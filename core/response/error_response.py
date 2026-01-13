@@ -1,5 +1,5 @@
-from visionary_response import VisionaryResponse
-from exceptions.visionary_base_exception import VisionaryBaseException
+from .visionary_response import VisionaryResponse
+from core.exceptions.visionary_base_exception import VisionaryBaseException
 from django.http import JsonResponse
 
 

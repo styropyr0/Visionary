@@ -1,4 +1,4 @@
-from visionary_base_exception import VisionaryBaseException
+from .visionary_base_exception import VisionaryBaseException
 
 
 class InvalidMetricException(VisionaryBaseException):
