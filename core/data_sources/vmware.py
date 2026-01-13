@@ -1,4 +1,4 @@
-from base import BaseCollector
+from core.base import BaseCollector
 from core.models import Metric
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
