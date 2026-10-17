@@ -18,6 +18,8 @@ internal static class ErrorReport
     public const int MaxStack = 16 * 1024;
     private const int FingerprintFrames = 5;
 
+    private static readonly char[] PathSeparators = { '/', '\\' };
+
     private static readonly Regex Digits = new(@"\d+", RegexOptions.Compiled);
 
     // Exceptions already recorded, so one rethrown through several layers is stored once.
@@ -88,7 +90,9 @@ internal static class ErrorReport
             }
             var (type, name) = Readable(method);
             var file = f.GetFileName();
-            file = string.IsNullOrEmpty(file) ? method.Module.Name : Path.GetFileName(file);
+            // The PDB keeps the build machine's path; cut at either separator so an app built on
+            // Windows and run on Linux fingerprints the same.
+            file = string.IsNullOrEmpty(file) ? method.Module.Name : file[(file.LastIndexOfAny(PathSeparators) + 1)..];
             list.Add(new Frame($"{type?.FullName?.Replace('+', '.') ?? "?"}.{name}@{file}", InApp(type)));
         }
         return list;

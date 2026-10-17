@@ -74,7 +74,7 @@ internal static class Native
         try
         {
             // glibc and musl share this layout on 64-bit Linux: f_files and f_ffree are the 6th and 7th words.
-            if (statvfs(path, out var st) != 0 || st.Files == 0)
+            if (statvfs(path, out var st) != 0 || st.Files == 0 || st.FilesFree > st.Files)
             {
                 return null;
             }
