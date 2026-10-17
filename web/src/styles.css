@@ -1850,3 +1850,17 @@ pre.code {
 .chart div {
   font-feature-settings: "cv11", "ss01", "tnum" !important;
 }
+
+/* Navigation groups (Monitor, Investigate, Manage). */
+.nav {
+  overflow-y: auto;
+  min-height: 0;
+}
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-group + .nav-group {
+  margin-top: 10px;
+}

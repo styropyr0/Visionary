@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser } from "./lib/api";
 import { load, save } from "./lib/state";
 import { useQuery } from "./lib/useQuery";
-import { Sidebar, type Route } from "./components/Sidebar";
+import { ROUTES, Sidebar, type Route } from "./components/Sidebar";
 import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
@@ -10,8 +10,13 @@ import { Overview } from "./views/Overview";
 import { Performance } from "./views/Performance";
 import { Saved } from "./views/Saved";
 import { System } from "./views/System";
+import { Alerts } from "./views/Alerts";
+import { Dashboards } from "./views/Dashboards";
+import { Errors } from "./views/Errors";
+import { Frontend } from "./views/Frontend";
+import { Settings } from "./views/Settings";
+import { Uptime } from "./views/Uptime";
 
-const ROUTES: Route[] = ["overview", "performance", "system", "explore", "saved", "logs"];
 
 function readRoute(): Route {
   const r = window.location.hash.replace(/^#\/?/, "").split("?")[0] as Route;
@@ -92,6 +97,12 @@ export function App() {
         {route === "overview" && <Overview />}
         {route === "performance" && <Performance meta={meta.data} />}
         {route === "system" && <System />}
+        {route === "errors" && <Errors />}
+        {route === "frontend" && <Frontend />}
+        {route === "uptime" && <Uptime />}
+        {route === "dashboards" && <Dashboards />}
+        {route === "alerts" && <Alerts meta={meta.data} />}
+        {route === "settings" && <Settings user={user} />}
         {route === "explore" && <Explore meta={meta.data} />}
         {route === "saved" && <Saved />}
         {route === "logs" && <Logs meta={meta.data} />}

@@ -1,7 +1,8 @@
 # Collector SDK contract
 
-Every Visionary SDK (Go in `sdks/go`, Python in `sdks/python`, Java/Spring Boot in
-`sdks/java`) writes the same rows to the same two tables, reads the same
+Every Visionary server SDK (Go in `sdks/go`, Python in `sdks/python`, Java/Spring
+Boot in `sdks/java`, Node in `sdks/node`, Ruby in `sdks/ruby`, .NET in
+`sdks/dotnet`) writes the same rows to the same tables, reads the same
 environment variables, and behaves the same way. The dashboards and the
 analyst depend only on this contract. The Go SDK is the reference
 implementation; when in doubt, match it.
@@ -30,8 +31,8 @@ dialect filters the same way. `user_id` is text in PostgreSQL and MySQL
 
 ## Tables
 
-Create both at startup with the exact SQL in `sdks/go/schema/<dialect>/requests.sql`
-and `system.sql`, statement by statement (split on `;`). Ship copies inside each
+Create them at startup with the exact SQL in `sdks/go/schema/<dialect>/requests.sql`,
+`system.sql` and `telemetry.sql`, statement by statement (split on `;`). Ship copies inside each
 SDK package; do not hand-edit the schema. MySQL has no `CREATE INDEX IF NOT
 EXISTS`: ignore error 1061 (duplicate key name) when creating indexes.
 
@@ -155,9 +156,17 @@ INSERT INTO api_logs (
 	request_id, created_at, method, path, route, query, status, duration_ms, ip, user_agent,
 	user_id, user_handle, user_role, request_headers, request_content_type, request_body,
 	request_body_truncated, request_size, response_content_type, response_body,
-	response_body_truncated, response_size, error_code, error_key
-) VALUES (24 placeholders)
+	response_body_truncated, response_size, error_code, error_key,
+	service, version, db_count, db_ms, http_count, http_ms
+) VALUES (30 placeholders)
 ```
+
+The last six columns were added later (`AddedRequestColumns` in
+`sdks/go/migrate.go`); add them to old tables at startup exactly as described for
+`system_metrics` below. `service` and `version` are the service name and release
+(see Telemetry); `db_count`/`db_ms` and `http_count`/`http_ms` are the number and
+total duration of database and outbound HTTP calls the request made (0 when it
+made none, NULL when the SDK cannot see that kind of call).
 
 Types: `status`, `*_truncated` (0/1), `*_size` are integers; `duration_ms` a
 float; everything else text.
@@ -233,6 +242,158 @@ so a partition's I/O is not counted again on top of its disk.
 Retention: same schedule as requests, `VISIONARY_SYSTEM_RETENTION_DAYS`,
 `DELETE FROM system_metrics WHERE id IN (SELECT id FROM system_metrics WHERE created_at < ? LIMIT 5000)`.
 
+## Telemetry (`spans`, `errors`, `releases`)
+
+Created at startup from `sdks/go/schema/<dialect>/telemetry.sql` (copy it like
+the other schemas). Written through the same writer as requests: batched, never
+blocking a request, dropped (and counted) when the queue is full. Retention:
+`spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS` with the same chunked
+delete; `releases` are kept.
+
+### Service and version
+
+- `service`: `VISIONARY_SERVICE`, else NULL. Lets several services share a database.
+- `version` (the release): `VISIONARY_RELEASE`, else the first non-empty of
+  `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
+  `HEROKU_SLUG_COMMIT`, `SOURCE_VERSION`, `GIT_COMMIT`, `GITHUB_SHA`, `K_REVISION`;
+  commit hashes are shortened to 12 characters. NULL when none is set.
+- Both go on every `api_logs`, `system_metrics`, `errors` and `spans` row (spans:
+  `service` only).
+
+### Releases (deploy markers)
+
+At start, when `version` is known, write one row:
+`releases(created_at, service, instance, version, sdk, sdk_version, runtime)`.
+`sdk` is `go`, `python`, `java`, `node`, `ruby`, `dotnet` or `otlp`;
+`runtime` is the language runtime and version, e.g. `go1.26.2`, `CPython 3.13.1`,
+`OpenJDK 21.0.4`. The dashboards draw a marker at the earliest `created_at` of
+each version.
+
+### Spans (database and outbound calls)
+
+A span is one call the service made while handling a request (or in background
+work): a database statement, an outbound HTTP request, a cache or queue call.
+
+- **Always**, for every logged request: count the calls and sum their durations
+  into `db_count`, `db_ms`, `http_count`, `http_ms` on the `api_logs` row (kinds
+  `cache`/`queue`/`custom` only become span rows).
+- **Span rows** are stored when the request took at least
+  `VISIONARY_SPAN_THRESHOLD_MS` (default 100) or answered ≥ 500, at most
+  `VISIONARY_SPAN_MAX` (default 100) per request, in start order; calls beyond
+  the cap still count in the totals. Spans outside any request are stored when
+  they themselves take at least the threshold, with `request_id` NULL.
+- `VISIONARY_SPANS=false` turns span capture off (totals and rows).
+
+Columns:
+
+| Column | Value |
+|---|---|
+| `created_at` | span start, same format as everywhere |
+| `request_id` | the parent request's `request_id`, NULL outside a request |
+| `service`, `instance` | as above |
+| `kind` | `db`, `http`, `cache`, `queue` or `custom` |
+| `name` | short and low-cardinality, used for grouping: `db`: first keyword + main table, e.g. `SELECT users`, `INSERT bookings`, `UPDATE trips`, `BEGIN`; `http`: `METHOD host`, e.g. `POST api.stripe.com`; others: the operation |
+| `target` | `db`: system and database, e.g. `postgresql/voygram`; `http`: host |
+| `detail` | `db`: the statement, sanitized (below); `http`: method and URL without query string; at most 2000 characters |
+| `offset_ms` | start relative to the request start (NULL outside a request) |
+| `duration_ms` | 3 decimals |
+| `status` | `ok` or `error` (`http`: `error` on a transport error or a 5xx response) |
+| `error` | short error message, at most 500 characters |
+| `row_count` | rows returned or affected when the driver reports it |
+
+Sanitizing statements: replace string literals (`'...'`, with doubled quotes
+inside) and numeric literals with `?`, collapse `IN (?, ?, ...)` to `IN (?)`,
+collapse runs of whitespace to one space, trim. Parameter values are never
+stored. Hook points per stack: Go: a pgx `QueryTracer`, a `database/sql`
+driver wrapper, an `http.RoundTripper`; Python: Django `execute_wrapper`,
+SQLAlchemy events, psycopg/PyMySQL cursors, `requests`/`httpx`/`urllib3`;
+Java: a JDBC `DataSource` proxy, `RestTemplate`/`RestClient`/`WebClient`
+interceptors; Node: `pg`, `mysql2`, Prisma, `fetch`/`undici`/`http`;
+Ruby: `ActiveSupport::Notifications` (`sql.active_record`), `Net::HTTP`;
+.NET: `DiagnosticListener`/`ActivitySource` for `HttpClient`, ADO.NET and EF Core.
+
+The dashboards flag N+1 patterns (one `name` repeated 10 or more times in a
+request) from these rows; SDKs do not need to detect them.
+
+### Errors
+
+- Record every unhandled exception (panic) that reaches the middleware, then
+  let it continue exactly as before (re-raise, re-panic): the framework's own
+  handling must not change. `handled = 0`.
+- Expose a manual API to record a handled error (`handled = 1`): Go
+  `visionary.CaptureError(ctx, err)`, Python `visionary.capture_exception(exc=None)`,
+  Java `Visionary.captureException(Throwable)`, Node
+  `visionary.captureException(err)`, Ruby `Visionary.capture_exception(e)`,
+  .NET `Visionary.CaptureException(ex)`. Inside a request it links to it.
+- Columns: `created_at`, `service`, `instance`, `version`, `request_id`,
+  `method`, `route`, `path`, `user_id` (when inside a request), `type` (the
+  exception class or Go error type, e.g. `ValueError`, `*pgconn.PgError`),
+  `message` (at most 1000 characters), `stack` (formatted the language's usual
+  way, at most 16 KB), `fingerprint`, `handled` (0/1), `runtime`.
+- `fingerprint`: the first 16 hex characters of SHA-1 over
+  `type + "\n" + frames`, where frames are the top 5 frames from the
+  application's own code (skip the standard library, the SDK and installed
+  packages when they can be told apart; else the top 5) written as
+  `function@file` without line numbers, joined with `\n`. With no frames, use
+  `type + "\n" + message` with every digit run replaced by `0`.
+- At most 20 rows per fingerprint per minute per process; drop the rest.
+- `VISIONARY_ERRORS=false` turns error capture off.
+
+## Client ingest API (browser and mobile)
+
+Browser and mobile SDKs do not write to the database; they post to the
+Visionary server, which writes `client_events`.
+
+`POST /api/ingest/client`, `Content-Type: application/json` (or
+`text/plain`, for `navigator.sendBeacon`). The key is a public client key
+(`VISIONARY_CLIENT_KEYS` on the server, or a key created in Settings), sent as
+`Authorization: Bearer <key>` or, where headers cannot be set, as `?key=<key>`.
+Browsers are also checked against `VISIONARY_CLIENT_ORIGINS` (comma list; empty
+allows any origin). The server answers `204`, `400` for a bad payload,
+`401` for a bad key, `413` over 64 KB, and `429` when a client sends too much;
+SDKs drop the batch on 4xx and retry once later on 5xx.
+
+```json
+{
+  "app": "web | android | ios",
+  "app_version": "2.4.1",
+  "version": "a1b2c3d4e5f6",
+  "session_id": "random per app launch or browser tab",
+  "user_id": "optional",
+  "device": "Pixel 8 | iPhone15,2 | Chrome 141 on macOS",
+  "os": "Android 16 | iOS 26.1 | macOS",
+  "events": [
+    {
+      "ts": "2026-10-17T09:30:12.345Z",
+      "kind": "page_load | web_vital | screen | api | error | custom",
+      "name": "LCP | /checkout | CheckoutActivity | GET /api/trips | TypeError",
+      "url": "https://app.example.com/checkout",
+      "method": "GET",
+      "status": 200,
+      "duration_ms": 412.5,
+      "value": 2350,
+      "message": "error message",
+      "stack": "stack trace",
+      "attrs": { "any": "flat string or number values" }
+    }
+  ]
+}
+```
+
+At most 100 events per request. Kinds:
+
+| Kind | name | Fields |
+|---|---|---|
+| `page_load` | path, e.g. `/checkout` | `duration_ms` (navigation start to load), `attrs`: `ttfb`, `fcp`, `dom_interactive` |
+| `web_vital` | `LCP`, `INP`, `CLS`, `FCP` or `TTFB` | `value` (ms, CLS unitless), `url`, `attrs.rating`: `good`/`needs-improvement`/`poor` |
+| `screen` | screen or activity name | `duration_ms`: time to first draw (mobile) |
+| `api` | `METHOD /path` with ids replaced by `:id` | `url` (no query string), `method`, `status` (0 on network failure), `duration_ms` |
+| `error` | error type | `message`, `stack`, `url` |
+| `custom` | any | `value`, `duration_ms`, `attrs` |
+
+The server stores one `client_events` row per event and computes `fingerprint`
+for errors.
+
 ## Environment
 
 | Variable | Default |
@@ -250,6 +411,12 @@ Retention: same schedule as requests, `VISIONARY_SYSTEM_RETENTION_DAYS`,
 | `VISIONARY_SYSTEM_METRICS` | `true` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` (plain number = seconds; also `500ms`, `1m`) |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` |
+| `VISIONARY_SERVICE` | empty (NULL) |
+| `VISIONARY_RELEASE` | from the platform's commit variable (see Telemetry), else NULL |
+| `VISIONARY_SPANS` | `true` |
+| `VISIONARY_SPAN_THRESHOLD_MS` | `100` |
+| `VISIONARY_SPAN_MAX` | `100` |
+| `VISIONARY_ERRORS` | `true` |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the

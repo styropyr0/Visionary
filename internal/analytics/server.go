@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/panels/{id}", s.authed(s.handleDeletePanel))
 	mux.Handle("GET /api/logs", s.authed(s.handleLogs))
 	mux.Handle("GET /api/logs/{id}", s.authed(s.handleLog))
+	s.featureRoutes(mux)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})

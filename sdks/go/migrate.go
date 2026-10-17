@@ -9,7 +9,7 @@ import (
 // earlier gain these columns at startup; new tables have them from the start.
 type Column struct {
 	Name string
-	// Kind is "real" or "int".
+	// Kind is "real", "int" or "text".
 	Kind string
 }
 
@@ -46,11 +46,30 @@ var AddedSystemColumns = []Column{
 	{"proc_read_kbps", "real"},
 	{"proc_write_kbps", "real"},
 	{"proc_max_fds", "int"},
+	{"service", "text"},
+	{"version", "text"},
+}
+
+// AddedRequestColumns are api_logs columns beyond the original set, in insert
+// order after the original columns: the service and release (version) that
+// served the request, and how many database and outbound HTTP calls it made
+// and how long they took in total.
+var AddedRequestColumns = []Column{
+	{"service", "text"},
+	{"version", "text"},
+	{"db_count", "int"},
+	{"db_ms", "real"},
+	{"http_count", "int"},
+	{"http_ms", "real"},
 }
 
 // SQLType is the column type of kind in d.
 func (d Dialect) SQLType(kind string) string {
 	switch {
+	case kind == "text" && d == MySQL:
+		return "VARCHAR(255)"
+	case kind == "text":
+		return "TEXT"
 	case kind == "int" && d == Postgres, kind == "int" && d == MySQL:
 		return "BIGINT"
 	case kind == "int":
@@ -98,12 +117,21 @@ func IsDuplicateColumn(err error) bool {
 
 // migrateSystem adds missing system_metrics columns.
 func migrateSystem(ctx context.Context, s store) error {
+	return migrate(ctx, s, "system_metrics", AddedSystemColumns)
+}
+
+// migrateRequests adds missing api_logs columns.
+func migrateRequests(ctx context.Context, s store) error {
+	return migrate(ctx, s, "api_logs", AddedRequestColumns)
+}
+
+func migrate(ctx context.Context, s store, table string, added []Column) error {
 	d := s.dialect()
-	existing, err := s.columns(ctx, d.ColumnsQuery("system_metrics"))
+	existing, err := s.columns(ctx, d.ColumnsQuery(table))
 	if err != nil {
 		return err
 	}
-	for _, stmt := range d.MissingColumns("system_metrics", AddedSystemColumns, existing) {
+	for _, stmt := range d.MissingColumns(table, added, existing) {
 		if err := s.execScript(ctx, stmt); err != nil && !IsDuplicateColumn(err) {
 			return err
 		}

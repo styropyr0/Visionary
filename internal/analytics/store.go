@@ -32,20 +32,30 @@ const (
 func (s *Server) ensureSchema(ctx context.Context) error {
 	// Saved panels live next to api_logs in the same database, so every viewer
 	// of the dashboard sees the same set.
-	for _, schema := range []string{s.q.panelsSchema(), s.q.d.RequestsSchema(), s.q.d.SystemSchema()} {
+	for _, schema := range []string{s.q.panelsSchema(), s.q.d.RequestsSchema(), s.q.d.SystemSchema(), s.q.d.TelemetrySchema()} {
 		if err := s.db.ExecScript(ctx, schema); err != nil {
 			return err
 		}
 	}
-	return s.addSystemColumns(ctx)
+	if err := s.addColumns(ctx, "system_metrics", sdk.AddedSystemColumns); err != nil {
+		return err
+	}
+	if err := s.addColumns(ctx, "api_logs", sdk.AddedRequestColumns); err != nil {
+		return err
+	}
+	for _, schema := range s.featureSchemas() {
+		if err := s.db.ExecScript(ctx, schema); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// addSystemColumns brings a system_metrics table from an older SDK up to the
-// current columns, so the System view can read them before every service has
-// upgraded.
-func (s *Server) addSystemColumns(ctx context.Context) error {
+// addColumns brings a table from an older SDK up to the current columns, so
+// the views can read them before every service has upgraded.
+func (s *Server) addColumns(ctx context.Context, table string, added []sdk.Column) error {
 	d := s.q.d
-	res, err := s.db.Query(ctx, d.ColumnsQuery("system_metrics"))
+	res, err := s.db.Query(ctx, d.ColumnsQuery(table))
 	if err != nil {
 		return err
 	}
@@ -55,7 +65,7 @@ func (s *Server) addSystemColumns(ctx context.Context) error {
 			have = append(have, toString(row[0]))
 		}
 	}
-	for _, stmt := range d.MissingColumns("system_metrics", sdk.AddedSystemColumns, have) {
+	for _, stmt := range d.MissingColumns(table, added, have) {
 		if err := s.db.Exec(ctx, stmt); err != nil && !sdk.IsDuplicateColumn(err) {
 			return err
 		}

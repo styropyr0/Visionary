@@ -232,6 +232,9 @@ func (a *Agent) Start(ctx context.Context) {
 		if err := a.db.execScript(schemaCtx, d.RequestsSchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create api_logs failed", "err", err)
 		}
+		if err := migrateRequests(schemaCtx, a.db); err != nil {
+			a.cfg.Logger.Error("visionary: add api_logs columns failed", "err", err)
+		}
 		a.requests.start(ctx)
 	}
 	if a.system != nil {

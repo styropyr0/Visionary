@@ -41,9 +41,11 @@ func main() {
 
 	initCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	if err := srv.Init(initCtx); err != nil {
-		logger.Error("create saved panels table", "err", err)
+		logger.Error("create tables", "err", err)
 	}
 	cancel()
+	// Background work: alert checks, rollups, digests and the like.
+	srv.Start(ctx)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,

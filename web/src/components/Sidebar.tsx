@@ -1,17 +1,70 @@
-import { Bookmark, Gauge, LayoutDashboard, LogOut, Moon, PanelLeftClose, PanelLeftOpen, ScrollText, Server, Sparkles, Sun } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Bookmark,
+  Bug,
+  Gauge,
+  LayoutDashboard,
+  LayoutGrid,
+  LogOut,
+  MonitorSmartphone,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ScrollText,
+  Server,
+  Settings,
+  Sparkles,
+  Sun,
+} from "lucide-react";
 import type { SessionUser } from "../lib/api";
 import { useApp } from "../lib/state";
 import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
 
-export type Route = "overview" | "performance" | "system" | "explore" | "saved" | "logs";
+export type Route =
+  | "overview"
+  | "performance"
+  | "system"
+  | "errors"
+  | "frontend"
+  | "uptime"
+  | "explore"
+  | "logs"
+  | "dashboards"
+  | "saved"
+  | "alerts"
+  | "settings";
 
-const NAV: { route: Route; label: string; icon: typeof LayoutDashboard }[] = [
-  { route: "overview", label: "API overview", icon: LayoutDashboard },
-  { route: "performance", label: "Performance", icon: Gauge },
-  { route: "system", label: "System", icon: Server },
-  { route: "explore", label: "Explore", icon: Sparkles },
-  { route: "saved", label: "Saved panels", icon: Bookmark },
-  { route: "logs", label: "Request logs", icon: ScrollText },
+export const ROUTES: Route[] = ["overview", "performance", "system", "errors", "frontend", "uptime", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
+
+const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
+  {
+    group: "Monitor",
+    items: [
+      { route: "overview", label: "API overview", icon: LayoutDashboard },
+      { route: "performance", label: "Performance", icon: Gauge },
+      { route: "system", label: "System", icon: Server },
+      { route: "errors", label: "Errors", icon: Bug },
+      { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
+      { route: "uptime", label: "Uptime", icon: Activity },
+    ],
+  },
+  {
+    group: "Investigate",
+    items: [
+      { route: "explore", label: "Explore", icon: Sparkles },
+      { route: "logs", label: "Request logs", icon: ScrollText },
+      { route: "dashboards", label: "Dashboards", icon: LayoutGrid },
+      { route: "saved", label: "Saved panels", icon: Bookmark },
+    ],
+  },
+  {
+    group: "Manage",
+    items: [
+      { route: "alerts", label: "Alerts", icon: Bell },
+      { route: "settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 interface Props {
@@ -54,18 +107,22 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
         </div>
       </div>
       <nav className="nav" aria-label="Main">
-        <div className="nav-label">Dashboards</div>
-        {NAV.map(({ route: r, label, icon: Icon }) => (
-          <a
-            key={r}
-            href={`#/${r}`}
-            className={`nav-item ${route === r ? "active" : ""}`}
-            aria-current={route === r ? "page" : undefined}
-            title={collapsed ? label : undefined}
-          >
-            <Icon size={16} />
-            <span className="nav-text">{label}</span>
-          </a>
+        {NAV.map(({ group, items }) => (
+          <div className="nav-group" key={group}>
+            <div className="nav-label">{group}</div>
+            {items.map(({ route: r, label, icon: Icon }) => (
+              <a
+                key={r}
+                href={`#/${r}`}
+                className={`nav-item ${route === r ? "active" : ""}`}
+                aria-current={route === r ? "page" : undefined}
+                title={collapsed ? label : undefined}
+              >
+                <Icon size={16} />
+                <span className="nav-text">{label}</span>
+              </a>
+            ))}
+          </div>
         ))}
       </nav>
       <div className="sidebar-foot">

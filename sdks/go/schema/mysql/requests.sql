@@ -23,7 +23,13 @@ CREATE TABLE IF NOT EXISTS api_logs (
     response_body_truncated TINYINT      NOT NULL DEFAULT 0,
     response_size           BIGINT       NOT NULL DEFAULT 0,
     error_code              VARCHAR(128),
-    error_key               VARCHAR(255)
+    error_key               VARCHAR(255),
+    service                 VARCHAR(255),
+    version                 VARCHAR(255),
+    db_count                BIGINT,
+    db_ms                   DOUBLE,
+    http_count              BIGINT,
+    http_ms                 DOUBLE
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_api_logs_created_at ON api_logs (created_at);
 CREATE INDEX idx_api_logs_user_created ON api_logs (user_id, created_at);

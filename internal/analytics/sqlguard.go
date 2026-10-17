@@ -32,7 +32,11 @@ var deniedPrefixes = []string{"SQLITE_", "_CF_", "D1_", "PG_"}
 
 // allowedTables are the only tables a query may read, so the analyst cannot
 // wander into the application's own tables when they share a database.
-var allowedTables = map[string]bool{"API_LOGS": true, "SYSTEM_METRICS": true, "ANALYTICS_PANELS": true}
+var allowedTables = map[string]bool{
+	"API_LOGS": true, "SYSTEM_METRICS": true, "ANALYTICS_PANELS": true,
+	"SPANS": true, "ERRORS": true, "RELEASES": true, "CLIENT_EVENTS": true,
+	"ALERT_EVENTS": true, "UPTIME_RESULTS": true, "ROLLUP_REQUESTS": true, "ROLLUP_SYSTEM": true,
+}
 
 // tableFunctions may stand in a FROM clause.
 var tableFunctions = map[string]bool{"JSON_EACH": true, "JSON_TREE": true, "GENERATE_SERIES": true, "UNNEST": true}
@@ -134,14 +138,14 @@ func checkTables(toks []token) error {
 				// a subquery; scanned like the rest
 			case isIdent(t):
 				if i+1 < len(toks) && toks[i+1].text == "." {
-					return errors.New("schema-qualified tables cannot be queried; use api_logs, system_metrics or analytics_panels")
+					return errors.New("schema-qualified tables cannot be queried")
 				}
 				if i+1 < len(toks) && toks[i+1].text == "(" {
 					if !tableFunctions[t.text] {
 						return fmt.Errorf("%s cannot be used as a table", strings.ToLower(t.text))
 					}
 				} else if !allowedTables[t.text] && !ctes[t.text] {
-					return fmt.Errorf("unknown table %s: only api_logs, system_metrics and analytics_panels can be queried", strings.ToLower(t.text))
+					return fmt.Errorf("unknown table %s: only Visionary's own tables can be queried", strings.ToLower(t.text))
 				}
 			default:
 				return errors.New("unexpected token after FROM")
