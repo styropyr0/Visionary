@@ -205,8 +205,9 @@ func (c *Config) validate() error {
 	if c.Fields.Token == "" {
 		return errors.New("set VISIONARY_AUTH_FIELD_TOKEN, where the token is in the sign-in response (e.g. data.token)")
 	}
-	if c.Fields.Role == "" || len(c.AllowedRoles) == 0 {
-		return errors.New("set VISIONARY_AUTH_FIELD_ROLE and VISIONARY_ALLOWED_ROLES; Visionary never lets every user of an API in")
+	// VISIONARY_ROLE_MAP also names who may sign in (every role it maps).
+	if c.Fields.Role == "" || (len(c.AllowedRoles) == 0 && strings.TrimSpace(os.Getenv("VISIONARY_ROLE_MAP")) == "") {
+		return errors.New("set VISIONARY_AUTH_FIELD_ROLE and VISIONARY_ALLOWED_ROLES or VISIONARY_ROLE_MAP; Visionary never lets every user of an API in")
 	}
 	if c.Identifier.Label == "" {
 		c.Identifier.Label = "Username"

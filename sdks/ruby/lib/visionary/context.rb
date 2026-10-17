@@ -1,0 +1,97 @@
+# frozen_string_literal: true
+
+module Visionary
+  # What the request being handled has said about itself: the user, the route
+  # pattern, and the spans and errors recorded while it ran.
+  #
+  # The middleware puts one object in fiber storage (Ruby 3.2+, inherited by
+  # child fibers and threads, so it works under Falcon and in Async tasks) or a
+  # fiber-local variable on Ruby 3.1. Code anywhere in the request then
+  # mutates the same object, behind a mutex.
+  class RequestContext
+    KEY = :visionary_request
+
+    attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible
+
+    def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:)
+      @request_id = request_id
+      @method = method
+      @path = path
+      @started_at = started_at
+      @started_mono = started_mono
+      @span_max = span_max
+      @db_visible = db_visible
+      @mutex = Mutex.new
+      @user = ["", "", ""]
+      @route = ""
+      @spans = []
+      @errors = []
+      @db_count = @http_count = 0
+      @db_ms = @http_ms = 0.0
+    end
+
+    def set_user(id, handle, role)
+      @mutex.synchronize { @user = [id.nil? ? "" : id.to_s, handle.to_s, role.to_s] }
+    end
+
+    def user
+      @mutex.synchronize { @user }
+    end
+
+    def route=(pattern)
+      @mutex.synchronize { @route = pattern.to_s }
+    end
+
+    def route
+      @mutex.synchronize { @route }
+    end
+
+    # Database and HTTP calls always count; rows are kept up to the cap.
+    def add_span(span)
+      @mutex.synchronize do
+        case span.kind
+        when "db"
+          @db_count += 1
+          @db_ms += span.duration_ms
+          @db_visible = true
+        when "http"
+          @http_count += 1
+          @http_ms += span.duration_ms
+        end
+        @spans << span if @spans.size < @span_max
+      end
+    end
+
+    def add_error(row)
+      @mutex.synchronize { @errors << row }
+    end
+
+    # [db_count, db_ms, http_count, http_ms]; database totals are NULL when no
+    # database hook could see this request's calls.
+    def totals
+      @mutex.synchronize do
+        [@db_visible ? @db_count : nil, @db_visible ? @db_ms.round(3) : nil, @http_count, @http_ms.round(3)]
+      end
+    end
+
+    def spans
+      @mutex.synchronize { @spans.sort_by(&:offset_ms) }
+    end
+
+    if Fiber.respond_to?(:[])
+      def self.current = Fiber[KEY]
+      def self.current=(ctx)
+        Fiber[KEY] = ctx
+      end
+    else
+      def self.current = Thread.current[KEY]
+      def self.current=(ctx)
+        Thread.current[KEY] = ctx
+      end
+    end
+  end
+
+  # One database, HTTP, cache, queue or custom call.
+  Span = Struct.new(:kind, :name, :target, :detail, :started_at, :offset_ms, :duration_ms,
+                    :status, :error, :row_count, :request_id, keyword_init: true)
+end

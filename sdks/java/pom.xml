@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>Visionary Spring Boot Starter</name>
-    <description>Visionary collector for Spring Boot: logs API requests and samples host, process and JVM metrics into your database.</description>
+    <description>Visionary collector for Spring Boot: logs API requests, database and HTTP client spans, errors and host, process and JVM metrics into your database.</description>
     <url>https://github.com/styropyr0/visionary</url>
 
     <properties>
@@ -45,6 +45,11 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
@@ -100,6 +105,17 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <!-- Implementation-Version is the sdk_version of the releases row. -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>

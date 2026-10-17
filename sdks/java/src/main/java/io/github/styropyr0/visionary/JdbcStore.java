@@ -9,6 +9,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 
 import javax.sql.DataSource;
@@ -107,18 +108,15 @@ final class JdbcStore implements Store {
     }
 
     @Override
-    public synchronized void insert(Table table, List<Object[]> rows) throws SQLException {
-        String sql = table.insertSql("?");
+    public synchronized void insert(Map<Table, List<Object[]>> rows) throws SQLException {
         run(conn -> {
             conn.setAutoCommit(false);
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                for (Object[] row : rows) {
-                    for (int i = 0; i < row.length; i++) {
-                        bind(ps, i + 1, row[i], table.types.get(i));
+            try {
+                for (Map.Entry<Table, List<Object[]>> e : rows.entrySet()) {
+                    if (!e.getValue().isEmpty()) {
+                        insert(conn, e.getKey(), e.getValue());
                     }
-                    ps.addBatch();
                 }
-                ps.executeBatch();
                 conn.commit();
             } catch (SQLException | RuntimeException e) {
                 rollbackQuietly(conn);
@@ -128,6 +126,18 @@ final class JdbcStore implements Store {
             }
             return null;
         });
+    }
+
+    private void insert(Connection conn, Table table, List<Object[]> rows) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(table.insertSql("?"))) {
+            for (Object[] row : rows) {
+                for (int i = 0; i < row.length; i++) {
+                    bind(ps, i + 1, row[i], table.types.get(i));
+                }
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
     }
 
     @Override

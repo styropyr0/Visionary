@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Styropyr0.Visionary</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>Visionary.AspNetCore</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>styropyr0</Authors>
+    <Description>Request logs, system metrics, spans and errors from ASP.NET Core into the Visionary tables (Cloudflare D1, PostgreSQL, MySQL or SQLite).</Description>
+    <PackageTags>visionary;aspnetcore;analytics;apm;logging;metrics</PackageTags>
+    <PackageProjectUrl>https://github.com/styropyr0/visionary</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/styropyr0/visionary</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copies of sdks/go/schema, byte for byte; see SPEC.md "Tables". -->
+    <EmbeddedResource Include="Schema\**\*.sql" LogicalName="Visionary.Schema.%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

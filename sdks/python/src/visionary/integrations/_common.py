@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any, Callable, Iterable, Iterator, Optional
 
-from .. import _agent
+from .. import _agent, _errors
 from .._agent import Agent
 from .._entry import BodyCapture, Entry
 
@@ -19,14 +19,23 @@ def resolve_agent(agent: Optional[Agent]) -> Agent:
     return _agent.get_agent() or _agent.init()
 
 
-def finish(agent: Agent, entry: Entry, t0: float, status: int) -> None:
-    """Close out a logged request: duration, status, queue it."""
+def finish(agent: Agent, entry: Entry, t0: float, status: int, trace: Any = None) -> None:
+    """Close out a logged request: duration, status, call totals and spans,
+    then queue it."""
     entry.status = status
     entry.duration = time.perf_counter() - t0
     try:
+        agent.finish_trace(entry, trace)
         agent.record(entry)
     except Exception:
         logger.exception("visionary: dropping request log entry")
+
+
+def report_unhandled(agent: Agent, exc: BaseException, info: Any = None) -> None:
+    """Record an exception escaping the app (handled = 0) once, however many
+    hooks see it. The caller re-raises it."""
+    if isinstance(exc, Exception) and agent.errors_on and _errors.mark_seen(exc):
+        agent.capture_error(exc, False, info)
 
 
 class CountingIterator:

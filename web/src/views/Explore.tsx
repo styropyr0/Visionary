@@ -29,6 +29,7 @@ import { RichText } from "../components/RichText";
 import { useToast } from "../components/Toast";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
+import { useSession } from "../lib/team";
 
 interface Step {
   id: number;
@@ -490,6 +491,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
   const tokens = useChartTokens();
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const canEdit = useSession().can("edit");
   const height = 260;
   const isTable = panel.viz.type === "table";
   return (
@@ -503,9 +505,12 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         chart={isTable ? undefined : <VizView result={panel.result} viz={panel.viz} height={height} title={panel.title} />}
         table={<DataTable result={panel.result} maxHeight={height} defaultUnit={panel.viz.unit} />}
         extraActions={
-          <button className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
-            <BookmarkPlus size={15} />
-          </button>
+          // Viewers can explore but not save.
+          canEdit ? (
+            <button className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
+              <BookmarkPlus size={15} />
+            </button>
+          ) : undefined
         }
       />
       {saving && (

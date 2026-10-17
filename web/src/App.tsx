@@ -19,7 +19,8 @@ import { Uptime } from "./views/Uptime";
 
 
 function readRoute(): Route {
-  const r = window.location.hash.replace(/^#\/?/, "").split("?")[0] as Route;
+  // "#/dashboards/12?from=..." is the dashboards view; the rest is the view's own.
+  const r = window.location.hash.replace(/^#\/?/, "").split(/[?/]/)[0] as Route;
   return ROUTES.includes(r) ? r : "overview";
 }
 

@@ -56,6 +56,17 @@ class Config:
     # Filesystem reported in disk_* columns (default: the working directory).
     disk_path: str = ""
 
+    # Telemetry (SPEC "Telemetry"). service and version label every row;
+    # version defaults to the platform's commit variable (see from_env).
+    service: str = ""
+    version: str = ""
+    spans: bool = True
+    span_threshold_ms: float = 100.0
+    span_max: int = 100
+    errors: bool = True
+    # Patch requests, httpx and urllib3 at start (same as instrument_http()).
+    instrument_http: bool = False
+
 
 def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
     """Build a Config from environment variables (see SPEC.md "Environment")."""
@@ -85,7 +96,32 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         system_metrics=parse_bool(s("VISIONARY_SYSTEM_METRICS"), True),
         system_interval=parse_duration(s("VISIONARY_SYSTEM_INTERVAL"), 15.0),
         system_retention_days=parse_int(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 30),
+        service=s("VISIONARY_SERVICE"),
+        version=release_from_env(env),
+        spans=parse_bool(s("VISIONARY_SPANS"), True),
+        span_threshold_ms=float(parse_int(s("VISIONARY_SPAN_THRESHOLD_MS"), 100)),
+        span_max=parse_int(s("VISIONARY_SPAN_MAX"), 100),
+        errors=parse_bool(s("VISIONARY_ERRORS"), True),
+        instrument_http=parse_bool(s("VISIONARY_INSTRUMENT_HTTP"), False),
     )
+
+
+# Commit variables set by common platforms, in the order SPEC.md lists them.
+_COMMIT_VARS = (
+    "RAILWAY_GIT_COMMIT_SHA", "RENDER_GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "HEROKU_SLUG_COMMIT",
+    "SOURCE_VERSION", "GIT_COMMIT", "GITHUB_SHA", "K_REVISION",
+)
+_COMMIT_HASH = re.compile(r"^[0-9a-fA-F]{13,64}$")
+
+
+def release_from_env(env: Dict[str, str]) -> str:
+    """VISIONARY_RELEASE, else the first platform commit variable set; commit
+    hashes are shortened to 12 characters."""
+    for key in ("VISIONARY_RELEASE",) + _COMMIT_VARS:
+        v = env.get(key, "").strip()
+        if v:
+            return v[:12] if _COMMIT_HASH.match(v) else v
+    return ""
 
 
 _TRUE = {"true", "1", "yes"}

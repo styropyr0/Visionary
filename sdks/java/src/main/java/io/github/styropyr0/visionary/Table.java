@@ -32,6 +32,11 @@ final class Table {
             .text("response_content_type", "response_body")
             .integer("response_body_truncated", "response_size")
             .text("error_code", "error_key")
+            // Added after the first release; older tables gain them at startup (sdks/go/migrate.go).
+            .added()
+            .text("service", "version")
+            .integer("db_count").real("db_ms")
+            .integer("http_count").real("http_ms")
             .build();
 
     static final Table SYSTEM_METRICS = builder("system_metrics", "system")
@@ -62,6 +67,26 @@ final class Table {
                     "procs_running", "procs_blocked")
             .real("ctx_switches_ps", "proc_read_kbps", "proc_write_kbps")
             .integer("proc_max_fds")
+            .text("service", "version")
+            .build();
+
+    // The three telemetry tables share one schema file, telemetry.sql.
+    static final Table SPANS = builder("spans", "telemetry")
+            .text("created_at", "request_id", "service", "instance", "kind", "name", "target", "detail")
+            .real("offset_ms", "duration_ms")
+            .text("status", "error")
+            .integer("row_count")
+            .build();
+
+    static final Table ERRORS = builder("errors", "telemetry")
+            .text("created_at", "service", "instance", "version", "request_id", "method", "route", "path",
+                    "user_id", "type", "message", "stack", "fingerprint")
+            .integer("handled")
+            .text("runtime")
+            .build();
+
+    static final Table RELEASES = builder("releases", "telemetry")
+            .text("created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime")
             .build();
 
     final String name;
@@ -69,7 +94,7 @@ final class Table {
     final String schemaName;
     final List<String> columns;
     final List<Type> types;
-    /** Columns added after the first release, in insert order; never TEXT. */
+    /** Columns added after the first release, in insert order. */
     final List<String> addedColumns;
     private final Map<String, Integer> index;
 

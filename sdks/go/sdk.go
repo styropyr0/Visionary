@@ -1,16 +1,30 @@
-// Package visionary collects what Visionary analyses, straight from a Go service:
-// one row per HTTP request (api_logs) and periodic host, process, runtime,
-// database-pool and throughput samples (system_metrics), written to Cloudflare
-// D1 in batches on background goroutines.
+// Package visionary collects what Visionary analyses, straight from a Go
+// service: one row per HTTP request (api_logs), the database and outbound HTTP
+// calls each request makes (spans), panics and captured errors (errors), a
+// deploy marker per release (releases), and periodic host, process, runtime,
+// database-pool and throughput samples (system_metrics). Rows are written in
+// batches on background goroutines to Cloudflare D1, SQLite, PostgreSQL or
+// MySQL; nothing on a request path waits for the database.
 //
-//	agent, err := sdk.New(sdk.FromEnv())
-//	if err != nil { log.Fatal(err) }
+//	agent, err := visionary.New(visionary.FromEnv())
+//	if err != nil { log.Print(err) } // a nil *Agent is a no-op
 //	agent.Start(ctx)
 //	defer agent.Close(context.Background())
 //	http.ListenAndServe(":8080", agent.Middleware(mux))
 //
 // Inside handlers or auth middleware, attach the signed-in user with
-// sdk.SetUser(r.Context(), sdk.User{ID: "42"}). Everything is configurable
+// visionary.SetUser(r.Context(), visionary.User{ID: "42"}).
+//
+// Calls become spans through hooks on the clients the application already
+// uses, all keyed off the request context:
+//
+//	pgxCfg.ConnConfig.Tracer = visionary.PgxTracer()        // pgx v5 / pgxpool
+//	db, _ := visionary.OpenDB("sqlite", dsn, "sqlite/app")  // database/sql
+//	client := &http.Client{Transport: visionary.Transport(nil)}
+//	end := visionary.StartSpan(ctx, visionary.KindCache, "GET session"); end(err)
+//
+// Panics reaching Middleware are recorded and re-panicked; handled errors are
+// recorded with visionary.CaptureError(ctx, err). Everything is configurable
 // through VISIONARY_* environment variables; see FromEnv.
 package visionary
 
@@ -58,6 +72,23 @@ type Config struct {
 	// Instance labels this server's rows (defaults to the hostname).
 	Instance string
 	Logger   *slog.Logger
+
+	// Service names this service, for databases several services share
+	// (VISIONARY_SERVICE). Release is the deployed version or commit
+	// (VISIONARY_RELEASE, else the platform's commit variable); when set,
+	// Start writes a releases row so dashboards can mark the deploy.
+	Service string
+	Release string
+
+	// Spans turns on per-request call capture: db_*/http_* totals on every
+	// logged request, and span rows for requests that took at least
+	// SpanThreshold or answered 5xx, at most SpanMax per request. Calls
+	// outside a request are kept when they alone take SpanThreshold.
+	Spans         bool
+	SpanThreshold time.Duration
+	SpanMax       int
+	// Errors records panics that reach Middleware and CaptureError calls.
+	Errors bool
 
 	Requests RequestsConfig
 	System   SystemConfig
@@ -134,6 +165,14 @@ type SystemConfig struct {
 //	VISIONARY_SYSTEM_METRICS=true|false  (default true)
 //	VISIONARY_SYSTEM_INTERVAL            (default 15s)
 //	VISIONARY_SYSTEM_RETENTION_DAYS      (default 30)
+//	VISIONARY_SERVICE                    (default: none)
+//	VISIONARY_RELEASE                    (default: RAILWAY_GIT_COMMIT_SHA, RENDER_GIT_COMMIT,
+//	                                      VERCEL_GIT_COMMIT_SHA, HEROKU_SLUG_COMMIT, SOURCE_VERSION,
+//	                                      GIT_COMMIT, GITHUB_SHA or K_REVISION; hashes cut to 12)
+//	VISIONARY_SPANS=true|false           (default true)
+//	VISIONARY_SPAN_THRESHOLD_MS          (default 100)
+//	VISIONARY_SPAN_MAX                   (default 100)
+//	VISIONARY_ERRORS=true|false          (default true)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -143,7 +182,13 @@ func FromEnv() Config {
 			APIToken:   env("D1_API_TOKEN", ""),
 			APIBase:    env("D1_API_BASE", ""),
 		},
-		Instance: env("VISIONARY_INSTANCE", ""),
+		Instance:      env("VISIONARY_INSTANCE", ""),
+		Service:       env("VISIONARY_SERVICE", ""),
+		Release:       releaseFromEnv(),
+		Spans:         envBool("VISIONARY_SPANS", true),
+		SpanThreshold: time.Duration(envInt("VISIONARY_SPAN_THRESHOLD_MS", 100)) * time.Millisecond,
+		SpanMax:       envInt("VISIONARY_SPAN_MAX", 100),
+		Errors:        envBool("VISIONARY_ERRORS", true),
 		Requests: RequestsConfig{
 			Enabled:             envBool("VISIONARY_LOG_REQUESTS", true),
 			PathPrefix:          env("VISIONARY_LOG_PATH_PREFIX", ""),
@@ -164,13 +209,16 @@ func FromEnv() Config {
 	}
 }
 
-// Agent runs request logging and system metrics. A nil *Agent is a valid
-// no-op, so callers need no checks when Visionary is not configured.
+// Agent runs request logging, span and error capture, and system metrics. A
+// nil *Agent is a valid no-op, so callers need no checks when Visionary is not
+// configured.
 type Agent struct {
-	cfg      Config
-	db       store
-	requests *requestWriter
-	system   *recorder
+	cfg     Config
+	db      store
+	ident   identity
+	writer  *writer
+	system  *recorder
+	limiter errLimiter
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -189,7 +237,7 @@ func openStore(cfg Config) (store, error) {
 		if err != nil {
 			return nil, err
 		}
-		return sqlStore{db: db, d: d}, nil
+		return sqlStore{db: db, d: d, owned: true}, nil
 	}
 	c := d1.New(cfg.D1.APIBase, cfg.D1.AccountID, cfg.D1.DatabaseID, cfg.D1.APIToken)
 	if c == nil {
@@ -207,35 +255,50 @@ func New(cfg Config) (*Agent, error) {
 		cfg.Logger = slog.Default()
 	}
 	if cfg.Instance == "" {
-		cfg.Instance, _ = os.Hostname()
+		cfg.Instance = hostname()
 	}
-	a := &Agent{cfg: cfg, db: db}
-	if cfg.Requests.Enabled {
-		a.requests = newRequestWriter(cfg.Requests, db, cfg.Logger)
+	if cfg.SpanMax <= 0 {
+		cfg.SpanMax = 100
+	}
+	cfg.Release = shortRelease(cfg.Release)
+	a := &Agent{cfg: cfg, db: db, ident: identity{service: cfg.Service, instance: cfg.Instance, version: cfg.Release}}
+	if cfg.Requests.Enabled || cfg.Spans || cfg.Errors {
+		a.writer = newWriter(cfg.Requests, cfg.Requests.Enabled, a.ident, db, cfg.Logger)
 	}
 	if cfg.System.Enabled && cfg.System.Interval > 0 {
-		a.system = newRecorder(cfg.System, cfg.Instance, db, cfg.Logger)
+		a.system = newRecorder(cfg.System, a.ident, db, cfg.Logger)
 	}
 	return a, nil
 }
 
-// Start creates the tables if needed and launches the background workers.
-// They stop when ctx ends; call Close to flush what is queued.
+// Start creates the tables if needed, writes the releases row and launches
+// the background workers. They stop when ctx ends; call Close to flush what
+// is queued. The started Agent also records spans and errors that happen
+// outside any request.
 func (a *Agent) Start(ctx context.Context) {
 	if a == nil {
 		return
 	}
-	schemaCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	schemaCtx, cancel := context.WithTimeout(quiet(ctx), 20*time.Second)
 	defer cancel()
 	d := a.db.dialect()
-	if a.requests != nil {
+	if a.cfg.Requests.Enabled {
 		if err := a.db.execScript(schemaCtx, d.RequestsSchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create api_logs failed", "err", err)
 		}
 		if err := migrateRequests(schemaCtx, a.db); err != nil {
 			a.cfg.Logger.Error("visionary: add api_logs columns failed", "err", err)
 		}
-		a.requests.start(ctx)
+	}
+	if a.writer != nil || a.ident.version != "" {
+		if err := a.db.execScript(schemaCtx, d.TelemetrySchema()); err != nil {
+			a.cfg.Logger.Error("visionary: create telemetry tables failed", "err", err)
+		}
+		a.writeRelease(schemaCtx)
+	}
+	if a.writer != nil {
+		a.writer.start(ctx)
+		active.Store(a)
 	}
 	if a.system != nil {
 		if err := a.db.execScript(schemaCtx, d.SystemSchema()); err != nil {
@@ -248,18 +311,20 @@ func (a *Agent) Start(ctx context.Context) {
 	}
 }
 
-// Close flushes queued requests and buffered samples, waiting until ctx ends
-// at most.
+// Close flushes queued rows and buffered samples, waiting until ctx ends at
+// most.
 func (a *Agent) Close(ctx context.Context) {
 	if a == nil {
 		return
 	}
-	if a.requests != nil {
-		a.requests.close(ctx)
+	active.CompareAndSwap(a, nil)
+	if a.writer != nil {
+		a.writer.close(ctx)
 	}
 	if a.system != nil {
 		a.system.close(ctx)
 	}
+	_ = a.db.close()
 }
 
 func env(k, def string) string {
