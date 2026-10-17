@@ -118,7 +118,7 @@ func (s *Server) anomalyBaseline(ctx context.Context, r alertRule, now time.Time
 	var spans []timeSpan
 	for k := 1; k <= seasonalWeeks; k++ {
 		at := now.Add(-time.Duration(k) * 7 * 24 * time.Hour)
-		spans = append(spans, timeSpan{floorTo(at.Add(-seasonalHalfWidth), w), floorTo(at.Add(seasonalHalfWidth), w)})
+		spans = append(spans, timeSpan{floorToStep(at.Add(-seasonalHalfWidth), w), floorToStep(at.Add(seasonalHalfWidth), w)})
 	}
 	pts, err := s.metricSeries(ctx, m, r.Spec.Scope, spans, bucket, false)
 	if err != nil {
@@ -127,7 +127,7 @@ func (s *Server) anomalyBaseline(ctx context.Context, r alertRule, now time.Time
 	values, weeks := seasonalValues(pts, spans, bucket, m.ID == "requests_per_min")
 	b.Source, b.Weeks = "seasonal", weeks
 	if weeks < minSeasonalWeeks || len(values) < minBaselinePoints {
-		day := []timeSpan{{floorTo(now.Add(-24*time.Hour), w), floorTo(now.Add(-w), w)}}
+		day := []timeSpan{{floorToStep(now.Add(-24*time.Hour), w), floorToStep(now.Add(-w), w)}}
 		pts, err = s.metricSeries(ctx, m, r.Spec.Scope, day, bucket, false)
 		if err != nil {
 			return b, m, err
@@ -218,7 +218,7 @@ func scaleFloor(m metricDef) float64 {
 	return 0.01
 }
 
-func floorTo(t time.Time, step time.Duration) time.Time {
+func floorToStep(t time.Time, step time.Duration) time.Time {
 	sec := int64(step.Seconds())
 	u := t.Unix()
 	return time.Unix(u-u%sec, 0).UTC()
