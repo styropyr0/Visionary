@@ -98,11 +98,29 @@ type Result struct {
 	Bucket     int64    `json:"bucket"`
 	From       string   `json:"from"`
 	To         string   `json:"to"`
+	// Source says where a fixed panel was read from: "raw", "rollup_1m" or
+	// "rollup_1h" (the coarsest rollup used; ragged edges are always raw).
+	Source string `json:"source,omitempty"`
 }
 
 // runTemplate renders sql for r, wraps it in a row cap, and runs it. trusted
-// skips validation for the package's own fixed queries.
+// skips validation for the package's own fixed queries, which read the
+// rollups instead of raw rows when the range is long and they cover it.
 func (s *Server) runTemplate(ctx context.Context, sql string, r timeRange, trusted bool) (*Result, error) {
+	if !trusted {
+		return s.execTemplate(ctx, sql, r, false)
+	}
+	if res, ok, err := s.runRollup(ctx, sql, r); ok {
+		return res, err
+	}
+	res, err := s.execTemplate(ctx, sql, r, true)
+	if res != nil {
+		res.Source = "raw"
+	}
+	return res, err
+}
+
+func (s *Server) execTemplate(ctx context.Context, sql string, r timeRange, trusted bool) (*Result, error) {
 	if !trusted {
 		checked, err := validateReadOnly(sql)
 		if err != nil {
