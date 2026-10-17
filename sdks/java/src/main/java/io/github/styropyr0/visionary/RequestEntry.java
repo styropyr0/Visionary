@@ -1,0 +1,31 @@
+package io.github.styropyr0.visionary;
+
+import java.time.Instant;
+import java.util.Map;
+
+/**
+ * The raw capture of one request. Redaction, error extraction and user lookup
+ * happen on the writer thread, off the request path.
+ */
+record RequestEntry(
+        String requestId,
+        Instant startedAt,
+        String method,
+        String path,
+        String route,
+        String query,
+        int status,
+        double durationMs,
+        String ip,
+        String userAgent,
+        VisionaryUser user,
+        Map<String, String> requestHeaders,
+        String requestContentType,
+        byte[] requestBody,
+        boolean requestTruncated,
+        long requestSize,
+        String responseContentType,
+        byte[] responseBody,
+        boolean responseTruncated,
+        long responseSize) {
+}
