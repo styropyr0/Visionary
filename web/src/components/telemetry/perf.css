@@ -49,7 +49,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-right: 4px;
+  margin-top: 2px;
 }
 
 .cmp-pickers .btn {

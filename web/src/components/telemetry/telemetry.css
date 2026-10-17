@@ -356,7 +356,7 @@
 
 .wf-track {
   position: relative;
-  height: 100%;
+  align-self: stretch;
 }
 
 .wf-gridline {
@@ -494,7 +494,7 @@
 
 .version-pills {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 

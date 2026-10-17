@@ -85,7 +85,8 @@ export function parseStack(stack: string): Item[] {
     // Go: a function line followed by "\t/path/file.go:12 +0x1d".
     const next = lines[i + 1];
     if (next !== undefined && (m = next.match(/^\t(\S+\.go):(\d+)(?: \+0x[0-9a-f]+)?$/)) && !l.startsWith("\t")) {
-      const fn = l.replace(/^created by /, "").replace(/\(.*\)$/, "").replace(/ in goroutine \d+$/, "");
+      // Drop the argument list only: receivers like (*Handler) stay in the name.
+      const fn = l.replace(/^created by /, "").replace(/ in goroutine \d+$/, "").replace(/\([^()]*\)$/, "");
       const f = frame(fn, m[1], m[2]);
       if (isGoStdlib(fn, f.file)) f.app = false;
       out.push(f);
@@ -145,8 +146,8 @@ function LibraryFrames({ frames }: { frames: Frame[] }) {
 }
 
 function shortFn(fn: string): string {
-  const parts = fn.split(/[/.]/);
-  return parts.slice(-2).join(".");
+  const last = fn.split("/").pop() ?? fn;
+  return last.length > 36 ? last.split(".").slice(-2).join(".") : last;
 }
 
 /**

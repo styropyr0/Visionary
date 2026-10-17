@@ -247,7 +247,6 @@ function compareColumns(res: Result): Column[] {
       ),
       width: 110,
     },
-    pair("p50", "p50", "ms"),
     pair("p95", "p95", "ms"),
     pair("error_rate", "5xx rate", "percent"),
     pair("db_ms", "DB time / request", "ms"),
@@ -293,6 +292,13 @@ export function CompareVersionsPanel({ className }: { className: string }) {
   const options = list.map((v) => ({ value: v.version, label: `${shortVersion(v.version)}${v.service ? ` · ${v.service}` : ""} · ${formatRelative(v.first)}` }));
   const row = overall?.rows[0];
   const at = (c: string) => (row && overall ? row[overall.columns.indexOf(c)] : null);
+  const pickers = (
+    <div className="cmp-pickers">
+      <Select label="Baseline version" align="left" value={a} onChange={setA} options={options} maxWidth={320} />
+      <span className="dim">compared with</span>
+      <Select label="Compared version" align="left" value={b} onChange={setB} options={options} maxWidth={320} />
+    </div>
+  );
 
   return (
     <Panel
@@ -303,15 +309,6 @@ export function CompareVersionsPanel({ className }: { className: string }) {
       loading={versions.loading || cmp.loading}
       error={versions.error ?? cmp.error}
       bodyHeight={160}
-      extraActions={
-        list.length >= 2 ? (
-          <span className="cmp-pickers">
-            <Select label="Baseline version" value={a} onChange={setA} options={options} maxWidth={260} />
-            <span className="dim">vs</span>
-            <Select label="Compared version" value={b} onChange={setB} options={options} maxWidth={260} />
-          </span>
-        ) : null
-      }
       table={
         versions.data &&
         (list.length < 2 ? (
@@ -321,11 +318,15 @@ export function CompareVersionsPanel({ className }: { className: string }) {
               : "Only one version served requests in this range. Widen the range to include an earlier version."}
           </div>
         ) : a === b ? (
-          <div className="panel-state">Pick two different versions.</div>
+          <div className="cmp">
+            {pickers}
+            <div className="panel-state">Pick two different versions.</div>
+          </div>
         ) : !routes ? (
-          <div className="panel-state" />
+          <div className="cmp">{pickers}</div>
         ) : (
           <div className="cmp">
+            {pickers}
             <div className="cmp-summary">
               <div>
                 <div className="cmp-label">All routes, p50</div>

@@ -130,7 +130,7 @@ function IssueList({ q }: { q: Q<IssuesResponse> }) {
         deltaLabel=""
         upIs="bad"
         loading={q.loading}
-        footer="back after a release without them"
+        footer="back in a newer release"
       />
       <StatTile label="Users affected" value={cur ? formatCount(cur.users) : "—"} delta={delta("users")} deltaLabel={previousLabel(range)} upIs="bad" loading={q.loading} />
       <StatTile
@@ -243,7 +243,7 @@ function issueColumns(bucket: number): Column[] {
       ),
       width: 112,
     },
-    { key: "versions", render: (_v, row) => <VersionPills versions={issueOf(row).versions} current={issueOf(row).status_version} max={3} />, width: 200 },
+    { key: "versions", render: (_v, row) => <VersionPills versions={issueOf(row).versions} current={issueOf(row).status_version} max={2} />, width: 190 },
     { key: "first_seen", label: "First seen", render: (v) => <span title={formatLogTime(String(v))}>{formatRelative(String(v))}</span>, width: 96 },
     { key: "last_seen", label: "Last seen", render: (v) => <span title={formatLogTime(String(v))}>{formatRelative(String(v))}</span>, width: 96 },
   ];

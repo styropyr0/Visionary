@@ -96,7 +96,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
         <div className="wf-axis">
           {ticks(total).map((t, i) => (
             <span key={i} style={{ left: `${(100 * t) / total}%` }} className={i === 4 ? "end" : i === 0 ? "start" : ""}>
-              {formatMs(t)}
+              {t === 0 ? "0" : formatMs(t)}
             </span>
           ))}
         </div>

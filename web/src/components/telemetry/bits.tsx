@@ -35,7 +35,7 @@ export function MiniSpark({ points, width = 96, height = 22 }: { points: number[
   );
 }
 
-export function VersionPills({ versions, current, max = 4 }: { versions: IssueVersion[]; current?: string; max?: number }) {
+export function VersionPills({ versions, current, max = 2 }: { versions: IssueVersion[]; current?: string; max?: number }) {
   const known = versions.filter((v) => v.version);
   if (known.length === 0) return <span className="dim">—</span>;
   const shown = known.slice(-max);

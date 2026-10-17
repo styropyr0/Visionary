@@ -210,6 +210,8 @@ function valueAxis(t: ChartTokens, unit: Unit) {
     type: "value" as const,
     min: 0,
     splitNumber: 4,
+    // Counts have no fractional ticks.
+    minInterval: unit === "count" ? 1 : undefined,
     axisLine: { show: false },
     axisTick: { show: false },
     axisLabel: { color: t.text3, fontSize: 11, formatter: (v: number) => formatAxis(v, unit) },
@@ -561,7 +563,9 @@ export function withDeployMarkers(option: EChartsOption, deploys: DeployMarker[]
           const first = params[0];
           if (!first || typeof html !== "string") return html;
           const at = Number(Array.isArray(first.value) ? first.value[0] : first.axisValue);
-          const hits = marks.filter(({ ts }) => ts >= at && ts < at + Math.max(step, 1));
+          // The pointer snaps to the nearest point, so a deploy shows from half
+          // an interval before the point to the end of its interval.
+          const hits = marks.filter(({ ts }) => ts >= at - step / 2 && ts < at + Math.max(step, 1));
           if (hits.length === 0) return html;
           const extra = hits
             .map(

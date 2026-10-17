@@ -494,16 +494,20 @@ function routeColumns(res: Result, apdexMs: number): Column[] {
     { key: "busy_seconds", label: "Busy", align: "right", render: (v) => msCell((toNumber(v) ?? 0) * 1000) },
     {
       key: "db_share",
-      label: "DB time",
+      label: "DB time · calls",
       align: "right",
       render: (v, row) => {
         const n = toNumber(v);
         if (n === null) return <span className="dim">—</span>;
         const calls = toNumber(row[res.columns.indexOf("db_calls")]);
-        return <span title={calls === null ? undefined : `${calls} database calls per request on average`}>{formatPercent(Math.min(100, n))}</span>;
+        return (
+          <span title="Share of request time spent in database calls, and database calls per request on average">
+            {formatPercent(Math.min(100, n))}
+            {calls !== null && <span className="dim"> · {formatCount(calls)}</span>}
+          </span>
+        );
       },
     },
-    { key: "db_calls", label: "DB calls", align: "right", render: (v) => (toNumber(v) === null ? <span className="dim">—</span> : formatCount(toNumber(v)!)) },
     { key: "p50", align: "right", render: msCell },
     { key: "p95", align: "right", render: msCell },
     { key: "p95_change", label: "p95 change", align: "right", render: (v) => <ChangeCell value={v} /> },
