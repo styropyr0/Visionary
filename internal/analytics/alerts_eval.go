@@ -384,9 +384,12 @@ func (e *alertEngine) knownInstances(ctx context.Context, now time.Time) ([]inst
 			out = append(out, instanceSeen{Instance: toString(row[0]), Service: toString(row[1])})
 		}
 	}
-	e.mu.Lock()
-	e.instances, e.instancesAt = out, time.Now()
-	e.mu.Unlock()
+	// An empty list is not cached, so the first instance is seen at once.
+	if len(out) > 0 {
+		e.mu.Lock()
+		e.instances, e.instancesAt = out, time.Now()
+		e.mu.Unlock()
+	}
 	return out, nil
 }
 
@@ -403,9 +406,11 @@ func (e *alertEngine) sloBudget(ctx context.Context, r alertRule, now time.Time,
 	if err != nil {
 		return 0, 0, "", err
 	}
-	e.mu.Lock()
-	e.budgets[key] = cachedBudget{total: total, bad: bad, at: now}
-	e.mu.Unlock()
+	if total > 0 {
+		e.mu.Lock()
+		e.budgets[key] = cachedBudget{total: total, bad: bad, at: now}
+		e.mu.Unlock()
+	}
 	return total, bad, now.Format(tsLayout), nil
 }
 
