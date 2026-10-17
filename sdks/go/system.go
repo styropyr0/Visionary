@@ -47,15 +47,15 @@ var systemBaseColumns = []string{
 const samplesPerWrite = 4
 
 type recorder struct {
-	cfg      SystemConfig
-	instance string
-	db       store
-	insert   string
-	logger   *slog.Logger
-	proc     *process.Process
-	diskDir  string
-	started  time.Time
-	http     httpCounters
+	cfg     SystemConfig
+	ident   identity
+	db      store
+	insert  string
+	logger  *slog.Logger
+	proc    *process.Process
+	diskDir string
+	started time.Time
+	http    httpCounters
 
 	last     time.Time
 	requests int64
@@ -72,7 +72,7 @@ type recorder struct {
 	stopOnce sync.Once
 }
 
-func newRecorder(cfg SystemConfig, instance string, db store, logger *slog.Logger) *recorder {
+func newRecorder(cfg SystemConfig, ident identity, db store, logger *slog.Logger) *recorder {
 	proc, _ := process.NewProcess(int32(os.Getpid()))
 	dir := cfg.DiskPath
 	if dir == "" {
@@ -80,27 +80,28 @@ func newRecorder(cfg SystemConfig, instance string, db store, logger *slog.Logge
 		dir = filepath.VolumeName(wd) + string(filepath.Separator)
 	}
 	return &recorder{
-		cfg:      cfg,
-		instance: instance,
-		db:       db,
-		insert:   insertSQL("system_metrics", systemColumns, db.stringParams()),
-		logger:   logger,
-		proc:     proc,
-		diskDir:  dir,
-		started:  time.Now(),
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
+		cfg:     cfg,
+		ident:   ident,
+		db:      db,
+		insert:  insertSQL("system_metrics", systemColumns, db.stringParams()),
+		logger:  logger,
+		proc:    proc,
+		diskDir: dir,
+		started: time.Now(),
+		stop:    make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 }
 
 func (r *recorder) start(ctx context.Context) {
+	ctx = quiet(ctx)
 	r.prime()
 	go r.run(ctx)
 	if r.cfg.RetentionDays > 0 {
 		sql := r.db.dialect().purgeSQL("system_metrics")
 		go runDaily(ctx, func() { purge(ctx, r.db, r.logger, sql, r.cfg.RetentionDays, "system_metrics") })
 	}
-	r.logger.Info("visionary: recording system metrics", "interval", r.cfg.Interval.String(), "instance", r.instance)
+	r.logger.Info("visionary: recording system metrics", "interval", r.cfg.Interval.String(), "instance", r.ident.instance)
 }
 
 func (r *recorder) close(ctx context.Context) {
@@ -154,7 +155,7 @@ func (r *recorder) run(ctx context.Context) {
 }
 
 func (r *recorder) flushOnExit() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(quiet(context.Background()), 10*time.Second)
 	defer cancel()
 	r.flush(ctx)
 }
@@ -189,7 +190,9 @@ func (r *recorder) sample() []any {
 	}
 	v := make(map[string]any, len(systemColumns))
 	v["created_at"] = now.UTC().Format(tsLayout)
-	v["instance"] = r.instance
+	v["instance"] = r.ident.instance
+	v["service"] = nullable(r.ident.service)
+	v["version"] = nullable(r.ident.version)
 	v["interval_s"] = round(secs, 2)
 
 	if pct, err := cpu.Percent(0, false); err == nil && len(pct) > 0 {

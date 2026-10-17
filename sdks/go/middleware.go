@@ -19,11 +19,32 @@ const requestIDHeader = "X-Request-ID"
 type ctxKey struct{}
 
 // annotations travel in the request context so code deeper in the stack (auth
-// middleware, handlers) can describe the request for the log.
+// middleware, handlers, tracers, CaptureError) can describe the request for
+// the log and attach calls and errors to it.
 type annotations struct {
+	agent *Agent
+	// trace collects spans; nil when the request is not logged or spans are off.
+	trace     *trace
+	requestID string
+	method    string
+	path      string
+
 	mu    sync.Mutex
 	user  User
 	route string
+	// errs are errors captured during the request, written when it ends so
+	// they carry its final route and user.
+	errs []*errorRecord
+	done bool
+}
+
+// fromContext returns the request's annotations (nil outside Middleware) and
+// the Agent that records for ctx (the request's, else the active one).
+func fromContext(ctx context.Context) (*annotations, *Agent) {
+	if ann, ok := ctx.Value(ctxKey{}).(*annotations); ok {
+		return ann, ann.agent
+	}
+	return nil, active.Load()
 }
 
 // SetUser attaches the signed-in user to the request being logged. Call it
@@ -51,11 +72,17 @@ type httpCounters struct {
 	requests, errors, inFlight atomic.Int64
 }
 
-// Middleware logs each request and counts throughput. Mount it outermost
-// (outside panic recovery) so failures are logged with the status the client
-// got. A nil Agent returns next unchanged.
+// Middleware logs each request, collects the database and HTTP calls it
+// makes (see PgxTracer, WrapDriver, Transport and StartSpan), records panics
+// and counts throughput. A nil Agent returns next unchanged.
+//
+// Mount it inside the router's panic recovery (chi's Recoverer, gin's
+// Recovery): a panic is recorded in errors, the request is logged with status
+// 500, and the panic continues to the recovery middleware, which answers as
+// it always did. Mounted outside the recovery it never sees panics, only the
+// 500 they become.
 func (a *Agent) Middleware(next http.Handler) http.Handler {
-	if a == nil || (a.requests == nil && a.system == nil) {
+	if a == nil || (a.writer == nil && a.system == nil) {
 		return next
 	}
 	counters := a.counters()
@@ -63,77 +90,132 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 		counters.inFlight.Add(1)
 		defer counters.inFlight.Add(-1)
 
-		logIt := a.requests != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix)
-		if !logIt {
-			rec := &captureWriter{ResponseWriter: w, status: http.StatusOK}
-			next.ServeHTTP(rec, r)
-			counters.observe(rec.status)
-			return
-		}
-
 		start := time.Now()
-		requestID := r.Header.Get(requestIDHeader)
-		if requestID == "" || len(requestID) > 128 {
-			requestID = newRequestID()
-		}
-		w.Header().Set(requestIDHeader, requestID)
-
-		ann := &annotations{}
-		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, ann))
-		headers := r.Header.Clone()
-		reqType := r.Header.Get("Content-Type")
-		bodies := a.cfg.Requests.CaptureBodies
-		maxBody := a.cfg.Requests.MaxBodyBytes
-
-		var reqCapture *captureReader
-		if bodies && r.Body != nil && r.Body != http.NoBody && capturable(reqType) {
-			reqCapture = &captureReader{ReadCloser: r.Body, max: maxBody}
-			r.Body = reqCapture
-		}
-		rec := &captureWriter{ResponseWriter: w, status: http.StatusOK, max: maxBody, bodies: bodies}
-
-		next.ServeHTTP(rec, r)
-		counters.observe(rec.status)
-
-		e := &entry{
-			RequestID:           requestID,
-			StartedAt:           start,
-			Method:              r.Method,
-			Path:                r.URL.Path,
-			Query:               r.URL.RawQuery,
-			Status:              rec.status,
-			Duration:            time.Since(start),
-			IP:                  clientIP(r),
-			UserAgent:           r.UserAgent(),
-			RequestHeaders:      headers,
-			RequestContentType:  reqType,
-			RequestSize:         max(r.ContentLength, 0),
-			ResponseContentType: rec.Header().Get("Content-Type"),
-			ResponseBody:        rec.buf.Bytes(),
-			ResponseTruncated:   rec.truncated,
-			ResponseSize:        rec.size,
-		}
-		ann.mu.Lock()
-		e.User, e.Route = ann.user, ann.route
-		ann.mu.Unlock()
-		if e.Route == "" && a.cfg.Requests.Route != nil {
-			e.Route = a.cfg.Requests.Route(r)
-		}
-		if e.Route == "" && r.Pattern != "" {
-			// Go 1.22+ ServeMux sets Pattern on the request it routes,
-			// as "GET /users/{id}"; keep the path part.
-			e.Route = r.Pattern
-			if _, path, ok := strings.Cut(r.Pattern, " "); ok {
-				e.Route = path
+		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path}
+		logIt := a.cfg.Requests.Enabled && a.writer != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix)
+		if logIt {
+			ann.requestID = r.Header.Get(requestIDHeader)
+			if ann.requestID == "" || len(ann.requestID) > 128 {
+				ann.requestID = newRequestID()
+			}
+			w.Header().Set(requestIDHeader, ann.requestID)
+			if a.spansOn() {
+				ann.trace = &trace{requestID: ann.requestID, start: start, max: a.cfg.SpanMax}
 			}
 		}
-		if reqCapture != nil {
-			e.RequestBody = reqCapture.buf.Bytes()
-			e.RequestTruncated = reqCapture.truncated
-			e.RequestSize = max(e.RequestSize, reqCapture.size)
+		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, ann))
+		rec := &captureWriter{ResponseWriter: w, status: http.StatusOK}
+
+		var (
+			headers    http.Header
+			reqType    string
+			reqCapture *captureReader
+		)
+		if logIt {
+			headers = r.Header.Clone()
+			reqType = r.Header.Get("Content-Type")
+			rec.bodies, rec.max = a.cfg.Requests.CaptureBodies, a.cfg.Requests.MaxBodyBytes
+			if rec.bodies && r.Body != nil && r.Body != http.NoBody && capturable(reqType) {
+				reqCapture = &captureReader{ReadCloser: r.Body, max: rec.max}
+				r.Body = reqCapture
+			}
 		}
-		a.requests.log(e)
+
+		finish := func() {
+			counters.observe(rec.status)
+			ann.mu.Lock()
+			ann.done = true
+			errs := ann.errs
+			ann.errs = nil
+			ann.mu.Unlock()
+			route := ""
+			if logIt || len(errs) > 0 {
+				route = a.route(r, ann)
+				ann.mu.Lock()
+				ann.route = route // for errors captured by goroutines still running
+				ann.mu.Unlock()
+			}
+			if logIt {
+				e := &entry{
+					RequestID:           ann.requestID,
+					StartedAt:           start,
+					Method:              r.Method,
+					Path:                r.URL.Path,
+					Route:               route,
+					Query:               r.URL.RawQuery,
+					Status:              rec.status,
+					Duration:            time.Since(start),
+					IP:                  clientIP(r),
+					UserAgent:           r.UserAgent(),
+					RequestHeaders:      headers,
+					RequestContentType:  reqType,
+					RequestSize:         max(r.ContentLength, 0),
+					ResponseContentType: rec.Header().Get("Content-Type"),
+					ResponseBody:        rec.buf.Bytes(),
+					ResponseTruncated:   rec.truncated,
+					ResponseSize:        rec.size,
+				}
+				if reqCapture != nil {
+					e.RequestBody = reqCapture.buf.Bytes()
+					e.RequestTruncated = reqCapture.truncated
+					e.RequestSize = max(e.RequestSize, reqCapture.size)
+				}
+				if ann.trace != nil {
+					keep := e.Duration >= a.cfg.SpanThreshold || e.Status >= 500
+					e.Totals, e.Spans = ann.trace.finish(keep)
+				}
+				ann.mu.Lock()
+				e.User = ann.user
+				ann.mu.Unlock()
+				a.writer.enqueue(e)
+			}
+			for _, e := range errs {
+				a.enqueueError(e, ann, route)
+			}
+		}
+
+		// A panic is recorded, logged as the 500 the recovery middleware
+		// will send, and then continues unchanged.
+		completed := false
+		defer func() {
+			if completed {
+				return
+			}
+			v := recover()
+			if v != nil && v != http.ErrAbortHandler {
+				a.capturePanic(ann, v)
+			}
+			if !rec.wroteHeader {
+				rec.status = http.StatusInternalServerError
+			}
+			finish()
+			if v != nil {
+				panic(v)
+			}
+		}()
+		next.ServeHTTP(rec, r)
+		completed = true
+		finish()
 	})
+}
+
+// route is the request's route pattern: SetRoute, else the Route option,
+// else the Go 1.22+ ServeMux pattern.
+func (a *Agent) route(r *http.Request, ann *annotations) string {
+	ann.mu.Lock()
+	route := ann.route
+	ann.mu.Unlock()
+	if route == "" && a.cfg.Requests.Route != nil {
+		route = a.cfg.Requests.Route(r)
+	}
+	if route == "" && r.Pattern != "" {
+		// ServeMux sets Pattern as "GET /users/{id}"; keep the path part.
+		route = r.Pattern
+		if _, path, ok := strings.Cut(r.Pattern, " "); ok {
+			route = path
+		}
+	}
+	return route
 }
 
 func (a *Agent) counters() *httpCounters {

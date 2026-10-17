@@ -28,12 +28,15 @@ type store interface {
 	execChanges(ctx context.Context, query string, args ...any) (int64, error)
 	// columns runs a query returning one name per row.
 	columns(ctx context.Context, query string) ([]string, error)
+	// close releases a connection the SDK opened itself.
+	close() error
 }
 
 type d1Store struct{ c *d1.Client }
 
 func (s d1Store) dialect() Dialect   { return SQLite }
 func (s d1Store) stringParams() bool { return true }
+func (s d1Store) close() error       { return nil }
 
 func (s d1Store) execScript(ctx context.Context, script string) error {
 	return s.c.Exec(ctx, script)
@@ -91,10 +94,20 @@ func stringArgs(args []any) []string {
 type sqlStore struct {
 	db *sql.DB
 	d  Dialect
+	// owned is set when the SDK opened db from a URL; the app's own pool is
+	// never closed.
+	owned bool
 }
 
 func (s sqlStore) dialect() Dialect   { return s.d }
 func (s sqlStore) stringParams() bool { return false }
+
+func (s sqlStore) close() error {
+	if s.owned {
+		return s.db.Close()
+	}
+	return nil
+}
 
 func (s sqlStore) execScript(ctx context.Context, script string) error {
 	for _, q := range Statements(script) {
