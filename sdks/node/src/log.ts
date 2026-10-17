@@ -12,5 +12,9 @@ export const consoleLogger: Logger = {
 };
 
 export function errMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  if (!(e instanceof Error)) return String(e);
+  // Connection failures (ECONNREFUSED to every address) are AggregateErrors
+  // with an empty message.
+  const inner = (e as { errors?: unknown[] }).errors?.[0];
+  return e.message || (inner instanceof Error ? inner.message : "") || (e as { code?: string }).code || e.name;
 }

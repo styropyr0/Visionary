@@ -98,7 +98,7 @@ const LIMITS: Record<string, Record<string, Limit>> = (() => {
       if (!m) continue;
       const cols: Record<string, Limit> = {};
       for (const line of m[2]!.split("\n")) {
-        const c = /^\s*(\w+)\s+(VARCHAR\((\d+)\)|MEDIUMTEXT|TEXT)\b/.exec(line);
+        const c = /^\s*(\w+)\s+(VARCHAR\((\d+)\)|MEDIUMTEXT|TEXT)(?=[\s,]|$)/.exec(line);
         if (!c) continue;
         cols[c[1]!] = c[3] ? { chars: Number(c[3]) } : { bytes: c[2] === "TEXT" ? 65535 : 16777215 };
       }

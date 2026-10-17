@@ -202,7 +202,8 @@ export class Recorder {
       v.disk_used_percent = round((used / (used + fs.bavail)) * 100, 1);
       v.disk_free_gb = round((fs.bavail * fs.bsize) / GB, 2);
       v.disk_total_gb = round((fs.blocks * fs.bsize) / GB, 2);
-      if (fs.files > 0) v.disk_inodes_percent = round(((fs.files - fs.ffree) / fs.files) * 100, 1);
+      // Some filesystems (bind mounts, FUSE) report nonsense free inode counts.
+      if (fs.files > 0 && fs.ffree <= fs.files) v.disk_inodes_percent = round(((fs.files - fs.ffree) / fs.files) * 100, 1);
     }
 
     const usage = process.cpuUsage(this.lastCpuUsage);

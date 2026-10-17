@@ -29,19 +29,23 @@ export class SqliteStore implements Store {
 
   static open(path: string): SqliteStore {
     const Better = optionalRequire("better-sqlite3");
-    let db: SyncDatabase;
-    if (Better) {
-      db = new Better(path);
-    } else {
+    let db: SyncDatabase | undefined;
+    try {
+      // The native binding loads here; one built for another platform throws.
+      if (Better) db = new Better(path);
+    } catch {
+      db = undefined;
+    }
+    if (!db) {
       const nodeSqlite = optionalRequire("node:sqlite");
       if (!nodeSqlite?.DatabaseSync) {
         throw new Error("visionary: SQLite needs better-sqlite3 (npm install better-sqlite3) or Node 22.5+ (node:sqlite)");
       }
-      db = new nodeSqlite.DatabaseSync(path);
+      db = new nodeSqlite.DatabaseSync(path) as SyncDatabase;
     }
     // Other processes (the Visionary server, other instances) share the file.
-    db.exec("PRAGMA busy_timeout = 10000");
-    return new SqliteStore(db, true);
+    db!.exec("PRAGMA busy_timeout = 10000");
+    return new SqliteStore(db!, true);
   }
 
   static fromClient(db: SyncDatabase): SqliteStore {

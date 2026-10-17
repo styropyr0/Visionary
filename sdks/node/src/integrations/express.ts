@@ -33,7 +33,26 @@ export function express(agent?: Agent) {
   const a = resolveAgent(agent);
   return function visionaryMiddleware(req: IncomingMessage, res: ServerResponse, next: Next): void {
     const r = req as ExpressRequest;
-    const state = observeRequest(a, r, res, () => expressRoute(r), r.originalUrl ?? r.url, () => r.user);
+    // Express sets req.route when it dispatches to a route, and restores
+    // req.baseUrl while an error unwinds through the routers, so the full
+    // pattern is taken at that moment.
+    let route: ExpressRequest["route"];
+    let pattern = "";
+    try {
+      Object.defineProperty(r, "route", {
+        configurable: true,
+        enumerable: true,
+        get: () => route,
+        set: (v) => {
+          route = v;
+          pattern = expressRoute({ baseUrl: r.baseUrl, route: v } as ExpressRequest);
+        },
+      });
+    } catch {
+      // req.route was made non-configurable; read it at the end instead
+    }
+    const routeOf = () => pattern || expressRoute(r);
+    const state = observeRequest(a, r, res, routeOf, r.originalUrl ?? r.url, () => r.user);
     if (state) runInRequest(state, () => next());
     else next();
   };
