@@ -72,7 +72,7 @@ func Open(cfg Config) (DB, error) {
 		}
 		return d1DB{c: c}, nil
 	}
-	conn, d, err := sdk.OpenURL(url)
+	conn, d, err := sdk.OpenURL(sqliteDefaults(url))
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +81,6 @@ func Open(cfg Config) (DB, error) {
 	if err := conn.PingContext(pingCtx); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("connect to %s: %w", d, err)
-	}
-	if d == sdk.SQLite {
-		// One writer at a time; readers wait instead of failing with SQLITE_BUSY.
-		_, _ = conn.Exec("PRAGMA busy_timeout = 5000")
 	}
 	return sqlDB{db: conn, d: d}, nil
 }
@@ -395,4 +391,19 @@ func toInt64(v any) int64 {
 		return n
 	}
 	return 0
+}
+
+// sqliteDefaults makes every connection the pool opens wait for a busy writer
+// (and use WAL so readers never block on one), instead of failing with
+// SQLITE_BUSY. Pragmas the URL already sets are kept.
+func sqliteDefaults(url string) string {
+	lower := strings.ToLower(url)
+	if !strings.HasPrefix(lower, "sqlite") || strings.Contains(lower, "_pragma=") {
+		return url
+	}
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return url + sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 }
