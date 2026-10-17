@@ -5,6 +5,9 @@
 
 or wrap any ASGI app: ``app = VisionaryASGIMiddleware(app)``. Without an
 explicit agent it uses ``visionary.init()``.
+
+Exceptions escaping the app are recorded in ``errors`` and re-raised, so the
+server's own 500 handling is unchanged.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import finish, logger, resolve_agent
+from ._common import finish, logger, report_unhandled, resolve_agent
 
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
@@ -57,7 +60,14 @@ class VisionaryASGIMiddleware:
                         status[0] = message["status"]
                     await send(message)
 
-                await self.app(scope, receive, send_status)
+                _, token = _context.begin(None, _info(scope, None))
+                try:
+                    await self.app(scope, receive, send_status)
+                except BaseException as e:
+                    report_unhandled(agent, e)
+                    raise
+                finally:
+                    _context.end(token)
         finally:
             agent.http.finished(status[0])
 
@@ -100,9 +110,13 @@ class VisionaryASGIMiddleware:
                 resp.feed(message.get("body", b""))
             await send(message)
 
-        ann, token = _context.begin()
+        trace = agent.new_trace(e.request_id, t0)
+        ann, token = _context.begin(trace, _info(scope, e.request_id))
         try:
             await self.app(scope, tee_receive, tee_send)
+        except BaseException as exc:
+            report_unhandled(agent, exc)
+            raise
         finally:
             _context.end(token)
             try:
@@ -119,9 +133,13 @@ class VisionaryASGIMiddleware:
                 e.request_size = max(parse_content_length(lookup.get("content-length")), req.size)
                 e.response_body, e.response_truncated = resp.data, resp.truncated
                 e.response_size = max(state["declared"], resp.size)
-                finish(agent, e, t0, status[0])
+                finish(agent, e, t0, status[0], trace)
             except Exception:
                 logger.exception("visionary: request capture failed")
+
+
+def _info(scope: Scope, rid: Optional[str]) -> _context.RequestInfo:
+    return _context.RequestInfo(rid, scope.get("method", ""), scope.get("path", ""), route=lambda: _route(scope))
 
 
 def _headers(scope: Scope) -> List[Tuple[str, str]]:

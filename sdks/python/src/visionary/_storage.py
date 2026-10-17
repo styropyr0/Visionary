@@ -16,6 +16,14 @@ REQUEST_COLUMNS = [
     "response_body_truncated", "response_size", "error_code", "error_key",
 ]
 
+# api_logs columns added after the first release, in insert order after the
+# ones above (Go: AddedRequestColumns).
+ADDED_REQUEST_COLUMNS = [
+    ("service", "text"), ("version", "text"),
+    ("db_count", "int"), ("db_ms", "real"), ("http_count", "int"), ("http_ms", "real"),
+]
+REQUEST_COLUMNS = REQUEST_COLUMNS + [name for name, _ in ADDED_REQUEST_COLUMNS]
+
 SYSTEM_COLUMNS = [
     "created_at", "instance", "interval_s",
     "host_cpu_percent", "load_1", "load_5", "load_15",
@@ -44,11 +52,31 @@ ADDED_SYSTEM_COLUMNS = [
     ("tcp_established", "int"), ("tcp_retrans", "int"),
     ("host_procs", "int"), ("procs_running", "int"), ("procs_blocked", "int"),
     ("ctx_switches_ps", "real"), ("proc_read_kbps", "real"), ("proc_write_kbps", "real"),
-    ("proc_max_fds", "int"),
+    ("proc_max_fds", "int"), ("service", "text"), ("version", "text"),
 ]
 SYSTEM_COLUMNS = SYSTEM_COLUMNS + [name for name, _ in ADDED_SYSTEM_COLUMNS]
 
-TABLES = {"requests": ("api_logs", REQUEST_COLUMNS), "system": ("system_metrics", SYSTEM_COLUMNS)}
+SPAN_COLUMNS = [
+    "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
+    "offset_ms", "duration_ms", "status", "error", "row_count",
+]
+ERROR_COLUMNS = [
+    "created_at", "service", "instance", "version", "request_id", "method", "route", "path", "user_id",
+    "type", "message", "stack", "fingerprint", "handled", "runtime",
+]
+RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"]
+
+TABLES = {
+    "requests": ("api_logs", REQUEST_COLUMNS),
+    "system": ("system_metrics", SYSTEM_COLUMNS),
+    "spans": ("spans", SPAN_COLUMNS),
+    "errors": ("errors", ERROR_COLUMNS),
+    "releases": ("releases", RELEASE_COLUMNS),
+}
+
+# Schema file per group, and the columns older tables of that group may lack.
+_SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql"}
+_MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS)}
 
 # NOT NULL columns in api_logs; on D1 they are bound as-is, like the Go SDK.
 _D1_REQUIRED = {
@@ -65,10 +93,13 @@ _MYSQL_CHARS = {
     "request_id": 128, "created_at": 32, "method": 16, "route": 255, "ip": 64, "user_id": 128,
     "user_handle": 255, "user_role": 64, "request_content_type": 255, "response_content_type": 255,
     "error_code": 128, "error_key": 255, "instance": 128,
+    "service": 255, "version": 255, "kind": 255, "name": 255, "target": 255, "type": 255,
+    "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255,
 }
 _MYSQL_BYTES = {
     "path": 65535, "query": 65535, "user_agent": 65535, "request_headers": 65535,
     "request_body": 16777215, "response_body": 16777215,
+    "detail": 65535, "error": 65535, "message": 65535, "stack": 16777215,
 }
 
 
@@ -78,7 +109,7 @@ class StorageError(Exception):
 
 def schema_statements(dialect: str, table: str) -> List[str]:
     folder = "sqlite" if dialect == "d1" else dialect
-    name = "requests.sql" if table == "requests" else "system.sql"
+    name = _SCHEMA_FILES[table]
     text = resources.files("visionary").joinpath("schema", folder, name).read_text(encoding="utf-8")
     return [s.strip() for s in text.split(";") if s.strip()]
 
@@ -94,15 +125,18 @@ def _columns_query(dialect: str, table: str) -> str:
 
 
 def _sql_type(dialect: str, kind: str) -> str:
+    if kind == "text":
+        return "VARCHAR(255)" if dialect == "mysql" else "TEXT"
     if kind == "int":
         return "INTEGER" if dialect in ("sqlite", "d1") else "BIGINT"
     return {"postgres": "DOUBLE PRECISION", "mysql": "DOUBLE"}.get(dialect, "REAL")
 
 
-def missing_column_statements(dialect: str, existing: Sequence[str]) -> List[str]:
+def missing_column_statements(dialect: str, table: str, added: Sequence[Tuple[str, str]],
+                              existing: Sequence[str]) -> List[str]:
     have = {str(c).lower() for c in existing}
-    return ["ALTER TABLE system_metrics ADD COLUMN %s %s" % (name, _sql_type(dialect, kind))
-            for name, kind in ADDED_SYSTEM_COLUMNS if name not in have]
+    return ["ALTER TABLE %s ADD COLUMN %s %s" % (table, name, _sql_type(dialect, kind))
+            for name, kind in added if name not in have]
 
 
 def is_duplicate_column(e: Exception) -> bool:
@@ -124,8 +158,8 @@ class Backend:
     dialect = ""
 
     def create_schema(self, table: str) -> None:
-        """Create the table and its indexes; for system_metrics, also add the
-        columns an older table is missing."""
+        """Create a schema group ("requests", "system" or "telemetry"): its
+        tables and indexes, then the columns an older table is missing."""
         raise NotImplementedError
 
     def _column_names(self, query: str) -> List[str]:
@@ -134,9 +168,12 @@ class Backend:
     def _alter(self, sql: str) -> None:
         raise NotImplementedError
 
-    def _migrate_system(self) -> None:
-        existing = self._column_names(_columns_query(self.dialect, "system_metrics"))
-        for stmt in missing_column_statements(self.dialect, existing):
+    def _migrate(self, group: str) -> None:
+        if group not in _MIGRATIONS:
+            return
+        table, added = _MIGRATIONS[group]
+        existing = self._column_names(_columns_query(self.dialect, table))
+        for stmt in missing_column_statements(self.dialect, table, added, existing):
             try:
                 self._alter(stmt)
             except Exception as e:
@@ -145,6 +182,10 @@ class Backend:
 
     def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
         """Write rows (typed values, None for NULL) in one batch/transaction."""
+        self.insert_many([(table, rows)])
+
+    def insert_many(self, groups: List[Tuple[str, List[Tuple[Any, ...]]]]) -> None:
+        """Write rows to several tables in one batch/transaction."""
         raise NotImplementedError
 
     def purge(self, table: str, cutoff: str) -> int:
@@ -181,8 +222,7 @@ class D1Backend(Backend):
 
     def create_schema(self, table: str) -> None:
         self._client.batch([(s, []) for s in schema_statements("d1", table)])
-        if table == "system":
-            self._migrate_system()
+        self._migrate(table)
 
     def _column_names(self, query: str) -> List[str]:
         return [str(row[0]) for row in self._client.rows(query) if row]
@@ -190,10 +230,10 @@ class D1Backend(Backend):
     def _alter(self, sql: str) -> None:
         self._client.query(sql)
 
-    def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
-        if rows:
-            sql = self._sql[table]
-            self._client.batch([(sql, [_d1_param(v) for v in row]) for row in rows])
+    def insert_many(self, groups: List[Tuple[str, List[Tuple[Any, ...]]]]) -> None:
+        stmts = [(self._sql[table], [_d1_param(v) for v in row]) for table, rows in groups for row in rows]
+        if stmts:
+            self._client.batch(stmts)
 
     def purge(self, table: str, cutoff: str) -> int:
         return self._client.changes(_purge_sql("d1", table, "?"), [cutoff])
@@ -283,8 +323,7 @@ class SQLBackend(Backend):
                 if self.dialect == "mysql" and _mysql_errno(e) == 1061:
                     continue  # index already exists; MySQL has no IF NOT EXISTS here
                 raise
-        if table == "system":
-            self._migrate_system()
+        self._migrate(table)
 
     def _column_names(self, query: str) -> List[str]:
         def read(conn: Any) -> List[str]:
@@ -300,17 +339,17 @@ class SQLBackend(Backend):
     def _alter(self, sql: str) -> None:
         self._run(lambda c: _execute(c, sql))
 
-    def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
-        if not rows:
+    def insert_many(self, groups: List[Tuple[str, List[Tuple[Any, ...]]]]) -> None:
+        work = [(self._sql[table], [self._fit(TABLES[table][1], row) for row in rows])
+                for table, rows in groups if rows]
+        if not work:
             return
-        cols = TABLES[table][1]
-        rows = [self._fit(cols, row) for row in rows]
-        sql = self._sql[table]
 
         def write(conn: Any) -> None:
             cur = conn.cursor()
             try:
-                cur.executemany(sql, rows)
+                for sql, rows in work:
+                    cur.executemany(sql, rows)
             finally:
                 cur.close()
 

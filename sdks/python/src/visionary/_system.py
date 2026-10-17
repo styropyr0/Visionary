@@ -9,6 +9,7 @@ import time
 import tracemalloc
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import _spans
 from ._entry import format_ts
 from ._node import NodeCollector
 from ._storage import SYSTEM_COLUMNS, Backend
@@ -89,6 +90,8 @@ class Recorder:
         self._db_stats = cfg.db_stats
         self._disk_path = cfg.disk_path or os.getcwd()
         self._instance = instance
+        self._service = cfg.service or None
+        self._version = cfg.version or None
         self._backend = backend
         self._http = http
         self._logger = logger
@@ -148,6 +151,7 @@ class Recorder:
         self._node.prime()
 
     def _run(self) -> None:
+        _spans.mark_internal()
         self._schema.ensure()
         next_at = time.monotonic() + self._interval
         while not self._stop.wait(max(0.0, next_at - time.monotonic())):
@@ -189,6 +193,8 @@ class Recorder:
             "created_at": format_ts(time.time()),
             "instance": self._instance,
             "interval_s": round(secs, 2),
+            "service": self._service,
+            "version": self._version,
         }
 
         load = _quiet(os.getloadavg) if hasattr(os, "getloadavg") else None
