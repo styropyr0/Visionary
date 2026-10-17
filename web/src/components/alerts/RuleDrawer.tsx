@@ -325,7 +325,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
           </div>
         </div>
         <p className="al-hint" style={{ marginTop: -6 }}>
-          Durations like 30s, 5m, 2h. "For" is how long the condition must hold before the rule fires.
+          Durations like 30s, 5m, 2h.{form.kind !== "slo" && ' "For" is how long the condition must hold before the rule fires.'}
         </p>
 
         <section className="al-preview">

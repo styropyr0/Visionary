@@ -318,13 +318,6 @@ func floatArg(v *float64) any {
 	return *v
 }
 
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // cellFloat reads a numeric cell, including NUMERIC sent as text.
 func cellFloat(v any) (float64, bool) {
 	if f, ok := asFloat(v); ok {

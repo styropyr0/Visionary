@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -114,8 +113,6 @@ func (s *Server) metricByID(id string) (metricDef, bool) {
 
 // timeSpan is a half-open range of created_at.
 type timeSpan struct{ From, To time.Time }
-
-var methodName = regexp.MustCompile(`^[A-Z]{1,10}$`)
 
 // scopeClause narrows a metric to the rule's scope with bound parameters.
 func scopeClause(m metricDef, sc alertScope) (string, []any) {
