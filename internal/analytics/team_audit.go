@@ -51,13 +51,6 @@ func (s *Server) auditAs(r *http.Request, sess *session, action, target string, 
 	}
 }
 
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
 // auditWriter drains the queue until ctx ends, then writes what is left.
 func (s *Server) auditWriter(ctx context.Context) {
 	for {

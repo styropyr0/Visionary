@@ -69,7 +69,7 @@ func (s *Server) handleClientIngest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
-	key := bearerKey(r)
+	key := clientKey(r)
 	if !s.ingestKeyValid(key, "client") {
 		writeError(w, http.StatusUnauthorized, "invalid client key")
 		return
@@ -148,9 +148,9 @@ func tooLargeOr(err error, msg string) error {
 	return errors.New(msg)
 }
 
-// bearerKey reads the key from Authorization or, for sendBeacon and other
+// clientKey reads the key from Authorization or, for sendBeacon and other
 // clients that cannot set headers, from ?key=.
-func bearerKey(r *http.Request) string {
+func clientKey(r *http.Request) string {
 	if auth := r.Header.Get("Authorization"); auth != "" {
 		scheme, token, ok := strings.Cut(auth, " ")
 		if ok && strings.EqualFold(scheme, "Bearer") {
