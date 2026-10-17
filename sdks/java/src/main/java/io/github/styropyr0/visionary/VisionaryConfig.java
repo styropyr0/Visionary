@@ -35,7 +35,13 @@ record VisionaryConfig(
         String errorKeyField,
         boolean systemMetrics,
         Duration systemInterval,
-        int systemRetentionDays) {
+        int systemRetentionDays,
+        String service,
+        String release,
+        boolean spans,
+        double spanThresholdMs,
+        int spanMax,
+        boolean errors) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -61,7 +67,28 @@ record VisionaryConfig(
                 r.string("VISIONARY_LOG_ERROR_KEY_FIELD", "error.key"),
                 r.bool("VISIONARY_SYSTEM_METRICS", true),
                 r.duration("VISIONARY_SYSTEM_INTERVAL", Duration.ofSeconds(15)),
-                r.nonNegativeInt("VISIONARY_SYSTEM_RETENTION_DAYS", 30));
+                r.nonNegativeInt("VISIONARY_SYSTEM_RETENTION_DAYS", 30),
+                r.string("VISIONARY_SERVICE", ""),
+                release(r),
+                r.bool("VISIONARY_SPANS", true),
+                r.nonNegativeDouble("VISIONARY_SPAN_THRESHOLD_MS", 100),
+                r.nonNegativeInt("VISIONARY_SPAN_MAX", 100),
+                r.bool("VISIONARY_ERRORS", true));
+    }
+
+    /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */
+    private static final List<String> COMMIT_VARIABLES = List.of(
+            "RAILWAY_GIT_COMMIT_SHA", "RENDER_GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "HEROKU_SLUG_COMMIT",
+            "SOURCE_VERSION", "GIT_COMMIT", "GITHUB_SHA", "K_REVISION");
+    private static final Pattern COMMIT_HASH = Pattern.compile("[0-9a-fA-F]{13,64}");
+
+    /** {@code VISIONARY_RELEASE}, else the platform's commit; hashes shortened to 12 characters. */
+    private static String release(Reader r) {
+        String v = r.string("VISIONARY_RELEASE", "");
+        for (int i = 0; v.isEmpty() && i < COMMIT_VARIABLES.size(); i++) {
+            v = r.string(COMMIT_VARIABLES.get(i), "");
+        }
+        return COMMIT_HASH.matcher(v).matches() ? v.substring(0, 12) : v;
     }
 
     boolean hasD1Credentials() {
@@ -113,6 +140,15 @@ record VisionaryConfig(
             try {
                 int v = Integer.parseInt(string(key, ""));
                 return v >= 0 ? v : def;
+            } catch (NumberFormatException e) {
+                return def;
+            }
+        }
+
+        double nonNegativeDouble(String key, double def) {
+            try {
+                double v = Double.parseDouble(string(key, ""));
+                return v >= 0 && !Double.isInfinite(v) ? v : def;
             } catch (NumberFormatException e) {
                 return def;
             }

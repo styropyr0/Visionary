@@ -20,7 +20,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     private final VisionaryConfig config;
     private final Store store;
     private final HttpCounters counters = new HttpCounters();
-    private final RequestWriter requests;
+    private final RequestWriter writer;
+    private final boolean logRequests;
+    private final Telemetry telemetry;
     private final SystemSampler system;
     private final Retention retention;
     private final String summary;
@@ -31,34 +33,50 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     VisionaryAgent(VisionaryConfig config) {
         this.config = config;
         this.store = null;
-        this.requests = null;
+        this.writer = null;
+        this.logRequests = false;
+        this.telemetry = null;
         this.system = null;
         this.retention = null;
         this.summary = "disabled";
     }
 
-    VisionaryAgent(Store store, RequestWriter requests, SystemSampler.PoolStats pool, VisionaryConfig cfg) {
+    VisionaryAgent(Store store, Origin origin, RequestWriter writer, SystemSampler.PoolStats pool,
+            VisionaryConfig cfg) {
         this.config = cfg;
         this.store = store;
-        this.requests = requests;
+        this.writer = writer;
+        this.logRequests = cfg.logRequests();
+        this.telemetry = cfg.spans() || cfg.errors() ? new Telemetry(cfg, writer) : null;
         this.system = cfg.systemEnabled()
-                ? new SystemSampler(store, cfg.resolvedInstance(), cfg.systemInterval(), counters, pool)
+                ? new SystemSampler(store, origin, cfg.systemInterval(), counters, pool)
                 : null;
         this.retention = new Retention(store);
-        if (requests != null) {
+        if (logRequests) {
             retention.add(Table.API_LOGS, cfg.logRetentionDays());
+        }
+        if (cfg.spans()) {
+            retention.add(Table.SPANS, cfg.logRetentionDays());
+        }
+        if (cfg.errors()) {
+            retention.add(Table.ERRORS, cfg.logRetentionDays());
         }
         if (system != null) {
             retention.add(Table.SYSTEM_METRICS, cfg.systemRetentionDays());
         }
         this.summary = "writing to " + store.describe()
-                + "; requests " + (requests != null ? "on (prefix '" + cfg.pathPrefix() + "', bodies "
+                + "; service " + (origin.service() == null ? "(none)" : origin.service())
+                + ", version " + (origin.version() == null ? "(none)" : origin.version())
+                + "; requests " + (logRequests ? "on (prefix '" + cfg.pathPrefix() + "', bodies "
                         + cfg.logBodies() + ", retention " + cfg.logRetentionDays() + "d)" : "off")
+                + "; spans " + (cfg.spans() ? "on (threshold " + cfg.spanThresholdMs() + "ms, max "
+                        + cfg.spanMax() + ")" : "off")
+                + "; errors " + (cfg.errors() ? "on" : "off")
                 + "; system metrics " + (system != null ? "every " + cfg.systemInterval().toMillis() + "ms" : "off");
     }
 
     boolean enabled() {
-        return store != null && (requests != null || system != null);
+        return store != null;
     }
 
     VisionaryConfig config() {
@@ -69,8 +87,14 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         return counters;
     }
 
+    /** The writer when request logging is on, else null. */
     RequestWriter requests() {
-        return requests;
+        return logRequests ? writer : null;
+    }
+
+    /** Span and error capture, null when both are off or Visionary is disabled. */
+    Telemetry telemetry() {
+        return telemetry;
     }
 
     @Override
@@ -79,8 +103,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
             return;
         }
         running = true;
-        if (requests != null) {
-            requests.start();
+        writer.start();
+        if (telemetry != null) {
+            telemetry.activate();
         }
         if (system != null) {
             system.start();
@@ -95,9 +120,10 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
             return;
         }
         running = false;
-        if (requests != null) {
-            requests.close(SHUTDOWN_TIMEOUT);
+        if (telemetry != null) {
+            telemetry.deactivate();
         }
+        writer.close(SHUTDOWN_TIMEOUT);
         if (system != null) {
             system.close(SHUTDOWN_TIMEOUT);
         }
