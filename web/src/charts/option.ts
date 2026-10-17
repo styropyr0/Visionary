@@ -283,10 +283,10 @@ function buildTimeseries(res: Result, viz: Viz, t: ChartTokens): BuiltChart | nu
           : {
               type: "line" as const,
               name: s.name,
-              data: s.points,
-              showSymbol: false,
-              symbol: "circle",
-              symbolSize: 8,
+              data: markIsolated(s.points),
+              // Only isolated readings get a dot; everything else is a plain line.
+              showSymbol: true,
+              symbol: "none",
               connectNulls: false,
               lineStyle: { width: 2, color: s.color, cap: "round", join: "round" },
               itemStyle: { color: s.color, borderColor: t.surface, borderWidth: 2 },
@@ -296,6 +296,19 @@ function buildTimeseries(res: Result, viz: Viz, t: ChartTokens): BuiltChart | nu
       ),
     },
   };
+}
+
+/**
+ * A reading with gaps on both sides has no neighbor to draw a line to, so it
+ * would not show at all; give those points a dot instead.
+ */
+function markIsolated(points: [number, number | null][]) {
+  return points.map((p, i) => {
+    const prev = points[i - 1]?.[1];
+    const next = points[i + 1]?.[1];
+    const alone = p[1] !== null && (prev === null || prev === undefined) && (next === null || next === undefined);
+    return alone ? { value: p, symbol: "circle", symbolSize: 6 } : p;
+  });
 }
 
 function buildBar(res: Result, viz: Viz, t: ChartTokens): BuiltChart | null {

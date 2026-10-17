@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Server, Sparkles } from "lucide-react";
+import { Select } from "../components/Select";
 import { api, ApiError, rangeQuery, type Result, type Viz } from "../lib/api";
 import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatLogTime, formatRelative } from "../lib/time";
+import { formatLogTime } from "../lib/time";
 import { sparkPoints } from "../charts/option";
 import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
@@ -64,7 +65,7 @@ const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
     text: "Throughput and IOPS show how much the disks do; busy time and await show whether they keep up. A disk near 100% busy with rising await is the bottleneck.",
     panels: [
       { name: "disk_space", title: "Disk space", description: "Space and inodes used on the filesystem the service runs from.", viz: { type: "timeseries", x: "t", y: ["space_used", "inodes_used"], unit: "percent" }, span: "span-4" },
-      { name: "disk_throughput", title: "Disk throughput", description: "Bytes read and written per second, across whole disks.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes" }, span: "span-4" },
+      { name: "disk_throughput", title: "Disk read/write speed", description: "How fast the host reads from and writes to its disks, summed over whole disks.", viz: { type: "timeseries", x: "t", y: ["read_speed", "write_speed"], unit: "bytes_per_s" }, span: "span-4" },
       { name: "disk_iops", title: "Disk operations", description: "Read and write operations per second.", viz: { type: "timeseries", x: "t", y: ["read_ops", "write_ops"], unit: "count" }, span: "span-4" },
       { name: "disk_busy", title: "Disk busy", description: "Share of each interval the busiest disk spent doing I/O.", viz: { type: "timeseries", x: "t", y: ["avg_busy", "peak_busy"], unit: "percent" }, span: "span-6", empty: LINUX_ONLY },
       { name: "disk_latency", title: "Disk latency", description: "Average time per disk operation (await), including time queued.", viz: { type: "timeseries", x: "t", y: ["avg_await", "peak_await"], unit: "ms" }, span: "span-6" },
@@ -74,7 +75,7 @@ const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
     title: "Network",
     text: "Errors, drops and TCP retransmits rising together usually mean a saturated link or a struggling peer.",
     panels: [
-      { name: "network", title: "Network throughput", description: "Bytes received and sent per second by the host.", viz: { type: "timeseries", x: "t", y: ["received_bytes", "sent_bytes"], unit: "bytes" }, span: "span-6" },
+      { name: "network", title: "Network throughput", description: "Bytes received and sent per second by the host.", viz: { type: "timeseries", x: "t", y: ["received_bytes", "sent_bytes"], unit: "bytes_per_s" }, span: "span-6" },
       { name: "network_packets", title: "Packets", description: "Packets received and sent per second.", viz: { type: "timeseries", x: "t", y: ["received", "sent"], unit: "count" }, span: "span-6" },
       { name: "network_errors", title: "Errors and drops", description: "Interface errors and dropped packets per interval, in and out.", viz: { type: "timeseries", x: "t", y: ["errors", "drops"], unit: "count" }, span: "span-4" },
       { name: "tcp", title: "TCP connections", description: "Connections in the ESTABLISHED state.", viz: { type: "timeseries", x: "t", y: ["established"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
@@ -88,7 +89,7 @@ const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
       { name: "goroutines", title: "Concurrency", description: "Goroutines (Go) or live threads, and OS threads. A steady climb usually means a leak or stuck work.", viz: { type: "timeseries", x: "t", y: ["goroutines", "threads"], unit: "count" }, span: "span-4" },
       { name: "gc", title: "GC pause", description: "Total garbage-collection pause per interval.", viz: { type: "timeseries", x: "t", y: ["gc_pause_ms"], unit: "ms" }, span: "span-4" },
       { name: "file_descriptors", title: "Open files", description: "Open files and sockets against the process limit. Hitting the limit makes new connections fail.", viz: { type: "timeseries", x: "t", y: ["open_files", "limit_files"], unit: "count" }, span: "span-4" },
-      { name: "process_io", title: "Process I/O", description: "Bytes this process read and wrote per second.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes" }, span: "span-6" },
+      { name: "process_io", title: "Process read/write speed", description: "How fast this process reads and writes, to disk and other files.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes_per_s" }, span: "span-6" },
       { name: "processes", title: "Host processes", description: "Processes running, and blocked waiting on I/O.", viz: { type: "timeseries", x: "t", y: ["running", "blocked"], unit: "count" }, span: "span-3", empty: LINUX_ONLY },
       { name: "context_switches", title: "Context switches", description: "Host context switches per second.", viz: { type: "timeseries", x: "t", y: ["per_second"], unit: "count" }, span: "span-3", empty: LINUX_ONLY },
     ],
@@ -123,6 +124,7 @@ export function System() {
   const cpu = useSystem("cpu", instance);
   const memory = useSystem("process_memory", instance);
   const disk = useSystem("disk_busy", instance);
+  const diskIO = useSystem("disk_throughput", instance);
   const net = useSystem("network", instance);
 
   const missing = instances.error instanceof ApiError && instances.error.status === 404;
@@ -141,6 +143,7 @@ export function System() {
   const perCore = loadNow !== null && cores ? loadNow / cores : null;
   const swapTotal = n("swap_total");
   const fdsLimit = n("fds_limit");
+  const speed = (v: number) => `${formatBytes(v)}/s`;
 
   return (
     <>
@@ -149,12 +152,14 @@ export function System() {
         actions={
           <>
             {names.length > 1 && (
-              <select className="select" value={instance} onChange={(e) => setInstance(e.target.value)} aria-label="Instance">
-                <option value="">All instances</option>
-                {names.map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
+              <Select
+                label="Instance"
+                icon={<Server size={14} />}
+                value={instance}
+                onChange={setInstance}
+                options={[{ value: "", label: "All instances" }, ...names.map((n) => ({ value: n, label: n }))]}
+                maxWidth={240}
+              />
             )}
             <TimeRangePicker />
             <RefreshControl busy={stats.loading || cpu.loading} />
@@ -237,24 +242,37 @@ export function System() {
               footer={n("disk_busy_max") !== null ? `peak ${formatPercent(n("disk_busy_max")!)}` : "Not reported on this host"}
             />
             <StatTile
+              label="Disk read speed"
+              description="Average read speed over the range, across whole disks."
+              value={dash(n("disk_read_avg"), speed)}
+              delta={null}
+              deltaLabel=""
+              upIs="neutral"
+              spark={sparkPoints(diskIO.data, ["read_speed"])}
+              loading={stats.loading}
+              footer={n("disk_read_max") !== null ? `peak ${speed(n("disk_read_max")!)}` : "Not reported on this host"}
+            />
+            <StatTile
+              label="Disk write speed"
+              description="Average write speed over the range, across whole disks."
+              value={dash(n("disk_write_avg"), speed)}
+              delta={null}
+              deltaLabel=""
+              upIs="neutral"
+              spark={sparkPoints(diskIO.data, ["write_speed"])}
+              loading={stats.loading}
+              footer={n("disk_write_max") !== null ? `peak ${speed(n("disk_write_max")!)}` : "Not reported on this host"}
+            />
+            <StatTile
               label="Network"
               description="Average bytes per second received plus sent."
-              value={dash(n("net_bytes_avg"), (v) => `${formatBytes(v)}/s`)}
+              value={dash(n("net_bytes_avg"), speed)}
               delta={null}
               deltaLabel=""
               upIs="neutral"
               spark={sparkPoints(net.data, ["received_bytes", "sent_bytes"])}
               loading={stats.loading}
               footer={n("net_bytes_max") !== null ? `peak ${formatBytes(n("net_bytes_max")!)}/s` : undefined}
-            />
-            <StatTile
-              label="TCP connections"
-              value={dash(n("tcp_now"), (v) => formatCount(v))}
-              delta={null}
-              deltaLabel=""
-              upIs="neutral"
-              loading={stats.loading}
-              footer={n("tcp_max") !== null ? `peak ${formatCount(n("tcp_max")!)}` : "Not reported on this host"}
             />
             <StatTile
               label="Process memory"
@@ -264,7 +282,7 @@ export function System() {
               upIs="bad"
               spark={sparkPoints(memory.data, ["rss_bytes"])}
               loading={stats.loading}
-              footer={n("rss_max") !== null ? `peak ${formatBytes(n("rss_max")! * 1048576)}` : undefined}
+              footer={[n("rss_max") !== null ? `peak ${formatBytes(n("rss_max")! * 1048576)}` : "", n("uptime_s") !== null ? `up ${formatUptime(n("uptime_s")!)}` : ""].filter(Boolean).join(" · ") || undefined}
             />
             <StatTile
               label="Open files"
@@ -283,16 +301,7 @@ export function System() {
               deltaLabel=""
               upIs="bad"
               loading={stats.loading}
-              footer={n("db_max") !== null ? `peak ${formatCount(n("db_max")!)}` : undefined}
-            />
-            <StatTile
-              label="Uptime"
-              value={dash(n("uptime_s"), formatUptime)}
-              delta={null}
-              deltaLabel=""
-              upIs="neutral"
-              loading={stats.loading}
-              footer={s?.last_seen ? `last sample ${formatRelative(String(s.last_seen))}` : undefined}
+              footer={n("db_max") !== null ? `peak ${formatCount(n("db_max")!)}` : "No pool stats recorded"}
             />
 
             {SECTIONS.map((sec) => (

@@ -1,4 +1,5 @@
-export type Unit = "count" | "ms" | "percent" | "bytes" | "none";
+/** bytes_per_s is a rate: shown as "12.4 MB/s". */
+export type Unit = "count" | "ms" | "percent" | "bytes" | "bytes_per_s" | "none";
 export type VizType = "timeseries" | "bar" | "pie" | "stat" | "table";
 
 export interface Viz {

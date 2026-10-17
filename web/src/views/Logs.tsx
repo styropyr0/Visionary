@@ -6,6 +6,7 @@ import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { formatFull, formatLogTime } from "../lib/time";
 import { DataTable, type Column } from "../components/DataTable";
+import { Select } from "../components/Select";
 import { CopyButton, Drawer } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 
@@ -63,6 +64,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
     setFilters(next);
     setDebounced(next);
   };
+  const pick = (k: keyof Filters) => (value: string) => setNow(k)({ target: { value } });
   const active = Object.values(filters).some(Boolean);
 
   return (
@@ -77,27 +79,36 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
           </>
         }
       />
-      <div className="content">
+      <div className="content logs-content">
         <div className="filter-row" role="search">
-          <select className="select" value={filters.status} onChange={setNow("status")} aria-label="Status">
-            <option value="">All statuses</option>
-            <option value="2xx">2xx success</option>
-            <option value="3xx">3xx redirect</option>
-            <option value="4xx">4xx client error</option>
-            <option value="5xx">5xx server error</option>
-          </select>
-          <select className="select" value={filters.method} onChange={setNow("method")} aria-label="Method">
-            <option value="">All methods</option>
-            {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </select>
-          <select className="select" value={filters.route} onChange={setNow("route")} aria-label="Route" style={{ maxWidth: 280 }}>
-            <option value="">All routes</option>
-            {(meta?.routes ?? []).map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
+          <Select
+            label="Status"
+            align="left"
+            value={filters.status}
+            onChange={pick("status")}
+            options={[
+              { value: "", label: "All statuses" },
+              { value: "2xx", label: "2xx success" },
+              { value: "3xx", label: "3xx redirect" },
+              { value: "4xx", label: "4xx client error" },
+              { value: "5xx", label: "5xx server error" },
+            ]}
+          />
+          <Select
+            label="Method"
+            align="left"
+            value={filters.method}
+            onChange={pick("method")}
+            options={[{ value: "", label: "All methods" }, ...["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => ({ value: m, label: m }))]}
+          />
+          <Select
+            label="Route"
+            align="left"
+            value={filters.route}
+            onChange={pick("route")}
+            maxWidth={280}
+            options={[{ value: "", label: "All routes" }, ...(meta?.routes ?? []).map((r) => ({ value: r, label: r }))]}
+          />
           <input className="input" placeholder="User ID or @handle" value={filters.user} onChange={set("user")} style={{ width: 170 }} aria-label="User" />
           <div className="search">
             <Search size={14} />
@@ -116,11 +127,11 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
           )}
         </div>
 
-        <section className="panel" aria-busy={first.loading || undefined}>
+        <section className="panel logs-panel" aria-busy={first.loading || undefined}>
           {first.loading && <div className="progress" aria-hidden />}
           {first.error && !merged && <div className="panel-state error">{first.error.message}</div>}
           {merged && (
-            <div className={first.loading ? "refetching" : ""} style={{ transition: "opacity 160ms" }}>
+            <div className={`logs-body ${first.loading ? "refetching" : ""}`} style={{ transition: "opacity 160ms" }}>
               <DataTable
                 result={merged}
                 columns={logColumns}
@@ -128,7 +139,6 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
                 rowKey={(r) => r[0]}
                 selectedKey={selected ?? undefined}
                 onRowClick={(r) => setSelected(Number(r[0]))}
-                maxHeight={window.innerHeight - 190}
               />
               {merged.truncated && (
                 <div className="load-more">

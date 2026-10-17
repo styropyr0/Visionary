@@ -1803,3 +1803,50 @@ pre.code {
   line-height: 1.5;
   color: var(--text-3);
 }
+
+/* Select: a toolbar button whose label truncates, and a scrolling menu. */
+.btn .btn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popover.menu-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.menu-row .menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Request logs: the table fills the rest of the window and scrolls inside. */
+.content.logs-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.logs-panel {
+  flex: 1 1 auto;
+  min-height: 240px;
+}
+.logs-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.logs-body .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Chart text matches the UI: same Inter alternates and tabular digits.
+   ECharts writes the font inline, so these need !important. */
+.chart svg text,
+.chart div {
+  font-feature-settings: "cv11", "ss01", "tnum" !important;
+}

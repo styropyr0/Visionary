@@ -3,7 +3,7 @@ import { Check, ChevronDown, Clock, RefreshCw } from "lucide-react";
 import { useApp } from "../lib/state";
 import { PRESETS, rangeLabel, toLocalInput } from "../lib/time";
 
-function usePopover() {
+export function usePopover() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {

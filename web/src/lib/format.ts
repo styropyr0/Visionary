@@ -55,6 +55,8 @@ export function formatValue(v: unknown, unit: Unit = "none"): string {
       return formatPercent(n);
     case "bytes":
       return formatBytes(n);
+    case "bytes_per_s":
+      return `${formatBytes(n)}/s`;
     case "count":
       return formatCount(n);
     default:
@@ -71,6 +73,8 @@ export function formatAxis(n: number, unit: Unit = "none"): string {
       return `${tick(n)}%`;
     case "bytes":
       return formatBytes(n);
+    case "bytes_per_s":
+      return `${formatBytes(n)}/s`;
     default:
       return tick(n);
   }
@@ -87,6 +91,7 @@ export function unitForColumn(name: string, fallback: Unit = "none"): Unit {
   const n = name.toLowerCase();
   if (/(^|_)(ms|latency|duration|p\d{2}|avg_ms|p50|p95|p99)($|_)/.test(n) || n.endsWith("_ms")) return "ms";
   if (/(rate|pct|percent|share)($|_)/.test(n)) return "percent";
+  if (/speed$/.test(n)) return "bytes_per_s";
   if (/(size|bytes)($|_)/.test(n)) return "bytes";
   if (/(count|requests|errors|occurrences|users|hits|total|calls|^n$)/.test(n)) return "count";
   return fallback;

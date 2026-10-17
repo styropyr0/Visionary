@@ -19,3 +19,4 @@ internal/analytics/web/dist/*
 .vscode/
 .DS_Store
 Thumbs.db
+*.tsbuildinfo

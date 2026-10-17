@@ -44,6 +44,10 @@ SELECT
   (SELECT disk_used_percent FROM latest) AS disk_now,
   (SELECT disk_free_gb FROM latest) AS disk_free_gb,
   (SELECT MAX(disk_busy_percent) FROM r) AS disk_busy_max,
+  (SELECT ` + q.round("AVG(disk_read_kbps) * 1024", 0) + ` FROM r) AS disk_read_avg,
+  (SELECT ` + q.round("MAX(disk_read_kbps) * 1024", 0) + ` FROM r) AS disk_read_max,
+  (SELECT ` + q.round("AVG(disk_write_kbps) * 1024", 0) + ` FROM r) AS disk_write_avg,
+  (SELECT ` + q.round("MAX(disk_write_kbps) * 1024", 0) + ` FROM r) AS disk_write_max,
   (SELECT ` + q.round("AVG(disk_busy_percent)", 1) + ` FROM r) AS disk_busy_avg,
   (SELECT swap_used_mb FROM latest) AS swap_now,
   (SELECT swap_total_mb FROM latest) AS swap_total,
@@ -198,8 +202,8 @@ GROUP BY t ORDER BY t`,
 
 		"disk_throughput": `
 SELECT {{t}} AS t,
-  ` + q.round("AVG(disk_read_kbps) * 1024", 0) + ` AS read_bytes,
-  ` + q.round("AVG(disk_write_kbps) * 1024", 0) + ` AS write_bytes
+  ` + q.round("AVG(disk_read_kbps) * 1024", 0) + ` AS read_speed,
+  ` + q.round("AVG(disk_write_kbps) * 1024", 0) + ` AS write_speed
 FROM system_metrics WHERE ` + sysWindow + ` AND disk_read_kbps IS NOT NULL
 GROUP BY t ORDER BY t`,
 
