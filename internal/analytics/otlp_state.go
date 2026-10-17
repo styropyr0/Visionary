@@ -174,30 +174,34 @@ func (o *otlpState) flushDue(ctx context.Context) {
 }
 
 // store writes rows, adding a releases row for each service version that
-// is new to the database, and remembers the versions once they are stored.
+// is new to the database.
 func (o *otlpState) store(ctx context.Context, rows *otlpRows) error {
 	keys := make([]string, 0, len(rows.releases))
-	for key, row := range rows.releases {
+	for key := range rows.releases {
+		keys = append(keys, key)
+	}
+	for _, row := range rows.releases {
 		known, err := o.releaseStored(ctx, row[1], row[3].(string))
 		if err != nil {
+			o.mu.Lock()
+			for _, k := range keys {
+				delete(o.releases, k)
+			}
+			o.mu.Unlock()
 			return err
 		}
 		if !known {
 			rows.add(otlpReleasesTable, row)
 		}
-		keys = append(keys, key)
 	}
 	if err := o.write(ctx, rows); err != nil {
+		o.mu.Lock()
+		for _, k := range keys {
+			delete(o.releases, k) // try again with the next export
+		}
+		o.mu.Unlock()
 		return err
 	}
-	o.mu.Lock()
-	if len(o.releases) > 10000 {
-		o.releases = map[string]bool{}
-	}
-	for _, k := range keys {
-		o.releases[k] = true
-	}
-	o.mu.Unlock()
 	return nil
 }
 
@@ -208,16 +212,25 @@ func (o *otlpState) noteRelease(rows *otlpRows, res *otlpResource, ns uint64) {
 		return
 	}
 	key := res.service + "\n" + res.version
+	at := otlpTime(ns)
+	if old, ok := rows.releases[key]; ok {
+		if at < old[0].(string) {
+			old[0] = at // the earliest time marks the deploy
+		}
+		return
+	}
 	if o.releases[key] {
 		return
 	}
 	if rows.releases == nil {
 		rows.releases = map[string][]any{}
 	}
-	at := otlpTime(ns)
-	if old, ok := rows.releases[key]; ok && old[0].(string) <= at {
-		return
+	if len(o.releases) > 10000 {
+		o.releases = map[string]bool{}
 	}
+	// Claimed now, so concurrent exports do not add it twice; store gives
+	// it back if the write fails.
+	o.releases[key] = true
 	rows.releases[key] = []any{at, otlpNullStr(res.service), res.instance, res.version, "otlp", otlpNullStr(res.sdkVersion), otlpNullStr(res.runtime)}
 }
 

@@ -77,7 +77,7 @@ type otlpMetricRow struct {
 }
 
 // otlpMetricLinger is how long a window stays open for more exports after
-// its first datapoint arrived, when no later window closes it first.
+// its first datapoint arrived.
 const otlpMetricLinger = 20 * time.Second
 
 func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.ResourceMetrics) (int64, error) {
@@ -126,7 +126,7 @@ func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.Resource
 			o.noteRelease(out, res, uint64(now.UnixNano()))
 		}
 	}
-	due := o.closedMetricRows(now, false)
+	due := o.closedMetricRows(now)
 	o.metricRowsInto(out, due)
 	o.mu.Unlock()
 	if err := o.store(ctx, out); err != nil {
@@ -167,18 +167,15 @@ func (o *otlpState) observe(res *otlpResource, name string, attrs map[string]str
 	series[sk] = otlpObs{attrs, v}
 }
 
-// closedMetricRows takes the windows that are complete: a later window of
-// the same instance exists, they lingered long enough, or all of them when
-// all is set or memory is short. The caller holds o.mu.
-func (o *otlpState) closedMetricRows(now time.Time, all bool) []*otlpMetricRow {
-	all = all || len(o.metricRows) > otlpMaxMetricRows
-	newest := map[string]int64{}
-	for _, row := range o.metricRows {
-		newest[row.key] = max(newest[row.key], row.bucket)
-	}
+// closedMetricRows takes the windows that lingered long enough, or all of
+// them when memory is short. Exporters may deliver out of order (retries,
+// several readers), so a later window does not close an earlier one. The
+// caller holds o.mu.
+func (o *otlpState) closedMetricRows(now time.Time) []*otlpMetricRow {
+	all := len(o.metricRows) > otlpMaxMetricRows
 	var due []*otlpMetricRow
 	for k, row := range o.metricRows {
-		if all || row.bucket < newest[row.key] || now.Sub(row.firstSeen) >= otlpMetricLinger {
+		if all || now.Sub(row.firstSeen) >= otlpMetricLinger {
 			due = append(due, row)
 			delete(o.metricRows, k)
 		}
@@ -192,7 +189,7 @@ func (o *otlpState) dueMetrics(now time.Time) *otlpRows {
 	rows := &otlpRows{}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.metricRowsInto(rows, o.closedMetricRows(now, false))
+	o.metricRowsInto(rows, o.closedMetricRows(now))
 	return rows
 }
 
