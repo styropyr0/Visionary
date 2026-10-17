@@ -220,13 +220,15 @@ type uptimeResult struct {
 	TLSMs         *float64 `json:"tls_ms"`
 	TTFBMs        *float64 `json:"ttfb_ms"`
 	CertExpiresAt string   `json:"cert_expires_at,omitempty"`
+
+	blocked bool // refused by the address guard; retrying cannot help
 }
 
 // probeWithRetry tries again once, shortly, before calling a check failed,
 // so one dropped packet does not open an incident.
 func (u *uptimeRunner) probeWithRetry(ctx context.Context, c UptimeCheck) uptimeResult {
 	res := u.probe(ctx, c)
-	if res.OK || ctx.Err() != nil {
+	if res.OK || ctx.Err() != nil || res.blocked {
 		return res
 	}
 	select {
@@ -332,7 +334,7 @@ func (u *uptimeRunner) probe(ctx context.Context, c UptimeCheck) (res uptimeResu
 		res.Degraded = res.OK && c.DegradedMs > 0 && res.DurationMs > float64(c.DegradedMs)
 	}()
 	fail := func(err error) uptimeResult {
-		res.OK, res.Error = false, probeError(err, c.TimeoutMs)
+		res.OK, res.Error, res.blocked = false, probeError(err, c.TimeoutMs), errors.Is(err, errBlockedAddress)
 		return res
 	}
 

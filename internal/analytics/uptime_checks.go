@@ -336,7 +336,8 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "you do not have permission to change checks")
 		return
 	}
-	var c UptimeCheck
+	// Fields left out of the body keep these defaults.
+	c := UptimeCheck{FollowRedirects: true, Enabled: true}
 	if err := readJSON(r, &c); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
