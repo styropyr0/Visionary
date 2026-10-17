@@ -9,6 +9,8 @@ import { DataTable, type Column } from "../components/DataTable";
 import { Select } from "../components/Select";
 import { CopyButton, Drawer } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
+import { RequestTelemetry } from "../components/telemetry/RequestTelemetry";
+import { shortVersion } from "../lib/telemetry";
 
 interface Filters {
   status: string;
@@ -250,9 +252,23 @@ export function LogDetail({ id, onClose }: { id: number; onClose: () => void }) 
               <span className="mono">{String(rec.ip ?? "—")}</span>
               <div className="dim" style={{ marginTop: 2 }}>{String(rec.user_agent ?? "")}</div>
             </dd>
+            {rec.service || rec.version ? (
+              <>
+                <dt>Service</dt>
+                <dd>
+                  {rec.service ? String(rec.service) : <span className="dim">—</span>}
+                  {rec.version ? (
+                    <span className="pill mono" style={{ marginLeft: 8 }} title={String(rec.version)}>
+                      {shortVersion(String(rec.version))}
+                    </span>
+                  ) : null}
+                </dd>
+              </>
+            ) : null}
             <dt>Request ID</dt>
             <dd className="mono">{String(rec.request_id)}</dd>
           </dl>
+          <RequestTelemetry rec={rec} />
           <div className="tabs" role="tablist">
             {(["response", "request", "headers"] as const).map((t) => (
               <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
