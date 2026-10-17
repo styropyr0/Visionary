@@ -187,7 +187,8 @@ func fingerprint(typ, msg string, frames []runtime.Frame) string {
 }
 
 // topFrames returns up to five application frames as function@file, or the
-// top five of all frames when none can be told to be the application's.
+// top five innermost frames of any kind (the SDK's own excepted) when none
+// are the application's. Frames arrive innermost first.
 func topFrames(frames []runtime.Frame) []string {
 	var app, rest []string
 	for _, f := range frames {
@@ -200,7 +201,7 @@ func topFrames(frames []runtime.Frame) []string {
 			if len(app) == fingerprintFrames {
 				break
 			}
-		} else if len(rest) < fingerprintFrames && !strings.HasPrefix(f.Function, "runtime.") {
+		} else if len(rest) < fingerprintFrames {
 			rest = append(rest, key)
 		}
 	}
