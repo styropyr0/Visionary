@@ -168,7 +168,11 @@ internal sealed class SystemSampler : BackgroundService
         v["goroutines"] = (long)ThreadPool.ThreadCount;
         var gc = GC.GetGCMemoryInfo();
         v["heap_alloc_mb"] = Math.Round(GC.GetTotalMemory(false) / HostSampler.Mb, 1);
-        v["heap_inuse_mb"] = Math.Round(gc.TotalCommittedBytes / HostSampler.Mb, 1);
+        if (gc.TotalCommittedBytes > 0)
+        {
+            // Known once the first collection has run.
+            v["heap_inuse_mb"] = Math.Round(gc.TotalCommittedBytes / HostSampler.Mb, 1);
+        }
         var gcCount = GC.CollectionCount(0);
         var gcPause = GC.GetTotalPauseDuration();
         var pauseMs = (gcPause - _gcPause).TotalMilliseconds;

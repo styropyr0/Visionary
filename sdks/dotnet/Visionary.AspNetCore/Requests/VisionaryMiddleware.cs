@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Diagnostics;
@@ -241,9 +242,14 @@ internal sealed class VisionaryMiddleware
         {
             return null;
         }
-        // Controllers' attribute routes come without the leading slash ("api/users/{id}").
+        // Inline constraints and defaults don't change the route: /users/{id:int} is /users/{id},
+        // as other SDKs write it. Controllers' attribute routes come without the leading slash.
+        raw = RouteConstraints.Replace(raw, "{$1$2}");
         return raw.StartsWith('/') ? raw : "/" + raw;
     }
+
+    private static readonly Regex RouteConstraints = new(@"\{(\*{0,2}[^{}:=?]+)(?::[^{}=?]+)*(?:=[^{}?]*)?(\??)\}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>The user set with <see cref="Visionary.SetUser"/>, else the authenticated principal.</summary>
     internal static VisionaryUser? UserOf(HttpContext ctx)

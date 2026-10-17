@@ -72,6 +72,7 @@ internal static class ErrorReport
         StackFrame[] frames;
         try
         {
+            // Innermost first: where the exception was thrown, then its callers.
             frames = new StackTrace(ex, fNeedFileInfo: true).GetFrames();
         }
         catch (Exception)
