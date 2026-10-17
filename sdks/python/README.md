@@ -4,7 +4,11 @@ The Python collector for [Visionary](../../Readme.md). It runs inside your web
 service and writes:
 
 - one row per HTTP request into `api_logs` (method, route pattern, status,
-  timing, user, redacted headers and bodies, error codes), and
+  timing, user, redacted headers and bodies, error codes, and how many
+  database and outbound HTTP calls it made),
+- the database and HTTP calls of slow or failed requests into `spans`,
+- unhandled and reported exceptions into `errors`,
+- one `releases` row per deploy (when the release is known), and
 - a periodic host / process / runtime sample into `system_metrics`.
 
 The Visionary server reads these tables for its dashboards. All slow work
@@ -163,8 +167,99 @@ same settings as attributes. The full list and semantics are in
 | `VISIONARY_SYSTEM_METRICS` | `true` | sampler on/off |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | `15`, `500ms`, `1m` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | |
+| `VISIONARY_SERVICE` | empty | service name on every row |
+| `VISIONARY_RELEASE` | platform commit variable | release on every row; see [Telemetry](#telemetry-spans-errors-releases) |
+| `VISIONARY_SPANS` | `true` | spans and call totals on/off |
+| `VISIONARY_SPAN_THRESHOLD_MS` | `100` | store spans of requests at least this slow (or 5xx) |
+| `VISIONARY_SPAN_MAX` | `100` | span rows per request; later calls still count in the totals |
+| `VISIONARY_ERRORS` | `true` | error capture on/off |
+| `VISIONARY_INSTRUMENT_HTTP` | `false` | Python only: call `instrument_http()` at start |
 
 Booleans accept `true/false/1/0/yes/no`.
+
+## Telemetry (spans, errors, releases)
+
+### Service and release
+
+`VISIONARY_SERVICE` names the service, so several services can share one
+database. The release (`version`) is `VISIONARY_RELEASE`, else the first of
+`RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
+`HEROKU_SLUG_COMMIT`, `SOURCE_VERSION`, `GIT_COMMIT`, `GITHUB_SHA`,
+`K_REVISION`; commit hashes are cut to 12 characters. Both go on every
+`api_logs`, `system_metrics` and `errors` row (`spans`: service only). When
+the release is known, one `releases` row (`sdk = python`, `runtime` such as
+`CPython 3.13.1`) is written at start; the dashboards mark deploys with it.
+
+### Spans
+
+Every call the SDK can see is counted into `db_count`, `db_ms`, `http_count`
+and `http_ms` on the request's `api_logs` row (NULL for a kind of call that is
+not instrumented). When the request took at least `VISIONARY_SPAN_THRESHOLD_MS`
+or answered 5xx, its first `VISIONARY_SPAN_MAX` calls are also stored as
+`spans` rows, in start order. Spans outside a request are stored when they
+take at least the threshold themselves, with `request_id` NULL.
+
+The request is found through a contextvar, so spans from sync views, thread
+pools that copy the context (FastAPI sync endpoints, `asgiref`,
+`contextvars.copy_context().run`) and asyncio tasks all land on the right
+request.
+
+| Source | How |
+|---|---|
+| Django ORM / `connection.cursor()` | automatic: the middleware adds a wrapper to `execute_wrappers` of every database alias |
+| SQLAlchemy (sync or async) | `visionary.instrument_sqlalchemy(engine)` |
+| psycopg 3 (sync/async), psycopg2, PyMySQL, sqlite3 | `conn = visionary.instrument_connection(conn)` (or `instrument_cursor(cur)`) |
+| `requests`, `httpx` (sync and async), `urllib3` | `visionary.instrument_http()` once at startup, or `VISIONARY_INSTRUMENT_HTTP=true` |
+| anything else | `with visionary.span("cache", "GET session"):` (also `async with`) |
+
+```python
+engine = visionary.instrument_sqlalchemy(create_engine(DSN))
+
+with visionary.span("queue", "publish order.created", target="rabbitmq") as s:
+    channel.basic_publish(...)
+    s.set_row_count(1)       # optional; s.set_error(...) marks it failed
+```
+
+Database spans are named after the first keyword and main table
+(`SELECT users`, `INSERT bookings`, `BEGIN`), with the target
+`system/database` (`postgresql/app`, `sqlite/app.db`). The statement is stored
+sanitized: string and number literals become `?`, `IN (?, ?, ...)` becomes
+`IN (?)`, whitespace is collapsed. Parameter values are never stored. HTTP
+spans are named `METHOD host`; the detail is the URL without credentials,
+query or fragment. An HTTP span fails on a transport error or a 5xx answer.
+A call through `requests` makes one span, not a second one for urllib3.
+
+The SDK's own writes are never recorded as spans.
+
+### Errors
+
+The Django, ASGI and Flask integrations record every exception the
+framework turns into a 500 (`handled = 0`) and leave the exception and the
+framework's response unchanged. 4xx exceptions (`Http404`, `HTTPException`,
+`abort(404)`) are not errors. To record one you handled:
+
+```python
+try:
+    charge(card)
+except PaymentError:
+    visionary.capture_exception()      # or capture_exception(exc)
+```
+
+Inside a request the row carries its `request_id`, method, route, path and
+user. `type` is the class name, qualified with its module unless it is a
+builtin (`ValueError`, `psycopg.errors.UndefinedTable`); `stack` is
+`traceback.format_exception` (the last 16 KB).
+
+`fingerprint` groups the same error: the first 16 hex characters of
+`sha1(type + "\n" + frames)`, where `frames` are the 5 innermost frames of
+your own code (not the standard library, `site-packages` or this SDK), each
+written `function@path` with the path relative to its `sys.path` entry
+(`shop/views.py`), joined with `\n`. If no frame is your code, the 5
+innermost frames are used; with no frames at all, the message with digit
+runs replaced by `0`. At most 20 rows per fingerprint per minute are kept.
+
+Retention: `spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS`;
+`releases` are kept.
 
 ## Users
 
@@ -269,9 +364,9 @@ Sources that don't exist on the platform are NULL:
 On Linux the node columns are read from `/proc` when psutil isn't installed,
 so all of them are filled either way.
 
-Older `system_metrics` tables are upgraded in place at startup: missing
-columns are added with `ALTER TABLE ... ADD COLUMN`, and existing rows keep
-NULL in them.
+Older `api_logs` and `system_metrics` tables are upgraded in place at
+startup: missing columns are added with `ALTER TABLE ... ADD COLUMN`, and
+existing rows keep NULL in them.
 
 ## Redaction
 
@@ -302,6 +397,8 @@ matching is case-insensitive.
 - **System writes:** samples are written 4 at a time. On failure they are kept
   (at most an hour's worth) and retried with the next write.
 - **Retention:** runs 60 s after start, then daily, deleting in chunks of 5000.
+- **Telemetry writes:** spans, errors and the release row share the request
+  queue and batches (one transaction, or one D1 `batch` call, per flush).
 - **Logging:** all messages go to the `visionary` logger.
 - **Forking servers:** with servers like `gunicorn --preload`, the background
   threads are restarted in each worker after fork.
