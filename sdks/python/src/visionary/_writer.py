@@ -6,8 +6,11 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import _spans
 from ._entry import Entry, format_ts
+from ._errors import ErrorEvent
 from ._redact import Redactor, error_fields
+from ._spans import Span
 from ._storage import PURGE_CHUNK, Backend
 
 _STOP = object()
@@ -37,20 +40,39 @@ class Schema:
                 self._logger.error("visionary: create %s schema failed (will retry): %s", self._table, e)
 
 
-class RequestWriter:
-    """One background thread that batches api_logs rows."""
+class Release:
+    """The releases row written once at start."""
 
-    def __init__(self, cfg: Any, backend: Backend, logger: logging.Logger) -> None:
+    __slots__ = ("created_at", "sdk_version", "runtime")
+
+    def __init__(self, created_at: float, sdk_version: str, runtime: str) -> None:
+        self.created_at = created_at
+        self.sdk_version = sdk_version
+        self.runtime = runtime
+
+
+class RequestWriter:
+    """One background thread that batches api_logs rows and the telemetry
+    rows (spans, errors, releases) next to them."""
+
+    def __init__(self, cfg: Any, backend: Backend, logger: logging.Logger, instance: str,
+                 runtime: str = "") -> None:
         self._cfg = cfg
         self._backend = backend
         self._logger = logger
+        self._instance = instance
+        self._service = cfg.service or None
+        self._version = cfg.version or None
+        self._runtime = runtime or None
         self._redact = Redactor(cfg.redact_headers, cfg.redact_fields, cfg.redact_request_fields)
         self._batch_size = cfg.batch_size if 0 < cfg.batch_size <= 50 else 50
         self._flush_interval = cfg.flush_interval if cfg.flush_interval > 0 else 3.0
         self._queue_size = cfg.queue_size if cfg.queue_size > 0 else 5000
         self._code_field = cfg.error_code_field or "error.code"
         self._key_field = cfg.error_key_field or "error.key"
-        self._schema = Schema(backend, "requests", logger)
+        self._schemas = [Schema(backend, "telemetry", logger)]
+        if cfg.log_requests:
+            self._schemas.insert(0, Schema(backend, "requests", logger))
         self._init_state()
 
     def _init_state(self) -> None:
@@ -68,8 +90,9 @@ class RequestWriter:
         self._init_state()
         self.start()
 
-    def log(self, e: Entry) -> None:
-        """Enqueue without blocking; a full queue drops and counts the entry."""
+    def log(self, e: Any) -> None:
+        """Enqueue an Entry, Span, ErrorEvent or Release without blocking; a
+        full queue drops and counts it."""
         try:
             self._queue.put_nowait(e)
         except queue.Full:
@@ -90,9 +113,14 @@ class RequestWriter:
                 return False
         return True
 
+    def _ensure_schemas(self) -> None:
+        for schema in self._schemas:
+            schema.ensure()
+
     def _run(self) -> None:
-        self._schema.ensure()
-        batch: List[Entry] = []
+        _spans.mark_internal()
+        self._ensure_schemas()
+        batch: List[Any] = []
         next_flush = time.monotonic() + self._flush_interval
         while True:
             if self._stop.is_set():
@@ -114,7 +142,7 @@ class RequestWriter:
                 self._report_drops()
                 next_flush = time.monotonic() + self._flush_interval
 
-    def _drain(self, batch: List[Entry]) -> None:
+    def _drain(self, batch: List[Any]) -> None:
         while True:
             try:
                 item = self._queue.get_nowait()
@@ -136,24 +164,57 @@ class RequestWriter:
         if n:
             self._logger.warning("visionary: request queue full; %d entries dropped", n)
 
-    def _write(self, batch: List[Entry]) -> None:
+    def _write(self, batch: List[Any]) -> None:
         try:
-            users = self._lookup_users(batch)
-            rows = [self._row(e, users) for e in batch]
+            groups = self._rows(batch)
         except Exception:
             self._logger.exception("visionary: building request rows failed; %d entries dropped", len(batch))
             return
         err: Optional[Exception] = None
         for attempt in (1, 2, 3):
-            self._schema.ensure()
+            self._ensure_schemas()
             try:
-                self._backend.insert("requests", rows)
+                self._backend.insert_many(groups)
                 return
             except Exception as e:
                 err = e
             if attempt < 3:
                 time.sleep(attempt)
         self._logger.error("visionary: request batch write failed; %d entries dropped: %s", len(batch), err)
+
+    def _rows(self, batch: List[Any]) -> List[Tuple[str, List[Tuple[Any, ...]]]]:
+        entries = [e for e in batch if isinstance(e, Entry)]
+        users = self._lookup_users(entries)
+        requests, spans, errors, releases = [], [], [], []
+        for item in batch:
+            if isinstance(item, Entry):
+                requests.append(self._row(item, users))
+                spans.extend(self._span_row(sp, item.request_id) for sp in item.spans)
+            elif isinstance(item, Span):
+                spans.append(self._span_row(item, item.request_id))
+            elif isinstance(item, ErrorEvent):
+                errors.append(self._error_row(item))
+            elif isinstance(item, Release):
+                releases.append(self._release_row(item))
+        return [("requests", requests), ("spans", spans), ("errors", errors), ("releases", releases)]
+
+    def _span_row(self, sp: Span, request_id: Optional[str]) -> Tuple[Any, ...]:
+        return (
+            format_ts(sp.started_at), request_id or None, self._service, self._instance,
+            sp.kind, sp.name, sp.target, sp.detail, sp.offset_ms, sp.duration_ms,
+            sp.status, sp.error, sp.row_count,
+        )
+
+    def _error_row(self, ev: ErrorEvent) -> Tuple[Any, ...]:
+        return (
+            format_ts(ev.created_at), self._service, self._instance, self._version,
+            ev.request_id, ev.method, ev.route, ev.path, ev.user_id,
+            ev.type, ev.message or None, ev.stack or None, ev.fingerprint, ev.handled, self._runtime,
+        )
+
+    def _release_row(self, r: Release) -> Tuple[Any, ...]:
+        return (format_ts(r.created_at), self._service, self._instance, self._version,
+                "python", r.sdk_version, r.runtime or None)
 
     def _lookup_users(self, batch: List[Entry]) -> Dict[str, Tuple[str, str]]:
         out: Dict[str, Tuple[str, str]] = {}
@@ -214,6 +275,12 @@ class RequestWriter:
             int(e.response_size),
             code or None,
             key or None,
+            self._service,
+            self._version,
+            e.db_count,
+            None if e.db_ms is None else round(e.db_ms, 3),
+            e.http_count,
+            None if e.http_ms is None else round(e.http_ms, 3),
         )
 
 
@@ -246,6 +313,7 @@ class Retention:
         self._stop.set()
 
     def _run(self) -> None:
+        _spans.mark_internal()
         wait = 60.0
         while not self._stop.wait(wait):
             for table, days in self._tables.items():

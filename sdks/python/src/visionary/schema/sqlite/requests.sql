@@ -23,7 +23,13 @@ CREATE TABLE IF NOT EXISTS api_logs (
     response_body_truncated INTEGER NOT NULL DEFAULT 0,
     response_size           INTEGER NOT NULL DEFAULT 0,
     error_code              TEXT,
-    error_key               TEXT
+    error_key               TEXT,
+    service                 TEXT,
+    version                 TEXT,
+    db_count                INTEGER,
+    db_ms                   REAL,
+    http_count              INTEGER,
+    http_ms                 REAL
 );
 CREATE INDEX IF NOT EXISTS idx_api_logs_created_at ON api_logs (created_at);
 CREATE INDEX IF NOT EXISTS idx_api_logs_user_created ON api_logs (user_id, created_at);

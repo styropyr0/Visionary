@@ -3,7 +3,8 @@
     app = Flask(__name__)
     Visionary(app)              # or: ext = Visionary(); ext.init_app(app)
 
-Without an explicit agent it uses ``visionary.init()``.
+Without an explicit agent it uses ``visionary.init()``. Exceptions Flask turns
+into a 500 are recorded in ``errors``; Flask's handling is unchanged.
 """
 
 from __future__ import annotations
@@ -18,9 +19,17 @@ from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import CountingIterator, finish, logger, resolve_agent
+from ._common import CountingIterator, finish, logger, report_unhandled, resolve_agent
 
 _KEY = "visionary.state"
+
+
+def _info(req: Any, rid: Optional[str]) -> _context.RequestInfo:
+    def route() -> str:
+        rule = req.url_rule
+        return rule.rule if rule is not None else ""
+
+    return _context.RequestInfo(rid, req.method, req.path, route=route)
 
 
 class _State:
@@ -109,13 +118,16 @@ class Visionary:
         environ[_KEY] = st
         agent.http.started()
         try:
+            req = request._get_current_object()
             if not agent.should_log(request.path):
+                st.ann, st.token = _context.begin(None, _info(req, None))
                 return
             e = Entry()
             e.started_at = now()
             e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
             st.entry, st.t0 = e, time.perf_counter()
-            st.ann, st.token = _context.begin()
+            trace = agent.new_trace(e.request_id, st.t0)
+            st.ann, st.token = _context.begin(trace, _info(req, e.request_id))
             cfg = agent.config
             ct = environ.get("CONTENT_TYPE", "")
             if cfg.capture_bodies and capturable(ct):
@@ -143,13 +155,16 @@ class Visionary:
         except Exception:
             logger.exception("visionary: request capture failed")
         self.agent.http.finished(status)
-        finish(self.agent, st.entry, st.t0, status)
+        finish(self.agent, st.entry, st.t0, status, st.ann.trace)
         return response
 
     def _teardown(self, exc: Optional[BaseException]) -> None:
         st = request.environ.get(_KEY)
         if st is None:
             return
+        if exc is not None:
+            # Unhandled: Flask answered (or will propagate) a 500.
+            report_unhandled(self.agent, exc)
         if st.token is not None:
             _context.end(st.token)
             st.token = None
@@ -164,7 +179,7 @@ class Visionary:
                 self._fill(st, None)
             except Exception:
                 logger.exception("visionary: request capture failed")
-            finish(self.agent, st.entry, st.t0, 500)
+            finish(self.agent, st.entry, st.t0, 500, st.ann.trace if st.ann is not None else None)
 
     def _fill(self, st: _State, response: Any) -> bool:
         """Fill the entry; returns True when a streaming body will finish it."""
@@ -214,7 +229,7 @@ class Visionary:
             e.response_body, e.response_truncated = resp.data, resp.truncated
             e.response_size = max(declared, resp.size)
             self.agent.http.finished(status)
-            finish(self.agent, e, st.t0, status)
+            finish(self.agent, e, st.t0, status, st.ann.trace)
 
         response.response = CountingIterator(response.response, resp, done)
         return True
