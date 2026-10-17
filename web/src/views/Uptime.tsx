@@ -134,7 +134,7 @@ function UptimeList() {
                       </th>
                       <th style={{ width: 196 }}>Response time 24h</th>
                       <th style={{ width: 96 }}>Last check</th>
-                      <th style={{ width: 100 }} aria-label="Actions" />
+                      <th style={{ width: 118 }} aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>

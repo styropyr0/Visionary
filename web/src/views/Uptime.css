@@ -60,6 +60,10 @@
 .up-legend i.minor { background: var(--warning); }
 .up-legend i.major { background: var(--critical); }
 
+table.data.up-table {
+  table-layout: fixed;
+  min-width: 1060px;
+}
 table.data.up-table td {
   height: 52px;
 }
@@ -159,7 +163,7 @@ table.data.up-table td {
   color: var(--text-3);
   font-size: 11.5px;
 }
-.up-form .field .btn { justify-content: space-between; width: 100%; }
+.up-form .field .popover-anchor > .btn { justify-content: space-between; width: 100%; }
 .up-form .field .popover-anchor { width: 100%; }
 .up-checks {
   display: flex;
@@ -186,3 +190,4 @@ table.data.up-table td {
   gap: 8px;
   padding-top: 4px;
 }
+.up-cert-warn { color: var(--warning-text); }

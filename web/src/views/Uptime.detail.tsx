@@ -278,9 +278,9 @@ function CertTile({ expires, https }: { expires?: string; https: boolean }) {
           {days === null ? "—" : days < 0 ? "Expired" : days}
           {days !== null && days >= 0 && <span className="stat-unit">{days === 1 ? "day" : "days"}</span>}
         </div>
-        <div className={`stat-delta ${warn ? "bad" : ""}`}>
+        <div className={`stat-delta ${warn ? "up-cert-warn" : ""}`}>
           {warn && <AlertTriangle size={13} aria-hidden />}
-          <span className="vs" style={{ marginLeft: 0, color: warn ? "var(--warning-text)" : undefined }}>
+          <span className="vs" style={{ marginLeft: 0, color: warn ? "inherit" : undefined }}>
             {expires ? `${warn ? "Renew soon · " : ""}expires ${new Date(expires).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}` : https ? "Not seen yet" : "Plain HTTP, no certificate"}
           </span>
         </div>
