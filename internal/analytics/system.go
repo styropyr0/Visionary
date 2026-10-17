@@ -14,13 +14,14 @@ const sysWindow = `created_at >= {{from}} AND created_at < {{to}}{{instance}}`
 
 func systemPanels(q sqlDialect) map[string]string {
 	return map[string]string{
-		// Latest values plus peaks over the range.
+		// Latest values plus peaks over the range. latest reads the raw table
+		// itself, so the rollup variant (which swaps r) keeps exact values.
 		"stats": `
 WITH r AS (
   SELECT * FROM system_metrics WHERE ` + sysWindow + `
 ),
 latest AS (
-  SELECT * FROM r ORDER BY created_at DESC LIMIT 1
+  SELECT * FROM system_metrics AS m WHERE ` + sysWindow + ` ORDER BY created_at DESC LIMIT 1
 )
 SELECT
   (SELECT host_cpu_percent FROM latest) AS cpu_now,
