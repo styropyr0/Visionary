@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visionary-sdk"
+version = "0.1.0"
+description = "Visionary collector: logs API requests and samples system metrics into your database."
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["analytics", "api", "monitoring", "metrics", "django", "fastapi", "flask", "asgi"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Framework :: Django",
+    "Framework :: FastAPI",
+    "Framework :: Flask",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+system = ["psutil>=5.9"]
+postgres = ["psycopg>=3.1"]
+mysql = ["PyMySQL>=1.0"]
+all = ["psutil>=5.9", "psycopg>=3.1", "PyMySQL>=1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/visionary"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/visionary", "README.md", "pyproject.toml"]
