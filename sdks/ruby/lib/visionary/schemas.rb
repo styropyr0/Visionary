@@ -13,6 +13,11 @@ module Visionary
       @mutex = Mutex.new
     end
 
+    # A fork can happen while a parent thread holds the lock.
+    def after_fork
+      @mutex = Mutex.new
+    end
+
     def ensure(group)
       @mutex.synchronize do
         return true if @ready[group]

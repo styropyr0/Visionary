@@ -122,6 +122,7 @@ module Visionary
       @lock = Mutex.new
       @http = System::HttpCounters.new
       @store.after_fork
+      @schemas.after_fork
       @system&.http = @http
       @system&.after_fork
       @writer&.after_fork
