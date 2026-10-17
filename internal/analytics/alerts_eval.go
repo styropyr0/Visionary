@@ -419,3 +419,11 @@ func digestTZ() *time.Location {
 	}
 	return time.Local
 }
+
+// tzName names a zone for people; the server's own zone is "Local" to Go.
+func tzName(loc *time.Location) string {
+	if loc != time.Local {
+		return loc.String()
+	}
+	return "server time (" + time.Now().In(loc).Format("UTC-07:00") + ")"
+}

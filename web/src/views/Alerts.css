@@ -1,0 +1,642 @@
+/* Alerts view. Status colors only carry meaning and always sit next to a
+   label or icon; everything else uses the neutral tokens. */
+
+.al-page .tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.al-tab-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--critical);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.al-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  min-height: 32px;
+}
+
+.al-counts {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  color: var(--text-2);
+}
+
+.al-counts strong {
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.al-count-firing strong {
+  color: var(--critical-text);
+}
+
+.al-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.al-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.al-hint code,
+.al-form code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+/* ---------- State and severity ---------- */
+
+.al-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.al-state.firing { color: var(--critical-text); }
+.al-state.pending { color: var(--warning-text); }
+.al-state.ok { color: var(--good-text); }
+.al-state.idle { color: var(--text-3); }
+
+.al-sev {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  text-transform: capitalize;
+}
+
+.al-sev.critical svg { color: var(--critical-text); }
+.al-sev.warning svg { color: var(--warning-text); }
+.al-sev.info svg { color: var(--text-3); }
+
+/* ---------- Rules table ---------- */
+
+table.al-rules td {
+  height: auto;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  vertical-align: top;
+}
+
+table.al-rules td:nth-child(2) {
+  max-width: 0;
+  width: 100%;
+  white-space: normal;
+}
+
+.al-rule-row {
+  cursor: pointer;
+}
+
+.al-rule-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.al-rule-cond,
+.al-rule-msg {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.al-rule-msg {
+  color: var(--text-2);
+}
+
+.al-rule-err {
+  margin-top: 2px;
+  color: var(--critical-text);
+  font-size: 12px;
+}
+
+.al-muted-cell {
+  color: var(--text-2);
+}
+
+.al-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.al-row-actions .popover {
+  right: 0;
+}
+
+.al-spark {
+  display: block;
+}
+
+.al-spark-line {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.al-spark-th {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.al-spark-empty {
+  color: var(--text-3);
+}
+
+/* ---------- Rule drawer ---------- */
+
+.al-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.al-form .field .segmented {
+  align-self: flex-start;
+}
+
+.al-form .field > .popover-anchor > .btn {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.al-form .textarea {
+  height: auto;
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.al-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.al-row > .field {
+  min-width: 120px;
+}
+
+.al-row > .field.grow {
+  flex: 1;
+  min-width: 220px;
+}
+
+.input.num {
+  width: 130px;
+  font-variant-numeric: tabular-nums;
+}
+
+.al-preview {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.al-preview .chart {
+  margin-top: 4px;
+}
+
+.al-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.al-now {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.al-now li {
+  display: grid;
+  grid-template-columns: 10px 84px 80px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.al-now-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--good);
+}
+
+.al-now-dot.breach {
+  background: var(--critical);
+}
+
+.al-now-state {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.al-now-val {
+  text-align: right;
+}
+
+.al-now-msg {
+  color: var(--text-3);
+}
+
+.al-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.al-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.al-check input {
+  accent-color: var(--accent);
+}
+
+.al-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ---------- Activity ---------- */
+
+.al-timeline {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+
+.al-timeline::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.al-event {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.al-event-mark {
+  position: absolute;
+  top: 14px;
+  left: -21px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--surface-1);
+  border-radius: 50%;
+  background: var(--good);
+}
+
+.al-event.firing .al-event-mark {
+  background: var(--critical);
+}
+
+.al-event-body {
+  padding: 10px 14px;
+}
+
+.al-event-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.al-event-rule {
+  font-weight: 600;
+}
+
+.al-event-time {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+.al-event-msg {
+  margin: 6px 0 0;
+  color: var(--text-2);
+}
+
+.al-explain {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-2);
+}
+
+.al-explain-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.al-explain p {
+  margin: 2px 0 0;
+  color: var(--text-1);
+}
+
+.al-event-foot {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+/* ---------- Channels ---------- */
+
+.al-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.al-card {
+  padding: 14px;
+  gap: 12px;
+}
+
+.al-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.al-kind {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+.al-card-title h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.al-kv {
+  grid-template-columns: 110px minmax(0, 1fr);
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.al-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.al-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+/* ---------- SLOs ---------- */
+
+.al-slos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 12px;
+}
+
+.al-slo {
+  padding: 14px;
+  gap: 14px;
+}
+
+.al-slo-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.al-slo-head h3 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.al-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.al-budget-label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--text-2);
+}
+
+.al-budget-label strong {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.al-budget-tone {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.al-budget-tone.good { color: var(--good-text); }
+.al-budget-tone.warning { color: var(--warning-text); }
+.al-budget-tone.critical { color: var(--critical-text); }
+.al-budget-tone.idle { color: var(--text-3); }
+
+.al-budget-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.al-budget-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.al-budget-fill.good { background: var(--good); }
+.al-budget-fill.warning { background: var(--warning); }
+.al-budget-fill.critical { background: var(--critical); }
+
+table.al-burn td {
+  height: 28px;
+}
+
+.al-hot {
+  color: var(--critical-text);
+  font-weight: 600;
+}
+
+.al-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* ---------- Digest ---------- */
+
+.al-digest {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.al-head-note {
+  margin-left: auto;
+  padding-right: 6px;
+}
+
+.al-digest-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 14px 14px;
+}
+
+.al-digest-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.al-digest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.al-digest-name {
+  font-weight: 500;
+}
+
+.al-digest-when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 22px;
+}
+
+.al-digest-last {
+  padding-left: 22px;
+}
+
+.al-week-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.al-week {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.al-week-val {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.al-week-delta {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.al-week-delta.good { color: var(--good-text); }
+.al-week-delta.bad { color: var(--critical-text); }
+
+.al-digest-text {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1400px) {
+  .al-digest {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

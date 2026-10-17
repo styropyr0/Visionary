@@ -223,5 +223,5 @@ func (s *Server) handleDigestPreview(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, dbErr(err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": d, "lines": digestLines(d), "time_zone": digestTZ().String(), "llm": s.llm != nil})
+	writeJSON(w, http.StatusOK, map[string]any{"data": d, "lines": digestLines(d), "time_zone": tzName(digestTZ()), "llm": s.llm != nil})
 }

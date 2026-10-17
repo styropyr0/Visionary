@@ -58,7 +58,7 @@ func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
 		"llm":             s.llm != nil,
 		"smtp_configured": ok,
 		"smtp_from":       map[bool]string{true: smtp.From}[ok],
-		"digest_tz":       tz.String(),
+		"digest_tz":       tzName(tz),
 		"interval_s":      int(s.alertEngine().interval.Seconds()),
 		"routes":          s.knownRoutes(r.Context()),
 		"instances":       names,

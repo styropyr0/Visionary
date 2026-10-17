@@ -211,7 +211,7 @@ func scaleFloor(m metricDef) float64 {
 	case "ms":
 		return 5
 	case "percent":
-		return 0.5
+		return 1
 	case "rpm":
 		return 0.2
 	}

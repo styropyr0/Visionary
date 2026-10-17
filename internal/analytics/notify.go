@@ -232,7 +232,10 @@ func (s *Server) alertNotice(r alertRule, ev *alertEvent, repeatSince string) no
 		n.Fields = append(n.Fields, [2]string{"Threshold", fnum(round2(*ev.Threshold))})
 	}
 	if ev.Explanation != "" {
-		n.Note = "Likely cause:\n" + ev.Explanation
+		n.Note = ev.Explanation
+		if !strings.HasPrefix(strings.ToLower(n.Note), "likely") {
+			n.Note = "Likely cause: " + n.Note
+		}
 	}
 	n.Payload = map[string]any{
 		"event":       "alert." + n.Event,
