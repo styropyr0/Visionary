@@ -32,20 +32,16 @@ final class Errors {
 
     /**
      * SHA-1 over the type and the top five in-app frames as {@code Class.method@File.java}
-     * (no line numbers), first 16 hex characters. Without in-app frames, the type and the
+     * (no line numbers), first 16 hex characters. Without in-app frames, the top five
+     * frames of any kind (innermost first); with no frames at all, the type and the
      * message with every digit run replaced by 0.
      */
     static String fingerprint(Throwable t) {
         String type = t.getClass().getName();
-        List<String> frames = new ArrayList<>(FINGERPRINT_FRAMES);
-        for (StackTraceElement f : t.getStackTrace()) {
-            if (inApp(f.getClassName())) {
-                String file = f.getFileName() == null ? "" : f.getFileName();
-                frames.add(f.getClassName() + "." + f.getMethodName() + "@" + file);
-                if (frames.size() == FINGERPRINT_FRAMES) {
-                    break;
-                }
-            }
+        StackTraceElement[] stack = t.getStackTrace();
+        List<String> frames = frames(stack, true);
+        if (frames.isEmpty()) {
+            frames = frames(stack, false);
         }
         String basis = frames.isEmpty()
                 ? type + "\n" + DIGITS.matcher(t.getMessage() == null ? "" : t.getMessage()).replaceAll("0")
@@ -56,6 +52,21 @@ final class Errors {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-1 is required of every JDK", e);
         }
+    }
+
+    /** The top five frames, innermost first; only the application's own when {@code inAppOnly}. */
+    private static List<String> frames(StackTraceElement[] stack, boolean inAppOnly) {
+        List<String> out = new ArrayList<>(FINGERPRINT_FRAMES);
+        for (StackTraceElement f : stack) {
+            if (!inAppOnly || inApp(f.getClassName())) {
+                String file = f.getFileName() == null ? "" : f.getFileName();
+                out.add(f.getClassName() + "." + f.getMethodName() + "@" + file);
+                if (out.size() == FINGERPRINT_FRAMES) {
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     static boolean inApp(String className) {

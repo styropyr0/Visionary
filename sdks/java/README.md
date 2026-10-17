@@ -211,8 +211,9 @@ user). Each row has the exception class, message (1000 characters), the
 first 16 hex characters of SHA-1 over the class name and the top five frames from the
 application's own code as `pkg.Class.method@File.java` (no line numbers), joined with
 newlines. Frames in `java.*`, `javax.*`, `jakarta.*`, `sun.*`, `jdk.*`,
-`org.springframework.*`, `org.apache.*` and the SDK are skipped; with no frame left, the
-class name and the message with digit runs replaced by `0` are hashed instead. At most 20
+`org.springframework.*`, `org.apache.*` and the SDK are skipped; when no in-app frame is
+left, the top five frames of any kind are used, and only an exception without any stack
+frames is hashed by its class name and message (digit runs replaced by `0`). At most 20
 rows per fingerprint per minute are written by each instance.
 
 ## What is captured
