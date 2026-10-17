@@ -274,6 +274,12 @@ LIMIT 12`, needs: needRequests | needSystem, min: systemRollupMin},
 			m[raw] = &rollupPanel{sql: sql, needs: needSystem, min: systemRollupMin}
 		}
 	}
+	// System panels for all instances arrive with {{instance}} rendered empty.
+	for _, raw := range sy {
+		if p := m[raw]; p != nil && strings.Contains(raw, "{{instance}}") {
+			m[strings.ReplaceAll(raw, "{{instance}}", "")] = p
+		}
+	}
 	return m
 }
 
@@ -313,10 +319,13 @@ func rollupSystemSQL(raw string) (string, bool) {
 		"MAX(created_at)", "MAX(last_at)",
 		"FROM system_metrics WHERE", "FROM {{system}} WHERE")
 	out := strings.NewReplacer(pairs...).Replace(raw)
-	// The stats panel reads its latest values from one raw row.
-	check := latestRef.ReplaceAllString(out, "")
+	// Output names may repeat a column name, and the stats panel reads its
+	// latest values from one raw row; neither reads raw aggregates.
+	check := latestRef.ReplaceAllString(outputName.ReplaceAllString(out, ""), "")
 	return out, !rawSystemColumn.MatchString(check)
 }
+
+var outputName = regexp.MustCompile(`\bAS [a-z0-9_]+`)
 
 var latestRef = regexp.MustCompile(`\(SELECT [a-z0-9_]+ FROM latest\)`)
 

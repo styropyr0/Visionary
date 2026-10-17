@@ -15,9 +15,9 @@ import (
 // duration_ms < 2, hNN counts edge[NN-1] <= duration_ms < edge[NN], and the
 // last bucket is open. Every latencyBuckets bound is an edge, so heatmap bands
 // are exact sums of buckets; elsewhere neighbours are at most ~1.3x apart
-// between 10 ms and 5 s, which keeps interpolated percentiles within a few
+// between 10 ms and 10 s, which keeps interpolated percentiles within a few
 // percent.
-var rollupEdges = []float64{2, 5, 10, 15, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 320, 400, 500, 650, 800, 1000, 1300, 1600, 2000, 2500, 3200, 4000, 5000, 10000, 30000}
+var rollupEdges = []float64{2, 5, 10, 15, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 320, 400, 500, 650, 800, 1000, 1300, 1600, 2000, 2500, 3200, 4000, 5000, 6500, 8000, 10000, 13000, 20000, 30000}
 
 func histCol(i int) string {
 	if i < 10 {

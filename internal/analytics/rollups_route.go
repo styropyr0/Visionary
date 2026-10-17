@@ -307,7 +307,7 @@ func bandRows(row []any, idx map[string]int, h []float64) [][]any {
 
 // histQuantile estimates the q-quantile with the raw panels' definition (the
 // smallest value ranked at or above q·n) from a histogram: it finds the
-// bucket holding that rank and interpolates linearly inside it, with the
+// bucket holding that rank and interpolates inside it, with the
 // bucket's bounds clamped to the group's exact min and max.
 func histQuantile(h []float64, lo, hi, q float64) any {
 	var n float64
@@ -337,7 +337,12 @@ func histQuantile(h []float64, lo, hi, q float64) any {
 		if i < len(rollupEdges) {
 			high = math.Min(hi, rollupEdges[i])
 		}
-		v := low + (high-low)*(k-cum-0.5)/c
+		// Latencies are roughly log-normal: interpolate on a log scale.
+		frac := (k - cum - 0.5) / c
+		v := low + (high-low)*frac
+		if low > 0 {
+			v = low * math.Pow(high/low, frac)
+		}
 		return math.Round(math.Min(math.Max(v, lo), hi)*100) / 100
 	}
 	return hi
