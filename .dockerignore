@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.env.*
+**/node_modules
+internal/analytics/web/dist/assets
+internal/analytics/web/dist/index.html
+internal/analytics/web/dist/favicon.svg
+*.exe
+README.md
+examples

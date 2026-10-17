@@ -1,0 +1,31 @@
+{
+  "provider": "Acme",
+  "type": "otp",
+  "base_url": "https://api.example.com",
+  "identifier": {
+    "label": "Phone number",
+    "placeholder": "Mobile number",
+    "input": "tel",
+    "normalize": "digits",
+    "pattern": "^[0-9]{8,15}$",
+    "pattern_hint": "Enter your phone number as digits."
+  },
+  "code_length": 6,
+  "resend_seconds": 30,
+  "request_code": { "method": "POST", "path": "/auth/otp/request", "body": { "phone": "{{identifier}}" } },
+  "verify": { "method": "POST", "path": "/auth/otp/verify", "body": { "phone": "{{identifier}}", "code": "{{code}}" } },
+  "profile": { "method": "GET", "path": "/me" },
+  "logout": { "method": "POST", "path": "/auth/logout" },
+  "token": { "header": "Authorization", "prefix": "Bearer " },
+  "fields": {
+    "sent_to": "masked_phone",
+    "token": "access_token",
+    "expires_at": "expires_at",
+    "user_id": "user.id",
+    "name": "name",
+    "handle": "username",
+    "role": "role",
+    "error_message": "error.message"
+  },
+  "allowed_roles": ["ADMIN"]
+}

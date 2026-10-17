@@ -1,0 +1,316 @@
+package analytics
+
+import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/sync/singleflight"
+	"golang.org/x/time/rate"
+
+	"github.com/styropyr0/visionary/internal/authbridge"
+)
+
+const sessionCookie = "visionary_session"
+
+// unavailableGrace keeps signed-in users working through a short outage of the
+// auth API, which is often exactly when the dashboard is needed. Past it,
+// sessions fail closed until access can be confirmed again.
+const unavailableGrace = time.Hour
+
+// session is what the cookie carries. It is encrypted, so the API token never
+// reaches page scripts or logs.
+type session struct {
+	UserID  string   `json:"u"`
+	Name    string   `json:"n"`
+	Handle  string   `json:"h"`
+	Roles   []string `json:"r"`
+	Token   string   `json:"t"`
+	Expires int64    `json:"e"`
+	// Checked is when the API last confirmed the token and role.
+	Checked int64 `json:"c"`
+}
+
+func (s *session) expiresAt() time.Time { return time.Unix(s.Expires, 0) }
+func (s *session) checkedAt() time.Time { return time.Unix(s.Checked, 0) }
+
+type auth struct {
+	aead       cipher.AEAD
+	ttl        time.Duration
+	checkEvery time.Duration
+	secureMode string
+	trustProxy bool
+	bridge     *authbridge.Bridge
+
+	checks singleflight.Group
+
+	mu       sync.Mutex
+	limiters map[string]*loginLimiter
+	// signedOut holds sessions ended by logout until they would have expired,
+	// so a copied cookie stops working at once on this instance. Other
+	// instances reject it at their next role check, when the API refuses the
+	// revoked token.
+	signedOut map[string]time.Time
+}
+
+type loginLimiter struct {
+	lim  *rate.Limiter
+	seen time.Time
+}
+
+// newAuth derives the cookie key from VISIONARY_SESSION_SECRET, or a random
+// key when it is unset (everyone is signed out on restart).
+func newAuth(cfg Config, bridge *authbridge.Bridge) (*auth, bool, error) {
+	secret := []byte(cfg.SessionSecret)
+	ephemeral := false
+	if len(secret) == 0 {
+		secret = make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, false, err
+		}
+		ephemeral = true
+	} else if len(secret) < 32 {
+		return nil, false, errors.New("VISIONARY_SESSION_SECRET must be at least 32 characters")
+	}
+	key := sha256.Sum256(append([]byte("visionary/session/v1:"), secret...))
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, false, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, false, err
+	}
+	return &auth{
+		aead:       aead,
+		ttl:        cfg.SessionTTL,
+		checkEvery: cfg.RoleCheckEvery,
+		secureMode: cfg.SecureCookieEnv,
+		trustProxy: cfg.TrustProxy,
+		bridge:     bridge,
+		limiters:   make(map[string]*loginLimiter),
+		signedOut:  make(map[string]time.Time),
+	}, ephemeral, nil
+}
+
+func (a *auth) seal(s *session) (string, error) {
+	plain, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, a.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	out := a.aead.Seal(nonce, nonce, plain, []byte(sessionCookie))
+	return base64.RawURLEncoding.EncodeToString(out), nil
+}
+
+func (a *auth) open(value string) (*session, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(value)
+	ns := a.aead.NonceSize()
+	if err != nil || len(raw) < ns {
+		return nil, false
+	}
+	plain, err := a.aead.Open(nil, raw[:ns], raw[ns:], []byte(sessionCookie))
+	if err != nil {
+		return nil, false
+	}
+	var s session
+	if json.Unmarshal(plain, &s) != nil || s.Token == "" {
+		return nil, false
+	}
+	return &s, true
+}
+
+// read returns the request's unexpired, not signed-out session.
+func (a *auth) read(r *http.Request) (*session, bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return nil, false
+	}
+	s, ok := a.open(c.Value)
+	if !ok || time.Now().After(s.expiresAt()) || a.isSignedOut(s) {
+		return nil, false
+	}
+	return s, true
+}
+
+func (a *auth) write(w http.ResponseWriter, r *http.Request, s *session) error {
+	value, err := a.seal(s)
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    value,
+		Path:     "/",
+		Expires:  s.expiresAt(),
+		HttpOnly: true,
+		Secure:   a.secure(r),
+		SameSite: http.SameSiteStrictMode,
+	})
+	return nil
+}
+
+func (a *auth) clear(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   a.secure(r),
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+// newSession starts a session for an allowed user. It ends with the API token
+// or the session TTL, whichever comes first.
+func (a *auth) newSession(res *authbridge.Result) *session {
+	now := time.Now()
+	exp := now.Add(a.ttl)
+	if !res.ExpiresAt.IsZero() && res.ExpiresAt.Before(exp) {
+		exp = res.ExpiresAt
+	}
+	return &session{
+		UserID:  res.User.ID,
+		Name:    res.User.Name,
+		Handle:  res.User.Handle,
+		Roles:   res.User.Roles,
+		Token:   res.Token,
+		Expires: exp.Unix(),
+		Checked: now.Unix(),
+	}
+}
+
+// checkShared compares the team password in constant time.
+func (a *auth) checkShared(pw string) bool {
+	want := sha256.Sum256([]byte(a.bridge.Config().SharedPassword))
+	got := sha256.Sum256([]byte(pw))
+	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
+}
+
+func tokenKey(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+// markSignedOut rejects s on this instance from now until it expires.
+func (a *auth) markSignedOut(s *session) {
+	now := time.Now()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k, exp := range a.signedOut {
+		if now.After(exp) {
+			delete(a.signedOut, k)
+		}
+	}
+	a.signedOut[tokenKey(s.Token)] = s.expiresAt()
+}
+
+func (a *auth) isSignedOut(s *session) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, out := a.signedOut[tokenKey(s.Token)]
+	return out
+}
+
+var (
+	errNotAllowed     = errors.New("this account doesn't have access to Visionary")
+	errSessionEnded   = errors.New("your session has ended, sign in again")
+	errAPIUnreachable = errors.New("can't reach the sign-in service to confirm your access, try again shortly")
+)
+
+// confirm re-checks the token and role with the API once every checkEvery.
+// It returns the session to keep and whether it changed (so the cookie must
+// be rewritten). Concurrent requests for one token share one API call. When
+// the API has no profile endpoint, sessions simply run to expiry.
+func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) {
+	if !a.bridge.CanRecheck() || time.Since(s.checkedAt()) < a.checkEvery {
+		return s, false, nil
+	}
+	v, err, _ := a.checks.Do(tokenKey(s.Token), func() (any, error) {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
+		defer cancel()
+		return a.bridge.Recheck(cctx, s.Token)
+	})
+	if err != nil {
+		if authbridge.IsUnavailable(err) {
+			if time.Since(s.checkedAt()) < unavailableGrace {
+				return s, false, nil
+			}
+			return nil, false, errAPIUnreachable
+		}
+		return nil, false, errSessionEnded
+	}
+	u := v.(*authbridge.User)
+	if !a.bridge.Allowed(u) {
+		return nil, false, errNotAllowed
+	}
+	next := *s
+	next.Name, next.Handle, next.Roles, next.Checked = u.Name, u.Handle, u.Roles, time.Now().Unix()
+	return &next, true, nil
+}
+
+// secure decides the cookie's Secure flag. "auto" follows the request scheme,
+// including X-Forwarded-Proto when the proxy is trusted.
+func (a *auth) secure(r *http.Request) bool {
+	switch a.secureMode {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return a.trustProxy && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// allowLogin rate-limits sign-in calls per client: 5 at once, then one every
+// 12 seconds. The auth API applies its own limits on top.
+func (a *auth) allowLogin(r *http.Request) bool {
+	ip := a.clientIP(r)
+	now := time.Now()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k, l := range a.limiters {
+		if now.Sub(l.seen) > 30*time.Minute {
+			delete(a.limiters, k)
+		}
+	}
+	l, ok := a.limiters[ip]
+	if !ok {
+		l = &loginLimiter{lim: rate.NewLimiter(rate.Every(12*time.Second), 5)}
+		a.limiters[ip] = l
+	}
+	l.seen = now
+	return l.lim.Allow()
+}
+
+func (a *auth) clientIP(r *http.Request) string {
+	if a.trustProxy {
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			first, _, _ := strings.Cut(fwd, ",")
+			return strings.TrimSpace(first)
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}

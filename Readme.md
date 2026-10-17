@@ -1,411 +1,156 @@
+<p align="center"><img src="icon/visionary.svg" alt="Visionary" width="128"></p>
+
 # Visionary
 
-Visionary is an **OpenAPI-first, framework-agnostic observability backend library** that enables developers to build custom dashboards, panels, and metrics integrations with Django or FastAPI (and other frameworks) using a shared core logic.
+API and server analytics for a Go service, with an AI analyst that answers *why*.
 
-**Status:** v0.1.0 (Alpha) - Core functionality complete, production-ready for custom integrations
+Visionary has two parts that meet in one Cloudflare D1 database:
 
----
-
-## What is Visionary?
-
-Unlike traditional monitoring tools like Grafana, Visionary is a **metrics SDK** that you integrate into your Python application. It provides:
-
-- **Pluggable data source collectors** — pull metrics from 15+ platforms (Docker, Kubernetes, Prometheus, databases, cloud platforms, etc.)
-- **Advanced query engine** — filter, group, aggregate, and analyze metrics in-memory
-- **Framework integration** — Django REST API or FastAPI routers out of the box
-- **OpenAPI documentation** — auto-generated API schema for all endpoints
-
-Perfect for:
-- Internal dashboards in SaaS applications
-- Embedded observability in monitoring tools
-- Cost-conscious infrastructure monitoring
-- CI/CD pipeline metrics and automation
-- Building custom analytics over infrastructure data
-
----
-
-## Core Features
-
-- **Framework-agnostic core** — Shared data models, collectors, and query engine
-- **Multi-source collectors** — 15 pre-built collectors for:
-  - **Databases**: PostgreSQL, MySQL, Redis, Elasticsearch, InfluxDB
-  - **Time-series**: Prometheus
-  - **System**: CPU, memory, disk (via psutil)
-  - **Container & virtualization**: Docker, Kubernetes, VMware, Hyper-V, KVM, Xen, OpenStack, Proxmox
-- **Advanced Query Engine**:
-  - Filtering by metric name, regex patterns, labels, time ranges
-  - Aggregations: sum, avg, min, max, median, stddev, percentiles (p50, p95, p99)
-  - Grouping and multi-level aggregations
-  - Threshold checking and rate-of-change calculations
-  - Sorting, limiting, and top-N queries
-- **Framework integrations**:
-  - **Django**: REST API views, models, serializers
-  - **FastAPI**: OpenAPI-compatible routers, Pydantic schemas
-- **Plug-in registry** — Dynamically register custom collectors
-- **Response helpers** — Standardized success/error responses
-- **Web UI** — Minimal web dashboard for ad-hoc queries (included)
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-pip install visionary
+```
+your Go API ──(sdk middleware + recorder)──▶ D1: api_logs, system_metrics ◀── Visionary server ──▶ browser
 ```
 
-Or from source:
+- **The SDK** (`sdk/`) logs every HTTP request and samples the server every 15s:
+  host CPU, load, memory, disk and network; process CPU, memory, threads and
+  file descriptors; goroutines, heap and GC; database pool use and waits; and
+  throughput. Writes are batched on background goroutines and never block a
+  request.
+- **The server** (`cmd/visionary`) serves the dashboards: API overview, System,
+  Explore (the analyst), Saved panels and Request logs. It signs people in
+  through your existing API, a shared team password, or not at all.
 
-```bash
-git clone https://github.com/yourusername/visionary.git
-cd visionary
-pip install -e .
-```
+## The analyst
 
-### Run the Demo Server
+Ask "when did latency spike yesterday, and what caused it?". The analyst writes
+read-only SQL, runs up to five queries to find the window, compares it with a
+normal baseline across routes, errors, users and server metrics, then answers
+in plain language with supporting charts. Each step is streamed to the browser
+as it happens, and follow-up questions keep the context.
 
-```bash
-python demo_server.py
-```
+Query results go to the model provider so it can reason about them. Columns
+holding IPs, user agents, headers and request/response bodies are masked first.
 
-Then open **http://localhost:8000** in your browser to access the dashboard.
+## Collect: add the SDK to a Go service
 
-Try querying system metrics:
-1. Select **system** from the Data Sources list
-2. Leave filters empty and click **Execute Query**
-3. See CPU, memory, and disk metrics displayed
+```go
+import visionary "github.com/styropyr0/visionary/sdk"
 
-### Query Metrics in Python
-
-```python
-from core.registry import get_collector
-from core.query_engine import QueryEngine
-
-# Load a collector
-SystemCollector = get_collector('system')
-collector = SystemCollector({})
-metrics = collector.collect()
-
-# Use query engine for advanced operations
-engine = QueryEngine()
-
-# Filter by name
-cpu_metrics = engine.filter_metrics(metrics, name='system.cpu_usage')
-
-# Aggregate
-avg_cpu = engine.aggregate(metrics, func='avg')
-max_cpu = engine.aggregate(metrics, func='max')
-
-# Group and aggregate
-by_device = engine.aggregate_by_groups(metrics, group_by='device', func='sum')
-```
-
-### Django Integration
-
-```python
-# settings.py
-INSTALLED_APPS = [
-    'django.contrib.contenttypes',
-    'django.contrib.auth',
-    'rest_framework',
-    'visionary.django_app',
-]
-
-# urls.py
-from django.urls import include, path
-
-urlpatterns = [
-    path('api/visionary/', include('visionary.django_app.urls')),
-]
-```
-
-### FastAPI Integration
-
-```python
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_app.routes import router as visionary_router
-
-app = FastAPI()
-
-# Enable CORS for cross-origin requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include Visionary API
-app.include_router(visionary_router)
-
-# Run: uvicorn main:app --reload
-```
-
----
-
-## API Reference
-
-### Query Endpoint (POST /api/visionary/query)
-
-Execute advanced queries on metric data:
-
-```bash
-curl -X POST http://localhost:8000/api/visionary/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "system",
-    "name": "system.cpu_usage",
-    "aggregate": "avg",
-    "limit": 10
-  }'
-```
-
-**Query Parameters:**
-- `source` (required): Data source name (e.g., "system", "docker", "kubernetes")
-- `name` (optional): Exact metric name match
-- `name_pattern` (optional): Regex pattern for metric name
-- `labels` (optional): Object of label key-value pairs to filter by
-- `aggregate` (optional): Aggregation function (sum, avg, min, max, median, stddev, count, p50, p95, p99)
-- `group_by` (optional): Label key to group results by
-- `limit` (optional): Maximum number of metrics to return
-
-**Response:**
-```json
-{
-  "source": "system",
-  "count": 3,
-  "metrics": [
-    {
-      "name": "system.cpu_usage",
-      "value": 0.0,
-      "labels": {},
-      "timestamp": 1234567890
-    }
-  ],
-  "aggregate": {
-    "value": 26.77
-  }
+agent, err := visionary.New(visionary.FromEnv())
+if err != nil {
+	log.Print(err) // collection is off; a nil agent is a no-op
 }
+agent.Start(ctx)
+defer agent.Close(context.Background())
+
+http.ListenAndServe(":8080", agent.Middleware(mux))
 ```
 
-### List Sources Endpoint (GET /api/visionary/sources)
+Tell it who made each request from your auth middleware, and it fills in the
+user columns:
 
-```bash
-curl http://localhost:8000/api/visionary/sources
+```go
+visionary.SetUser(r.Context(), visionary.User{ID: "42", Handle: "ada", Role: "ADMIN"})
 ```
 
-Returns:
-```json
-{
-  "sources": ["docker", "elasticsearch", "hyperv", "influxdb", "kubernetes", ...],
-  "count": 15,
-  "description": "List of all available data source connectors"
-}
+Optional hooks:
+
+```go
+cfg := visionary.FromEnv()
+// Route patterns for routers other than Go 1.22's ServeMux (detected on its own), e.g. chi:
+cfg.Requests.Route = func(r *http.Request) string { return chi.RouteContext(r.Context()).RoutePattern() }
+// Fill in handle and role from a cache when only the ID is known:
+cfg.Requests.LookupUser = func(ctx context.Context, id string) (visionary.User, bool) { ... }
+// Database pool stats: visionary.SQLDB(db) for database/sql, or adapt pgxpool:
+cfg.System.DB = func() visionary.DBStats { s := pool.Stat(); return visionary.DBStats{ /* ... */ } }
 ```
 
-### Health Check (GET /api/visionary/health)
+### SDK environment
 
-```bash
-curl http://localhost:8000/api/visionary/health
+| Variable | Default | |
+|---|---|---|
+| `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | — | Required. The token needs D1 edit access. |
+| `VISIONARY_INSTANCE` | hostname | Labels this server in System. |
+| `VISIONARY_LOG_REQUESTS` | `true` | |
+| `VISIONARY_LOG_PATH_PREFIX` | all paths | e.g. `/api` |
+| `VISIONARY_LOG_BODIES` | `true` | Store request/response bodies (redacted, capped). |
+| `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` | |
+| `VISIONARY_LOG_RETENTION_DAYS` | `30` | `0` keeps rows forever. |
+| `VISIONARY_LOG_REDACT_HEADERS` | | Added to Authorization, Cookie, Set-Cookie, X-Api-Key… |
+| `VISIONARY_LOG_REDACT_FIELDS` | | JSON/form keys added to password, token, secret, otp, api_key… |
+| `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | | Keys redacted in requests only. |
+| `VISIONARY_LOG_ERROR_CODE_FIELD`, `..._ERROR_KEY_FIELD` | `error.code`, `error.key` | Where your error responses keep their codes. |
+| `VISIONARY_SYSTEM_METRICS` | `true` | |
+| `VISIONARY_SYSTEM_INTERVAL` | `15s` | |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | |
+
+Not on Go? Write rows to the same tables. The schemas are `sdk/requests.sql`
+and `sdk/system.sql`.
+
+## Run the server
+
+```sh
+docker run -d -p 8090:8090 --env-file .env ghcr.io/<owner>/visionary:latest
 ```
 
----
+Or locally: `cd web && npm ci && npm run build && cd .. && go run ./cmd/visionary`.
+Every setting is listed in [`.env.example`](.env.example). The server creates the
+tables it needs at startup, so dashboards load before any service reports in.
 
-## Project Structure
+### Sign-in modes
 
-```
-visionary/
-├── core/                      # Core library
-│   ├── __init__.py           # Package exports
-│   ├── base.py               # BaseCollector abstract class
-│   ├── models.py             # Metric, Panel, Dashboard models
-│   ├── query_engine.py       # Advanced query engine
-│   ├── registry.py           # Dynamic collector registry (lazy loading)
-│   ├── settings.py           # Configuration
-│   ├── data_sources/         # 15 pre-built collectors
-│   ├── exceptions/           # Custom exceptions
-│   └── response/             # Response helpers
-├── django_app/               # Django integration
-│   ├── __init__.py
-│   ├── models.py
-│   ├── views.py
-│   ├── serializers.py
-│   └── migrations/
-├── fastapi_app/              # FastAPI integration
-│   ├── __init__.py
-│   └── routes.py
-├── ui/                       # Web UI (static HTML + JS)
-│   └── index.html           # Interactive dashboard
-├── setup.py                  # Package configuration
-├── pyproject.toml            # Modern Python packaging
-├── requirements.txt          # Legacy dependencies file
-├── demo_server.py            # Run example: python demo_server.py
-├── test_core.py              # Test script
-└── README.md                 # This file
-```
+Set `VISIONARY_AUTH_MODE`:
 
----
+| Mode | Use when | Needs |
+|---|---|---|
+| `otp` | Your API already signs users in with a one-time code (SMS or email). | Endpoints and field paths for your API. |
+| `password` | Your API has a username/email + password login. | The same, without the code step. |
+| `shared` | You just want a team password. | `VISIONARY_SHARED_PASSWORD` (12+ characters). |
+| `none` | Local development. | Nothing; never expose it. |
 
-## Query Engine Capabilities
+With `otp` and `password`, Visionary calls your API's own endpoints, so nobody
+needs a new account. Only users whose role is in `VISIONARY_ALLOWED_ROLES` get
+in; anyone else's freshly issued session is logged out straight away. When a
+profile endpoint is set, the role is re-checked every few minutes, so removing
+someone's role or revoking their session takes effect mid-session.
 
-The `QueryEngine` supports advanced metric operations:
+Everything about the flow is an environment variable:
 
-### Filtering
-```python
-engine = QueryEngine()
+- endpoints: `VISIONARY_AUTH_START`, `_VERIFY`, `_PROFILE`, `_LOGOUT` as
+  `"POST /path"`, with JSON bodies in `..._BODY` using `{{identifier}}`,
+  `{{code}}`, `{{password}}`, `{{latitude}}`, `{{longitude}}`
+- response paths: `VISIONARY_AUTH_FIELD_TOKEN`, `_ROLE`, `_NAME`, `_HANDLE`,
+  `_USER_ID`, `_EXPIRES_AT`, `_SENT_TO`, `_ERROR` (dotted, e.g. `data.token`)
+- the form: `VISIONARY_AUTH_IDENTIFIER_LABEL`, `_INPUT` (`tel`/`email`/`text`),
+  `_NORMALIZE`, `_PATTERN`, `_HINT`, `VISIONARY_AUTH_CODE_LENGTH`
+- extras: `VISIONARY_AUTH_HEADERS` (JSON, sent on every call, e.g. an API key),
+  `VISIONARY_AUTH_TOKEN_HEADER`/`_PREFIX`, and `VISIONARY_AUTH_LOCATION`
+  (`none`/`optional`/`required`) for APIs that expect the device's position.
 
-# Exact name match
-engine.filter_metrics(metrics, name='system.cpu_usage')
+The same settings can live in a JSON file (`VISIONARY_AUTH_CONFIG`, see
+`examples/auth/`); env vars override the file.
 
-# Regex pattern
-engine.filter_metrics(metrics, name_pattern='system\.*')
+## Deploy
 
-# By labels
-engine.filter_metrics(metrics, labels={'device': 'eth0'})
+`.github/workflows/image.yml` checks the build and pushes
+`ghcr.io/<owner>/visionary` for `linux/amd64` and `linux/arm64`: `latest` from
+the default branch, `sha-<short>`, and semver tags from `v*` git tags.
 
-# Time range
-engine.filter_metrics(
-    metrics,
-    timestamp_from=1609459200,  # Jan 1, 2021
-    timestamp_to=1640995200      # Jan 1, 2022
-)
-```
+Run it behind HTTPS and set `VISIONARY_TRUST_PROXY=true`. The image is
+distroless and runs as non-root. `GET /api/healthz` is the health check.
 
-### Aggregation
-```python
-# Single aggregation
-engine.aggregate(metrics, func='avg')          # Average
-engine.aggregate(metrics, func='sum')          # Sum
-engine.aggregate(metrics, func='max')          # Maximum
-engine.aggregate(metrics, func='median')       # Median
-engine.aggregate(metrics, func='stddev')       # Std Deviation
-engine.aggregate(metrics, func='p95')          # 95th percentile
+## Security
 
-# Group and aggregate
-engine.aggregate_by_groups(metrics, group_by='device', func='avg')
-```
+- **Read-only queries.** The D1 token can write, so every query that isn't
+  built in (analyst, edited SQL, saved panels) must be a single `SELECT`/`WITH`.
+  Comments, statement separators, write/DDL/PRAGMA keywords and SQLite or
+  Cloudflare internal tables are rejected.
+- **Sessions** are AES-GCM encrypted, HttpOnly, SameSite=Strict cookies. The
+  API token inside never reaches the page. Sign-in is rate-limited per client.
+- **Logs are redacted** before they are stored. Defaults cover common
+  credentials; add your own with the `VISIONARY_LOG_REDACT_*` variables.
 
-### Sorting & Selection
-```python
-engine.sort_by_value(metrics, ascending=False)
-engine.top_n(metrics, n=10)
-engine.bottom_n(metrics, n=5)
-engine.limit(metrics, limit=100)
-```
+## Cost
 
-### Threshold & Analysis
-```python
-engine.apply_threshold(metrics, lower=50, upper=80)  # Categorize by thresholds
-engine.rate_of_change(current_metrics, previous_metrics)  # Calculate deltas
-```
-
----
-
-## Available Data Sources
-
-| Source | Module | Status | Config |
-|--------|--------|--------|--------|
-| System | `system.py` | ✅ Stable | None (uses psutil) |
-| Docker | `docker.py` | ✅ Stable | Docker socket path |
-| Kubernetes | `kubernetes.py` | ✅ Stable | Kubeconfig path |
-| Prometheus | `prometheus.py` | ✅ Stable | URL, username, password |
-| PostgreSQL | `postgres.py` | ✅ Stable | Host, port, user, password, database |
-| MySQL | `mysql.py` | ✅ Stable | Host, port, user, password, database |
-| Redis | `redis.py` | ✅ Stable | Host, port |
-| Elasticsearch | `elastic_search.py` | ✅ Stable | Host, port, username, password |
-| InfluxDB | `influxdb.py` | ✅ Stable | Host, port, token, org, bucket |
-| VMware | `vmware.py` | ✅ Stable | Host, user, password |
-| Hyper-V | `hyperv.py` | ✅ Windows | Local (WMI) |
-| KVM | `kvm.py` | ✅ Stable | Libvirt URI |
-| Xen | `xen.py` | ✅ Stable | Xend host, port |
-| OpenStack | `openstack.py` | ✅ Stable | Auth URL, project, user, password |
-| Proxmox | `proxmox.py` | ✅ Stable | Host, user, password |
-
----
-
-## Creating Custom Collectors
-
-Extend Visionary with custom data sources:
-
-```python
-from core.base import BaseCollector
-from core.models import Metric
-
-class MyCollector(BaseCollector):
-    def collect(self):
-        # Your logic to fetch metrics
-        return [
-            Metric(
-                name='my_metric.counter',
-                value=42,
-                labels={'service': 'api'},
-            )
-        ]
-
-# Register it
-from core.registry import register_collector
-register_collector('my_source', MyCollector)
-
-# Use it
-from core.registry import get_collector
-MyCollector = get_collector('my_source')
-metrics = MyCollector({}).collect()
-```
-
----
-
-## Roadmap
-
-- [x] Core library with 15 collectors
-- [x] Advanced query engine with aggregations
-- [x] Framework integrations (Django, FastAPI)
-- [x] Web UI (minimal dashboard)
-- [ ] Authentication & role-based access control
-- [ ] Time-series storage (optional InfluxDB backend)
-- [ ] Alert rules and notifications
-- [ ] Prometheus metrics exporter format
-- [ ] Grafana datasource plugin
-- [ ] Kubernetes operator & Helm chart
-- [ ] Performance benchmarks and optimization
-
----
-
-## Contributing
-
-Contributions are welcome! Areas for help:
-
-- Adding new data source collectors
-- Improving performance and caching
-- Building more advanced UI features
-- Documentation and examples
-- Integration with other frameworks (Starlette, Quart, etc.)
-
-To contribute:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit changes (`git commit -am 'Add my feature'`)
-4. Push to branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
-
----
-
-## License
-
-Licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-## Support
-
-- **Issues**: Open an issue on GitHub
-- **Discussions**: Use GitHub Discussions for questions
-- **Documentation**: Check [docs/](docs/) folder for detailed guides
-
----
-
-## Acknowledgments
-
-Built with inspiration from Prometheus, Grafana, and the broader observability community.
-
+D1 bills by rows read. Panels show their rows read under Inspect. A 24h
+overview over moderate traffic reads tens of thousands of rows; 30-day ranges
+read far more. Keep auto-refresh for short ranges.

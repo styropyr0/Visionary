@@ -1,5 +1,21 @@
-/.venv
-/__pycache__/
-*.pyc
-.DS_Store
+# Secrets
 .env
+.env.*
+!.env.example
+
+# Frontend dependencies and the build embedded into the Go binary
+node_modules/
+internal/analytics/web/dist/*
+!internal/analytics/web/dist/.gitkeep
+
+# Go build output
+/visionary
+*.exe
+*.test
+*.out
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
