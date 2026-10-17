@@ -49,6 +49,7 @@ func (s *Server) Start(ctx context.Context) {
 	s.telemetryStart(ctx)
 	s.rumStart(ctx)
 	s.teamStart(ctx)
+	s.otlpStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.
