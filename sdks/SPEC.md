@@ -333,7 +333,8 @@ request) from these rows; SDKs do not need to detect them.
 - `fingerprint`: the first 16 hex characters of SHA-1 over
   `type + "\n" + frames`, where frames are the top 5 frames from the
   application's own code (skip the standard library, the SDK and installed
-  packages when they can be told apart; else the top 5) written as
+  packages when they can be told apart; when the stack has frames but none are
+  the application's, or they cannot be told apart, the top 5 frames of any kind) written as
   `function@file` without line numbers, joined with `\n`. With no frames, use
   `type + "\n" + message` with every digit run replaced by `0`.
 - At most 20 rows per fingerprint per minute per process; drop the rest.
