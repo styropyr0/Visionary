@@ -1,0 +1,101 @@
+/* Errors view: issue list and issue detail. */
+
+.errors-filters {
+  margin: 4px 0 -2px;
+}
+
+.errors-empty {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.issue-cell {
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.issue-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issue-type {
+  flex: none;
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.issue-route {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-msg {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-back {
+  margin: -4px 0 10px -8px;
+  text-decoration: none;
+}
+
+.issue-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.issue-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.issue-title h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.issue-message {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.issue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.issue-latest {
+  margin-left: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issue-link {
+  color: var(--accent);
+}
+
+tr.clickable:hover .issue-link {
+  text-decoration: underline;
+}

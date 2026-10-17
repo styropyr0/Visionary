@@ -1,0 +1,509 @@
+/* Telemetry: stack traces, request waterfalls, deploy tooltips. */
+
+/* ---------- Stack trace ---------- */
+
+.stacktrace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.st-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-bar .btn.on {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+.st-frames {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: auto;
+  max-height: 560px;
+}
+
+.st-text {
+  padding: 8px 12px;
+  color: var(--text-1);
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+}
+
+.st-frame {
+  padding: 6px 12px 6px 14px;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+}
+
+.st-frame:last-child {
+  border-bottom: 0;
+}
+
+.st-frame .st-fn {
+  overflow-wrap: anywhere;
+}
+
+.st-frame .st-loc {
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.st-frame .st-line {
+  color: var(--text-2);
+}
+
+.st-frame.app .st-fn {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.st-frame.app.top {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.st-frame.lib .st-fn {
+  color: var(--text-2);
+}
+
+.st-code {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+.st-lib {
+  border-bottom: 1px solid var(--border);
+}
+
+.st-lib:last-child {
+  border-bottom: 0;
+}
+
+.st-lib .st-frame {
+  background: var(--surface-1);
+}
+
+.st-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-toggle:hover {
+  color: var(--text-1);
+  background: var(--hover-wash);
+}
+
+.st-lib-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.st-raw {
+  max-height: 560px;
+}
+
+/* ---------- Request telemetry (log drawer) ---------- */
+
+/* The drawer widens when it holds a waterfall, so bars have room. */
+.drawer:has(.waterfall) {
+  width: min(860px, 100vw);
+}
+
+.rt {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.rt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rt-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rt-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rt-total {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.rt-total-label {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.rt-total-value {
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-nplus1 svg {
+  color: var(--warning);
+}
+
+.rt-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.rt-error:hover {
+  background: var(--hover-wash);
+  border-color: var(--border-strong);
+}
+
+.rt-error svg {
+  flex: none;
+  color: var(--critical-text);
+}
+
+.rt-error-type {
+  flex: none;
+  font-weight: 600;
+}
+
+.rt-error-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rt-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ---------- Waterfall ---------- */
+
+.waterfall {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wf-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.wf-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.wf-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 10px;
+}
+
+.wf-head {
+  height: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wf-axis {
+  position: relative;
+  height: 100%;
+}
+
+.wf-axis span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wf-axis span.start {
+  transform: none;
+}
+
+.wf-axis span.end {
+  transform: translateX(-100%);
+}
+
+.wf-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.wf-row {
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wf-row:hover,
+.wf-row.open {
+  background: var(--hover-wash);
+}
+
+.wf-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 2px;
+  color: var(--text-3);
+}
+
+.wf-label {
+  overflow: hidden;
+  color: var(--text-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-repeat {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--warning-text);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.wf-track {
+  position: relative;
+  height: 100%;
+}
+
+.wf-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--grid);
+}
+
+.wf-bar {
+  position: absolute;
+  top: 7px;
+  height: 10px;
+  min-width: 2px;
+  border-radius: 2px;
+}
+
+.wf-bar.failed {
+  outline: 1.5px solid var(--critical);
+  outline-offset: 1px;
+}
+
+.wf-dur {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-right: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-err {
+  display: inline-flex;
+  color: var(--critical-text);
+}
+
+.wf-detail {
+  padding: 10px 12px 12px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.wf-kv {
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.wf-sql {
+  margin: 0;
+  max-height: 200px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Deploys in chart tooltips ---------- */
+
+.tt-deploy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.tt-deploy-key {
+  flex: none;
+  width: 0;
+  height: 12px;
+  border-left: 1px dashed var(--text-3);
+  margin: 0 5px 0 4px;
+}
+
+.tt-deploy b {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.tt-deploy-time {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+/* ---------- Small shared pieces ---------- */
+
+.issue-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.issue-status .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.issue-status.new {
+  color: var(--warning-text);
+}
+
+.issue-status.new .dot {
+  background: var(--warning);
+}
+
+.issue-status.regressed {
+  color: var(--critical-text);
+}
+
+.issue-status.regressed .dot {
+  background: var(--critical);
+}
+
+.issue-status.ongoing {
+  color: var(--text-2);
+}
+
+.issue-status.ongoing .dot {
+  background: var(--text-3);
+}
+
+.mini-spark {
+  display: block;
+}
+
+.version-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.version-pills .pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.version-pills .pill.current {
+  background: var(--accent-wash);
+  color: var(--text-1);
+}

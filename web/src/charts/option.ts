@@ -489,3 +489,93 @@ export function sparkPoints(res: Result | undefined, valueCols: string[], series
   }
   return [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 }
+
+export interface DeployMarker {
+  version: string;
+  service: string;
+  deployed_at: string;
+}
+
+const deployTime = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+function shortVersion(v: string): string {
+  return /^[0-9a-f]{12,40}$/i.test(v) ? v.slice(0, 7) : v;
+}
+
+type SeriesLike = { data?: unknown[]; markLine?: unknown };
+
+function pointTime(p: unknown): number | null {
+  const v = p && typeof p === "object" && !Array.isArray(p) && "value" in p ? (p as { value: unknown }).value : p;
+  return Array.isArray(v) ? toNumber(v[0]) : null;
+}
+
+/**
+ * Adds a thin vertical marker at each deploy inside a time chart's data, and
+ * the deploys of the hovered interval to its tooltip. Markers use the muted
+ * text color: a deploy is context, not a status.
+ */
+export function withDeployMarkers(option: EChartsOption, deploys: DeployMarker[], t: ChartTokens): EChartsOption {
+  if (deploys.length === 0) return option;
+  const x = option.xAxis;
+  if (!x || Array.isArray(x) || (x as { type?: string }).type !== "time") return option;
+  const series = (Array.isArray(option.series) ? option.series : option.series ? [option.series] : []) as SeriesLike[];
+  if (series.length === 0 || series[0].markLine) return option;
+
+  const times = (series[0].data ?? []).map(pointTime).filter((n): n is number => n !== null);
+  if (times.length < 2) return option;
+  const min = Math.min(...times);
+  const max = Math.max(...times);
+  let step = Infinity;
+  for (let i = 1; i < times.length; i++) if (times[i] > times[i - 1]) step = Math.min(step, times[i] - times[i - 1]);
+  if (!Number.isFinite(step)) step = 0;
+
+  const marks = deploys
+    .map((d) => ({ d, ts: Date.parse(d.deployed_at) }))
+    .filter(({ ts }) => Number.isFinite(ts) && ts >= min && ts <= max + step);
+  if (marks.length === 0) return option;
+
+  const markLine = {
+    silent: true,
+    symbol: ["none", "none"],
+    animation: false,
+    lineStyle: { color: t.text3, type: [4, 3], width: 1, opacity: 0.9 },
+    label: {
+      show: true,
+      position: "insideEndTop",
+      formatter: (p: { name: string }) => p.name,
+      color: t.text3,
+      fontSize: 10,
+      distance: 2,
+    },
+    emphasis: { disabled: true },
+    data: marks.map(({ d, ts }) => ({ xAxis: ts, name: shortVersion(d.version) })),
+  };
+
+  const tooltip = option.tooltip && !Array.isArray(option.tooltip) ? option.tooltip : undefined;
+  const format = tooltip?.formatter;
+  const withDeploys =
+    typeof format === "function"
+      ? (raw: unknown, ...rest: unknown[]) => {
+          const html = (format as (...a: unknown[]) => string)(raw, ...rest);
+          const params = (Array.isArray(raw) ? raw : [raw]) as AxisParam[];
+          const first = params[0];
+          if (!first || typeof html !== "string") return html;
+          const at = Number(Array.isArray(first.value) ? first.value[0] : first.axisValue);
+          const hits = marks.filter(({ ts }) => ts >= at && ts < at + Math.max(step, 1));
+          if (hits.length === 0) return html;
+          const extra = hits
+            .map(
+              ({ d, ts }) =>
+                `<div class="tt-deploy"><span class="tt-deploy-key"></span><span>Deployed <b>${escapeHtml(d.version)}</b>${d.service ? ` · ${escapeHtml(d.service)}` : ""}</span><span class="tt-deploy-time">${escapeHtml(deployTime.format(new Date(ts)))}</span></div>`,
+            )
+            .join("");
+          return html.replace(/<\/div>$/, `${extra}</div>`);
+        }
+      : format;
+
+  return {
+    ...option,
+    tooltip: tooltip ? { ...tooltip, formatter: withDeploys as typeof format } : option.tooltip,
+    series: series.map((s, i) => (i === 0 ? { ...s, markLine } : s)) as EChartsOption["series"],
+  };
+}
