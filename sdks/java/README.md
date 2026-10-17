@@ -3,7 +3,10 @@
 A Spring Boot starter that collects what Visionary analyses, straight from a
 servlet (Spring MVC) application:
 
-- one row per HTTP request in `api_logs`, and
+- one row per HTTP request in `api_logs`, with the number and total time of its
+  database and outbound HTTP calls,
+- the database statements and outbound HTTP calls of slow or failed requests in `spans`,
+- unhandled and reported exceptions in `errors`, and a deploy marker per release in `releases`,
 - periodic host, process, JVM, connection-pool and throughput samples in `system_metrics`,
 
 written in batches on background threads to Cloudflare D1, PostgreSQL, MySQL/MariaDB
@@ -52,7 +55,7 @@ implementation("io.github.styropyr0:visionary-spring-boot-starter:0.1.0-SNAPSHOT
    export VISIONARY_DATABASE_URL=postgres://user:pass@db.internal:5432/app
    ```
 
-3. Start the application. The starter auto-configures itself, creates both tables
+3. Start the application. The starter auto-configures itself, creates its tables
    if they don't exist, and starts logging. You will see one line like
    `visionary: writing to jdbc:postgresql://db.internal:5432/app (postgres); requests on ...`.
 
@@ -127,6 +130,92 @@ VisionaryUserLookup visionaryUserLookup(UserCache users) {
 }
 ```
 
+## Service and release
+
+Set `VISIONARY_SERVICE` when several services share one database. The release
+(`version` column) is `VISIONARY_RELEASE`, else the first commit variable a platform
+sets (`RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
+`HEROKU_SLUG_COMMIT`, `SOURCE_VERSION`, `GIT_COMMIT`, `GITHUB_SHA`, `K_REVISION`);
+commit hashes are shortened to 12 characters. Both are stored on every `api_logs`,
+`system_metrics`, `errors` and `spans` row (spans: service only). When the release
+is known, one `releases` row is written at start (`sdk` = `java`, `runtime` such as
+`OpenJDK 21.0.4`), which the dashboards draw as a deploy marker.
+
+## Spans
+
+Captured automatically, with no code changes:
+
+- **JDBC**: every `DataSource` bean of the application is wrapped in a lightweight
+  `java.lang.reflect.Proxy` (connections, statements and result sets), so JPA/Hibernate,
+  `JdbcTemplate`, jOOQ, MyBatis and plain JDBC are all seen. Each `execute*` call is a
+  `db` span named after its first keyword and main table (`SELECT users`, `UPDATE trips`),
+  with target `postgresql/<database>` and the statement as detail, its literals replaced
+  by `?` and `IN (?, ?, ...)` collapsed to `IN (?)`; parameter values are never stored.
+  Row counts are the affected rows of updates and the rows read from result sets.
+  `commit` and `rollback` are spans too. Visionary's own writes are never traced.
+- **HTTP clients**: `RestTemplate`s built from Boot's `RestTemplateBuilder`, `RestClient`s
+  built from Boot's `RestClient.Builder` and, when WebFlux is on the classpath,
+  `WebClient`s built from Boot's `WebClient.Builder` get an interceptor. Each call is an
+  `http` span named `METHOD host`, with the URL without its query string; a transport
+  error or a 5xx response marks it `error`. Clients created with `new RestTemplate()` or
+  `RestClient.create()` are not seen.
+- **Anything else**, by hand:
+
+  ```java
+  try (VisionarySpan span = Visionary.span("cache", "GET session")) {
+      span.target("redis/sessions");
+      return cache.get(key);
+  }
+  ```
+
+  Kinds are `db`, `http`, `cache`, `queue` and `custom`.
+
+Every logged request gets `db_count`, `db_ms`, `http_count` and `http_ms` (all calls,
+also beyond the cap). Span rows are stored when the request took at least
+`VISIONARY_SPAN_THRESHOLD_MS` (default 100) or answered 5xx, at most `VISIONARY_SPAN_MAX`
+(default 100) per request, in start order. Spans outside a request (scheduled jobs,
+background threads) are stored on their own when they take at least the threshold.
+
+Spans join the request through a thread-local. Work handed to another thread joins it when:
+
+- it runs on Boot's task executor (`@Async`, MVC `Callable`/`WebAsyncTask`): the starter
+  registers a `VisionaryTaskDecorator` unless the application declares its own
+  `TaskDecorator`; then add `Visionary.wrap(...)` to yours, or combine both with Spring's
+  `CompositeTaskDecorator`;
+- it is wrapped by hand: `executor.submit(Visionary.wrap(task))`.
+
+Not propagated: `CompletableFuture.supplyAsync` on the common pool, raw `new Thread`,
+`parallelStream`, and reactor operators that move work to other schedulers (a `WebClient`
+call joins the request only when it is subscribed on the request thread, as with
+`block()`). Calls made there count as background spans. Spans that end after their
+request has finished are stored on their own if they reach the threshold.
+
+The wrapped DataSource keeps every interface of the original and answers
+`unwrap`/`isWrapperFor` with it, so Boot's Hikari metrics and pool code still find the pool.
+Code that injects the concrete class (`@Autowired HikariDataSource`) instead of
+`DataSource` no longer matches; inject `DataSource` and `unwrap` it, or set
+`VISIONARY_SPANS=false`.
+
+## Errors
+
+Recorded with `handled = 0`, without changing what the client gets:
+
+- exceptions that escape the filter chain (the container's 500), and
+- exceptions Spring MVC's `HandlerExceptionResolver`s turn into a 5xx response
+  (`@ExceptionHandler`, `@ResponseStatus`, `ResponseStatusException`).
+
+Report errors the application handles itself with `Visionary.captureException(e)`
+(`handled = 1`); inside a request it is linked to it (request id, method, route, path,
+user). Each row has the exception class, message (1000 characters), the
+`printStackTrace` output (16 KB), the release and a fingerprint that groups repeats: the
+first 16 hex characters of SHA-1 over the class name and the top five frames from the
+application's own code as `pkg.Class.method@File.java` (no line numbers), joined with
+newlines. Frames in `java.*`, `javax.*`, `jakarta.*`, `sun.*`, `jdk.*`,
+`org.springframework.*`, `org.apache.*` and the SDK are skipped; when no in-app frame is
+left, the top five frames of any kind are used, and only an exception without any stack
+frames is hashed by its class name and message (digit runs replaced by `0`). At most 20
+rows per fingerprint per minute are written by each instance.
+
 ## What is captured
 
 Per request (see SPEC.md for the full column list): request id (incoming
@@ -187,8 +276,8 @@ Always NULL in this SDK: `load_5`, `load_15`, `heap_objects`, `disk_inodes_perce
 Inside a container, the `/proc` figures describe what the container can see: host
 CPU, memory and disks, but only its own processes and network namespace.
 
-Tables created by an earlier version gain the newer `system_metrics` columns at
-startup (`ALTER TABLE ... ADD COLUMN`), so upgrading needs no manual migration.
+Tables created by an earlier version gain the newer `api_logs` and `system_metrics`
+columns at startup (`ALTER TABLE ... ADD COLUMN`), so upgrading needs no manual migration.
 
 ## Configuration
 
@@ -212,17 +301,25 @@ Everything is read from the environment variables in SPEC.md, through Spring's
 | `VISIONARY_SYSTEM_METRICS` | `true` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` (plain number = seconds; also `500ms`, `1m`) |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` |
+| `VISIONARY_SERVICE` | empty (NULL) |
+| `VISIONARY_RELEASE` | the platform's commit variable, else empty (NULL) |
+| `VISIONARY_SPANS` | `true` (`false` also removes the DataSource wrapper and leaves the totals NULL) |
+| `VISIONARY_SPAN_THRESHOLD_MS` | `100` |
+| `VISIONARY_SPAN_MAX` | `100` |
+| `VISIONARY_ERRORS` | `true` |
 
 Booleans accept `true/false/1/0/yes/no`.
 
 ## Behaviour notes
 
-- Requests go into a bounded in-memory queue (5000 entries) that never blocks; when
+- Requests, background spans and errors go into one bounded in-memory queue (5000
+  entries; a request and its spans are one entry) that never blocks; when
   it is full, entries are dropped and the count is logged. The writer flushes every
   50 entries or 3 seconds, retrying a failed batch twice (after 1 s and 2 s).
 - System samples are written 4 at a time. While the database is unreachable, up to
   an hour of samples is kept and written once it is back.
 - Retention runs a minute after start and then daily, deleting in chunks of 5000.
+  `spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS`; `releases` are kept.
 - On shutdown, after the web server has stopped accepting requests, queued requests
   and buffered samples are flushed (at most 10 seconds each).
 - The schemas shipped in the jar are copies of `sdks/go/schema/<dialect>/`.

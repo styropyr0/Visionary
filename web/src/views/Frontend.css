@@ -1,0 +1,144 @@
+/* Frontend (real user monitoring) view. */
+
+.rum-vitals {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1180px) {
+  .rum-vitals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.rum-vital .stat {
+  gap: 6px;
+  min-height: 0;
+  padding-bottom: 12px;
+}
+
+.rum-vital-name {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rum-vital-full {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-weight: 400;
+  min-width: 0;
+}
+
+.rum-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rum-rating.good { color: var(--good-text); }
+.rum-rating.needs-improvement { color: var(--warning-text); }
+.rum-rating.poor { color: var(--critical-text); }
+.rum-rating.none { color: var(--text-3); font-weight: 400; }
+
+.rum-dist {
+  display: flex;
+  height: 8px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-3);
+  gap: 1px;
+}
+
+.rum-dist span { display: block; height: 100%; }
+
+.rum-dist .good,
+.rum-dist-legend .good,
+.rum-cell.good .dot { background: var(--good); }
+
+.rum-dist .needs-improvement,
+.rum-dist-legend .needs-improvement,
+.rum-cell.needs-improvement .dot { background: var(--warning); }
+
+.rum-dist .poor,
+.rum-dist-legend .poor,
+.rum-cell.poor .dot { background: var(--critical); }
+
+.rum-dist-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.rum-dist-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.rum-dist-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.rum-vital-foot {
+  margin-top: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rum-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rum-cell .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.rum-error-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rum-error-cell .dim {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 520px;
+  font-size: 12px;
+}
+
+.rum-error-message {
+  margin: 0 0 16px;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.rum-drawer-h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.rum-stack {
+  margin-bottom: 20px !important;
+  font-size: 12px;
+}

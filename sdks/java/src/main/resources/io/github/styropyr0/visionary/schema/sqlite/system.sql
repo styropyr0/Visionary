@@ -66,7 +66,9 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     ctx_switches_ps    REAL,
     proc_read_kbps     REAL,
     proc_write_kbps    REAL,
-    proc_max_fds       INTEGER
+    proc_max_fds       INTEGER,
+    service            TEXT,
+    version            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

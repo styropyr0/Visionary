@@ -331,9 +331,11 @@ request) from these rows; SDKs do not need to detect them.
   `message` (at most 1000 characters), `stack` (formatted the language's usual
   way, at most 16 KB), `fingerprint`, `handled` (0/1), `runtime`.
 - `fingerprint`: the first 16 hex characters of SHA-1 over
-  `type + "\n" + frames`, where frames are the top 5 frames from the
+  `type + "\n" + frames`, where frames are the top 5 (innermost first: where the error was raised,
+  then its callers) frames from the
   application's own code (skip the standard library, the SDK and installed
-  packages when they can be told apart; else the top 5) written as
+  packages when they can be told apart; when the stack has frames but none are
+  the application's, or they cannot be told apart, the top 5 frames of any kind) written as
   `function@file` without line numbers, joined with `\n`. With no frames, use
   `type + "\n" + message` with every digit run replaced by `0`.
 - At most 20 rows per fingerprint per minute per process; drop the rest.
@@ -379,6 +381,13 @@ SDKs drop the batch on 4xx and retry once later on 5xx.
   ]
 }
 ```
+
+Bodies may be gzip-compressed (`Content-Encoding: gzip`); the 64 KB limit applies
+after decompression.
+
+Ids in `api` names: replace a path segment with `:id` when it is all digits, a
+UUID, 16 or more hex characters, or 20 or more characters containing a digit
+(e.g. `/api/trips/8412/photos/3f2a9c...` becomes `/api/trips/:id/photos/:id`).
 
 At most 100 events per request. Kinds:
 

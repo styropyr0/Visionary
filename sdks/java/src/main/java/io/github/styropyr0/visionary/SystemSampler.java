@@ -31,7 +31,7 @@ final class SystemSampler {
     private static final double GB = MB * 1024.0;
 
     private final Store store;
-    private final String instance;
+    private final Origin origin;
     private final Duration interval;
     private final HttpCounters http;
     private final PoolStats pool;
@@ -57,9 +57,9 @@ final class SystemSampler {
     private int writeAt = SAMPLES_PER_WRITE;
     private boolean schemaReady;
 
-    SystemSampler(Store store, String instance, Duration interval, HttpCounters http, PoolStats pool) {
+    SystemSampler(Store store, Origin origin, Duration interval, HttpCounters http, PoolStats pool) {
         this.store = store;
-        this.instance = instance;
+        this.origin = origin;
         this.interval = interval;
         this.http = http;
         this.pool = pool;
@@ -159,7 +159,9 @@ final class SystemSampler {
             elapsedNs = interval.toNanos();
         }
         set(row, "created_at", Values.timestamp(Instant.now()));
-        set(row, "instance", instance);
+        set(row, "instance", origin.instance());
+        set(row, "service", origin.service());
+        set(row, "version", origin.version());
         set(row, "interval_s", Values.round(secs, 2));
 
         double load = os.getSystemLoadAverage();

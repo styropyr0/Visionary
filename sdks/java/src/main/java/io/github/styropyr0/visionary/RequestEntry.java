@@ -5,7 +5,8 @@ import java.util.Map;
 
 /**
  * The raw capture of one request. Redaction, error extraction and user lookup
- * happen on the writer thread, off the request path.
+ * happen on the writer thread, off the request path. {@code telemetry} holds the
+ * request's spans and call totals, null when span capture is off.
  */
 record RequestEntry(
         String requestId,
@@ -27,5 +28,6 @@ record RequestEntry(
         String responseContentType,
         byte[] responseBody,
         boolean responseTruncated,
-        long responseSize) {
+        long responseSize,
+        RequestScope.Finished telemetry) implements Queued {
 }

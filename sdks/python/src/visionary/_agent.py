@@ -9,17 +9,20 @@ import time
 import weakref
 from typing import Optional
 
+from . import _errors, _spans
 from ._config import Config, from_env
+from ._context import RequestInfo
 from ._entry import Entry
 from ._storage import Backend, open_backend
 from ._system import HttpCounters, Recorder
-from ._writer import RequestWriter, Retention
+from ._writer import Release, RequestWriter, Retention
 
 logger = logging.getLogger("visionary")
 
 
 class Agent:
-    """Runs request logging and system metrics for one process.
+    """Runs request logging, telemetry (spans, errors, releases) and system
+    metrics for one process.
 
     With no database configured the agent is a no-op: it logs one warning
     and every method does nothing. It never raises into the host app once
@@ -34,6 +37,9 @@ class Agent:
         self._requests: Optional[RequestWriter] = None
         self._system: Optional[Recorder] = None
         self._retention: Optional[Retention] = None
+        self._error_limit = _errors.RateLimiter()
+        self.spans_on = False
+        self.errors_on = False
         self._started = False
         self._closed = False
         self._lock = threading.Lock()
@@ -48,13 +54,21 @@ class Agent:
             return
 
         instance = cfg.instance or socket.gethostname()
-        if cfg.log_requests:
-            self._requests = RequestWriter(cfg, self._backend, logger)
+        self.instance = instance
+        if cfg.log_requests or cfg.spans or cfg.errors or cfg.version:
+            # One writer for api_logs and the telemetry tables.
+            self._requests = RequestWriter(cfg, self._backend, logger, instance, _errors.runtime())
+            self.spans_on = cfg.spans
+            self.errors_on = cfg.errors
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
-        if self._requests is not None:
+        if self._requests is not None and cfg.log_requests:
             retention["requests"] = cfg.log_retention_days
+        if self.spans_on:
+            retention["spans"] = cfg.log_retention_days
+        if self.errors_on:
+            retention["errors"] = cfg.log_retention_days
         if self._system is not None:
             retention["system"] = cfg.system_retention_days
         self._retention = Retention(self._backend, logger, retention)
@@ -66,16 +80,52 @@ class Agent:
 
     @property
     def logging_requests(self) -> bool:
-        return self._requests is not None
+        return self._requests is not None and self.config.log_requests
 
     def should_log(self, path: str) -> bool:
         """Whether a request to path gets an api_logs row (integration API)."""
-        return self._requests is not None and path.startswith(self.config.path_prefix)
+        return self.logging_requests and path.startswith(self.config.path_prefix)
 
     def record(self, entry: Entry) -> None:
         """Queue a captured request (integration API). Never blocks."""
-        if self._requests is not None and not self._closed:
+        if self.logging_requests and not self._closed:
             self._requests.log(entry)
+
+    def new_trace(self, request_id: str, t0: float) -> Optional[_spans.Trace]:
+        """The span collector for a logged request (integration API); t0 is
+        its time.perf_counter() start."""
+        if not self.spans_on:
+            return None
+        return _spans.Trace(request_id, t0, self.config.span_max)
+
+    def finish_trace(self, entry: Entry, trace: Optional[_spans.Trace]) -> None:
+        """Copy call totals and, for slow or failed requests, the spans onto
+        the entry (integration API, after status and duration are set)."""
+        if trace is None:
+            return
+        slow = entry.duration * 1000.0 >= self.config.span_threshold_ms or entry.status >= 500
+        entry.spans = trace.close(slow)
+        if _spans.db_visible:
+            entry.db_count, entry.db_ms = trace.db_count, trace.db_ms
+        if _spans.http_visible:
+            entry.http_count, entry.http_ms = trace.http_count, trace.http_ms
+
+    def record_span(self, span: _spans.Span) -> None:
+        """Queue a span recorded outside a request. Never blocks."""
+        if self.spans_on and not self._closed:
+            self._requests.log(span)
+
+    def capture_error(self, exc: BaseException, handled: bool, info: Optional[RequestInfo] = None) -> None:
+        """Queue an errors row for exc, rate limited per fingerprint. Never
+        raises."""
+        if not self.errors_on or self._closed or exc is None:
+            return
+        try:
+            ev = _errors.build(exc, handled, info)
+            if self._error_limit.allow(ev.fingerprint):
+                self._requests.log(ev)
+        except Exception:
+            logger.exception("visionary: capturing an error failed")
 
     def start(self) -> "Agent":
         """Launch the background threads. Tables are created on them, so a slow
@@ -86,8 +136,17 @@ class Agent:
             self._started = True
         if self._requests is not None:
             self._requests.start()
-            logger.info("visionary: logging requests (path_prefix=%r, bodies=%s, retention_days=%d)",
-                        self.config.path_prefix, self.config.capture_bodies, self.config.log_retention_days)
+            if self.config.version:
+                self._requests.log(Release(time.time(), _sdk_version(), _errors.runtime()))
+            if self.logging_requests:
+                logger.info("visionary: logging requests (path_prefix=%r, bodies=%s, retention_days=%d)",
+                            self.config.path_prefix, self.config.capture_bodies, self.config.log_retention_days)
+            if self.spans_on or self.errors_on:
+                _spans.set_active(self)
+            if self.spans_on and self.config.instrument_http:
+                from ._http import instrument_http
+
+                instrument_http()
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -104,6 +163,7 @@ class Agent:
                 return
             self._closed = True
             started = self._started
+        _spans.clear_active(self)
         idle = True
         if started:
             deadline = _Deadline(timeout)
@@ -145,6 +205,12 @@ class Agent:
         self.close()
 
 
+def _sdk_version() -> str:
+    from . import __version__
+
+    return __version__
+
+
 class _Deadline:
     def __init__(self, seconds: float) -> None:
         self._end = time.monotonic() + max(0.0, seconds)
@@ -182,7 +248,8 @@ def init(config: Optional[Config] = None) -> Agent:
             agent.start()
         except Exception:
             logger.exception("visionary: init failed; collection is off")
-            agent = Agent(Config(log_requests=False, system_metrics=False), backend=_NoBackend())
+            agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False),
+                          backend=_NoBackend())
         atexit.register(agent.close)
         _default = agent
         return agent

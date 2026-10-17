@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -28,6 +28,7 @@ class Entry:
         "headers", "request_content_type", "request_body", "request_truncated",
         "request_size", "response_content_type", "response_body",
         "response_truncated", "response_size",
+        "db_count", "db_ms", "http_count", "http_ms", "spans",
     )
 
     def __init__(self) -> None:
@@ -53,6 +54,13 @@ class Entry:
         self.response_body = b""
         self.response_truncated = False
         self.response_size = 0
+        # Call totals (None when the SDK can't see that kind of call) and the
+        # spans kept for this request, filled when it finishes.
+        self.db_count: Optional[int] = None
+        self.db_ms: Optional[float] = None
+        self.http_count: Optional[int] = None
+        self.http_ms: Optional[float] = None
+        self.spans: List[Any] = []
 
 
 class BodyCapture:

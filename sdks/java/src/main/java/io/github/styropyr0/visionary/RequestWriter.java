@@ -2,9 +2,11 @@ package io.github.styropyr0.visionary;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -18,8 +20,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * The single background writer for {@code api_logs}: a bounded queue that never
- * blocks the request thread, flushed every 50 entries or 3 seconds.
+ * The single background writer for {@code api_logs}, {@code spans}, {@code errors}
+ * and {@code releases}: a bounded queue that never blocks the request thread,
+ * flushed every 50 entries or 3 seconds. A request and the spans it stores count
+ * as one entry; each batch is written as one unit.
  */
 final class RequestWriter {
 
@@ -33,6 +37,9 @@ final class RequestWriter {
     private static final long STACK_SIZE = 8L << 20;
 
     private final Store store;
+    private final Origin origin;
+    private final boolean logRequests;
+    private final double spanThresholdMs;
     private final Redactor redactor;
     private final ErrorFields errorFields;
     private final VisionaryUserLookup userLookup;
@@ -40,15 +47,19 @@ final class RequestWriter {
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition wake = lock.newCondition();
-    private final ArrayDeque<RequestEntry> queue = new ArrayDeque<>();
+    private final ArrayDeque<Queued> queue = new ArrayDeque<>();
     private long dropped;
     private boolean closing;
 
     private final Thread thread;
-    private boolean schemaReady;
+    private boolean requestsReady;
+    private boolean telemetryReady;
 
-    RequestWriter(VisionaryConfig cfg, Store store, ObjectMapper json, VisionaryUserLookup userLookup) {
+    RequestWriter(VisionaryConfig cfg, Origin origin, Store store, ObjectMapper json, VisionaryUserLookup userLookup) {
         this.store = store;
+        this.origin = origin;
+        this.logRequests = cfg.logRequests();
+        this.spanThresholdMs = cfg.spanThresholdMs();
         this.redactor = new Redactor(cfg.redactHeaders(), cfg.redactFields(), cfg.redactRequestFields(), json);
         this.errorFields = new ErrorFields(json, cfg.errorCodeField(), cfg.errorKeyField());
         this.userLookup = userLookup;
@@ -57,12 +68,20 @@ final class RequestWriter {
         this.thread.setDaemon(true);
     }
 
+    /** Starts the worker; the deploy marker goes first when the release is known. */
     void start() {
+        if (origin.version() != null) {
+            enqueue(new ReleaseEntry(Instant.now()));
+        }
         thread.start();
     }
 
-    /** Enqueues without blocking; when the queue is full the entry is dropped and counted. */
     void log(RequestEntry e) {
+        enqueue(e);
+    }
+
+    /** Enqueues without blocking; when the queue is full the entry is dropped and counted. */
+    void enqueue(Queued e) {
         lock.lock();
         try {
             if (closing || queue.size() >= QUEUE_SIZE) {
@@ -101,11 +120,11 @@ final class RequestWriter {
         try {
             ensureSchema();
         } catch (Exception e) {
-            log.warn("visionary: create api_logs failed (retrying on the next write): " + e);
+            log.warn("visionary: create tables failed (retrying on the next write): " + e);
         }
         long nextFlush = System.nanoTime() + FLUSH_INTERVAL.toNanos();
         while (true) {
-            List<RequestEntry> batch;
+            List<Queued> batch;
             long droppedNow;
             boolean last;
             lock.lock();
@@ -144,23 +163,42 @@ final class RequestWriter {
         }
     }
 
-    private void write(List<RequestEntry> batch) {
-        List<Object[]> rows;
+    private void write(List<Queued> batch) {
+        Map<Table, List<Object[]>> rows = new LinkedHashMap<>();
+        for (Table t : List.of(Table.API_LOGS, Table.SPANS, Table.ERRORS, Table.RELEASES)) {
+            rows.put(t, new ArrayList<>());
+        }
         try {
             Map<String, VisionaryUser> users = lookupUsers(batch);
-            rows = new ArrayList<>(batch.size());
-            for (RequestEntry e : batch) {
-                rows.add(row(e, users));
+            for (Queued q : batch) {
+                if (q instanceof RequestEntry e) {
+                    rows.get(Table.API_LOGS).add(row(e, users));
+                    if (keepSpans(e)) {
+                        for (VisionarySpan span : e.telemetry().spans()) {
+                            rows.get(Table.SPANS).add(spanRow(span, e.requestId(), e.telemetry().startNanos()));
+                        }
+                    }
+                } else if (q instanceof SpanEntry e) {
+                    RequestScope scope = e.span().scope;
+                    rows.get(Table.SPANS).add(scope == null
+                            ? spanRow(e.span(), null, 0)
+                            : spanRow(e.span(), scope.requestId, scope.startNanos));
+                } else if (q instanceof ErrorEntry e) {
+                    rows.get(Table.ERRORS).add(errorRow(e));
+                } else if (q instanceof ReleaseEntry e) {
+                    rows.get(Table.RELEASES).add(releaseRow(e));
+                }
             }
         } catch (RuntimeException e) {
-            log.error("visionary: could not prepare " + batch.size() + " request rows; dropped", e);
+            log.error("visionary: could not prepare " + batch.size() + " rows; dropped", e);
             return;
         }
+        rows.values().removeIf(List::isEmpty);
         Exception last = null;
         for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
             try {
                 ensureSchema();
-                store.insert(Table.API_LOGS, rows);
+                store.insert(rows);
                 return;
             } catch (Exception e) {
                 last = e;
@@ -169,23 +207,36 @@ final class RequestWriter {
                 }
             }
         }
-        log.error("visionary: request batch write failed; " + batch.size() + " entries dropped: " + last);
+        log.error("visionary: batch write failed; " + batch.size() + " entries dropped: " + last);
     }
 
     private void ensureSchema() throws Exception {
-        if (!schemaReady) {
+        if (logRequests && !requestsReady) {
             store.createSchema(Table.API_LOGS);
-            schemaReady = true;
+            requestsReady = true;
+        }
+        if (!telemetryReady) {
+            // One script creates spans, errors and releases.
+            store.createSchema(Table.SPANS);
+            telemetryReady = true;
         }
     }
 
+    /** Span rows are kept for slow requests and for those that answered 5xx. */
+    private boolean keepSpans(RequestEntry e) {
+        return e.telemetry() != null && (e.durationMs() >= spanThresholdMs || e.status() >= 500);
+    }
+
     /** Resolves each distinct user missing a handle or role once per batch. */
-    private Map<String, VisionaryUser> lookupUsers(List<RequestEntry> batch) {
+    private Map<String, VisionaryUser> lookupUsers(List<Queued> batch) {
         Map<String, VisionaryUser> out = new HashMap<>();
         if (userLookup == null) {
             return out;
         }
-        for (RequestEntry e : batch) {
+        for (Queued q : batch) {
+            if (!(q instanceof RequestEntry e)) {
+                continue;
+            }
             VisionaryUser u = e.user();
             if (u == null || isEmpty(u.id()) || (!isEmpty(u.handle()) && !isEmpty(u.role()))
                     || out.containsKey(u.id())) {
@@ -213,6 +264,7 @@ final class RequestWriter {
             role = isEmpty(role) ? found.role() : role;
         }
 
+        RequestScope.Finished t = e.telemetry();
         String responseText = text(e.responseBody());
         ErrorFields.Result err = e.status() >= 400 ? errorFields.extract(responseText) : ErrorFields.Result.NONE;
         String requestBody = null;
@@ -247,6 +299,71 @@ final class RequestWriter {
             e.responseSize(),
             err.code(),
             err.key(),
+            origin.service(),
+            origin.version(),
+            t == null ? null : t.dbCount(),
+            t == null ? null : Values.round(t.dbMs(), 3),
+            t == null ? null : t.httpCount(),
+            t == null ? null : Values.round(t.httpMs(), 3),
+        };
+    }
+
+    private Object[] spanRow(VisionarySpan s, String requestId, long requestStartNanos) {
+        String name = s.name;
+        String detail = s.detail;
+        if (s.sql != null) {
+            detail = Values.cap(SqlText.sanitize(s.sql), 2000);
+            if (name == null) {
+                name = SqlText.name(detail == null ? "" : detail);
+            }
+        }
+        long rows = s.rowCount;
+        return new Object[] {
+            Values.timestamp(s.startedAt),
+            requestId,
+            origin.service(),
+            origin.instance(),
+            s.kind,
+            Values.cap(name == null || name.isEmpty() ? s.kind : name, 255),
+            Values.cap(s.target, 255),
+            detail,
+            requestId == null ? null : Values.round((s.startNanos - requestStartNanos) / 1_000_000.0, 3),
+            Values.round(s.durationMs, 3),
+            s.failed ? "error" : "ok",
+            Values.cap(s.error, 500),
+            rows < 0 ? null : rows,
+        };
+    }
+
+    private Object[] errorRow(ErrorEntry e) {
+        return new Object[] {
+            Values.timestamp(e.createdAt()),
+            origin.service(),
+            origin.instance(),
+            origin.version(),
+            e.requestId(),
+            Values.emptyToNull(e.method()),
+            Values.cap(e.route(), 255),
+            Values.emptyToNull(e.path()),
+            Values.cap(e.userId(), 255),
+            Values.cap(e.type(), 255),
+            Errors.message(e.error()),
+            scrub(() -> Errors.stack(e.error())),
+            e.fingerprint(),
+            e.handled() ? 1L : 0L,
+            origin.runtime(),
+        };
+    }
+
+    private Object[] releaseRow(ReleaseEntry e) {
+        return new Object[] {
+            Values.timestamp(e.createdAt()),
+            origin.service(),
+            origin.instance(),
+            origin.version(),
+            "java",
+            origin.sdkVersion(),
+            origin.runtime(),
         };
     }
 

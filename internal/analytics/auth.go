@@ -13,6 +13,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -33,12 +34,15 @@ const unavailableGrace = time.Hour
 // session is what the cookie carries. It is encrypted, so the API token never
 // reaches page scripts or logs.
 type session struct {
-	UserID  string   `json:"u"`
-	Name    string   `json:"n"`
-	Handle  string   `json:"h"`
-	Roles   []string `json:"r"`
-	Token   string   `json:"t"`
-	Expires int64    `json:"e"`
+	UserID string   `json:"u"`
+	Name   string   `json:"n"`
+	Handle string   `json:"h"`
+	Roles  []string `json:"r"`
+	// Role is set for sessions with a fixed role (shared password, local, API
+	// key); delegated sessions are mapped from Roles on every request.
+	Role    string `json:"o,omitempty"`
+	Token   string `json:"t"`
+	Expires int64  `json:"e"`
 	// Checked is when the API last confirmed the token and role.
 	Checked int64 `json:"c"`
 }
@@ -53,6 +57,9 @@ type auth struct {
 	secureMode string
 	trustProxy bool
 	bridge     *authbridge.Bridge
+	roles      *roleMapping
+	// viewerPassword is a second shared password that signs in read-only.
+	viewerPassword string
 
 	checks singleflight.Group
 
@@ -93,15 +100,30 @@ func newAuth(cfg Config, bridge *authbridge.Bridge) (*auth, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	roles, err := newRoleMapping(os.Getenv("VISIONARY_ROLE_MAP"), cfg.Auth.AllowedRoles)
+	if err != nil {
+		return nil, false, err
+	}
+	viewerPassword := os.Getenv("VISIONARY_VIEWER_PASSWORD")
+	if viewerPassword != "" && cfg.Auth.Type == authbridge.TypeShared {
+		if len(viewerPassword) < 12 {
+			return nil, false, errors.New("VISIONARY_VIEWER_PASSWORD must be at least 12 characters")
+		}
+		if viewerPassword == cfg.Auth.SharedPassword {
+			return nil, false, errors.New("VISIONARY_VIEWER_PASSWORD must differ from VISIONARY_SHARED_PASSWORD")
+		}
+	}
 	return &auth{
-		aead:       aead,
-		ttl:        cfg.SessionTTL,
-		checkEvery: cfg.RoleCheckEvery,
-		secureMode: cfg.SecureCookieEnv,
-		trustProxy: cfg.TrustProxy,
-		bridge:     bridge,
-		limiters:   make(map[string]*loginLimiter),
-		signedOut:  make(map[string]time.Time),
+		roles:          roles,
+		viewerPassword: viewerPassword,
+		aead:           aead,
+		ttl:            cfg.SessionTTL,
+		checkEvery:     cfg.RoleCheckEvery,
+		secureMode:     cfg.SecureCookieEnv,
+		trustProxy:     cfg.TrustProxy,
+		bridge:         bridge,
+		limiters:       make(map[string]*loginLimiter),
+		signedOut:      make(map[string]time.Time),
 	}, ephemeral, nil
 }
 
@@ -196,11 +218,24 @@ func (a *auth) newSession(res *authbridge.Result) *session {
 	}
 }
 
-// checkShared compares the team password in constant time.
-func (a *auth) checkShared(pw string) bool {
-	want := sha256.Sum256([]byte(a.bridge.Config().SharedPassword))
+// checkShared compares the team password, then the viewer password when one
+// is set, in constant time. It returns the role the password grants.
+func (a *auth) checkShared(pw string) role {
 	got := sha256.Sum256([]byte(pw))
-	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
+	want := sha256.Sum256([]byte(a.bridge.Config().SharedPassword))
+	admin := subtle.ConstantTimeCompare(want[:], got[:]) == 1
+	viewer := false
+	if a.viewerPassword != "" {
+		want = sha256.Sum256([]byte(a.viewerPassword))
+		viewer = subtle.ConstantTimeCompare(want[:], got[:]) == 1
+	}
+	switch {
+	case admin:
+		return roleAdmin
+	case viewer:
+		return roleViewer
+	}
+	return roleNone
 }
 
 func tokenKey(token string) string {
@@ -257,7 +292,7 @@ func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) 
 		return nil, false, errSessionEnded
 	}
 	u := v.(*authbridge.User)
-	if !a.bridge.Allowed(u) {
+	if !a.roles.allowed(u) {
 		return nil, false, errNotAllowed
 	}
 	next := *s

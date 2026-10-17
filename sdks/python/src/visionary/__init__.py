@@ -1,7 +1,9 @@
 """Visionary collector SDK.
 
-Logs one row per HTTP request into ``api_logs`` and samples host, process and
-runtime metrics into ``system_metrics``, from background threads.
+Logs one row per HTTP request into ``api_logs``, the database and outbound
+HTTP calls each request makes into ``spans``, unhandled and reported
+exceptions into ``errors``, and samples host, process and runtime metrics
+into ``system_metrics``, from background threads.
 
     import visionary
     agent = visionary.init()            # from VISIONARY_* / D1_* env vars
@@ -12,9 +14,16 @@ known. See README.md and SPEC.md.
 """
 
 from ._agent import Agent, get_agent, init
+from ._api import capture_exception, instrument_sqlalchemy, span
 from ._config import Config, from_env
 from ._context import set_route, set_user
+from ._db import instrument_connection, instrument_cursor
+from ._http import instrument_http
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-__all__ = ["Agent", "Config", "from_env", "get_agent", "init", "set_route", "set_user", "__version__"]
+__all__ = [
+    "Agent", "Config", "capture_exception", "from_env", "get_agent", "init", "instrument_connection",
+    "instrument_cursor", "instrument_http", "instrument_sqlalchemy", "set_route", "set_user", "span",
+    "__version__",
+]

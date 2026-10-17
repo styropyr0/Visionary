@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "visionary-sdk"
-version = "0.1.0"
-description = "Visionary collector: logs API requests and samples system metrics into your database."
+version = "0.2.0"
+description = "Visionary collector: logs API requests, database and HTTP spans, errors and system metrics into your database."
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = ["analytics", "api", "monitoring", "metrics", "django", "fastapi", "flask", "asgi"]

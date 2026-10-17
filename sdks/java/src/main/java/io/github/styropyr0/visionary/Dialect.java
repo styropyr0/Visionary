@@ -70,7 +70,11 @@ enum Dialect {
         return out;
     }
 
+    /** Column types as in {@code SQLType} of sdks/go/migrate.go. */
     private String sqlType(Table.Type type) {
+        if (type == Table.Type.TEXT) {
+            return this == MYSQL ? "VARCHAR(255)" : "TEXT";
+        }
         boolean integer = type == Table.Type.INT;
         return switch (this) {
             case POSTGRES -> integer ? "BIGINT" : "DOUBLE PRECISION";

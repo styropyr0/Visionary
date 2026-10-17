@@ -14,6 +14,8 @@ import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { LogDetail } from "./Logs";
+import { useTelemetry } from "../lib/telemetry";
+import { CompareVersionsPanel, logIdFor, NPlusOnePanel, SpanGroupsPanel } from "../components/telemetry/PerfPanels";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
 
@@ -49,9 +51,15 @@ export function Performance({ meta }: { meta?: Meta }) {
   const slowest = usePerf("slowest");
   const users = usePerf("users");
   const saturation = usePerf("saturation");
+  const calls = useTelemetry("routes");
   const [openLog, setOpenLog] = useState<number | null>(null);
+  const openRequest = (requestId: string) => {
+    logIdFor(requestId)
+      .then((id) => id !== null && setOpenLog(id))
+      .catch(() => undefined);
+  };
 
-  const all = [summary, percentiles, apdex, heatmap, histogram, routes, routeP95, slowest, users, saturation];
+  const all = [summary, percentiles, apdex, heatmap, histogram, routes, routeP95, slowest, users, saturation, calls];
   const busy = all.some((q) => q.loading);
 
   const cur = rowObject(summary.data?.current);
@@ -80,7 +88,7 @@ export function Performance({ meta }: { meta?: Meta }) {
 
   const histResult = useMemo(() => labelBands(histogram.data), [histogram.data]);
   const regressions = useMemo(() => findRegressions(routes.data), [routes.data]);
-  const routeRows = useMemo(() => withPreviousP95(routes.data), [routes.data]);
+  const routeRows = useMemo(() => withCalls(withPreviousP95(routes.data), calls.data), [routes.data, calls.data]);
 
   return (
     <>
@@ -209,7 +217,7 @@ export function Performance({ meta }: { meta?: Meta }) {
           <Panel
             className="span-12"
             title="Routes by server time"
-            description="Busy time is the sum of request durations: where the server spends its time, and so where optimizing pays off most. p95 change compares with the previous period of the same length."
+            description="Busy time is the sum of request durations: where the server spends its time, and so where optimizing pays off most. p95 change compares with the previous period of the same length. DB time is the share of request time spent in database calls, from SDKs that measure it."
             result={routeRows}
             loading={routes.loading}
             error={routes.error}
@@ -266,6 +274,22 @@ export function Performance({ meta }: { meta?: Meta }) {
               )
             }
           />
+
+          <Section
+            title="Database and outbound calls"
+            text="Where requests wait on other systems, from the spans the SDKs keep for slow and failed requests. Statements are grouped by their first keyword and table, outbound calls by method and host."
+          />
+          <SpanGroupsPanel
+            className="span-12"
+            kind="db"
+            title="Slowest queries"
+            description="Database statements by total time spent in them, with the slowest instance of each (literals replaced by ?) and the routes that run them most."
+          />
+          <SpanGroupsPanel className="span-12" kind="http" title="Outbound calls" description="Outbound HTTP calls by host, by total time, with the routes that make them most." />
+          <NPlusOnePanel className="span-12" onOpenRequest={openRequest} />
+
+          <Section title="Releases" text="Dashed lines on the charts mark deploys. Compare two versions to see what a release changed, route by route." />
+          <CompareVersionsPanel className="span-12" />
         </div>
       </div>
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}
@@ -373,6 +397,23 @@ function withPreviousP95(data: StatsResponse | undefined): Result | undefined {
   };
 }
 
+/** Adds each route's DB time share and calls per request, when the SDK reports them. */
+function withCalls(rows: Result | undefined, calls: Result | undefined): Result | undefined {
+  if (!rows) return undefined;
+  const by = new Map<string, unknown[]>();
+  if (calls) for (const r of calls.rows) by.set(routeKey(r, calls.columns), r);
+  const si = calls?.columns.indexOf("db_share") ?? -1;
+  const ci = calls?.columns.indexOf("db_calls") ?? -1;
+  return {
+    ...rows,
+    columns: [...rows.columns, "db_share", "db_calls"],
+    rows: rows.rows.map((r) => {
+      const c = by.get(routeKey(r, rows.columns));
+      return [...r, c && si >= 0 ? c[si] : null, c && ci >= 0 ? c[ci] : null];
+    }),
+  };
+}
+
 function findRegressions(data: StatsResponse | undefined): Result | undefined {
   const cur = data?.current;
   if (!cur) return undefined;
@@ -451,6 +492,22 @@ function routeColumns(res: Result, apdexMs: number): Column[] {
       },
     },
     { key: "busy_seconds", label: "Busy", align: "right", render: (v) => msCell((toNumber(v) ?? 0) * 1000) },
+    {
+      key: "db_share",
+      label: "DB time · calls",
+      align: "right",
+      render: (v, row) => {
+        const n = toNumber(v);
+        if (n === null) return <span className="dim">—</span>;
+        const calls = toNumber(row[res.columns.indexOf("db_calls")]);
+        return (
+          <span title="Share of request time spent in database calls, and database calls per request on average">
+            {formatPercent(Math.min(100, n))}
+            {calls !== null && <span className="dim"> · {formatCount(calls)}</span>}
+          </span>
+        );
+      },
+    },
     { key: "p50", align: "right", render: msCell },
     { key: "p95", align: "right", render: msCell },
     { key: "p95_change", label: "p95 change", align: "right", render: (v) => <ChangeCell value={v} /> },

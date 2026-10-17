@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { BarChart, HeatmapChart, LineChart, PieChart } from "echarts/charts";
-import { GridComponent, LegendComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
+import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
+import { withDeployMarkers } from "../charts/option";
+import { readTokens } from "../charts/palette";
+import { useApp } from "../lib/state";
+import { useDeploys } from "./telemetry/deploys";
 
-echarts.use([LineChart, BarChart, PieChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, SVGRenderer]);
+echarts.use([LineChart, BarChart, PieChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, VisualMapComponent, SVGRenderer]);
 
 interface Props {
   option: EChartsOption;
@@ -50,9 +54,15 @@ export function Chart({ option, height, label }: Props) {
     };
   }, []);
 
+  // Time charts mark the deploys in the range (see telemetry/deploys).
+  const deploys = useDeploys();
+  const { theme } = useApp();
+  const tokens = useMemo(() => readTokens(), [theme]);
+  const drawn = useMemo(() => withDeployMarkers(option, deploys, tokens), [option, deploys, tokens]);
+
   useEffect(() => {
-    inst.current?.setOption(withAppFont(option), { notMerge: true, lazyUpdate: true });
-  }, [option, fontsReady]);
+    inst.current?.setOption(withAppFont(drawn), { notMerge: true, lazyUpdate: true });
+  }, [drawn, fontsReady]);
 
   return <div ref={el} className="chart" role="img" aria-label={label} style={{ width: "100%", height }} />;
 }

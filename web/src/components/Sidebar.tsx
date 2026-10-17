@@ -85,9 +85,10 @@ export function BrandMark() {
   );
 }
 
-function roleLabel(roles: string[]): string {
-  const r = roles[0] ?? "";
-  return r ? r.charAt(0) + r.slice(1).toLowerCase() : "Signed in";
+/** The Visionary role (admin, editor, viewer) from the session. */
+function roleLabel(user: SessionUser & { role?: string }): string {
+  const r = user.role ?? "";
+  return r ? r.charAt(0).toUpperCase() + r.slice(1) : "Signed in";
 }
 
 function initials(name: string): string {
@@ -143,13 +144,13 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
           <span className="nav-text">Sign out</span>
         </button>
         {user && (
-          <div className="user-chip" title={collapsed ? `${user.name} · @${user.handle}` : undefined}>
+          <div className="user-chip" title={collapsed ? `${user.name} · ${roleLabel(user)}${user.handle ? ` · @${user.handle}` : ""}` : undefined}>
             <span className="avatar" aria-hidden>
               {initials(user.name || user.handle)}
             </span>
             <span className="nav-text user-text">
               <span className="user-name">{user.name || `@${user.handle}`}</span>
-              <span className="user-role">{roleLabel(user.roles)}{user.handle ? ` · @${user.handle}` : ""}</span>
+              <span className="user-role">{roleLabel(user)}{user.handle ? ` · @${user.handle}` : ""}</span>
             </span>
           </div>
         )}

@@ -72,18 +72,21 @@ final class D1Store implements Store {
     }
 
     @Override
-    public void insert(Table table, List<Object[]> rows) throws IOException, InterruptedException {
-        String sql = table.insertSql("NULLIF(?, '')");
-        for (int from = 0; from < rows.size(); from += MAX_STATEMENTS_PER_BATCH) {
-            List<Map<String, Object>> stmts = new ArrayList<>();
-            for (Object[] row : rows.subList(from, Math.min(rows.size(), from + MAX_STATEMENTS_PER_BATCH))) {
+    public void insert(Map<Table, List<Object[]>> rows) throws IOException, InterruptedException {
+        List<Map<String, Object>> stmts = new ArrayList<>();
+        for (Map.Entry<Table, List<Object[]>> e : rows.entrySet()) {
+            String sql = e.getKey().insertSql("NULLIF(?, '')");
+            for (Object[] row : e.getValue()) {
                 List<String> params = new ArrayList<>(row.length);
                 for (Object v : row) {
                     params.add(param(v));
                 }
                 stmts.add(Map.of("sql", sql, "params", params));
             }
-            post(queryUri, Map.of("batch", stmts));
+        }
+        for (int from = 0; from < stmts.size(); from += MAX_STATEMENTS_PER_BATCH) {
+            int to = Math.min(stmts.size(), from + MAX_STATEMENTS_PER_BATCH);
+            post(queryUri, Map.of("batch", stmts.subList(from, to)));
         }
     }
 

@@ -1,0 +1,112 @@
+/* Performance: span breakdowns, N+1 suspects, version comparison. */
+
+.empty-why {
+  max-width: 620px;
+  margin: 0 auto;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.span-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.span-name-main {
+  color: var(--text-1);
+}
+
+.span-detail {
+  max-width: 520px;
+  margin-top: 1px;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.span-routes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.span-routes .mono {
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.span-routes .mono + .mono {
+  color: var(--text-3);
+}
+
+.cmp-pickers {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.cmp-pickers .btn {
+  height: 28px;
+  font-size: 12px;
+}
+
+.cmp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmp-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cmp-summary > div {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.cmp-label {
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.cmp-cell {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cmp-summary .cmp-cell {
+  justify-content: flex-start;
+  font-size: 14px;
+}
+
+.cmp-arrow {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.cmp-change {
+  min-width: 48px;
+  font-size: 12px;
+  text-align: right;
+}
+
+.cmp-change .flag.dim {
+  color: var(--text-3);
+}
