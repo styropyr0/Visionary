@@ -9,10 +9,12 @@ import (
 
 // clientFingerprint groups client errors by the rule in sdks/SPEC.md
 // ("Errors"): the first 16 hex characters of SHA-1 over type + "\n" + the top
-// five application frames as function@file (no line numbers). Browser
-// (V8, SpiderMonkey, JavaScriptCore), JVM (Android) and Apple crash-report
-// frames are understood. Without frames, the message with digit runs as 0
-// stands in.
+// five in-app frames, innermost first, as function@file (no line numbers).
+// Browser (V8, SpiderMonkey, JavaScriptCore), JVM (Android) and Apple
+// crash-report stacks all list the innermost frame first, so frames are taken
+// in the order they appear. When a stack has frames but none are in-app, the
+// top five frames of any kind are used; only a stack without frames falls
+// back to the message with digit runs as 0.
 func clientFingerprint(typ, message, stack string) string {
 	var app, all []string
 	for _, line := range strings.Split(stack, "\n") {
