@@ -1,0 +1,369 @@
+/* Dashboards: list, grid editor and TV mode. */
+
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.dash-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  text-decoration: none;
+  transition: border-color 120ms;
+}
+
+.dash-card:hover,
+.dash-card:focus-visible {
+  border-color: var(--border-strong);
+  outline: none;
+}
+
+.dash-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dash-card-desc {
+  color: var(--text-2);
+}
+
+.dash-card-meta,
+.dash-crumbs .dim,
+.dash-pick .dim,
+.dash-help,
+.tv .dim {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.dash-crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+}
+
+.dash-crumbs a {
+  color: var(--text-2);
+}
+
+.dash-vars {
+  gap: 16px;
+}
+
+.dash-var {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-var > span {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dash-range-pill {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+}
+
+.dash-pill-x {
+  display: inline-grid;
+  margin-left: 2px;
+  color: var(--text-3);
+}
+
+.dash-pill-x:hover {
+  color: var(--text-1);
+}
+
+.dash-edit-hint {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+/* ---------- Grid ---------- */
+
+.dash-grid {
+  position: relative;
+  min-height: 0;
+}
+
+.dash-item {
+  position: absolute;
+  display: flex;
+  touch-action: none;
+}
+
+.dash-grid.busy .dash-item:not(.active) {
+  transition: left 140ms ease, top 140ms ease, width 140ms ease, height 140ms ease;
+}
+
+.dash-grid.busy {
+  user-select: none;
+}
+
+.dash-item.active {
+  z-index: 3;
+}
+
+.dash-item.active .panel {
+  box-shadow: var(--shadow-pop);
+}
+
+.dash-fill {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dash-grid.editing .panel-head {
+  cursor: grab;
+}
+
+.dash-grid.editing .panel-actions {
+  opacity: 1;
+}
+
+.dash-grid.busy .panel-head {
+  cursor: grabbing;
+}
+
+.dash-grid.editing .panel {
+  border-style: dashed;
+  border-color: var(--border-strong);
+}
+
+.dash-ghost {
+  position: absolute;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-wash);
+}
+
+.dash-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+}
+
+.dash-resize::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-3);
+  border-bottom: 2px solid var(--text-3);
+  border-bottom-right-radius: 2px;
+}
+
+.dash-resize:hover::after {
+  border-color: var(--accent);
+}
+
+/* ---------- Add panel and settings ---------- */
+
+.dash-pick {
+  display: flex;
+  flex-direction: column;
+  max-height: 56vh;
+  overflow: auto;
+}
+
+.dash-pick-group {
+  display: block;
+  margin: 12px 0 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dash-pick-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dash-pick-row:hover,
+.dash-pick-row:focus-visible {
+  background: var(--hover-wash);
+  outline: none;
+}
+
+.dash-pick-title {
+  font-weight: 500;
+}
+
+.dash-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dash-var-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-var-pick {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.dash-var-pick label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+}
+
+.dash-help {
+  margin: 4px 0 0;
+  line-height: 1.55;
+}
+
+.dash-help code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/* ---------- TV mode ---------- */
+
+.tv {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.tv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tv-head .dash-vars {
+  margin: 0;
+}
+
+.tv-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tv-title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tv-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.tv-clock {
+  min-width: 56px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tv-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.tv .panel-actions {
+  display: none;
+}
+
+/* ---------- Saved panels: add to dashboard ---------- */
+
+.saved-dash-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.saved-dash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.saved-dash-row:hover:not(:disabled) {
+  background: var(--hover-wash);
+}
+
+.saved-dash-meta {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.saved-dash-new {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.saved-dash-new .input {
+  flex: 1;
+}

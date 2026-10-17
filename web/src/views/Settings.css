@@ -1,0 +1,234 @@
+/* Settings: members and roles, API keys, audit log, about. */
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1200px;
+}
+
+.settings-note {
+  max-width: 1200px;
+  margin-bottom: 12px;
+}
+
+.settings-note svg {
+  color: var(--text-3);
+}
+
+.settings-card {
+  overflow: hidden;
+}
+
+.settings-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.settings-desc {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.settings-desc code,
+.settings-card code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.settings-body,
+.settings-me {
+  padding: 12px 14px;
+}
+
+.settings-kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 16px;
+  align-items: baseline;
+}
+
+.settings-kv > span:nth-child(odd) {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.settings-card .dim,
+.settings-count {
+  color: var(--text-3);
+}
+
+.settings-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.settings-role {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+}
+
+.settings-role > :first-child {
+  justify-self: start;
+}
+
+.settings-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 14px;
+  color: var(--text-3);
+}
+
+.settings-empty.error {
+  color: var(--critical-text);
+}
+
+.settings-scroll {
+  max-height: 360px;
+}
+
+.settings-card .table-wrap table.data td:first-child,
+.settings-card .table-wrap table.data th:first-child {
+  padding-left: 14px;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-1);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.role-badge.role-admin {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.role-badge.role-viewer {
+  color: var(--text-2);
+}
+
+.key-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-2);
+}
+
+.key-status.ok svg {
+  color: var(--good-text);
+}
+
+.key-status.off {
+  color: var(--text-3);
+}
+
+.warn-icon {
+  color: var(--warning-text);
+  vertical-align: -2px;
+}
+
+.key-secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.key-secret code {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scope-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scope-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.scope-pick span {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.scope-pick.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.settings-filters {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-user-filter .input {
+  width: 260px;
+}
+
+.settings-count {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.audit-detail {
+  max-width: 320px;
+  text-overflow: ellipsis;
+}
+
+.feature-name {
+  width: 200px;
+  font-weight: 500;
+}
+
+.feature-detail {
+  white-space: normal !important;
+}
