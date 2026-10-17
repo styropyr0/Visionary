@@ -26,6 +26,8 @@ type store interface {
 	execScript(ctx context.Context, script string) error
 	batch(ctx context.Context, stmts []stmt) error
 	execChanges(ctx context.Context, query string, args ...any) (int64, error)
+	// columns runs a query returning one name per row.
+	columns(ctx context.Context, query string) ([]string, error)
 }
 
 type d1Store struct{ c *d1.Client }
@@ -47,6 +49,20 @@ func (s d1Store) batch(ctx context.Context, stmts []stmt) error {
 
 func (s d1Store) execChanges(ctx context.Context, query string, args ...any) (int64, error) {
 	return s.c.ExecChanges(ctx, query, stringArgs(args)...)
+}
+
+func (s d1Store) columns(ctx context.Context, query string) ([]string, error) {
+	r, err := s.c.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, row := range r.Rows {
+		if len(row) > 0 {
+			out = append(out, fmt.Sprint(row[0]))
+		}
+	}
+	return out, nil
 }
 
 func stringArgs(args []any) []string {
@@ -122,6 +138,23 @@ func (s sqlStore) execChanges(ctx context.Context, query string, args ...any) (i
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func (s sqlStore) columns(ctx context.Context, query string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 // OpenURL opens a database/sql connection from a URL: postgres://,

@@ -180,7 +180,7 @@ const logColumns: Column[] = [
   { key: "error_key", label: "Error", render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>) },
 ];
 
-function LogDetail({ id, onClose }: { id: number; onClose: () => void }) {
+export function LogDetail({ id, onClose }: { id: number; onClose: () => void }) {
   const q = useQuery(`log-${id}`, (signal) => api<Result>(`/api/logs/${id}`, { signal }));
   const [tab, setTab] = useState<"request" | "response" | "headers">("response");
   const rec = useMemo(() => {

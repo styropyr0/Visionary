@@ -2,6 +2,11 @@ import type { Unit } from "./api";
 
 const compactFmt = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const intFmt = new Intl.NumberFormat("en");
+const smallFmt = new Intl.NumberFormat("en", { maximumSignificantDigits: 2 });
+
+// Ticks below 1 (load per core, small rates) keep two significant digits; compact
+// formatting would round them all to 0.
+const tick = (n: number) => (Math.abs(n) < 1 ? smallFmt.format(n) : compactFmt.format(n));
 
 export function toNumber(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
@@ -61,13 +66,13 @@ export function formatValue(v: unknown, unit: Unit = "none"): string {
 export function formatAxis(n: number, unit: Unit = "none"): string {
   switch (unit) {
     case "ms":
-      return n >= 1000 ? `${compactFmt.format(n / 1000)}s` : `${compactFmt.format(n)}ms`;
+      return n >= 1000 ? `${compactFmt.format(n / 1000)}s` : `${tick(n)}ms`;
     case "percent":
-      return `${compactFmt.format(n)}%`;
+      return `${tick(n)}%`;
     case "bytes":
       return formatBytes(n);
     default:
-      return compactFmt.format(n);
+      return tick(n);
   }
 }
 
@@ -94,11 +99,13 @@ export function isTimeColumn(name: string): boolean {
 export function humanize(col: string): string {
   const special: Record<string, string> = {
     p50: "p50",
+    p90: "p90",
     p95: "p95",
     p99: "p99",
     p50_ms: "p50",
     p95_ms: "p95",
     p99_ms: "p99",
+    max_ms: "Max",
     avg_ms: "Avg",
     error_rate: "5xx rate",
     client_error_rate: "4xx rate",

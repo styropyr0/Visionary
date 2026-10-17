@@ -20,7 +20,16 @@ import (
 )
 
 // systemColumns is the insert order; sample builds rows in it.
-var systemColumns = []string{
+var systemColumns = func() []string {
+	cols := append([]string{}, systemBaseColumns...)
+	for _, c := range AddedSystemColumns {
+		cols = append(cols, c.Name)
+	}
+	return cols
+}()
+
+// systemBaseColumns are the columns of the first release.
+var systemBaseColumns = []string{
 	"created_at", "instance", "interval_s",
 	"host_cpu_percent", "load_1", "load_5", "load_15",
 	"host_mem_used_mb", "host_mem_total_mb", "host_mem_percent",
@@ -56,6 +65,7 @@ type recorder struct {
 	numGC    uint32
 	pauseNs  uint64
 	dbPrev   DBStats
+	prev     counters
 	buf      [][]any
 	stop     chan struct{}
 	done     chan struct{}
@@ -117,6 +127,7 @@ func (r *recorder) prime() {
 	if r.cfg.DB != nil {
 		r.dbPrev = r.cfg.DB()
 	}
+	r.prev = readCounters(r.proc)
 }
 
 func (r *recorder) run(ctx context.Context) {
@@ -253,6 +264,7 @@ func (r *recorder) sample() []any {
 	v["http_in_flight"] = r.http.inFlight.Load()
 
 	v["uptime_s"] = int64(time.Since(r.started).Seconds())
+	r.sampleExtra(v, secs)
 
 	row := make([]any, len(systemColumns))
 	for i, c := range systemColumns {
@@ -275,6 +287,9 @@ func SQLDB(db *sql.DB) func() DBStats {
 		}
 	}
 }
+
+// goos is runtime.GOOS, named so sampleExtra reads clearly.
+const goos = runtime.GOOS
 
 func mb(b uint64) float64 { return float64(b) / (1 << 20) }
 

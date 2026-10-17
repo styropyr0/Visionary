@@ -44,6 +44,13 @@
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
+  /* Sequential ramp (heatmaps): one hue, dim to bright on dark surfaces. */
+  --seq-1: #1f324d;
+  --seq-2: #234a7a;
+  --seq-3: #2a64a8;
+  --seq-4: #3987e5;
+  --seq-5: #74aef0;
+  --seq-6: #b5d3f7;
   /* Logo inks, lifted so the navy eye stays visible on dark surfaces. */
   --logo-sun: #c8483c;
   --logo-eye: #a7bcd6;
@@ -78,6 +85,13 @@
   --series-6: #008300;
   --series-7: #6250d6;
   --series-8: #e34948;
+  /* Sequential ramp (heatmaps): one hue, pale to deep on light surfaces. */
+  --seq-1: #dce9fa;
+  --seq-2: #b3cff3;
+  --seq-3: #7eaee9;
+  --seq-4: #3d86dc;
+  --seq-5: #1f5fb0;
+  --seq-6: #123d77;
   /* The logo's original oxblood and navy inks. */
   --logo-sun: #962422;
   --logo-eye: #142a3e;
@@ -1769,4 +1783,23 @@ pre.code {
 
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(6px); }
+}
+
+/* Section headings inside a dashboard grid. */
+.section-title {
+  padding: 14px 2px 0;
+}
+.section-title h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+.section-title p {
+  margin: 4px 0 0;
+  max-width: 820px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
 }

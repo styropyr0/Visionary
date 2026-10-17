@@ -7,10 +7,11 @@ import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
 import { Overview } from "./views/Overview";
+import { Performance } from "./views/Performance";
 import { Saved } from "./views/Saved";
 import { System } from "./views/System";
 
-const ROUTES: Route[] = ["overview", "system", "explore", "saved", "logs"];
+const ROUTES: Route[] = ["overview", "performance", "system", "explore", "saved", "logs"];
 
 function readRoute(): Route {
   const r = window.location.hash.replace(/^#\/?/, "").split("?")[0] as Route;
@@ -89,6 +90,7 @@ export function App() {
       />
       <main className="main">
         {route === "overview" && <Overview />}
+        {route === "performance" && <Performance meta={meta.data} />}
         {route === "system" && <System />}
         {route === "explore" && <Explore meta={meta.data} />}
         {route === "saved" && <Saved />}

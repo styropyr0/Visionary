@@ -1,5 +1,7 @@
 export interface ChartTokens {
   series: string[];
+  /** Sequential ramp, low to high. */
+  seq: string[];
   surface: string;
   surface2: string;
   border: string;
@@ -19,6 +21,7 @@ export function readTokens(): ChartTokens {
   const v = (name: string) => css.getPropertyValue(name).trim();
   return {
     series: [1, 2, 3, 4, 5, 6, 7, 8].map((i) => v(`--series-${i}`)),
+    seq: [1, 2, 3, 4, 5, 6].map((i) => v(`--seq-${i}`)),
     surface: v("--surface-1"),
     surface2: v("--surface-2"),
     border: v("--border-strong"),

@@ -18,17 +18,19 @@ interface Props {
   viz: Viz;
   height: number;
   title: string;
+  /** Shown instead of the default when there are no rows. */
+  empty?: string;
 }
 
 /** Draws a result the way its viz says, falling back to a table. */
-export function VizView({ result, viz, height, title }: Props) {
+export function VizView({ result, viz, height, title, empty }: Props) {
   const tokens = useChartTokens();
   const built = useMemo(() => buildChart(result, viz, tokens), [result, viz, tokens]);
 
   if (result.rows.length === 0) {
     return (
       <div className="panel-state" style={{ height }}>
-        No data in this time range.
+        {empty ?? "No data in this time range."}
       </div>
     );
   }

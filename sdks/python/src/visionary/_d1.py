@@ -19,7 +19,9 @@ class D1Client:
 
     def __init__(self, account_id: str, database_id: str, api_token: str, api_base: str = "", timeout: float = 20.0):
         base = (api_base or DEFAULT_API_BASE).strip().rstrip("/")
-        self._url = "%s/accounts/%s/d1/database/%s/query" % (base, account_id.strip(), database_id.strip())
+        db = "%s/accounts/%s/d1/database/%s" % (base, account_id.strip(), database_id.strip())
+        self._url = db + "/query"
+        self._raw_url = db + "/raw"
         self._token = api_token.strip()
         self._timeout = timeout
 
@@ -28,6 +30,17 @@ class D1Client:
         if params:
             body["params"] = list(params)
         return self._post(body)
+
+    def rows(self, sql: str, params: Sequence[str] = ()) -> List[List[Any]]:
+        """One statement's rows as arrays in column order (the /raw endpoint)."""
+        body = {"sql": sql}
+        if params:
+            body["params"] = list(params)
+        result = self._post(body, self._raw_url)
+        try:
+            return result[0]["results"]["rows"] or []
+        except (TypeError, KeyError, IndexError):
+            return []
 
     def batch(self, statements: List[Tuple[str, Sequence[str]]]) -> None:
         for i in range(0, len(statements), MAX_BATCH):
@@ -41,9 +54,9 @@ class D1Client:
         except (TypeError, KeyError, IndexError, ValueError):
             return 0
 
-    def _post(self, body: dict) -> Any:
+    def _post(self, body: dict, url: str = "") -> Any:
         req = urllib.request.Request(
-            self._url,
+            url or self._url,
             data=json.dumps(body).encode("utf-8"),
             method="POST",
             headers={"Authorization": "Bearer " + self._token, "Content-Type": "application/json"},

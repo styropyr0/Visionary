@@ -50,6 +50,18 @@ final class Table {
             .integer("http_requests", "http_errors")
             .real("http_rps")
             .integer("http_in_flight", "uptime_s")
+            // Added after the first release; older tables gain them at startup (sdks/go/migrate.go).
+            .added()
+            .integer("cpu_count")
+            .real("cpu_user_percent", "cpu_system_percent", "cpu_iowait_percent", "cpu_steal_percent",
+                    "host_mem_available_mb", "host_mem_cached_mb", "swap_used_mb", "swap_total_mb",
+                    "disk_total_gb", "disk_inodes_percent", "disk_read_kbps", "disk_write_kbps",
+                    "disk_read_iops", "disk_write_iops", "disk_busy_percent", "disk_await_ms",
+                    "net_rx_pps", "net_tx_pps")
+            .integer("net_errors", "net_drops", "tcp_established", "tcp_retrans", "host_procs",
+                    "procs_running", "procs_blocked")
+            .real("ctx_switches_ps", "proc_read_kbps", "proc_write_kbps")
+            .integer("proc_max_fds")
             .build();
 
     final String name;
@@ -57,13 +69,16 @@ final class Table {
     final String schemaName;
     final List<String> columns;
     final List<Type> types;
+    /** Columns added after the first release, in insert order; never TEXT. */
+    final List<String> addedColumns;
     private final Map<String, Integer> index;
 
-    private Table(String name, String schemaName, Map<String, Type> cols) {
+    private Table(String name, String schemaName, Map<String, Type> cols, List<String> added) {
         this.name = name;
         this.schemaName = schemaName;
         this.columns = List.copyOf(cols.keySet());
         this.types = List.copyOf(cols.values());
+        this.addedColumns = List.copyOf(added);
         Map<String, Integer> idx = new LinkedHashMap<>();
         for (int i = 0; i < columns.size(); i++) {
             idx.put(columns.get(i), i);
@@ -77,6 +92,10 @@ final class Table {
             throw new IllegalArgumentException("unknown column " + name + "." + column);
         }
         return i;
+    }
+
+    Type typeOf(String column) {
+        return types.get(indexOf(column));
     }
 
     String insertSql(String placeholder) {
@@ -93,6 +112,8 @@ final class Table {
         private final String name;
         private final String schemaName;
         private final Map<String, Type> cols = new LinkedHashMap<>();
+        private final List<String> added = new ArrayList<>();
+        private boolean adding;
 
         Builder(String name, String schemaName) {
             this.name = name;
@@ -111,15 +132,24 @@ final class Table {
             return add(Type.REAL, names);
         }
 
+        /** Marks the columns that follow as added to an existing table. */
+        Builder added() {
+            adding = true;
+            return this;
+        }
+
         private Builder add(Type type, String... names) {
             for (String n : names) {
                 cols.put(n, type);
+                if (adding) {
+                    added.add(n);
+                }
             }
             return this;
         }
 
         Table build() {
-            return new Table(name, schemaName, cols);
+            return new Table(name, schemaName, cols, added);
         }
     }
 }

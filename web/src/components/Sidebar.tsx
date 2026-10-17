@@ -1,12 +1,13 @@
-import { Bookmark, LayoutDashboard, LogOut, Moon, PanelLeftClose, PanelLeftOpen, ScrollText, Server, Sparkles, Sun } from "lucide-react";
+import { Bookmark, Gauge, LayoutDashboard, LogOut, Moon, PanelLeftClose, PanelLeftOpen, ScrollText, Server, Sparkles, Sun } from "lucide-react";
 import type { SessionUser } from "../lib/api";
 import { useApp } from "../lib/state";
 import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
 
-export type Route = "overview" | "system" | "explore" | "saved" | "logs";
+export type Route = "overview" | "performance" | "system" | "explore" | "saved" | "logs";
 
 const NAV: { route: Route; label: string; icon: typeof LayoutDashboard }[] = [
   { route: "overview", label: "API overview", icon: LayoutDashboard },
+  { route: "performance", label: "Performance", icon: Gauge },
   { route: "system", label: "System", icon: Server },
   { route: "explore", label: "Explore", icon: Sparkles },
   { route: "saved", label: "Saved panels", icon: Bookmark },

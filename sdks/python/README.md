@@ -23,9 +23,9 @@ pip install "visionary-sdk[postgres]"     # + psycopg 3
 pip install "visionary-sdk[mysql]"        # + PyMySQL
 ```
 
-Requires Python 3.9+. Without the `system` extra, the host and process
+Requires Python 3.9+. Without the `system` extra, most host and process
 columns are NULL. Disk usage, thread count, GC and HTTP throughput are still
-recorded.
+recorded, and on Linux the node-level columns are read from `/proc`.
 
 ## Quickstart
 
@@ -246,8 +246,32 @@ Each sample (`system_metrics`) records:
 - **HTTP:** requests, 5xx responses, requests per second and in-flight
   requests seen by the integrations. These are counted even when request
   logging is off.
+- **Node (node-exporter style):**
+  - CPU: count, user / system / iowait / steal share.
+  - Memory: available and page-cache memory, swap.
+  - Disk: total size, inode use, read/write KB/s and IOPS summed over whole
+    disks (partitions skipped), average I/O wait (await), and busy % of the
+    busiest disk.
+  - Network: packets/s, errors and drops.
+  - TCP: connections established and retransmits.
+  - Processes on the host, running and blocked.
+  - Context switches/s.
+  - This process: read/write KB/s and its open-file limit.
 
-Sources that don't exist on the platform are NULL.
+Sources that don't exist on the platform are NULL:
+
+- **Linux only:** iowait, steal, disk busy, the TCP columns,
+  `procs_running` / `procs_blocked`.
+- **Not on Windows:** page cache, inodes and the open-file limit.
+- **Windows resolution:** disk await comes from whole-second counters there,
+  so it is coarse.
+
+On Linux the node columns are read from `/proc` when psutil isn't installed,
+so all of them are filled either way.
+
+Older `system_metrics` tables are upgraded in place at startup: missing
+columns are added with `ALTER TABLE ... ADD COLUMN`, and existing rows keep
+NULL in them.
 
 ## Redaction
 

@@ -12,10 +12,14 @@ your API ──(SDK middleware + recorder)──▶ database: api_logs, system_m
 ```
 
 - **An SDK** in your service logs every HTTP request and samples the server
-  every 15s: host CPU, load, memory, disk and network; process CPU, memory,
-  threads and file descriptors; runtime heap, GC and threads; database pool use
-  and waits; and throughput. Writes are batched in the background and never
-  block a request. SDKs:
+  every 15s, at the depth of a node-exporter dashboard: CPU by mode (user,
+  system, iowait, steal), load per core, memory, cache and swap, disk space,
+  inodes, throughput, IOPS, busy time and latency, network bytes, packets,
+  errors, drops, TCP connections and retransmits, processes and context
+  switches; the process CPU, memory, I/O and open files against the limit;
+  runtime heap, GC and threads; database pool use and waits; and throughput.
+  Writes are batched in the background and never block a request. Tables from
+  older SDK versions gain new columns automatically at startup. SDKs:
 
   | Stack | Where |
   |---|---|
@@ -25,8 +29,12 @@ your API ──(SDK middleware + recorder)──▶ database: api_logs, system_m
 
   Every SDK follows the same contract, [`sdks/SPEC.md`](sdks/SPEC.md), so
   services in different languages can share one database and one dashboard.
-- **The server** (`cmd/visionary`) serves the dashboards: API overview, System,
-  Explore (the analyst), Saved panels and Request logs. It signs people in
+- **The server** (`cmd/visionary`) serves the dashboards: API overview;
+  Performance (Apdex and SLO with error budget, a latency heatmap, percentiles,
+  per-route p95 and share of server time, regressions against the previous
+  period, saturation, slowest requests); System (CPU, memory, disk, network,
+  process and database pool, Grafana-style); Explore (the analyst); Saved
+  panels; and Request logs. It signs people in
   through your existing API, a shared team password, or not at all.
 
 ## The analyst

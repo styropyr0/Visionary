@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	sdk "github.com/styropyr0/visionary/sdks/go"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,29 @@ func (s *Server) ensureSchema(ctx context.Context) error {
 	// of the dashboard sees the same set.
 	for _, schema := range []string{s.q.panelsSchema(), s.q.d.RequestsSchema(), s.q.d.SystemSchema()} {
 		if err := s.db.ExecScript(ctx, schema); err != nil {
+			return err
+		}
+	}
+	return s.addSystemColumns(ctx)
+}
+
+// addSystemColumns brings a system_metrics table from an older SDK up to the
+// current columns, so the System view can read them before every service has
+// upgraded.
+func (s *Server) addSystemColumns(ctx context.Context) error {
+	d := s.q.d
+	res, err := s.db.Query(ctx, d.ColumnsQuery("system_metrics"))
+	if err != nil {
+		return err
+	}
+	var have []string
+	for _, row := range res.Rows {
+		if len(row) > 0 {
+			have = append(have, toString(row[0]))
+		}
+	}
+	for _, stmt := range d.MissingColumns("system_metrics", sdk.AddedSystemColumns, have) {
+		if err := s.db.Exec(ctx, stmt); err != nil && !sdk.IsDuplicateColumn(err) {
 			return err
 		}
 	}

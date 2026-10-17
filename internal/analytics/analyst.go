@@ -394,8 +394,13 @@ Table api_logs: one row per HTTP request.
 
 Table system_metrics: one row per server instance every ~15 seconds. May be empty or missing if the recorder is off.
 - created_at TEXT (same format), instance TEXT, interval_s REAL
-- host: host_cpu_percent, load_1, load_5, load_15, host_mem_used_mb, host_mem_total_mb, host_mem_percent, disk_used_percent, disk_free_gb, net_rx_kbps, net_tx_kbps
-- process: proc_cpu_percent (percent of one core), proc_rss_mb, proc_threads, proc_open_fds
+- host CPU: host_cpu_percent, cpu_count, cpu_user_percent, cpu_system_percent, cpu_iowait_percent (waiting on disk), cpu_steal_percent (taken by the hypervisor), load_1, load_5, load_15
+- host memory: host_mem_used_mb, host_mem_total_mb, host_mem_percent, host_mem_available_mb, host_mem_cached_mb, swap_used_mb, swap_total_mb
+- disk: disk_used_percent, disk_free_gb, disk_total_gb, disk_inodes_percent, disk_read_kbps, disk_write_kbps, disk_read_iops, disk_write_iops, disk_busy_percent (time the busiest disk spent on I/O), disk_await_ms (average time per I/O)
+- network: net_rx_kbps, net_tx_kbps, net_rx_pps, net_tx_pps, net_errors, net_drops (per sample), tcp_established, tcp_retrans (per sample)
+- host processes: host_procs, procs_running, procs_blocked (waiting on I/O), ctx_switches_ps
+- process: proc_cpu_percent (percent of one core), proc_rss_mb, proc_threads, proc_open_fds, proc_max_fds, proc_read_kbps, proc_write_kbps
+- Columns a platform cannot report are NULL (iowait, steal, TCP and disk busy are Linux-only).
 - Go runtime: goroutines, heap_alloc_mb, heap_inuse_mb, heap_objects, gc_count, gc_pause_ms (both per sample), gc_cpu_percent
 - database pool: db_total_conns, db_idle_conns, db_acquired_conns (in use), db_max_conns, db_acquires, db_empty_acquires (had to wait), db_acquire_wait_ms (per sample)
 - HTTP: http_requests, http_errors (5xx), http_rps, http_in_flight, uptime_s

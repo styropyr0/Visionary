@@ -39,7 +39,20 @@ SELECT
   (SELECT MAX(proc_rss_mb) FROM r) AS rss_max,
   (SELECT uptime_s FROM latest) AS uptime_s,
   (SELECT created_at FROM latest) AS last_seen,
-  (SELECT COUNT(DISTINCT instance) FROM r) AS instances`,
+  (SELECT COUNT(DISTINCT instance) FROM r) AS instances,
+  (SELECT cpu_count FROM latest) AS cpu_count,
+  (SELECT disk_used_percent FROM latest) AS disk_now,
+  (SELECT disk_free_gb FROM latest) AS disk_free_gb,
+  (SELECT MAX(disk_busy_percent) FROM r) AS disk_busy_max,
+  (SELECT ` + q.round("AVG(disk_busy_percent)", 1) + ` FROM r) AS disk_busy_avg,
+  (SELECT swap_used_mb FROM latest) AS swap_now,
+  (SELECT swap_total_mb FROM latest) AS swap_total,
+  (SELECT tcp_established FROM latest) AS tcp_now,
+  (SELECT MAX(tcp_established) FROM r) AS tcp_max,
+  (SELECT proc_open_fds FROM latest) AS fds_now,
+  (SELECT proc_max_fds FROM latest) AS fds_limit,
+  (SELECT ` + q.round("AVG(net_rx_kbps + net_tx_kbps) * 1024", 0) + ` FROM r) AS net_bytes_avg,
+  (SELECT ` + q.round("MAX(net_rx_kbps + net_tx_kbps) * 1024", 0) + ` FROM r) AS net_bytes_max`,
 
 		"cpu": `
 SELECT {{t}} AS t,
@@ -144,6 +157,125 @@ SELECT s.t, s.cpu, s.memory, s.db_in_use, s.in_flight, s.goroutines,
 FROM s LEFT JOIN a ON a.t = s.t
 ORDER BY s.cpu DESC
 LIMIT 12`,
+
+		"cpu_breakdown": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(cpu_user_percent)", 1) + ` AS user_time,
+  ` + q.round("AVG(cpu_system_percent)", 1) + ` AS system_time,
+  ` + q.round("AVG(cpu_iowait_percent)", 1) + ` AS iowait,
+  ` + q.round("AVG(cpu_steal_percent)", 1) + ` AS steal
+FROM system_metrics WHERE ` + sysWindow + ` AND cpu_user_percent IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"load_per_core": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(load_1 / NULLIF(cpu_count, 0))", 2) + ` AS load_per_core,
+  ` + q.round("MAX(load_1 / NULLIF(cpu_count, 0))", 2) + ` AS peak_load_per_core
+FROM system_metrics WHERE ` + sysWindow + ` AND load_1 IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"memory_detail": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(host_mem_used_mb) * 1048576.0", 0) + ` AS used,
+  ` + q.round("AVG(host_mem_available_mb) * 1048576.0", 0) + ` AS available,
+  ` + q.round("AVG(host_mem_cached_mb) * 1048576.0", 0) + ` AS cached
+FROM system_metrics WHERE ` + sysWindow + `
+GROUP BY t ORDER BY t`,
+
+		"swap": `
+SELECT {{t}} AS t,
+  ` + q.round("MAX(swap_used_mb) * 1048576.0", 0) + ` AS swap_used,
+  ` + q.round("MAX(swap_total_mb) * 1048576.0", 0) + ` AS swap_total
+FROM system_metrics WHERE ` + sysWindow + ` AND swap_total_mb IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"disk_space": `
+SELECT {{t}} AS t,
+  ` + q.round("MAX(disk_used_percent)", 1) + ` AS space_used,
+  ` + q.round("MAX(disk_inodes_percent)", 1) + ` AS inodes_used
+FROM system_metrics WHERE ` + sysWindow + `
+GROUP BY t ORDER BY t`,
+
+		"disk_throughput": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(disk_read_kbps) * 1024", 0) + ` AS read_bytes,
+  ` + q.round("AVG(disk_write_kbps) * 1024", 0) + ` AS write_bytes
+FROM system_metrics WHERE ` + sysWindow + ` AND disk_read_kbps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"disk_iops": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(disk_read_iops)", 1) + ` AS read_ops,
+  ` + q.round("AVG(disk_write_iops)", 1) + ` AS write_ops
+FROM system_metrics WHERE ` + sysWindow + ` AND disk_read_iops IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"disk_latency": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(disk_await_ms)", 2) + ` AS avg_await,
+  MAX(disk_await_ms) AS peak_await
+FROM system_metrics WHERE ` + sysWindow + ` AND disk_await_ms IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"disk_busy": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(disk_busy_percent)", 1) + ` AS avg_busy,
+  MAX(disk_busy_percent) AS peak_busy
+FROM system_metrics WHERE ` + sysWindow + ` AND disk_busy_percent IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"network_packets": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(net_rx_pps)", 1) + ` AS received,
+  ` + q.round("AVG(net_tx_pps)", 1) + ` AS sent
+FROM system_metrics WHERE ` + sysWindow + ` AND net_rx_pps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"network_errors": `
+SELECT {{t}} AS t,
+  SUM(net_errors) AS errors,
+  SUM(net_drops) AS drops
+FROM system_metrics WHERE ` + sysWindow + ` AND net_errors IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"tcp": `
+SELECT {{t}} AS t,
+  MAX(tcp_established) AS established
+FROM system_metrics WHERE ` + sysWindow + ` AND tcp_established IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"tcp_retrans": `
+SELECT {{t}} AS t,
+  SUM(tcp_retrans) AS retransmits
+FROM system_metrics WHERE ` + sysWindow + ` AND tcp_retrans IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"processes": `
+SELECT {{t}} AS t,
+  MAX(procs_running) AS running,
+  MAX(procs_blocked) AS blocked
+FROM system_metrics WHERE ` + sysWindow + ` AND procs_running IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"context_switches": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(ctx_switches_ps)", 0) + ` AS per_second
+FROM system_metrics WHERE ` + sysWindow + ` AND ctx_switches_ps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"process_io": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(proc_read_kbps) * 1024", 0) + ` AS read_bytes,
+  ` + q.round("AVG(proc_write_kbps) * 1024", 0) + ` AS write_bytes
+FROM system_metrics WHERE ` + sysWindow + ` AND proc_read_kbps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"file_descriptors": `
+SELECT {{t}} AS t,
+  MAX(proc_open_fds) AS open_files,
+  MAX(proc_max_fds) AS limit_files
+FROM system_metrics WHERE ` + sysWindow + ` AND proc_open_fds IS NOT NULL
+GROUP BY t ORDER BY t`,
 
 		"instances": `
 SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples

@@ -3,8 +3,10 @@ package io.github.styropyr0.visionary;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -77,9 +79,31 @@ final class JdbcStore implements Store {
                         }
                     }
                 }
+                if (!table.addedColumns.isEmpty()) {
+                    addMissingColumns(st, table);
+                }
             }
             return null;
         });
+    }
+
+    /** Upgrades a table created by an older release in place. */
+    private void addMissingColumns(Statement st, Table table) throws SQLException {
+        List<String> existing = new ArrayList<>();
+        try (ResultSet rs = st.executeQuery(dialect.columnsQuery(table.name))) {
+            while (rs.next()) {
+                existing.add(rs.getString(1));
+            }
+        }
+        for (String alter : dialect.missingColumns(table, existing)) {
+            try {
+                st.execute(alter);
+            } catch (SQLException e) {
+                if (!Dialect.isDuplicateColumn(e)) {
+                    throw e;
+                }
+            }
+        }
     }
 
     @Override

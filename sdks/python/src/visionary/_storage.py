@@ -30,6 +30,24 @@ SYSTEM_COLUMNS = [
     "uptime_s",
 ]
 
+# Columns added after the first release, in insert order after the ones
+# above (Go: AddedSystemColumns). Older tables gain them at startup.
+ADDED_SYSTEM_COLUMNS = [
+    ("cpu_count", "int"), ("cpu_user_percent", "real"), ("cpu_system_percent", "real"),
+    ("cpu_iowait_percent", "real"), ("cpu_steal_percent", "real"),
+    ("host_mem_available_mb", "real"), ("host_mem_cached_mb", "real"),
+    ("swap_used_mb", "real"), ("swap_total_mb", "real"),
+    ("disk_total_gb", "real"), ("disk_inodes_percent", "real"),
+    ("disk_read_kbps", "real"), ("disk_write_kbps", "real"), ("disk_read_iops", "real"),
+    ("disk_write_iops", "real"), ("disk_busy_percent", "real"), ("disk_await_ms", "real"),
+    ("net_rx_pps", "real"), ("net_tx_pps", "real"), ("net_errors", "int"), ("net_drops", "int"),
+    ("tcp_established", "int"), ("tcp_retrans", "int"),
+    ("host_procs", "int"), ("procs_running", "int"), ("procs_blocked", "int"),
+    ("ctx_switches_ps", "real"), ("proc_read_kbps", "real"), ("proc_write_kbps", "real"),
+    ("proc_max_fds", "int"),
+]
+SYSTEM_COLUMNS = SYSTEM_COLUMNS + [name for name, _ in ADDED_SYSTEM_COLUMNS]
+
 TABLES = {"requests": ("api_logs", REQUEST_COLUMNS), "system": ("system_metrics", SYSTEM_COLUMNS)}
 
 # NOT NULL columns in api_logs; on D1 they are bound as-is, like the Go SDK.
@@ -65,6 +83,34 @@ def schema_statements(dialect: str, table: str) -> List[str]:
     return [s.strip() for s in text.split(";") if s.strip()]
 
 
+def _columns_query(dialect: str, table: str) -> str:
+    if dialect == "postgres":
+        return ("SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = '%s'" % table)
+    if dialect == "mysql":
+        return ("SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() AND table_name = '%s'" % table)
+    return "SELECT name FROM pragma_table_info('%s')" % table
+
+
+def _sql_type(dialect: str, kind: str) -> str:
+    if kind == "int":
+        return "INTEGER" if dialect in ("sqlite", "d1") else "BIGINT"
+    return {"postgres": "DOUBLE PRECISION", "mysql": "DOUBLE"}.get(dialect, "REAL")
+
+
+def missing_column_statements(dialect: str, existing: Sequence[str]) -> List[str]:
+    have = {str(c).lower() for c in existing}
+    return ["ALTER TABLE system_metrics ADD COLUMN %s %s" % (name, _sql_type(dialect, kind))
+            for name, kind in ADDED_SYSTEM_COLUMNS if name not in have]
+
+
+def is_duplicate_column(e: Exception) -> bool:
+    """An ALTER that lost a race with another instance."""
+    msg = str(e).lower()
+    return "duplicate column" in msg or "already exists" in msg or "1060" in msg
+
+
 def _purge_sql(dialect: str, table: str, ph: str) -> str:
     name = TABLES[table][0]
     if dialect == "mysql":
@@ -78,7 +124,24 @@ class Backend:
     dialect = ""
 
     def create_schema(self, table: str) -> None:
+        """Create the table and its indexes; for system_metrics, also add the
+        columns an older table is missing."""
         raise NotImplementedError
+
+    def _column_names(self, query: str) -> List[str]:
+        raise NotImplementedError
+
+    def _alter(self, sql: str) -> None:
+        raise NotImplementedError
+
+    def _migrate_system(self) -> None:
+        existing = self._column_names(_columns_query(self.dialect, "system_metrics"))
+        for stmt in missing_column_statements(self.dialect, existing):
+            try:
+                self._alter(stmt)
+            except Exception as e:
+                if not is_duplicate_column(e):
+                    raise
 
     def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
         """Write rows (typed values, None for NULL) in one batch/transaction."""
@@ -118,6 +181,14 @@ class D1Backend(Backend):
 
     def create_schema(self, table: str) -> None:
         self._client.batch([(s, []) for s in schema_statements("d1", table)])
+        if table == "system":
+            self._migrate_system()
+
+    def _column_names(self, query: str) -> List[str]:
+        return [str(row[0]) for row in self._client.rows(query) if row]
+
+    def _alter(self, sql: str) -> None:
+        self._client.query(sql)
 
     def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
         if rows:
@@ -212,6 +283,22 @@ class SQLBackend(Backend):
                 if self.dialect == "mysql" and _mysql_errno(e) == 1061:
                     continue  # index already exists; MySQL has no IF NOT EXISTS here
                 raise
+        if table == "system":
+            self._migrate_system()
+
+    def _column_names(self, query: str) -> List[str]:
+        def read(conn: Any) -> List[str]:
+            cur = conn.cursor()
+            try:
+                cur.execute(query)
+                return [str(r[0]) for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+        return self._run(read)
+
+    def _alter(self, sql: str) -> None:
+        self._run(lambda c: _execute(c, sql))
 
     def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:
         if not rows:

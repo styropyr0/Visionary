@@ -5,7 +5,11 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /** A storage dialect and the schema shipped for it. */
 enum Dialect {
@@ -38,6 +42,47 @@ enum Dialect {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Lists a table's column names, one per row (SPEC.md "System metrics"). */
+    String columnsQuery(String table) {
+        return switch (this) {
+            case POSTGRES -> "SELECT column_name FROM information_schema.columns"
+                    + " WHERE table_schema = current_schema() AND table_name = '" + table + "'";
+            case MYSQL -> "SELECT column_name FROM information_schema.columns"
+                    + " WHERE table_schema = DATABASE() AND table_name = '" + table + "'";
+            case SQLITE, D1 -> "SELECT name FROM pragma_table_info('" + table + "')";
+        };
+    }
+
+    /** ALTER statements for the table's added columns missing from {@code existing} (any case). */
+    List<String> missingColumns(Table table, Collection<String> existing) {
+        Set<String> have = new HashSet<>();
+        for (String c : existing) {
+            have.add(c.toLowerCase(Locale.ROOT));
+        }
+        List<String> out = new ArrayList<>();
+        for (String column : table.addedColumns) {
+            if (!have.contains(column)) {
+                out.add("ALTER TABLE " + table.name + " ADD COLUMN " + column + " " + sqlType(table.typeOf(column)));
+            }
+        }
+        return out;
+    }
+
+    private String sqlType(Table.Type type) {
+        boolean integer = type == Table.Type.INT;
+        return switch (this) {
+            case POSTGRES -> integer ? "BIGINT" : "DOUBLE PRECISION";
+            case MYSQL -> integer ? "BIGINT" : "DOUBLE";
+            case SQLITE, D1 -> integer ? "INTEGER" : "REAL";
+        };
+    }
+
+    /** An ALTER that lost a race with another instance adding the same column. */
+    static boolean isDuplicateColumn(Exception e) {
+        String msg = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);
+        return msg.contains("duplicate column") || msg.contains("already exists") || msg.contains("1060");
     }
 
     /**

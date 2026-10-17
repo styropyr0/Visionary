@@ -146,7 +146,7 @@ function shapeTimeseries(res: Result, viz: Viz, t: ChartTokens): { series: Shape
   return { series, note };
 }
 
-function tooltipBox(t: ChartTokens) {
+export function tooltipBox(t: ChartTokens) {
   return {
     backgroundColor: t.surface,
     borderColor: t.border,

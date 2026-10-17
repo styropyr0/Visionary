@@ -156,13 +156,39 @@ Redacted before anything is stored (case-insensitive, extendable with the
   `card_number`, `cvv`, `private_key`, in request and response bodies, including
   bodies cut off at the size cap.
 
-System samples every `VISIONARY_SYSTEM_INTERVAL`: host CPU, load average (where
-the OS has one), host memory, disk usage of the working directory, process CPU,
-resident memory (Linux), threads, open file descriptors (Unix), JVM heap used and
-committed, GC count and time since the previous sample, HikariCP pool
-total/idle/active/max when the application's `DataSource` is a `HikariDataSource`,
-requests, 5xx errors, requests per second and in-flight requests, and uptime.
-Values a platform doesn't offer are stored as NULL.
+System samples every `VISIONARY_SYSTEM_INTERVAL` (counters are deltas or
+per-second rates since the previous sample; the first reading is taken at start).
+Values a platform doesn't offer are stored as NULL. No extra dependencies: the
+JVM's MXBeans everywhere, plus `/proc` on Linux.
+
+| Group | Columns | Source | Available on |
+|---|---|---|---|
+| CPU | `host_cpu_percent`, `cpu_count` | `OperatingSystemMXBean`, `availableProcessors()` | all |
+| | `cpu_user_percent`, `cpu_system_percent`, `cpu_iowait_percent`, `cpu_steal_percent`, `ctx_switches_ps`, `procs_running`, `procs_blocked` | `/proc/stat` | Linux |
+| | `load_1` | `getSystemLoadAverage()` | Linux, macOS (`load_5`/`load_15` are always NULL) |
+| Memory | `host_mem_used_mb`, `host_mem_total_mb`, `host_mem_percent`, `swap_used_mb`, `swap_total_mb` | `OperatingSystemMXBean` | all |
+| | `host_mem_available_mb` | `/proc/meminfo` MemAvailable; free memory elsewhere | all |
+| | `host_mem_cached_mb` | `/proc/meminfo` Cached + SReclaimable | Linux |
+| Disk | `disk_used_percent`, `disk_free_gb`, `disk_total_gb` (working directory's filesystem) | `java.io.File` | all |
+| | `disk_read_kbps`, `disk_write_kbps`, `disk_read_iops`, `disk_write_iops`, `disk_await_ms`, `disk_busy_percent` (whole disks only, partitions skipped) | `/proc/diskstats` | Linux |
+| Network | `net_rx_kbps`, `net_tx_kbps`, `net_rx_pps`, `net_tx_pps`, `net_errors`, `net_drops` (all interfaces) | `/proc/net/dev` | Linux |
+| | `tcp_established`, `tcp_retrans` | `/proc/net/snmp` | Linux |
+| Processes | `host_procs` | numeric entries of `/proc` | Linux |
+| This process | `proc_cpu_percent`, `proc_threads`, `goroutines` (live JVM threads) | MXBeans | all |
+| | `proc_open_fds`, `proc_max_fds` | `UnixOperatingSystemMXBean` | Linux, macOS |
+| | `proc_rss_mb`, `proc_read_kbps`, `proc_write_kbps` | `/proc/self/status`, `/proc/self/io` | Linux |
+| JVM | `heap_alloc_mb`, `heap_inuse_mb` (heap used / committed), `gc_count`, `gc_pause_ms`, `gc_cpu_percent` | `MemoryMXBean`, `GarbageCollectorMXBean` | all |
+| Pool | `db_total_conns`, `db_idle_conns`, `db_acquired_conns`, `db_max_conns` | `HikariPoolMXBean`, when the app's `DataSource` is a `HikariDataSource` | all |
+| HTTP | `http_requests`, `http_errors`, `http_rps`, `http_in_flight`, `uptime_s` | the filter | all |
+
+Always NULL in this SDK: `load_5`, `load_15`, `heap_objects`, `disk_inodes_percent`
+(the JDK has no inode counts), and `db_acquires`, `db_empty_acquires`,
+`db_acquire_wait_ms` (HikariCP's MXBean has no cumulative acquire counters).
+Inside a container, the `/proc` figures describe what the container can see: host
+CPU, memory and disks, but only its own processes and network namespace.
+
+Tables created by an earlier version gain the newer `system_metrics` columns at
+startup (`ALTER TABLE ... ADD COLUMN`), so upgrading needs no manual migration.
 
 ## Configuration
 

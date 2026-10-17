@@ -1,15 +1,12 @@
 package io.github.styropyr0.visionary;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.ThreadMXBean;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,7 +29,6 @@ final class SystemSampler {
     static final int SAMPLES_PER_WRITE = 4;
     private static final double MB = 1024.0 * 1024.0;
     private static final double GB = MB * 1024.0;
-    private static final Path PROC_STATUS = Path.of("/proc/self/status");
 
     private final Store store;
     private final String instance;
@@ -40,6 +36,7 @@ final class SystemSampler {
     private final HttpCounters http;
     private final PoolStats pool;
     private final File disk = new File(System.getProperty("user.dir", ".")).getAbsoluteFile();
+    private final NodeSampler node = new NodeSampler(disk);
     private final ScheduledExecutorService executor;
 
     private final OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
@@ -113,6 +110,7 @@ final class SystemSampler {
         gcCount = gc[0];
         gcTimeMs = gc[1];
         procCpuNs = processCpuTime();
+        node.prime();
         if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
             sun.getCpuLoad();
         }
@@ -196,7 +194,7 @@ final class SystemSampler {
             set(row, "proc_cpu_percent", Values.round(sun.getProcessCpuLoad() * 100 * cores, 1));
         }
         procCpuNs = cpuNs;
-        Long rssKb = residentKb();
+        Long rssKb = node.residentKb();
         if (rssKb != null) {
             set(row, "proc_rss_mb", Values.round(rssKb / 1024.0, 1));
         }
@@ -234,6 +232,12 @@ final class SystemSampler {
         errors = errs;
 
         set(row, "uptime_s", (now - started) / 1_000_000_000L);
+        try {
+            node.sample(row, secs);
+        } catch (RuntimeException e) {
+            // The node columns are best effort; the rest of the row still counts.
+            log.debug("visionary: node metrics failed", e);
+        }
         return row;
     }
 
@@ -267,23 +271,6 @@ final class SystemSampler {
             return sun.getProcessCpuTime();
         }
         return -1;
-    }
-
-    /** VmRSS from procfs on Linux; null elsewhere. */
-    private static Long residentKb() {
-        if (!Files.isReadable(PROC_STATUS)) {
-            return null;
-        }
-        try {
-            for (String line : Files.readAllLines(PROC_STATUS)) {
-                if (line.startsWith("VmRSS:")) {
-                    return Long.parseLong(line.replaceAll("\\D+", ""));
-                }
-            }
-        } catch (IOException | RuntimeException ignored) {
-            // treated as unavailable
-        }
-        return null;
     }
 
     private static void set(Object[] row, String column, Object value) {

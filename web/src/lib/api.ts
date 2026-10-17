@@ -51,6 +51,10 @@ export interface Meta {
   routes: string[];
   max_rows: number;
   max_range_days: number;
+  /** Apdex threshold T in ms: satisfied within T, tolerating within 4T. */
+  apdex_ms: number;
+  /** SLO: target percent of requests that succeed within T. */
+  slo_target: number;
 }
 
 export interface SessionUser {

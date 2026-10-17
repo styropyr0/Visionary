@@ -8,87 +8,105 @@ import { formatLogTime, formatRelative } from "../lib/time";
 import { sparkPoints } from "../charts/option";
 import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
+import { Section } from "../components/Section";
 import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 
-const PANELS: { name: string; title: string; description: string; viz: Viz; span: string }[] = [
+interface PanelDef {
+  name: string;
+  title: string;
+  description: string;
+  viz: Viz;
+  span: string;
+  /** Says why a panel can be empty, e.g. a Linux-only source. */
+  empty?: string;
+}
+
+const LINUX_ONLY = "Not reported by this host. This metric is collected on Linux.";
+
+const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
   {
-    name: "cpu",
-    title: "Host CPU",
-    description: "Whole-machine CPU use: average and peak per interval.",
-    viz: { type: "timeseries", x: "t", y: ["avg_cpu", "max_cpu"], unit: "percent" },
-    span: "span-6",
+    title: "CPU",
+    text: "How busy the machine is and where the time goes. iowait means CPUs idle while waiting on disk; steal means the hypervisor gave the time to another VM.",
+    panels: [
+      { name: "cpu", title: "Host CPU", description: "Whole-machine CPU use: average and peak per interval.", viz: { type: "timeseries", x: "t", y: ["avg_cpu", "max_cpu"], unit: "percent" }, span: "span-6" },
+      {
+        name: "cpu_breakdown",
+        title: "CPU time by mode",
+        description: "Share of all CPU time spent in user code, the kernel, waiting on disk (iowait) and stolen by the hypervisor (steal).",
+        viz: { type: "timeseries", x: "t", y: ["user_time", "system_time", "iowait", "steal"], unit: "percent", stack: true },
+        span: "span-6",
+      },
+      { name: "process_cpu", title: "Process CPU", description: "This process alone, as a percent of one core (can exceed 100% on multi-core hosts).", viz: { type: "timeseries", x: "t", y: ["avg_process_cpu", "max_process_cpu"], unit: "percent" }, span: "span-6" },
+      {
+        name: "load_per_core",
+        title: "Load per core",
+        description: "1-minute load average divided by the number of CPUs. Above 1 means work is queuing for CPU.",
+        viz: { type: "timeseries", x: "t", y: ["load_per_core", "peak_load_per_core"], unit: "none" },
+        span: "span-6",
+        empty: "Load average is not reported on Windows hosts.",
+      },
+    ],
   },
   {
-    name: "process_cpu",
-    title: "Process CPU",
-    description: "The API process alone, as a percent of one core (can exceed 100% on multi-core hosts).",
-    viz: { type: "timeseries", x: "t", y: ["avg_process_cpu", "max_process_cpu"], unit: "percent" },
-    span: "span-6",
+    title: "Memory",
+    text: "Available memory is what new work can use without swapping; cached memory is page cache the kernel gives back under pressure.",
+    panels: [
+      { name: "memory_detail", title: "Host memory", description: "Memory in use, available to new work, and held as page cache.", viz: { type: "timeseries", x: "t", y: ["used", "available", "cached"], unit: "bytes" }, span: "span-6" },
+      { name: "process_memory", title: "Process memory", description: "Resident memory of this process and its runtime heap in use.", viz: { type: "timeseries", x: "t", y: ["rss_bytes", "heap_bytes"], unit: "bytes" }, span: "span-6" },
+      { name: "swap", title: "Swap", description: "Swap in use against the total. Steady swap use under load slows everything down.", viz: { type: "timeseries", x: "t", y: ["swap_used", "swap_total"], unit: "bytes" }, span: "span-6", empty: "No swap reported by this host." },
+      { name: "memory", title: "Host memory used", description: "Percent of host memory in use.", viz: { type: "timeseries", x: "t", y: ["host_memory"], unit: "percent" }, span: "span-6" },
+    ],
   },
   {
-    name: "process_memory",
-    title: "Process memory",
-    description: "Resident memory of the API process and the Go heap in use.",
-    viz: { type: "timeseries", x: "t", y: ["rss_bytes", "heap_bytes"], unit: "bytes" },
-    span: "span-6",
+    title: "Disk",
+    text: "Throughput and IOPS show how much the disks do; busy time and await show whether they keep up. A disk near 100% busy with rising await is the bottleneck.",
+    panels: [
+      { name: "disk_space", title: "Disk space", description: "Space and inodes used on the filesystem the service runs from.", viz: { type: "timeseries", x: "t", y: ["space_used", "inodes_used"], unit: "percent" }, span: "span-4" },
+      { name: "disk_throughput", title: "Disk throughput", description: "Bytes read and written per second, across whole disks.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes" }, span: "span-4" },
+      { name: "disk_iops", title: "Disk operations", description: "Read and write operations per second.", viz: { type: "timeseries", x: "t", y: ["read_ops", "write_ops"], unit: "count" }, span: "span-4" },
+      { name: "disk_busy", title: "Disk busy", description: "Share of each interval the busiest disk spent doing I/O.", viz: { type: "timeseries", x: "t", y: ["avg_busy", "peak_busy"], unit: "percent" }, span: "span-6", empty: LINUX_ONLY },
+      { name: "disk_latency", title: "Disk latency", description: "Average time per disk operation (await), including time queued.", viz: { type: "timeseries", x: "t", y: ["avg_await", "peak_await"], unit: "ms" }, span: "span-6" },
+    ],
   },
   {
-    name: "memory",
-    title: "Host memory and disk",
-    description: "Percent of host memory and of the disk in use.",
-    viz: { type: "timeseries", x: "t", y: ["host_memory", "disk_used"], unit: "percent" },
-    span: "span-6",
+    title: "Network",
+    text: "Errors, drops and TCP retransmits rising together usually mean a saturated link or a struggling peer.",
+    panels: [
+      { name: "network", title: "Network throughput", description: "Bytes received and sent per second by the host.", viz: { type: "timeseries", x: "t", y: ["received_bytes", "sent_bytes"], unit: "bytes" }, span: "span-6" },
+      { name: "network_packets", title: "Packets", description: "Packets received and sent per second.", viz: { type: "timeseries", x: "t", y: ["received", "sent"], unit: "count" }, span: "span-6" },
+      { name: "network_errors", title: "Errors and drops", description: "Interface errors and dropped packets per interval, in and out.", viz: { type: "timeseries", x: "t", y: ["errors", "drops"], unit: "count" }, span: "span-4" },
+      { name: "tcp", title: "TCP connections", description: "Connections in the ESTABLISHED state.", viz: { type: "timeseries", x: "t", y: ["established"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
+      { name: "tcp_retrans", title: "TCP retransmits", description: "Segments sent again per interval. Spikes mean packet loss somewhere on the path.", viz: { type: "timeseries", x: "t", y: ["retransmits"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
+    ],
   },
   {
-    name: "throughput",
-    title: "Throughput",
-    description: "Requests per second (average and peak) and the most requests in flight at once.",
-    viz: { type: "timeseries", x: "t", y: ["avg_rps", "peak_rps", "max_in_flight"], unit: "count" },
-    span: "span-6",
+    title: "Process and runtime",
+    text: "The service process itself: concurrency, garbage collection, file handles and its own I/O.",
+    panels: [
+      { name: "goroutines", title: "Concurrency", description: "Goroutines (Go) or live threads, and OS threads. A steady climb usually means a leak or stuck work.", viz: { type: "timeseries", x: "t", y: ["goroutines", "threads"], unit: "count" }, span: "span-4" },
+      { name: "gc", title: "GC pause", description: "Total garbage-collection pause per interval.", viz: { type: "timeseries", x: "t", y: ["gc_pause_ms"], unit: "ms" }, span: "span-4" },
+      { name: "file_descriptors", title: "Open files", description: "Open files and sockets against the process limit. Hitting the limit makes new connections fail.", viz: { type: "timeseries", x: "t", y: ["open_files", "limit_files"], unit: "count" }, span: "span-4" },
+      { name: "process_io", title: "Process I/O", description: "Bytes this process read and wrote per second.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes" }, span: "span-6" },
+      { name: "processes", title: "Host processes", description: "Processes running, and blocked waiting on I/O.", viz: { type: "timeseries", x: "t", y: ["running", "blocked"], unit: "count" }, span: "span-3", empty: LINUX_ONLY },
+      { name: "context_switches", title: "Context switches", description: "Host context switches per second.", viz: { type: "timeseries", x: "t", y: ["per_second"], unit: "count" }, span: "span-3", empty: LINUX_ONLY },
+    ],
   },
   {
-    name: "db_pool",
-    title: "Database connections",
-    description: "Connections in use and open, against the pool limit. In-use reaching the limit means requests queue for a connection.",
-    viz: { type: "timeseries", x: "t", y: ["in_use", "open", "pool_limit"], unit: "count" },
-    span: "span-6",
+    title: "Database pool",
+    text: "In-use connections reaching the limit, or time spent waiting for one, means requests are queuing for the database.",
+    panels: [
+      { name: "db_pool", title: "Database connections", description: "Connections in use and open, against the pool limit.", viz: { type: "timeseries", x: "t", y: ["in_use", "open", "pool_limit"], unit: "count" }, span: "span-6", empty: "No pool stats: pass the pool to the SDK to record them." },
+      { name: "db_wait", title: "Waiting for a connection", description: "Total time requests spent waiting for a database connection per interval.", viz: { type: "timeseries", x: "t", y: ["acquire_wait_ms"], unit: "ms" }, span: "span-6", empty: "No pool stats: pass the pool to the SDK to record them." },
+    ],
   },
   {
-    name: "db_wait",
-    title: "Waiting for a connection",
-    description: "Total time requests spent waiting for a database connection per interval.",
-    viz: { type: "timeseries", x: "t", y: ["acquire_wait_ms"], unit: "ms" },
-    span: "span-4",
-  },
-  {
-    name: "goroutines",
-    title: "Goroutines and threads",
-    viz: { type: "timeseries", x: "t", y: ["goroutines", "threads"], unit: "count" },
-    description: "A steady climb in goroutines usually means a leak or stuck work.",
-    span: "span-4",
-  },
-  {
-    name: "gc",
-    title: "GC pause",
-    description: "Total garbage-collection pause per interval.",
-    viz: { type: "timeseries", x: "t", y: ["gc_pause_ms"], unit: "ms" },
-    span: "span-4",
-  },
-  {
-    name: "load",
-    title: "Load average",
-    description: "Run-queue length over 1, 5 and 15 minutes (not reported on Windows hosts).",
-    viz: { type: "timeseries", x: "t", y: ["load_1", "load_5", "load_15"], unit: "none" },
-    span: "span-6",
-  },
-  {
-    name: "network",
-    title: "Network per second",
-    description: "Bytes received and sent per second by the host.",
-    viz: { type: "timeseries", x: "t", y: ["received_bytes", "sent_bytes"], unit: "bytes" },
-    span: "span-6",
+    title: "Traffic",
+    text: "What the service was asked to do while the numbers above moved.",
+    panels: [
+      { name: "throughput", title: "Throughput", description: "Requests per second (average and peak) and the most requests in flight at once.", viz: { type: "timeseries", x: "t", y: ["avg_rps", "peak_rps", "max_in_flight"], unit: "count" }, span: "span-12" },
+    ],
   },
 ];
 
@@ -104,8 +122,8 @@ export function System() {
   const stats = useSystem("stats", instance);
   const cpu = useSystem("cpu", instance);
   const memory = useSystem("process_memory", instance);
-  const db = useSystem("db_pool", instance);
-  const goroutines = useSystem("goroutines", instance);
+  const disk = useSystem("disk_busy", instance);
+  const net = useSystem("network", instance);
 
   const missing = instances.error instanceof ApiError && instances.error.status === 404;
   const names = (instances.data?.rows ?? []).map((r) => String(r[0]));
@@ -117,6 +135,12 @@ export function System() {
     return o;
   }, [stats.data]);
   const n = (k: string) => toNumber(s?.[k]);
+  const dash = (v: number | null, f: (x: number) => string) => (v === null ? "—" : f(v));
+  const cores = n("cpu_count");
+  const loadNow = n("load_now");
+  const perCore = loadNow !== null && cores ? loadNow / cores : null;
+  const swapTotal = n("swap_total");
+  const fdsLimit = n("fds_limit");
 
   return (
     <>
@@ -145,9 +169,9 @@ export function System() {
             </div>
             <h2>No system metrics yet</h2>
             <p>
-              System stats come from the <code className="mono">system_metrics</code> table, which the API server fills every
-              few seconds with host, process, runtime and database-pool samples. Turn the recorder on in your API server and this
-              view fills in on its own.
+              System stats come from the <code className="mono">system_metrics</code> table, which a Visionary SDK in your service
+              fills every few seconds with host, disk, network, process, runtime and database-pool samples. Add the SDK and this view
+              fills in on its own.
             </p>
             <p style={{ color: "var(--text-3)", fontSize: 12.5 }}>{instances.error?.message}</p>
           </div>
@@ -156,7 +180,7 @@ export function System() {
             <StatTile
               label="Host CPU"
               description="Latest sample, with the range average and peak below."
-              value={n("cpu_now") === null ? "—" : formatPercent(n("cpu_now")!)}
+              value={dash(n("cpu_now"), formatPercent)}
               delta={null}
               deltaLabel=""
               upIs="bad"
@@ -165,8 +189,18 @@ export function System() {
               footer={n("cpu_max") !== null ? `avg ${formatPercent(n("cpu_avg") ?? 0)} · peak ${formatPercent(n("cpu_max")!)}` : undefined}
             />
             <StatTile
+              label="Load per core"
+              description="1-minute load average divided by the CPU count. Above 1.0 means work is waiting for CPU."
+              value={dash(perCore, (v) => v.toFixed(2))}
+              delta={null}
+              deltaLabel=""
+              upIs="bad"
+              loading={stats.loading}
+              footer={cores ? `${formatCount(cores)} CPUs · load ${loadNow?.toFixed(2) ?? "—"}` : "Not reported on this host"}
+            />
+            <StatTile
               label="Host memory"
-              value={n("mem_now") === null ? "—" : formatPercent(n("mem_now")!)}
+              value={dash(n("mem_now"), formatPercent)}
               delta={null}
               deltaLabel=""
               upIs="bad"
@@ -174,8 +208,57 @@ export function System() {
               footer={n("mem_max") !== null ? `peak ${formatPercent(n("mem_max")!)}` : undefined}
             />
             <StatTile
+              label="Swap used"
+              value={dash(n("swap_now"), (v) => formatBytes(v * 1048576))}
+              delta={null}
+              deltaLabel=""
+              upIs="bad"
+              loading={stats.loading}
+              footer={swapTotal ? `of ${formatBytes(swapTotal * 1048576)}` : "No swap configured"}
+            />
+            <StatTile
+              label="Disk space"
+              value={dash(n("disk_now"), formatPercent)}
+              delta={null}
+              deltaLabel=""
+              upIs="bad"
+              loading={stats.loading}
+              footer={n("disk_free_gb") !== null ? `${formatBytes(n("disk_free_gb")! * 1073741824)} free` : undefined}
+            />
+            <StatTile
+              label="Disk busy"
+              description="Share of time the busiest disk spent on I/O. Linux only."
+              value={dash(n("disk_busy_avg"), formatPercent)}
+              delta={null}
+              deltaLabel=""
+              upIs="bad"
+              spark={sparkPoints(disk.data, ["avg_busy"])}
+              loading={stats.loading}
+              footer={n("disk_busy_max") !== null ? `peak ${formatPercent(n("disk_busy_max")!)}` : "Not reported on this host"}
+            />
+            <StatTile
+              label="Network"
+              description="Average bytes per second received plus sent."
+              value={dash(n("net_bytes_avg"), (v) => `${formatBytes(v)}/s`)}
+              delta={null}
+              deltaLabel=""
+              upIs="neutral"
+              spark={sparkPoints(net.data, ["received_bytes", "sent_bytes"])}
+              loading={stats.loading}
+              footer={n("net_bytes_max") !== null ? `peak ${formatBytes(n("net_bytes_max")!)}/s` : undefined}
+            />
+            <StatTile
+              label="TCP connections"
+              value={dash(n("tcp_now"), (v) => formatCount(v))}
+              delta={null}
+              deltaLabel=""
+              upIs="neutral"
+              loading={stats.loading}
+              footer={n("tcp_max") !== null ? `peak ${formatCount(n("tcp_max")!)}` : "Not reported on this host"}
+            />
+            <StatTile
               label="Process memory"
-              value={n("rss_now") === null ? "—" : formatBytes(n("rss_now")! * 1048576)}
+              value={dash(n("rss_now"), (v) => formatBytes(v * 1048576))}
               delta={null}
               deltaLabel=""
               upIs="bad"
@@ -184,28 +267,27 @@ export function System() {
               footer={n("rss_max") !== null ? `peak ${formatBytes(n("rss_max")! * 1048576)}` : undefined}
             />
             <StatTile
+              label="Open files"
+              description="Open files and sockets of the process, against its limit."
+              value={dash(n("fds_now"), (v) => formatCount(v))}
+              delta={null}
+              deltaLabel=""
+              upIs="bad"
+              loading={stats.loading}
+              footer={fdsLimit ? `limit ${formatCount(fdsLimit)} · ${formatPercent((100 * (n("fds_now") ?? 0)) / fdsLimit)} used` : undefined}
+            />
+            <StatTile
               label="DB connections in use"
               value={n("db_now") === null ? "—" : `${formatCount(n("db_now")!)} / ${formatCount(n("db_limit") ?? 0)}`}
               delta={null}
               deltaLabel=""
               upIs="bad"
-              spark={sparkPoints(db.data, ["in_use"])}
               loading={stats.loading}
               footer={n("db_max") !== null ? `peak ${formatCount(n("db_max")!)}` : undefined}
             />
             <StatTile
-              label="Goroutines"
-              value={n("goroutines_now") === null ? "—" : formatCount(n("goroutines_now")!)}
-              delta={null}
-              deltaLabel=""
-              upIs="bad"
-              spark={sparkPoints(goroutines.data, ["goroutines"])}
-              loading={stats.loading}
-              footer={n("goroutines_max") !== null ? `peak ${formatCount(n("goroutines_max")!)}` : undefined}
-            />
-            <StatTile
               label="Uptime"
-              value={n("uptime_s") === null ? "—" : formatUptime(n("uptime_s")!)}
+              value={dash(n("uptime_s"), formatUptime)}
               delta={null}
               deltaLabel=""
               upIs="neutral"
@@ -213,14 +295,26 @@ export function System() {
               footer={s?.last_seen ? `last sample ${formatRelative(String(s.last_seen))}` : undefined}
             />
 
-            {PANELS.map((p) => (
-              <SystemPanel key={p.name} {...p} instance={instance} />
+            {SECTIONS.map((sec) => (
+              <SectionPanels key={sec.title} {...sec} instance={instance} />
             ))}
 
+            <Section title="Notable moments" />
             <SpikesPanel instance={instance} />
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+function SectionPanels({ title, text, panels, instance }: (typeof SECTIONS)[number] & { instance: string }) {
+  return (
+    <>
+      <Section title={title} text={text} />
+      {panels.map((p) => (
+        <SystemPanel key={p.name} {...p} instance={instance} />
+      ))}
     </>
   );
 }
@@ -234,10 +328,10 @@ function formatUptime(sec: number): string {
   return `${m}m`;
 }
 
-function SystemPanel({ name, title, description, viz, span, instance }: (typeof PANELS)[number] & { instance: string }) {
+function SystemPanel({ name, title, description, viz, span, empty, instance }: PanelDef & { instance: string }) {
   const tokens = useChartTokens();
   const q = useSystem(name, instance);
-  const height = 220;
+  const height = span === "span-3" ? 180 : 220;
   return (
     <Panel
       className={span}
@@ -248,7 +342,7 @@ function SystemPanel({ name, title, description, viz, span, instance }: (typeof 
       error={q.error}
       bodyHeight={height}
       note={vizNote(q.data, viz, tokens)}
-      chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} />}
+      chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} empty={empty} />}
       table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
     />
   );
@@ -265,7 +359,7 @@ function SpikesPanel({ instance }: { instance: string }) {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    })}? Compare that window with normal traffic and server health.`;
+    })}? Compare that window with normal traffic and server health, including disk, network and the database pool.`;
     window.location.hash = `#/explore?q=${encodeURIComponent(q)}`;
   };
   const columns: Column[] = [
@@ -292,7 +386,7 @@ function SpikesPanel({ instance }: { instance: string }) {
   return (
     <Panel
       className="span-12"
-      title="Notable moments"
+      title="Highest CPU intervals"
       description="The intervals with the highest CPU in this range, with what the API was doing at the time. Investigate hands the moment to the analyst."
       result={q.data}
       loading={q.loading}

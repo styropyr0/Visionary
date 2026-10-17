@@ -238,6 +238,9 @@ func (a *Agent) Start(ctx context.Context) {
 		if err := a.db.execScript(schemaCtx, d.SystemSchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create system_metrics failed", "err", err)
 		}
+		if err := migrateSystem(schemaCtx, a.db); err != nil {
+			a.cfg.Logger.Error("visionary: add system_metrics columns failed", "err", err)
+		}
 		a.system.start(ctx)
 	}
 }

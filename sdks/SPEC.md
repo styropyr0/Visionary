@@ -172,6 +172,15 @@ deltas. A source that fails or doesn't exist on this runtime/OS is NULL
 (`""`), never an error.
 
 Insert: all columns below in this order (same placeholder rules as requests).
+
+The columns from `cpu_count` on were added later. At startup, after creating the
+table, read its columns (SQLite/D1: `SELECT name FROM pragma_table_info('system_metrics')`;
+PostgreSQL/MySQL: `information_schema.columns` for the current schema or database)
+and run `ALTER TABLE system_metrics ADD COLUMN <name> <type>` for each one missing.
+Types for SQLite / PostgreSQL / MySQL: counts `INTEGER` / `BIGINT` / `BIGINT`,
+measurements `REAL` / `DOUBLE PRECISION` / `DOUBLE`. Ignore "duplicate column"
+errors (another instance got there first). `AddedSystemColumns` in
+`sdks/go/migrate.go` is the canonical list and insert order.
 Counts are integers, measurements floats, `created_at`/`instance` text.
 
 | Column | Meaning | Python | Java |
@@ -183,7 +192,7 @@ Counts are integers, measurements floats, `created_at`/`instance` text.
 | `load_1/5/15` | load average | `os.getloadavg()` | `getSystemLoadAverage()` (load_1 only) |
 | `host_mem_used_mb/total_mb/percent` | host memory | `psutil.virtual_memory()` | `getTotalMemorySize()/getFreeMemorySize()` |
 | `disk_used_percent`, `disk_free_gb` | the working directory's filesystem | `psutil.disk_usage` | `File.getTotalSpace()/getUsableSpace()` |
-| `net_rx_kbps`, `net_tx_kbps` | host network KB/s since previous sample | `psutil.net_io_counters()` | NULL |
+| `net_rx_kbps`, `net_tx_kbps` | host network KB/s since previous sample | `psutil.net_io_counters()` | `/proc/net/dev` on Linux, else NULL |
 | `proc_cpu_percent` | this process, % of one core | `Process.cpu_percent(None)` | `getProcessCpuLoad()*100*cores` |
 | `proc_rss_mb` | resident memory | `memory_info().rss` | NULL unless available |
 | `proc_threads` | OS threads | `num_threads()` | `ThreadMXBean.getThreadCount()` |
@@ -199,6 +208,27 @@ Counts are integers, measurements floats, `created_at`/`instance` text.
 | `http_rps` | `http_requests / interval_s` (2 decimals) | | |
 | `http_in_flight` | requests in progress now | | |
 | `uptime_s` | seconds since the SDK started | | |
+| `cpu_count` | logical CPUs | `psutil.cpu_count()` / `os.cpu_count()` | `Runtime.availableProcessors()` |
+| `cpu_user_percent`, `cpu_system_percent` | share of all CPU time since the previous sample: user (+nice), system (+irq, softirq) | `psutil.cpu_times()` deltas over the sum of all fields | `/proc/stat` deltas on Linux, else NULL |
+| `cpu_iowait_percent`, `cpu_steal_percent` | same, for iowait and steal; **Linux only**, else NULL | `cpu_times()` iowait/steal | `/proc/stat` |
+| `host_mem_available_mb`, `host_mem_cached_mb` | memory available to new work; page cache (NULL when 0 or unknown) | `virtual_memory().available` / `.cached` | `/proc/meminfo` MemAvailable/Cached on Linux; available = `getFreeMemorySize()` elsewhere |
+| `swap_used_mb`, `swap_total_mb` | swap | `psutil.swap_memory()` | `getTotalSwapSpaceSize() - getFreeSwapSpaceSize()` |
+| `disk_total_gb`, `disk_inodes_percent` | size of the working directory's filesystem; inodes used % (NULL when unknown) | `disk_usage`; `os.statvfs` f_files/f_ffree | `File.getTotalSpace()`; inodes NULL |
+| `disk_read_kbps`, `disk_write_kbps`, `disk_read_iops`, `disk_write_iops` | host disk I/O per second, summed over whole disks only (see the partition rule below) | `psutil.disk_io_counters(perdisk=True)` | `/proc/diskstats` on Linux, else NULL |
+| `disk_await_ms` | (read time + write time) delta / (reads + writes) delta; NULL when there was no I/O | same | same |
+| `disk_busy_percent` | the busiest whole disk's I/O-time delta / interval × 100, capped at 100; **Linux only** | `busy_time` per disk | `/proc/diskstats` field 13 |
+| `net_rx_pps`, `net_tx_pps` | packets per second | `net_io_counters()` | `/proc/net/dev` on Linux, else NULL |
+| `net_errors`, `net_drops` | errors in+out and drops in+out since the previous sample | same | same |
+| `tcp_established` | TCP connections in ESTABLISHED now; **Linux only** | `/proc/net/snmp` Tcp CurrEstab | same |
+| `tcp_retrans` | TCP segments retransmitted since the previous sample; **Linux only** | `/proc/net/snmp` Tcp RetransSegs | same |
+| `host_procs`, `procs_running`, `procs_blocked` | processes on the host; running, and blocked on I/O (`/proc/stat` procs_running/procs_blocked on Linux, else NULL) | `len(psutil.pids())`; `/proc/stat` | `/proc` count and `/proc/stat` on Linux, else NULL |
+| `ctx_switches_ps` | host context switches per second | `psutil.cpu_stats().ctx_switches` delta | `/proc/stat` ctxt delta on Linux, else NULL |
+| `proc_read_kbps`, `proc_write_kbps` | this process's I/O per second | `Process.io_counters()` read_bytes/write_bytes | `/proc/self/io` on Linux, else NULL |
+| `proc_max_fds` | soft limit on open files (NULL on Windows or when unlimited) | `resource.getrlimit(RLIMIT_NOFILE)[0]` | `UnixOperatingSystemMXBean.getMaxFileDescriptorCount()` |
+
+Partition rule: skip disk devices matching
+`^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,
+so a partition's I/O is not counted again on top of its disk.
 
 Retention: same schedule as requests, `VISIONARY_SYSTEM_RETENTION_DAYS`,
 `DELETE FROM system_metrics WHERE id IN (SELECT id FROM system_metrics WHERE created_at < ? LIMIT 5000)`.

@@ -29,13 +29,14 @@ type Server struct {
 	db  db.DB
 	q   sqlDialect
 
-	overview map[string]string
-	system   map[string]string
-	bridge   *authbridge.Bridge
-	llm      *llm
-	auth     *auth
-	logger   *slog.Logger
-	static   fs.FS
+	overview    map[string]string
+	performance map[string]string
+	system      map[string]string
+	bridge      *authbridge.Bridge
+	llm         *llm
+	auth        *auth
+	logger      *slog.Logger
+	static      fs.FS
 
 	routesMu sync.Mutex
 	routes   []string
@@ -64,7 +65,7 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 		logger.Warn("VISIONARY_SESSION_SECRET not set; sessions reset on every restart")
 	}
 	q := sqlDialect{conn.Dialect()}
-	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
+	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), performance: performancePanels(q, cfg.ApdexMs), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
 	if s.llm == nil {
 		logger.Warn("OPENAI_API_KEY not set; the analyst is disabled")
 	}
@@ -101,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/meta", s.authed(s.handleMeta))
 	mux.Handle("GET /api/overview/{panel}", s.authed(s.handleOverview))
 	mux.Handle("GET /api/system/{panel}", s.authed(s.handleSystem))
+	mux.Handle("GET /api/performance/{panel}", s.authed(s.handlePerformance))
 	mux.Handle("POST /api/analyst", s.authed(s.handleAnalyst))
 	mux.Handle("POST /api/query", s.authed(s.handleQuery))
 	mux.Handle("GET /api/panels", s.authed(s.handleListPanels))
@@ -381,6 +383,8 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		"routes":         s.knownRoutes(r.Context()),
 		"max_rows":       s.cfg.MaxRows,
 		"max_range_days": s.cfg.MaxRangeDays,
+		"apdex_ms":       s.cfg.ApdexMs,
+		"slo_target":     s.cfg.SLOTarget,
 	})
 }
 

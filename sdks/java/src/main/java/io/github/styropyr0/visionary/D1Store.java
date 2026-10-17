@@ -28,11 +28,14 @@ final class D1Store implements Store {
     private final ObjectMapper json;
     private final HttpClient http;
     private final URI queryUri;
+    private final URI rawUri;
     private final String token;
 
     D1Store(String apiBase, String accountId, String databaseId, String token, ObjectMapper json) {
         String base = apiBase.endsWith("/") ? apiBase.substring(0, apiBase.length() - 1) : apiBase;
-        this.queryUri = URI.create(base + "/accounts/" + accountId + "/d1/database/" + databaseId + "/query");
+        String database = base + "/accounts/" + accountId + "/d1/database/" + databaseId;
+        this.queryUri = URI.create(database + "/query");
+        this.rawUri = URI.create(database + "/raw");
         this.token = token;
         this.json = json;
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -44,7 +47,28 @@ final class D1Store implements Store {
         for (String sql : Dialect.D1.schema(table.schemaName)) {
             stmts.add(Map.of("sql", sql, "params", List.of()));
         }
-        post(Map.of("batch", stmts));
+        post(queryUri, Map.of("batch", stmts));
+        if (!table.addedColumns.isEmpty()) {
+            addMissingColumns(table);
+        }
+    }
+
+    /** Upgrades a table created by an older release in place. */
+    private void addMissingColumns(Table table) throws IOException, InterruptedException {
+        JsonNode res = post(rawUri, Map.of("sql", Dialect.D1.columnsQuery(table.name), "params", List.of()));
+        List<String> existing = new ArrayList<>();
+        for (JsonNode row : res.path("result").path(0).path("results").path("rows")) {
+            existing.add(row.path(0).asText());
+        }
+        for (String alter : Dialect.D1.missingColumns(table, existing)) {
+            try {
+                post(queryUri, Map.of("sql", alter, "params", List.of()));
+            } catch (IOException e) {
+                if (!Dialect.isDuplicateColumn(e)) {
+                    throw e;
+                }
+            }
+        }
     }
 
     @Override
@@ -59,13 +83,13 @@ final class D1Store implements Store {
                 }
                 stmts.add(Map.of("sql", sql, "params", params));
             }
-            post(Map.of("batch", stmts));
+            post(queryUri, Map.of("batch", stmts));
         }
     }
 
     @Override
     public long purgeChunk(Table table, String cutoff) throws IOException, InterruptedException {
-        JsonNode res = post(Map.of("sql", Dialect.D1.purgeSql(table.name), "params", List.of(cutoff)));
+        JsonNode res = post(queryUri, Map.of("sql", Dialect.D1.purgeSql(table.name), "params", List.of(cutoff)));
         return res.path("result").path(0).path("meta").path("changes").asLong(0);
     }
 
@@ -79,8 +103,8 @@ final class D1Store implements Store {
         // HttpClient has nothing to release on Java 17.
     }
 
-    private JsonNode post(Object body) throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder(queryUri)
+    private JsonNode post(URI uri, Object body) throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder(uri)
                 .timeout(REQUEST_TIMEOUT)
                 .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")

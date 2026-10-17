@@ -10,6 +10,7 @@ import tracemalloc
 from typing import Any, Dict, List, Optional, Tuple
 
 from ._entry import format_ts
+from ._node import NodeCollector
 from ._storage import SYSTEM_COLUMNS, Backend
 from ._writer import Schema
 
@@ -106,6 +107,7 @@ class Recorder:
                 self._proc = psutil.Process()
             except Exception:
                 self._proc = None
+        self._node = NodeCollector(self._proc, self._disk_path)
 
     def start(self) -> None:
         self._gc.install()
@@ -143,6 +145,7 @@ class Recorder:
                 self._net = (io.bytes_recv, io.bytes_sent)
         if self._db_stats is not None:
             self._db_prev = _quiet(self._db_stats) or {}
+        self._node.prime()
 
     def _run(self) -> None:
         self._schema.ensure()
@@ -220,6 +223,7 @@ class Recorder:
         v["http_rps"] = round(d_reqs / secs, 2)
         v["http_in_flight"] = in_flight
         v["uptime_s"] = int(now - self._started)
+        self._node.sample(v, secs)
         return tuple(v.get(c) for c in SYSTEM_COLUMNS)
 
     def _disk(self, v: Dict[str, Any]) -> None:
@@ -228,11 +232,13 @@ class Recorder:
             if du is not None:
                 v["disk_used_percent"] = round(du.percent, 1)
                 v["disk_free_gb"] = round(du.free / (1 << 30), 2)
+                v["disk_total_gb"] = round(du.total / (1 << 30), 2)
                 return
         du = _quiet(lambda: shutil.disk_usage(self._disk_path))
         if du is not None and du.total:
             v["disk_used_percent"] = round(du.used / du.total * 100.0, 1)
             v["disk_free_gb"] = round(du.free / (1 << 30), 2)
+            v["disk_total_gb"] = round(du.total / (1 << 30), 2)
 
     def _host(self, v: Dict[str, Any], secs: float) -> None:
         cpu = _quiet(lambda: psutil.cpu_percent(None))
