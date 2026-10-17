@@ -120,16 +120,21 @@ func (s *Server) Handler() http.Handler {
 
 type sessionKey struct{}
 
-// authed requires an admin session and re-confirms the role with the API
-// every RoleCheckEvery. Writes also require a JSON body, which a cross-site
-// form cannot send, on top of the SameSite=Strict cookie.
+// authed requires a signed-in session (or a read API key) and re-confirms
+// the role with the API every RoleCheckEvery. Writes also require a JSON body,
+// which a cross-site form cannot send, on top of the SameSite=Strict cookie.
+// Handlers check what the role may do with s.can.
 func (s *Server) authed(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key, ok := bearerKey(r); ok {
+			s.keyAuthed(w, r, key, h)
+			return
+		}
+		if needsJSON(r) && !isJSON(r) {
+			writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
+			return
+		}
 		if s.cfg.Auth.Type == authbridge.TypeNone {
-			if r.Method == http.MethodPost && !isJSON(r) {
-				writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
-				return
-			}
 			h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, localSession)))
 			return
 		}
@@ -139,6 +144,10 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 			return
 		}
 		next, changed, err := s.auth.confirm(r.Context(), sess)
+		if err == nil && s.roleOf(next) == roleNone {
+			// The role mapping changed since sign-in.
+			err = errNotAllowed
+		}
 		if err != nil {
 			if !errors.Is(err, errAPIUnreachable) {
 				s.auth.clear(w, r)
@@ -153,12 +162,12 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 				return
 			}
 		}
-		if r.Method == http.MethodPost && !isJSON(r) {
-			writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
-			return
-		}
 		h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, next)))
 	})
+}
+
+func needsJSON(r *http.Request) bool {
+	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
 }
 
 // handleAuthConfig tells the sign-in screen which flow to render.
@@ -167,12 +176,13 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, _ *http.Request) {
 }
 
 // localSession stands in for a user when sign-in is off (mode none).
-var localSession = &session{UserID: "local", Name: "Local user", Roles: []string{"local"}, Expires: 4102444800} // 2100-01-01
+var localSession = &session{UserID: "local", Name: "Local user", Roles: []string{"local"}, Role: "admin", Expires: 4102444800} // 2100-01-01
 
 // completeShared checks the team password. Sessions carry a random token only
 // so logout can end them; there is no API to re-check against.
 func (s *Server) completeShared(w http.ResponseWriter, r *http.Request, password string) {
-	if !s.auth.checkShared(password) {
+	granted := s.auth.checkShared(password)
+	if granted == roleNone {
 		s.logger.Warn("shared password sign-in failed", "ip", s.auth.clientIP(r))
 		writeError(w, http.StatusUnauthorized, "That password isn't right.")
 		return
@@ -182,15 +192,18 @@ func (s *Server) completeShared(w http.ResponseWriter, r *http.Request, password
 		s.fail(w, err)
 		return
 	}
-	sess := s.auth.newSession(&authbridge.Result{
-		Token: "shared:" + hex.EncodeToString(token),
-		User:  authbridge.User{ID: "team", Name: "Team", Roles: []string{"team"}},
-	})
+	user := authbridge.User{ID: "team", Name: "Team", Roles: []string{"team"}}
+	if granted == roleViewer {
+		user = authbridge.User{ID: "team-viewer", Name: "Team (read-only)", Roles: []string{"team-viewer"}}
+	}
+	sess := s.auth.newSession(&authbridge.Result{Token: "shared:" + hex.EncodeToString(token), User: user})
+	sess.Role = granted.String()
 	if err := s.auth.write(w, r, sess); err != nil {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionView(sess))
+	s.auditAs(r, sess, "auth.sign_in", sess.UserID, map[string]any{"mode": "shared"})
+	writeJSON(w, http.StatusOK, s.sessionView(sess))
 }
 
 // handleAuthStart sends the one-time code (otp flow).
@@ -232,7 +245,7 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		s.completeShared(w, r, body.Password)
 		return
 	case authbridge.TypeNone:
-		writeJSON(w, http.StatusOK, sessionView(localSession))
+		writeJSON(w, http.StatusOK, s.sessionView(localSession))
 		return
 	}
 	id, ok := s.identifier(w, body.Identifier)
@@ -274,9 +287,11 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		s.apiFail(w, err)
 		return
 	}
-	if !s.bridge.Allowed(&res.User) {
+	if !s.auth.roles.allowed(&res.User) {
 		s.revoke(res.Token)
 		s.logger.Warn("sign-in refused: role not allowed", "user_id", res.User.ID, "roles", res.User.Roles)
+		s.auditAs(r, &session{UserID: res.User.ID, Name: res.User.Name, Roles: res.User.Roles}, "auth.sign_in_refused", res.User.ID,
+			map[string]any{"roles": res.User.Roles})
 		writeError(w, http.StatusForbidden, "This account doesn't have access to Visionary.")
 		return
 	}
@@ -286,7 +301,8 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("sign-in", "user_id", sess.UserID, "roles", sess.Roles)
-	writeJSON(w, http.StatusOK, sessionView(sess))
+	s.auditAs(r, sess, "auth.sign_in", sess.UserID, map[string]any{"mode": s.cfg.Auth.Type, "roles": sess.Roles})
+	writeJSON(w, http.StatusOK, s.sessionView(sess))
 }
 
 func (s *Server) identifier(w http.ResponseWriter, raw string) (string, bool) {
@@ -355,20 +371,27 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if sess, ok := s.auth.read(r); ok {
 		s.auth.markSignedOut(sess)
 		s.revoke(sess.Token)
+		s.auditAs(r, sess, "auth.sign_out", sess.UserID, nil)
 	}
 	s.auth.clear(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	sess, _ := r.Context().Value(sessionKey{}).(*session)
-	writeJSON(w, http.StatusOK, sessionView(sess))
+	writeJSON(w, http.StatusOK, s.sessionView(sessionFrom(r)))
 }
 
-func sessionView(s *session) map[string]any {
+// sessionView is what the UI knows about the user: who they are and what
+// their role lets them do, so it can hide actions they can't take.
+func (s *Server) sessionView(sess *session) map[string]any {
+	r := s.roleOf(sess)
 	return map[string]any{
-		"user":       map[string]any{"id": s.UserID, "name": s.Name, "handle": s.Handle, "roles": s.Roles},
-		"expires_at": s.expiresAt().UTC(),
+		"user": map[string]any{"id": sess.UserID, "name": sess.Name, "handle": sess.Handle, "roles": sess.Roles, "role": r.String()},
+		"role": r.String(),
+		"permissions": map[string]bool{
+			"view": r >= roleViewer, "edit": r >= roleEditor, "admin": r >= roleAdmin,
+		},
+		"expires_at": sess.expiresAt().UTC(),
 	}
 }
 
@@ -499,6 +522,9 @@ func (s *Server) handleListPanels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreatePanel(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r, "edit") {
+		return
+	}
 	var p Panel
 	if err := readJSON(r, &p); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -509,10 +535,14 @@ func (s *Server) handleCreatePanel(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.audit(r, "panel.create", strconv.FormatInt(created.ID, 10), map[string]any{"title": created.Title})
 	writeJSON(w, http.StatusCreated, created)
 }
 
 func (s *Server) handleDeletePanel(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r, "edit") {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid panel id")
@@ -522,6 +552,7 @@ func (s *Server) handleDeletePanel(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.audit(r, "panel.delete", strconv.FormatInt(id, 10), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
