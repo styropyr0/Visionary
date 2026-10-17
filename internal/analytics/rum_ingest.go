@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -86,14 +87,13 @@ func (s *Server) handleClientIngest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "payload over 64 KB")
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxClientBody))
+	body, err := readClientBody(w, r)
 	if err != nil {
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
+		if errors.Is(err, errClientTooLarge) {
 			writeError(w, http.StatusRequestEntityTooLarge, "payload over 64 KB")
 			return
 		}
-		writeError(w, http.StatusBadRequest, "could not read body")
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -108,6 +108,44 @@ func (s *Server) handleClientIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+var errClientTooLarge = errors.New("payload over 64 KB")
+
+// readClientBody reads at most 64 KB, after gzip decompression when the body
+// is compressed. Both the compressed and the decompressed reads are capped,
+// so a small body that inflates hugely (a decompression bomb) stops at the
+// limit instead of filling memory.
+func readClientBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	var src io.Reader = http.MaxBytesReader(w, r.Body, maxClientBody)
+	switch enc := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding"))); enc {
+	case "", "identity":
+	case "gzip", "x-gzip":
+		gz, err := gzip.NewReader(src)
+		if err != nil {
+			return nil, tooLargeOr(err, "invalid gzip body")
+		}
+		defer gz.Close()
+		src = gz
+	default:
+		return nil, errors.New("unsupported Content-Encoding " + enc)
+	}
+	body, err := io.ReadAll(io.LimitReader(src, maxClientBody+1))
+	if err != nil {
+		return nil, tooLargeOr(err, "could not read body")
+	}
+	if len(body) > maxClientBody {
+		return nil, errClientTooLarge
+	}
+	return body, nil
+}
+
+func tooLargeOr(err error, msg string) error {
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) {
+		return errClientTooLarge
+	}
+	return errors.New(msg)
 }
 
 // bearerKey reads the key from Authorization or, for sendBeacon and other
@@ -395,14 +433,15 @@ func flatAttrs(raw json.RawMessage) string {
 	return string(b)
 }
 
-var idSegment = regexp.MustCompile(`^(\d+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,}|[A-Za-z0-9_]{24,})$`)
+var idSegment = regexp.MustCompile(`^(\d+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,})$`)
 
-// normalizePath replaces id-like segments (numbers, UUIDs, long hex or
-// token-like strings) with :id.
+// normalizePath replaces id-like segments with :id, by the SPEC rule: all
+// digits, a UUID, 16 or more hex characters, or 20 or more characters
+// containing a digit.
 func normalizePath(p string) string {
 	parts := strings.Split(p, "/")
 	for i, seg := range parts {
-		if seg != "" && idSegment.MatchString(seg) && (strings.ContainsAny(seg, "0123456789") || len(seg) >= 32) {
+		if seg != "" && (idSegment.MatchString(seg) || utf8.RuneCountInString(seg) >= 20 && strings.ContainsAny(seg, "0123456789")) {
 			parts[i] = ":id"
 		}
 	}

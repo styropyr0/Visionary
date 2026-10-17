@@ -1,10 +1,14 @@
-const ID = /^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|\w{24,})$/i;
+const ID = /^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i;
 
-/** Replaces id-like path segments (numbers, UUIDs, long hex or tokens) with :id. */
+/**
+ * Replaces id-like path segments with :id, as sdks/SPEC.md defines them (the
+ * mobile SDKs and the server use the same rule): all digits, a UUID, 16 or
+ * more hex characters, or 20 or more characters containing a digit.
+ */
 export function normalizePath(path: string): string {
   return path
     .split("/")
-    .map((s) => (s && ID.test(s) && (/\d/.test(s) || s.length >= 32) ? ":id" : s))
+    .map((s) => (s && (ID.test(s) || (s.length >= 20 && /\d/.test(s))) ? ":id" : s))
     .join("/");
 }
 

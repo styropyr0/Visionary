@@ -30,7 +30,9 @@ export function trackPageLoad(report: Report) {
 
 /**
  * Single-page app route changes, as page loads with soft timing: from the
- * history change until the DOM has been quiet for 100 ms (at most 10 s).
+ * history change until the DOM has been quiet for 100 ms after its last
+ * change (at most 10 s). Routes that render asynchronously change nothing at
+ * first, so with no change yet the wait is up to 2 s.
  */
 export function trackRouteChanges(report: Report) {
   let path = location.pathname;
@@ -44,10 +46,15 @@ export function trackRouteChanges(report: Report) {
     const url = bareUrl(location.href);
     const t0 = now();
     let last = t0;
-    const mo = new MutationObserver(() => (last = now()));
+    let changed = false;
+    const mo = new MutationObserver(() => {
+      last = now();
+      changed = true;
+    });
     mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     const timer = setInterval(() => {
-      if (now() - last >= 100 || now() - t0 >= 10_000) finish?.();
+      const t = now();
+      if ((changed && t - last >= 100) || (!changed && t - t0 >= 2000) || t - t0 >= 10_000) finish?.();
     }, 50);
     finish = () => {
       finish = undefined;
