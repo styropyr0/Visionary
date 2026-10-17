@@ -35,10 +35,12 @@ type otlpState struct {
 	nPending int
 	recent   map[string]*otlpRecent // by span id, every span of a written request
 	series   map[string]otlpPoint   // last cumulative value per series, for rates
-	lastRow  map[string]time.Time   // last system_metrics row per instance
-	releases map[string]bool
-	fpMinute int64
-	fpCount  map[string]int
+	// metricRows are the open system_metrics windows by instance and start.
+	metricRows map[string]*otlpMetricRow
+	lastRow    map[string]time.Time // last system_metrics row per instance
+	releases   map[string]bool
+	fpMinute   int64
+	fpCount    map[string]int
 	// excSeen holds the exceptions already stored per span, so one recorded
 	// both as a span event and as a log record is stored once.
 	excSeen map[string]time.Time
@@ -53,12 +55,13 @@ type otlpState struct {
 const (
 	// otlpHold is how long spans wait for the request span they belong to;
 	// SDKs export every 5 s by default, and parents end after their children.
-	otlpHold         = 30 * time.Second
-	otlpRecentTTL    = 2 * time.Minute
-	otlpMaxPending   = 50000
-	otlpMaxRecent    = 200000
-	otlpMaxSeries    = 50000
-	otlpErrorsPerMin = 20
+	otlpHold          = 30 * time.Second
+	otlpRecentTTL     = 2 * time.Minute
+	otlpMaxPending    = 50000
+	otlpMaxRecent     = 200000
+	otlpMaxSeries     = 50000
+	otlpErrorsPerMin  = 20
+	otlpMaxMetricRows = 2000
 )
 
 var otlpStates sync.Map // *Server -> *otlpState
@@ -91,6 +94,7 @@ func (s *Server) newOTLPState() *otlpState {
 		pending:     map[string]*otlpPendingTrace{},
 		recent:      map[string]*otlpRecent{},
 		series:      map[string]otlpPoint{},
+		metricRows:  map[string]*otlpMetricRow{},
 		lastRow:     map[string]time.Time{},
 		releases:    map[string]bool{},
 		fpCount:     map[string]int{},
@@ -143,7 +147,8 @@ func (o *otlpState) start(ctx context.Context) {
 	})
 }
 
-// flushDue writes the spans whose request span never came.
+// flushDue writes what waited long enough: spans whose request span never
+// came, and metric windows nothing else closed.
 func (o *otlpState) flushDue(ctx context.Context) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -152,6 +157,12 @@ func (o *otlpState) flushDue(ctx context.Context) {
 	}()
 	now := time.Now()
 	rows := o.expireTraces(now)
+	metrics := o.dueMetrics(now)
+	for _, t := range metrics.order {
+		for _, row := range metrics.tables[t] {
+			rows.add(t, row)
+		}
+	}
 	if rows.empty() {
 		return
 	}

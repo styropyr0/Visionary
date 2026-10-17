@@ -66,18 +66,23 @@ type otlpObs struct {
 }
 
 // otlpMetricRow is one instance's datapoints in one window: metric name ->
-// series -> last value.
+// series -> last value (deltas add up).
 type otlpMetricRow struct {
-	res    *otlpResource
-	bucket int64
-	at     uint64
-	obs    map[string]map[string]otlpObs
+	res       *otlpResource
+	key       string // instance and service
+	bucket    int64
+	at        uint64
+	firstSeen time.Time
+	obs       map[string]map[string]otlpObs
 }
+
+// otlpMetricLinger is how long a window stays open for more exports after
+// its first datapoint arrived, when no later window closes it first.
+const otlpMetricLinger = 20 * time.Second
 
 func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.ResourceMetrics) (int64, error) {
 	var rejected int64
-	rowsByKey := map[string]*otlpMetricRow{}
-	var keys []string
+	now := time.Now()
 	o.mu.Lock()
 	out := &otlpRows{}
 	for _, rm := range rms {
@@ -105,48 +110,110 @@ func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.Resource
 						rejected++
 						continue
 					}
-					attrs := map[string]string{}
-					for k := range otlpAttrMap(p.GetAttributes()) {
-						attrs[k] = otlpAttrMap(p.GetAttributes()).str(k)
+					pa := otlpAttrMap(p.GetAttributes())
+					attrs := make(map[string]string, len(pa))
+					for k := range pa {
+						attrs[k] = pa.str(k)
 					}
 					if filter != nil && !filter(attrs) {
 						continue
 					}
-					v, ok := o.metricValue(res, name, attrs, p, cumulative, monotonic)
-					if !ok {
-						continue
+					if v, ok := o.metricValue(res, name, attrs, p, cumulative, monotonic); ok {
+						o.observe(res, name, attrs, p.GetTimeUnixNano(), v, now)
 					}
-					bucket := int64(p.GetTimeUnixNano()/1e9) / otlpMetricWindow * otlpMetricWindow
-					key := res.instance + "\n" + res.service + "\n" + otlpParam(bucket)
-					row := rowsByKey[key]
-					if row == nil {
-						row = &otlpMetricRow{res: res, bucket: bucket, obs: map[string]map[string]otlpObs{}}
-						rowsByKey[key] = row
-						keys = append(keys, key)
-					}
-					row.at = max(row.at, p.GetTimeUnixNano())
-					if row.obs[name] == nil {
-						row.obs[name] = map[string]otlpObs{}
-					}
-					row.obs[name][otlpSeriesKey(attrs)] = otlpObs{attrs, v}
 				}
 			}
-			o.noteRelease(out, res, uint64(time.Now().UnixNano()))
+			o.noteRelease(out, res, uint64(now.UnixNano()))
 		}
 	}
-	sort.Slice(keys, func(i, j int) bool { return rowsByKey[keys[i]].at < rowsByKey[keys[j]].at })
-	for _, k := range keys {
-		row := rowsByKey[k]
+	due := o.closedMetricRows(now, false)
+	o.metricRowsInto(out, due)
+	o.mu.Unlock()
+	if err := o.store(ctx, out); err != nil {
+		// Keep the closed windows for the next attempt.
+		o.mu.Lock()
+		for _, row := range due {
+			k := row.key + "\n" + otlpParam(row.bucket)
+			if _, newer := o.metricRows[k]; !newer {
+				o.metricRows[k] = row
+			}
+		}
+		o.mu.Unlock()
+		return 0, err
+	}
+	return rejected, nil
+}
+
+// observe adds a value to its instance's window. The caller holds o.mu.
+func (o *otlpState) observe(res *otlpResource, name string, attrs map[string]string, ns uint64, v float64, now time.Time) {
+	bucket := int64(ns/1e9) / otlpMetricWindow * otlpMetricWindow
+	rowKey := res.instance + "\n" + res.service
+	k := rowKey + "\n" + otlpParam(bucket)
+	row := o.metricRows[k]
+	if row == nil {
+		row = &otlpMetricRow{res: res, key: rowKey, bucket: bucket, firstSeen: now, obs: map[string]map[string]otlpObs{}}
+		o.metricRows[k] = row
+	}
+	row.at = max(row.at, ns)
+	series := row.obs[name]
+	if series == nil {
+		series = map[string]otlpObs{}
+		row.obs[name] = series
+	}
+	sk := otlpSeriesKey(attrs)
+	if prev, ok := series[sk]; ok && otlpDeltas[name] {
+		v += prev.v
+	}
+	series[sk] = otlpObs{attrs, v}
+}
+
+// closedMetricRows takes the windows that are complete: a later window of
+// the same instance exists, they lingered long enough, or all of them when
+// all is set or memory is short. The caller holds o.mu.
+func (o *otlpState) closedMetricRows(now time.Time, all bool) []*otlpMetricRow {
+	all = all || len(o.metricRows) > otlpMaxMetricRows
+	newest := map[string]int64{}
+	for _, row := range o.metricRows {
+		newest[row.key] = max(newest[row.key], row.bucket)
+	}
+	var due []*otlpMetricRow
+	for k, row := range o.metricRows {
+		if all || row.bucket < newest[row.key] || now.Sub(row.firstSeen) >= otlpMetricLinger {
+			due = append(due, row)
+			delete(o.metricRows, k)
+		}
+	}
+	sort.Slice(due, func(i, j int) bool { return due[i].at < due[j].at })
+	return due
+}
+
+// dueMetrics is the closed windows as rows, for the background flush.
+func (o *otlpState) dueMetrics(now time.Time) *otlpRows {
+	rows := &otlpRows{}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.metricRowsInto(rows, o.closedMetricRows(now, false))
+	return rows
+}
+
+// metricRowsInto turns windows into system_metrics rows. The caller holds
+// o.mu.
+func (o *otlpState) metricRowsInto(out *otlpRows, due []*otlpMetricRow) {
+	for _, row := range due {
 		vals := row.columns()
 		if len(vals) == 0 {
 			continue
 		}
 		at := time.Unix(0, int64(row.at))
 		interval := float64(otlpMetricWindow)
-		if prev, ok := o.lastRow[row.res.instance]; ok && at.After(prev) && at.Sub(prev) < time.Hour {
-			interval = math.Round(at.Sub(prev).Seconds()*100) / 100
+		if prev, ok := o.lastRow[row.key]; ok && at.After(prev) {
+			if at.Sub(prev) < time.Hour {
+				interval = math.Round(at.Sub(prev).Seconds()*100) / 100
+			}
+			o.lastRow[row.key] = at
+		} else if !ok {
+			o.lastRow[row.key] = at
 		}
-		o.lastRow[row.res.instance] = at
 		r := []any{otlpTime(row.at), row.res.instance, interval, otlpNullStr(row.res.service), otlpNullStr(row.res.version)}
 		for _, c := range otlpSystemCols[5:] {
 			v, ok := vals[c]
@@ -164,8 +231,6 @@ func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.Resource
 	if len(o.lastRow) > otlpMaxSeries {
 		o.lastRow = map[string]time.Time{}
 	}
-	o.mu.Unlock()
-	return rejected, o.store(ctx, out)
 }
 
 // otlpLegacy prefixes the older process.runtime.<runtime>.* metrics. SDKs

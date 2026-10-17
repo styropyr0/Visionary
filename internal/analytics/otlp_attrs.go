@@ -215,8 +215,9 @@ func otlpStackFrames(stack string) []string {
 	for i, line := range lines {
 		if m := otlpFramePython.FindStringSubmatch(line); m != nil {
 			python = true
-			f := strings.ReplaceAll(m[1], `\`, "/")
-			frames = append(frames, frame{m[2], f, strings.Contains(f, "-packages/") || strings.Contains(f, "/lib/python") || strings.HasPrefix(f, "<")})
+			f := strings.ToLower(strings.ReplaceAll(m[1], `\`, "/"))
+			lib := strings.Contains(f, "-packages/") || strings.Contains(f, "/lib/python") || strings.HasPrefix(f, "<")
+			frames = append(frames, frame{m[2], m[1], lib})
 		} else if m := otlpFrameGoFile.FindStringSubmatch(line); m != nil && i > 0 {
 			fn := strings.TrimSpace(lines[i-1])
 			if j := strings.LastIndex(fn, "("); j > 0 {
