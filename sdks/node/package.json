@@ -1,0 +1,67 @@
+{
+  "name": "visionary-sdk",
+  "version": "0.1.0",
+  "description": "Visionary collector for Node.js: logs API requests, samples system metrics and records spans and errors into your database.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "keywords": [
+    "analytics",
+    "apm",
+    "monitoring",
+    "metrics",
+    "express",
+    "fastify",
+    "koa",
+    "nestjs"
+  ],
+  "peerDependencies": {
+    "better-sqlite3": ">=9",
+    "mysql2": ">=3",
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "tsup": "8.3.5",
+    "typescript": "5.6.3"
+  }
+}
