@@ -331,7 +331,8 @@ request) from these rows; SDKs do not need to detect them.
   `message` (at most 1000 characters), `stack` (formatted the language's usual
   way, at most 16 KB), `fingerprint`, `handled` (0/1), `runtime`.
 - `fingerprint`: the first 16 hex characters of SHA-1 over
-  `type + "\n" + frames`, where frames are the top 5 frames from the
+  `type + "\n" + frames`, where frames are the top 5 (innermost first: where the error was raised,
+  then its callers) frames from the
   application's own code (skip the standard library, the SDK and installed
   packages when they can be told apart; when the stack has frames but none are
   the application's, or they cannot be told apart, the top 5 frames of any kind) written as
