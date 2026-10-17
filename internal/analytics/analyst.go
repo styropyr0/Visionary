@@ -270,7 +270,7 @@ func summarize(res *Result) string {
 			if ci >= len(row) {
 				continue
 			}
-			v, ok := row[ci].(float64)
+			v, ok := asFloat(row[ci])
 			if !ok {
 				continue
 			}
@@ -306,7 +306,7 @@ func num(v float64) string {
 
 // timeLabel shows epoch-second buckets as timestamps the model can read.
 func timeLabel(v any) string {
-	if f, ok := v.(float64); ok && f > 1e9 && f < 1e11 {
+	if f, ok := asFloat(v); ok && f > 1e9 && f < 1e11 {
 		return time.Unix(int64(f), 0).UTC().Format(tsLayout)
 	}
 	return toString(v)
@@ -373,7 +373,7 @@ func (s *Server) analystPrompt(req analystRequest, tr timeRange) string {
 		knownRoutes = strings.Join(head(routes, 60), ", ")
 	}
 
-	return `You are Visionary, an analyst for ` + s.cfg.AppName + `'s production API. You answer questions about traffic, errors, latency and server health by querying a Cloudflare D1 (SQLite) database, then explaining what you found in plain language.
+	return `You are Visionary, an analyst for ` + s.cfg.AppName + `'s production API. You answer questions about traffic, errors, latency and server health by querying a ` + s.db.Name() + ` database, then explaining what you found in plain language.
 
 Context
 - Now: ` + time.Now().UTC().Format(tsLayout) + ` UTC. The viewer is in ` + tz + ` (` + offset + `). Data is stored in UTC; in your answer, convert every time to the viewer's zone and say so once (e.g. "all times ` + tz + `").` + example + `
@@ -418,12 +418,13 @@ How to work
 - If the data cannot answer the question, answer saying what is missing.
 
 SQL rules
-- One read-only statement: SELECT or WITH ... SELECT. No semicolons, no comments.
+- One read-only statement: SELECT or WITH ... SELECT over api_logs and system_metrics only. No semicolons, no comments, no backslashes.
+` + s.q.promptRules() + `
 - Time filter: created_at >= {{from}} AND created_at < {{to}} (placeholders become quoted timestamps; do not add quotes). For other periods write quoted timestamps in the same format.
-- Buckets: (CAST(strftime('%s', created_at) AS INTEGER) / {{bucket}}) * {{bucket}} AS t gives epoch seconds; ORDER BY t. Use 60, 300, 3600 or 86400 instead of {{bucket}} when a specific granularity helps.
+- Buckets: {{t}} AS t is created_at floored to the dashboard's bucket of {{bucket}} seconds, as epoch seconds; GROUP BY t ORDER BY t. For a specific granularity write ` + s.q.bucketOf("300") + ` AS t (any number of seconds instead of 300).
 - To join the two tables, bucket both by the same expression and join on t.
 - No percentile function: rank with ROW_NUMBER() OVER (PARTITION BY <group> ORDER BY duration_ms) AS rn and COUNT(*) OVER (PARTITION BY <group>) AS n in a CTE, then MIN(CASE WHEN rn >= 0.95 * n THEN duration_ms END) AS p95.
-- Counts of a condition: SUM(status >= 500). Percentages: ROUND(100.0 * SUM(cond) / COUNT(*), 2). Round decimals with ROUND(x, 2).
+- Percentages: ` + s.q.pct("status >= 500") + `.
 - Categories: LIMIT 20 unless asked, ORDER BY the main measure DESC. Name columns in short snake_case.
 - Several series over time for a chart: long format with columns t, series, value.
 

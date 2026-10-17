@@ -2,19 +2,29 @@
 
 # Visionary
 
-API and server analytics for a Go service, with an AI analyst that answers *why*.
+API and server analytics for your web service, with an AI analyst that answers *why*.
 
-Visionary has two parts that meet in one Cloudflare D1 database:
+Visionary has two parts that meet in one SQL database: PostgreSQL, MySQL 8,
+SQLite or Cloudflare D1.
 
 ```
-your Go API ──(sdk middleware + recorder)──▶ D1: api_logs, system_metrics ◀── Visionary server ──▶ browser
+your API ──(SDK middleware + recorder)──▶ database: api_logs, system_metrics ◀── Visionary server ──▶ browser
 ```
 
-- **The SDK** (`sdk/`) logs every HTTP request and samples the server every 15s:
-  host CPU, load, memory, disk and network; process CPU, memory, threads and
-  file descriptors; goroutines, heap and GC; database pool use and waits; and
-  throughput. Writes are batched on background goroutines and never block a
-  request.
+- **An SDK** in your service logs every HTTP request and samples the server
+  every 15s: host CPU, load, memory, disk and network; process CPU, memory,
+  threads and file descriptors; runtime heap, GC and threads; database pool use
+  and waits; and throughput. Writes are batched in the background and never
+  block a request. SDKs:
+
+  | Stack | Where |
+  |---|---|
+  | Go (`net/http`, chi, any router) | [`sdks/go`](sdks/go) |
+  | Python: Django, FastAPI/Starlette (ASGI), Flask | [`sdks/python`](sdks/python) |
+  | Java: Spring Boot 3 | [`sdks/java`](sdks/java) |
+
+  Every SDK follows the same contract, [`sdks/SPEC.md`](sdks/SPEC.md), so
+  services in different languages can share one database and one dashboard.
 - **The server** (`cmd/visionary`) serves the dashboards: API overview, System,
   Explore (the analyst), Saved panels and Request logs. It signs people in
   through your existing API, a shared team password, or not at all.
@@ -30,10 +40,35 @@ as it happens, and follow-up questions keep the context.
 Query results go to the model provider so it can reason about them. Columns
 holding IPs, user agents, headers and request/response bodies are masked first.
 
+## Database
+
+Point the SDKs and the server at the same database with one variable:
+
+| Database | `VISIONARY_DATABASE_URL` |
+|---|---|
+| PostgreSQL | `postgres://user:pass@host:5432/db?sslmode=require` |
+| MySQL 8 | `mysql://user:pass@host:3306/db` |
+| SQLite | `sqlite:///var/lib/visionary/analytics.db` (one host only) |
+| Cloudflare D1 | leave it unset (or `d1://`) and set `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` |
+
+Tables are created on first start: `api_logs`, `system_metrics` and
+`analytics_panels`. The schemas for each database are in
+[`sdks/go/schema/`](sdks/go/schema). Timestamps are stored as ISO-8601 UTC text in every
+database, so all dialects read the same.
+
+The tables can live in your application database. The server only ever reads
+its own three tables (anything else is rejected before it reaches the
+database), but a dedicated database or schema, or a database user granted only
+those tables, is still the tidy choice.
+
+<a id="collect-go"></a>
 ## Collect: add the SDK to a Go service
 
 ```go
-import visionary "github.com/styropyr0/visionary/sdk"
+import (
+	_ "github.com/jackc/pgx/v5/stdlib" // for postgres:// (or go-sql-driver/mysql, modernc.org/sqlite)
+	visionary "github.com/styropyr0/visionary/sdks/go"
+)
 
 agent, err := visionary.New(visionary.FromEnv())
 if err != nil {
@@ -56,6 +91,8 @@ Optional hooks:
 
 ```go
 cfg := visionary.FromEnv()
+// Reuse a pool the app already has instead of VISIONARY_DATABASE_URL:
+cfg.Database, cfg.Dialect = db, visionary.Postgres // or visionary.MySQL, visionary.SQLite
 // Route patterns for routers other than Go 1.22's ServeMux (detected on its own), e.g. chi:
 cfg.Requests.Route = func(r *http.Request) string { return chi.RouteContext(r.Context()).RoutePattern() }
 // Fill in handle and role from a cache when only the ID is known:
@@ -68,7 +105,8 @@ cfg.System.DB = func() visionary.DBStats { s := pool.Stat(); return visionary.DB
 
 | Variable | Default | |
 |---|---|---|
-| `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | — | Required. The token needs D1 edit access. |
+| `VISIONARY_DATABASE_URL` | — | Where rows go (see [Database](#database)). Import the matching driver. |
+| `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | — | For D1 instead. The token needs D1 edit access. |
 | `VISIONARY_INSTANCE` | hostname | Labels this server in System. |
 | `VISIONARY_LOG_REQUESTS` | `true` | |
 | `VISIONARY_LOG_PATH_PREFIX` | all paths | e.g. `/api` |
@@ -83,8 +121,7 @@ cfg.System.DB = func() visionary.DBStats { s := pool.Stat(); return visionary.DB
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | |
 
-Not on Go? Write rows to the same tables. The schemas are `sdk/requests.sql`
-and `sdk/system.sql`.
+The Python and Java SDKs read the same variables.
 
 ## Run the server
 
@@ -140,10 +177,14 @@ distroless and runs as non-root. `GET /api/healthz` is the health check.
 
 ## Security
 
-- **Read-only queries.** The D1 token can write, so every query that isn't
-  built in (analyst, edited SQL, saved panels) must be a single `SELECT`/`WITH`.
-  Comments, statement separators, write/DDL/PRAGMA keywords and SQLite or
-  Cloudflare internal tables are rejected.
+- **Read-only queries.** Every query that isn't built in (analyst, edited
+  SQL, saved panels) must be a single `SELECT`/`WITH` over `api_logs`,
+  `system_metrics` or `analytics_panels`. Other tables, schema-qualified names,
+  comments, statement separators, backslashes, write/DDL keywords and server
+  functions (`pg_*`, `sleep`, `load_file`…) are rejected. On PostgreSQL and
+  MySQL the query then runs in a read-only transaction with a 30s timeout; on
+  SQLite with `query_only` on. D1 has no read-only mode, so there the check is
+  the guard.
 - **Sessions** are AES-GCM encrypted, HttpOnly, SameSite=Strict cookies. The
   API token inside never reaches the page. Sign-in is rate-limited per client.
 - **Logs are redacted** before they are stored. Defaults cover common
@@ -151,6 +192,6 @@ distroless and runs as non-root. `GET /api/healthz` is the health check.
 
 ## Cost
 
-D1 bills by rows read. Panels show their rows read under Inspect. A 24h
+On D1, which bills by rows read, panels show their rows read under Inspect. A 24h
 overview over moderate traffic reads tens of thousands of rows; 30-day ranges
 read far more. Keep auto-refresh for short ranges.

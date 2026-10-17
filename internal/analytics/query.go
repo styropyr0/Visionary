@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/internal/db"
 )
 
 // tsLayout matches api_logs.created_at, so string comparison is time order and
@@ -71,16 +71,18 @@ func (r timeRange) previous() timeRange {
 	return timeRange{From: r.From.Add(-span), To: r.From, Bucket: r.Bucket}
 }
 
-// render fills the {{from}}, {{to}} and {{bucket}} placeholders. Values are
+// render fills the {{from}}, {{to}}, {{bucket}} and {{t}} placeholders; {{t}}
+// is created_at floored to the bucket, in epoch seconds, written for q. Values are
 // generated here (timestamps and an integer), never taken from user input, so
 // inlining them is safe; quoted placeholders are accepted too because models
 // sometimes add the quotes themselves.
-func (r timeRange) render(sql string) string {
+func (r timeRange) render(sql string, q sqlDialect) string {
 	from := "'" + r.From.Format(tsLayout) + "'"
 	to := "'" + r.To.Format(tsLayout) + "'"
 	bucket := strconv.FormatInt(r.Bucket, 10)
 	return strings.NewReplacer(
 		"'{{from}}'", from, "'{{to}}'", to, "'{{bucket}}'", bucket,
+		"{{t}}", q.bucketOf(bucket),
 		"{{from}}", from, "{{to}}", to, "{{bucket}}", bucket,
 	).Replace(sql)
 }
@@ -108,18 +110,24 @@ func (s *Server) runTemplate(ctx context.Context, sql string, r timeRange, trust
 		}
 		sql = checked
 	}
-	rendered := r.render(sql)
+	rendered := r.render(sql, s.q)
 	// One extra row tells us the result was cut.
-	capped := fmt.Sprintf("SELECT * FROM (\n%s\n) LIMIT %d", rendered, s.cfg.MaxRows+1)
+	capped := fmt.Sprintf("SELECT * FROM (\n%s\n) AS q LIMIT %d", rendered, s.cfg.MaxRows+1)
 
-	rows, err := s.db.Query(ctx, capped)
+	var rows *db.Rows
+	var err error
+	if trusted {
+		rows, err = s.db.Query(ctx, capped)
+	} else {
+		rows, err = s.db.QueryUntrusted(ctx, capped)
+	}
 	if err != nil {
-		return nil, d1Err(err)
+		return nil, dbErr(err)
 	}
 	return newResult(rows, s.cfg.MaxRows, rendered, r), nil
 }
 
-func newResult(rows *d1.Rows, maxRows int, sql string, r timeRange) *Result {
+func newResult(rows *db.Rows, maxRows int, sql string, r timeRange) *Result {
 	res := &Result{
 		Columns:    rows.Columns,
 		Rows:       rows.Rows,
@@ -147,12 +155,12 @@ type queryError struct{ err error }
 func (e *queryError) Error() string { return e.err.Error() }
 func (e *queryError) Unwrap() error { return e.err }
 
-// d1Err treats D1 rejecting the statement (4xx) as a query error the user and
-// the model can act on; transport and 5xx failures stay upstream errors.
-func d1Err(err error) error {
-	var se *d1.StatusError
-	if errors.As(err, &se) && se.Status < 500 {
-		return &queryError{se}
+// dbErr treats the database rejecting the statement as a query error the user
+// and the model can act on; connection failures stay upstream errors.
+func dbErr(err error) error {
+	var qe *db.QueryError
+	if errors.As(err, &qe) {
+		return &queryError{qe.Err}
 	}
 	return err
 }

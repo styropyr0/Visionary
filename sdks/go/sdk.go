@@ -1,4 +1,4 @@
-// Package sdk collects what Visionary analyses, straight from a Go service:
+// Package visionary collects what Visionary analyses, straight from a Go service:
 // one row per HTTP request (api_logs) and periodic host, process, runtime,
 // database-pool and throughput samples (system_metrics), written to Cloudflare
 // D1 in batches on background goroutines.
@@ -12,11 +12,11 @@
 // Inside handlers or auth middleware, attach the signed-in user with
 // sdk.SetUser(r.Context(), sdk.User{ID: "42"}). Everything is configurable
 // through VISIONARY_* environment variables; see FromEnv.
-package sdk
+package visionary
 
 import (
 	"context"
-	_ "embed"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -27,12 +27,6 @@ import (
 
 	"github.com/styropyr0/visionary/internal/d1"
 )
-
-//go:embed requests.sql
-var RequestsSchema string
-
-//go:embed system.sql
-var SystemSchema string
 
 // User is who made a request. Only ID is required; Handle and Role make the
 // dashboards friendlier and let the analyst group by role.
@@ -50,8 +44,17 @@ type DBStats struct {
 	AcquireWait             time.Duration
 }
 
+// Config chooses where rows go, in this order: Database (a connection the
+// app already has), DatabaseURL, then D1.
 type Config struct {
-	D1 D1Config
+	// Database is an open database/sql pool to write to; Dialect says which
+	// SQL flavour it speaks. The app owns the pool and its driver.
+	Database *sql.DB
+	Dialect  Dialect
+	// DatabaseURL (postgres://, mysql://, sqlite:///path, or d1://) is opened
+	// by the SDK; see OpenURL for the drivers it needs.
+	DatabaseURL string
+	D1          D1Config
 	// Instance labels this server's rows (defaults to the hostname).
 	Instance string
 	Logger   *slog.Logger
@@ -115,6 +118,7 @@ type SystemConfig struct {
 // FromEnv builds a Config from VISIONARY_* variables. Request logging and
 // system metrics are on by default; set them to false to opt out.
 //
+//	VISIONARY_DATABASE_URL               (postgres://, mysql://, sqlite:///path, d1://)
 //	D1_ACCOUNT_ID, D1_DATABASE_ID, D1_API_TOKEN, D1_API_BASE
 //	VISIONARY_INSTANCE                   (default: hostname)
 //	VISIONARY_LOG_REQUESTS=true|false    (default true)
@@ -132,6 +136,7 @@ type SystemConfig struct {
 //	VISIONARY_SYSTEM_RETENTION_DAYS      (default 30)
 func FromEnv() Config {
 	return Config{
+		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
 		D1: D1Config{
 			AccountID:  env("D1_ACCOUNT_ID", ""),
 			DatabaseID: env("D1_DATABASE_ID", ""),
@@ -163,19 +168,40 @@ func FromEnv() Config {
 // no-op, so callers need no checks when Visionary is not configured.
 type Agent struct {
 	cfg      Config
-	db       *d1.Client
+	db       store
 	requests *requestWriter
 	system   *recorder
 }
 
-// ErrNotConfigured is returned when D1 credentials are missing. Callers can
+// ErrNotConfigured is returned when no database is configured. Callers can
 // treat it as "collection off" and continue with a nil Agent.
-var ErrNotConfigured = errors.New("visionary: D1_ACCOUNT_ID, D1_DATABASE_ID and D1_API_TOKEN are required")
+var ErrNotConfigured = errors.New("visionary: no database configured (set VISIONARY_DATABASE_URL, pass Config.Database, or set the D1_* variables)")
+
+func openStore(cfg Config) (store, error) {
+	switch {
+	case cfg.Database != nil:
+		if cfg.Dialect == "" {
+			return nil, errUnknownDialect
+		}
+		return sqlStore{db: cfg.Database, d: cfg.Dialect}, nil
+	case cfg.DatabaseURL != "" && !strings.HasPrefix(strings.ToLower(cfg.DatabaseURL), "d1:"):
+		db, d, err := OpenURL(cfg.DatabaseURL)
+		if err != nil {
+			return nil, err
+		}
+		return sqlStore{db: db, d: d}, nil
+	}
+	c := d1.New(cfg.D1.APIBase, cfg.D1.AccountID, cfg.D1.DatabaseID, cfg.D1.APIToken)
+	if c == nil {
+		return nil, ErrNotConfigured
+	}
+	return d1Store{c: c}, nil
+}
 
 func New(cfg Config) (*Agent, error) {
-	db := d1.New(cfg.D1.APIBase, cfg.D1.AccountID, cfg.D1.DatabaseID, cfg.D1.APIToken)
-	if db == nil {
-		return nil, ErrNotConfigured
+	db, err := openStore(cfg)
+	if err != nil {
+		return nil, err
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -201,14 +227,15 @@ func (a *Agent) Start(ctx context.Context) {
 	}
 	schemaCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	d := a.db.dialect()
 	if a.requests != nil {
-		if err := a.db.Exec(schemaCtx, RequestsSchema); err != nil {
+		if err := a.db.execScript(schemaCtx, d.RequestsSchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create api_logs failed", "err", err)
 		}
 		a.requests.start(ctx)
 	}
 	if a.system != nil {
-		if err := a.db.Exec(schemaCtx, SystemSchema); err != nil {
+		if err := a.db.execScript(schemaCtx, d.SystemSchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create system_metrics failed", "err", err)
 		}
 		a.system.start(ctx)

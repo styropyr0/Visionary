@@ -8,21 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/styropyr0/visionary/sdk"
 )
-
-// Saved panels live next to api_logs in the same D1 database, so every viewer
-// of the dashboard sees the same set.
-const panelsSchema = `CREATE TABLE IF NOT EXISTS analytics_panels (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT    NOT NULL,
-    description TEXT    NOT NULL DEFAULT '',
-    prompt      TEXT    NOT NULL DEFAULT '',
-    query       TEXT    NOT NULL,
-    viz         TEXT    NOT NULL,
-    created_at  TEXT    NOT NULL
-)`
 
 type Panel struct {
 	ID          int64     `json:"id"`
@@ -43,8 +29,10 @@ const (
 // ensureSchema creates Visionary's own table and the two the SDK writes, so
 // dashboards load (empty) before any service reports in.
 func (s *Server) ensureSchema(ctx context.Context) error {
-	for _, schema := range []string{panelsSchema, sdk.RequestsSchema, sdk.SystemSchema} {
-		if err := s.db.Exec(ctx, schema); err != nil {
+	// Saved panels live next to api_logs in the same database, so every viewer
+	// of the dashboard sees the same set.
+	for _, schema := range []string{s.q.panelsSchema(), s.q.d.RequestsSchema(), s.q.d.SystemSchema()} {
+		if err := s.db.ExecScript(ctx, schema); err != nil {
 			return err
 		}
 	}
@@ -95,20 +83,17 @@ func (s *Server) createPanel(ctx context.Context, p Panel) (*Panel, error) {
 	}
 	p.CreatedAt = time.Now().UTC()
 
-	rows, err := s.db.Query(ctx, `INSERT INTO analytics_panels (title, description, prompt, query, viz, created_at)
-VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+	p.ID, err = s.db.InsertID(ctx, `INSERT INTO analytics_panels (title, description, prompt, query, viz, created_at)
+VALUES (?, ?, ?, ?, ?, ?)`,
 		p.Title, p.Description, p.Prompt, p.Query, string(vizJSON), p.CreatedAt.Format(tsLayout))
 	if err != nil {
 		return nil, err
-	}
-	if len(rows.Rows) == 1 && len(rows.Rows[0]) == 1 {
-		p.ID = toInt(rows.Rows[0][0])
 	}
 	return &p, nil
 }
 
 func (s *Server) deletePanel(ctx context.Context, id int64) error {
-	return s.db.Exec(ctx, `DELETE FROM analytics_panels WHERE id = ?`, strconv.FormatInt(id, 10))
+	return s.db.Exec(ctx, `DELETE FROM analytics_panels WHERE id = ?`, id)
 }
 
 // knownRoutes lists recent route patterns for the model's prompt and the logs
@@ -154,6 +139,8 @@ func toString(v any) string {
 
 func toInt(v any) int64 {
 	switch t := v.(type) {
+	case int64:
+		return t
 	case float64:
 		return int64(t)
 	case string:
@@ -161,4 +148,16 @@ func toInt(v any) int64 {
 		return n
 	}
 	return 0
+}
+
+// asFloat reads a numeric cell: D1 returns JSON numbers, SQL drivers int64 or
+// float64.
+func asFloat(v any) (float64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return t, true
+	case int64:
+		return float64(t), true
+	}
+	return 0, false
 }

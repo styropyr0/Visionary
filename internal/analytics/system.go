@@ -12,11 +12,10 @@ import (
 
 const sysWindow = `created_at >= {{from}} AND created_at < {{to}}{{instance}}`
 
-const mb = `1048576.0`
-
-var systemPanels = map[string]string{
-	// Latest values plus peaks over the range.
-	"stats": `
+func systemPanels(q sqlDialect) map[string]string {
+	return map[string]string{
+		// Latest values plus peaks over the range.
+		"stats": `
 WITH r AS (
   SELECT * FROM system_metrics WHERE ` + sysWindow + `
 ),
@@ -25,7 +24,7 @@ latest AS (
 )
 SELECT
   (SELECT host_cpu_percent FROM latest) AS cpu_now,
-  (SELECT ROUND(AVG(host_cpu_percent), 1) FROM r) AS cpu_avg,
+  (SELECT ` + q.round("AVG(host_cpu_percent)", 1) + ` FROM r) AS cpu_avg,
   (SELECT MAX(host_cpu_percent) FROM r) AS cpu_max,
   (SELECT host_mem_percent FROM latest) AS mem_now,
   (SELECT MAX(host_mem_percent) FROM r) AS mem_max,
@@ -42,88 +41,88 @@ SELECT
   (SELECT created_at FROM latest) AS last_seen,
   (SELECT COUNT(DISTINCT instance) FROM r) AS instances`,
 
-	"cpu": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(host_cpu_percent), 1) AS avg_cpu,
+		"cpu": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(host_cpu_percent)", 1) + ` AS avg_cpu,
   MAX(host_cpu_percent) AS max_cpu
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"process_cpu": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(proc_cpu_percent), 1) AS avg_process_cpu,
+		"process_cpu": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(proc_cpu_percent)", 1) + ` AS avg_process_cpu,
   MAX(proc_cpu_percent) AS max_process_cpu
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"memory": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(host_mem_percent), 1) AS host_memory,
-  ROUND(AVG(disk_used_percent), 1) AS disk_used
+		"memory": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(host_mem_percent)", 1) + ` AS host_memory,
+  ` + q.round("AVG(disk_used_percent)", 1) + ` AS disk_used
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"process_memory": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(MAX(proc_rss_mb) * ` + mb + `) AS rss_bytes,
-  ROUND(MAX(heap_inuse_mb) * ` + mb + `) AS heap_bytes
+		"process_memory": `
+SELECT {{t}} AS t,
+  ` + q.round("MAX(proc_rss_mb) * 1048576.0", 0) + ` AS rss_bytes,
+  ` + q.round("MAX(heap_inuse_mb) * 1048576.0", 0) + ` AS heap_bytes
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"load": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(load_1), 2) AS load_1,
-  ROUND(AVG(load_5), 2) AS load_5,
-  ROUND(AVG(load_15), 2) AS load_15
+		"load": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(load_1)", 2) + ` AS load_1,
+  ` + q.round("AVG(load_5)", 2) + ` AS load_5,
+  ` + q.round("AVG(load_15)", 2) + ` AS load_15
 FROM system_metrics WHERE ` + sysWindow + ` AND load_1 IS NOT NULL
 GROUP BY t ORDER BY t`,
 
-	"goroutines": `
-SELECT ` + bucketExpr + ` AS t,
+		"goroutines": `
+SELECT {{t}} AS t,
   MAX(goroutines) AS goroutines,
   MAX(proc_threads) AS threads
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"gc": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(SUM(gc_pause_ms), 2) AS gc_pause_ms
+		"gc": `
+SELECT {{t}} AS t,
+  ` + q.round("SUM(gc_pause_ms)", 2) + ` AS gc_pause_ms
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"db_pool": `
-SELECT ` + bucketExpr + ` AS t,
+		"db_pool": `
+SELECT {{t}} AS t,
   MAX(db_acquired_conns) AS in_use,
   MAX(db_total_conns) AS open,
   MAX(db_max_conns) AS pool_limit
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"db_wait": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(SUM(db_acquire_wait_ms), 1) AS acquire_wait_ms
+		"db_wait": `
+SELECT {{t}} AS t,
+  ` + q.round("SUM(db_acquire_wait_ms)", 1) + ` AS acquire_wait_ms
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"network": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(net_rx_kbps) * 1024) AS received_bytes,
-  ROUND(AVG(net_tx_kbps) * 1024) AS sent_bytes
+		"network": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(net_rx_kbps) * 1024", 0) + ` AS received_bytes,
+  ` + q.round("AVG(net_tx_kbps) * 1024", 0) + ` AS sent_bytes
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	"throughput": `
-SELECT ` + bucketExpr + ` AS t,
-  ROUND(AVG(http_rps), 2) AS avg_rps,
+		"throughput": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(http_rps)", 2) + ` AS avg_rps,
   MAX(http_rps) AS peak_rps,
   MAX(http_in_flight) AS max_in_flight
 FROM system_metrics WHERE ` + sysWindow + `
 GROUP BY t ORDER BY t`,
 
-	// The worst intervals by CPU, with what the API was doing at the time.
-	"spikes": `
+		// The worst intervals by CPU, with what the API was doing at the time.
+		"spikes": `
 WITH s AS (
-  SELECT ` + bucketExpr + ` AS t,
+  SELECT {{t}} AS t,
     MAX(host_cpu_percent) AS cpu,
     MAX(host_mem_percent) AS memory,
     MAX(db_acquired_conns) AS db_in_use,
@@ -133,9 +132,9 @@ WITH s AS (
   GROUP BY t
 ),
 a AS (
-  SELECT ` + bucketExpr + ` AS t,
+  SELECT {{t}} AS t,
     COUNT(*) AS requests,
-    SUM(status >= 500) AS errors,
+    ` + countIf("status >= 500") + ` AS errors,
     MAX(duration_ms) AS slowest_ms
   FROM api_logs WHERE ` + window + `
   GROUP BY t
@@ -146,10 +145,11 @@ FROM s LEFT JOIN a ON a.t = s.t
 ORDER BY s.cpu DESC
 LIMIT 12`,
 
-	"instances": `
+		"instances": `
 SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples
 FROM system_metrics WHERE created_at >= {{from}} AND created_at < {{to}}
 GROUP BY instance ORDER BY last_seen DESC`,
+	}
 }
 
 var instanceName = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)

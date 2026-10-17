@@ -9,3 +9,5 @@ internal/analytics/web/dist/favicon.svg
 *.exe
 README.md
 examples
+sdks/python
+sdks/java

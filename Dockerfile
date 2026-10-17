@@ -18,7 +18,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
-COPY sdk/ sdk/
+COPY sdks/go/ sdks/go/
 COPY --from=web /src/internal/analytics/web/dist/ internal/analytics/web/dist/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/visionary ./cmd/visionary

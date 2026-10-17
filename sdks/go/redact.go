@@ -1,4 +1,4 @@
-package sdk
+package visionary
 
 import (
 	"encoding/json"

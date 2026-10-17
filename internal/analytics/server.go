@@ -18,20 +18,24 @@ import (
 	"time"
 
 	"github.com/styropyr0/visionary/internal/authbridge"
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/internal/db"
 )
 
 // UserAgent identifies Visionary to the auth API and model provider.
 const UserAgent = "Visionary/1.0"
 
 type Server struct {
-	cfg    Config
-	db     *d1.Client
-	bridge *authbridge.Bridge
-	llm    *llm
-	auth   *auth
-	logger *slog.Logger
-	static fs.FS
+	cfg Config
+	db  db.DB
+	q   sqlDialect
+
+	overview map[string]string
+	system   map[string]string
+	bridge   *authbridge.Bridge
+	llm      *llm
+	auth     *auth
+	logger   *slog.Logger
+	static   fs.FS
 
 	routesMu sync.Mutex
 	routes   []string
@@ -40,10 +44,17 @@ type Server struct {
 
 // New wires the server. static is the built frontend (index.html at its root).
 func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
-	db := d1.New(cfg.D1APIBase, cfg.D1AccountID, cfg.D1DatabaseID, cfg.D1APIToken)
-	if db == nil {
-		return nil, errors.New("D1 credentials are incomplete")
+	conn, err := db.Open(db.Config{
+		URL:          cfg.DatabaseURL,
+		D1APIBase:    cfg.D1APIBase,
+		D1AccountID:  cfg.D1AccountID,
+		D1DatabaseID: cfg.D1DatabaseID,
+		D1APIToken:   cfg.D1APIToken,
+	})
+	if err != nil {
+		return nil, err
 	}
+	logger.Info("database", "backend", conn.Name())
 	bridge := authbridge.New(cfg.Auth, UserAgent)
 	a, ephemeral, err := newAuth(cfg, bridge)
 	if err != nil {
@@ -52,7 +63,8 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 	if ephemeral {
 		logger.Warn("VISIONARY_SESSION_SECRET not set; sessions reset on every restart")
 	}
-	s := &Server{cfg: cfg, db: db, bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
+	q := sqlDialect{conn.Dialect()}
+	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
 	if s.llm == nil {
 		logger.Warn("OPENAI_API_KEY not set; the analyst is disabled")
 	}
@@ -374,7 +386,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("panel")
-	sql, ok := overviewPanels[name]
+	sql, ok := s.overview[name]
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
@@ -398,10 +410,10 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 
 // errNoSystemMetrics is answered with 404 so the System view can explain how
 // to turn the recorder on, instead of showing a SQL error.
-const errNoSystemMetrics = "no system metrics yet: the API server writes them to system_metrics once SYSTEM_METRICS_INTERVAL_SECONDS is set (default 15) and D1 is configured"
+const errNoSystemMetrics = "no system metrics yet: a Visionary SDK in your service writes them to system_metrics while VISIONARY_SYSTEM_METRICS is on (the default) and its database points here"
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	sql, ok := systemPanels[r.PathValue("panel")]
+	sql, ok := s.system[r.PathValue("panel")]
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
@@ -418,7 +430,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.runTemplate(r.Context(), strings.ReplaceAll(sql, "{{instance}}", clause), tr, true)
 	if err != nil {
-		if strings.Contains(err.Error(), "no such table: system_metrics") {
+		if missingTable(err, "system_metrics") {
 			writeError(w, http.StatusNotFound, errNoSystemMetrics)
 			return
 		}
@@ -632,4 +644,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// missingTable reports a "table does not exist" error in any supported dialect.
+func missingTable(err error, table string) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, table) &&
+		(strings.Contains(msg, "no such table") || strings.Contains(msg, "does not exist") || strings.Contains(msg, "doesn't exist"))
 }

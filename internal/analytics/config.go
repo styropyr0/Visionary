@@ -18,6 +18,7 @@ import (
 type Config struct {
 	Addr string
 
+	DatabaseURL  string
 	D1APIBase    string
 	D1AccountID  string
 	D1DatabaseID string
@@ -49,6 +50,7 @@ type Config struct {
 func LoadConfig() (Config, error) {
 	cfg := Config{
 		Addr:            getEnv("VISIONARY_ADDR", ":8090"),
+		DatabaseURL:     os.Getenv("VISIONARY_DATABASE_URL"),
 		D1APIBase:       getEnv("D1_API_BASE", d1.DefaultAPIBase),
 		D1AccountID:     os.Getenv("D1_ACCOUNT_ID"),
 		D1DatabaseID:    os.Getenv("D1_DATABASE_ID"),
@@ -78,9 +80,10 @@ func LoadConfig() (Config, error) {
 			missing = append(missing, name)
 		}
 	}
-	if len(missing) > 0 {
+	usesD1 := cfg.DatabaseURL == "" || strings.HasPrefix(strings.ToLower(cfg.DatabaseURL), "d1:")
+	if usesD1 && len(missing) > 0 {
 		sort.Strings(missing)
-		return cfg, errors.New("missing required env: " + strings.Join(missing, ", "))
+		return cfg, errors.New("set VISIONARY_DATABASE_URL (postgres://, mysql://, sqlite:///path), or for Cloudflare D1: " + strings.Join(missing, ", "))
 	}
 
 	auth, err := authbridge.Load(authbridge.Source{

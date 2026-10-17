@@ -1,14 +1,13 @@
-package sdk
+package visionary
 
 import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,8 +17,6 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	gnet "github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
-
-	"github.com/styropyr0/visionary/internal/d1"
 )
 
 // systemColumns is the insert order; sample builds rows in it.
@@ -37,25 +34,14 @@ var systemColumns = []string{
 	"uptime_s",
 }
 
-var insertSystemSQL = func() string {
-	ph := make([]string, len(systemColumns))
-	for i := range ph {
-		ph[i] = "NULLIF(?, '')"
-	}
-	return "INSERT INTO system_metrics (" + strings.Join(systemColumns, ", ") + ") VALUES (" + strings.Join(ph, ", ") + ")"
-}()
-
-const purgeSystemSQL = `DELETE FROM system_metrics WHERE id IN (
-	SELECT id FROM system_metrics WHERE created_at < ? LIMIT 5000
-)`
-
-// samplesPerWrite batches rows: one D1 call per minute at the default interval.
+// samplesPerWrite batches rows: one write per minute at the default interval.
 const samplesPerWrite = 4
 
 type recorder struct {
 	cfg      SystemConfig
 	instance string
-	db       *d1.Client
+	db       store
+	insert   string
 	logger   *slog.Logger
 	proc     *process.Process
 	diskDir  string
@@ -70,13 +56,13 @@ type recorder struct {
 	numGC    uint32
 	pauseNs  uint64
 	dbPrev   DBStats
-	buf      [][]string
+	buf      [][]any
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
 }
 
-func newRecorder(cfg SystemConfig, instance string, db *d1.Client, logger *slog.Logger) *recorder {
+func newRecorder(cfg SystemConfig, instance string, db store, logger *slog.Logger) *recorder {
 	proc, _ := process.NewProcess(int32(os.Getpid()))
 	dir := cfg.DiskPath
 	if dir == "" {
@@ -87,6 +73,7 @@ func newRecorder(cfg SystemConfig, instance string, db *d1.Client, logger *slog.
 		cfg:      cfg,
 		instance: instance,
 		db:       db,
+		insert:   insertSQL("system_metrics", systemColumns, db.stringParams()),
 		logger:   logger,
 		proc:     proc,
 		diskDir:  dir,
@@ -100,7 +87,8 @@ func (r *recorder) start(ctx context.Context) {
 	r.prime()
 	go r.run(ctx)
 	if r.cfg.RetentionDays > 0 {
-		go runDaily(ctx, func() { purge(ctx, r.db, r.logger, purgeSystemSQL, r.cfg.RetentionDays, "system_metrics") })
+		sql := r.db.dialect().purgeSQL("system_metrics")
+		go runDaily(ctx, func() { purge(ctx, r.db, r.logger, sql, r.cfg.RetentionDays, "system_metrics") })
 	}
 	r.logger.Info("visionary: recording system metrics", "interval", r.cfg.Interval.String(), "instance", r.instance)
 }
@@ -164,13 +152,13 @@ func (r *recorder) flush(ctx context.Context) {
 	if len(r.buf) == 0 {
 		return
 	}
-	stmts := make([]d1.Statement, len(r.buf))
+	stmts := make([]stmt, len(r.buf))
 	for i, row := range r.buf {
-		stmts[i] = d1.Statement{SQL: insertSystemSQL, Params: row}
+		stmts[i] = stmt{sql: r.insert, args: row}
 	}
-	if err := r.db.Batch(ctx, stmts); err != nil {
+	if err := r.db.batch(ctx, stmts); err != nil {
 		r.logger.Warn("visionary: system metrics write failed", "rows", len(r.buf), "err", err)
-		// Keep at most an hour of samples while D1 is unreachable.
+		// Keep at most an hour of samples while the database is unreachable.
 		if keep := int(time.Hour / r.cfg.Interval); len(r.buf) > keep {
 			r.buf = r.buf[len(r.buf)-keep:]
 		}
@@ -181,93 +169,94 @@ func (r *recorder) flush(ctx context.Context) {
 
 // sample reads every source once. A source that fails (load average where
 // unsupported, file descriptors without permission) is stored as NULL.
-func (r *recorder) sample() []string {
+func (r *recorder) sample() []any {
 	now := time.Now()
 	secs := now.Sub(r.last).Seconds()
 	r.last = now
 	if secs <= 0 {
 		secs = r.cfg.Interval.Seconds()
 	}
-	v := make(map[string]string, len(systemColumns))
+	v := make(map[string]any, len(systemColumns))
 	v["created_at"] = now.UTC().Format(tsLayout)
 	v["instance"] = r.instance
-	v["interval_s"] = f(secs, 2)
+	v["interval_s"] = round(secs, 2)
 
 	if pct, err := cpu.Percent(0, false); err == nil && len(pct) > 0 {
-		v["host_cpu_percent"] = f(pct[0], 1)
+		v["host_cpu_percent"] = round(pct[0], 1)
 	}
 	if avg, err := load.Avg(); err == nil {
-		v["load_1"], v["load_5"], v["load_15"] = f(avg.Load1, 2), f(avg.Load5, 2), f(avg.Load15, 2)
+		v["load_1"], v["load_5"], v["load_15"] = round(avg.Load1, 2), round(avg.Load5, 2), round(avg.Load15, 2)
 	}
 	if vm, err := mem.VirtualMemory(); err == nil {
-		v["host_mem_used_mb"] = f(mb(vm.Used), 1)
-		v["host_mem_total_mb"] = f(mb(vm.Total), 1)
-		v["host_mem_percent"] = f(vm.UsedPercent, 1)
+		v["host_mem_used_mb"] = round(mb(vm.Used), 1)
+		v["host_mem_total_mb"] = round(mb(vm.Total), 1)
+		v["host_mem_percent"] = round(vm.UsedPercent, 1)
 	}
 	if du, err := disk.Usage(r.diskDir); err == nil {
-		v["disk_used_percent"] = f(du.UsedPercent, 1)
-		v["disk_free_gb"] = f(float64(du.Free)/(1<<30), 2)
+		v["disk_used_percent"] = round(du.UsedPercent, 1)
+		v["disk_free_gb"] = round(float64(du.Free)/(1<<30), 2)
 	}
 	if io, err := gnet.IOCounters(false); err == nil && len(io) > 0 {
 		rx, tx := io[0].BytesRecv, io[0].BytesSent
 		if rx >= r.netRx && tx >= r.netTx {
-			v["net_rx_kbps"] = f(float64(rx-r.netRx)/1024/secs, 1)
-			v["net_tx_kbps"] = f(float64(tx-r.netTx)/1024/secs, 1)
+			v["net_rx_kbps"] = round(float64(rx-r.netRx)/1024/secs, 1)
+			v["net_tx_kbps"] = round(float64(tx-r.netTx)/1024/secs, 1)
 		}
 		r.netRx, r.netTx = rx, tx
 	}
 
 	if r.proc != nil {
 		if pct, err := r.proc.Percent(0); err == nil {
-			v["proc_cpu_percent"] = f(pct, 1)
+			v["proc_cpu_percent"] = round(pct, 1)
 		}
 		if mi, err := r.proc.MemoryInfo(); err == nil {
-			v["proc_rss_mb"] = f(mb(mi.RSS), 1)
+			v["proc_rss_mb"] = round(mb(mi.RSS), 1)
 		}
 		if n, err := r.proc.NumThreads(); err == nil {
-			v["proc_threads"] = strconv.Itoa(int(n))
+			v["proc_threads"] = int64(n)
 		}
 		if n, err := r.proc.NumFDs(); err == nil {
-			v["proc_open_fds"] = strconv.Itoa(int(n))
+			v["proc_open_fds"] = int64(n)
 		}
 	}
 
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	v["goroutines"] = strconv.Itoa(runtime.NumGoroutine())
-	v["heap_alloc_mb"] = f(mb(ms.HeapAlloc), 1)
-	v["heap_inuse_mb"] = f(mb(ms.HeapInuse), 1)
-	v["heap_objects"] = strconv.FormatUint(ms.HeapObjects, 10)
-	v["gc_count"] = strconv.FormatUint(uint64(ms.NumGC-r.numGC), 10)
-	v["gc_pause_ms"] = f(float64(ms.PauseTotalNs-r.pauseNs)/1e6, 2)
-	v["gc_cpu_percent"] = f(ms.GCCPUFraction*100, 2)
+	v["goroutines"] = int64(runtime.NumGoroutine())
+	v["heap_alloc_mb"] = round(mb(ms.HeapAlloc), 1)
+	v["heap_inuse_mb"] = round(mb(ms.HeapInuse), 1)
+	v["heap_objects"] = int64(ms.HeapObjects)
+	v["gc_count"] = int64(ms.NumGC - r.numGC)
+	gcPauseMs := float64(ms.PauseTotalNs-r.pauseNs) / 1e6
+	v["gc_pause_ms"] = round(gcPauseMs, 2)
+	v["gc_cpu_percent"] = round(ms.GCCPUFraction*100, 2)
 	r.numGC, r.pauseNs = ms.NumGC, ms.PauseTotalNs
 
 	if r.cfg.DB != nil {
 		st := r.cfg.DB()
-		v["db_total_conns"] = strconv.FormatInt(st.Total, 10)
-		v["db_idle_conns"] = strconv.FormatInt(st.Idle, 10)
-		v["db_acquired_conns"] = strconv.FormatInt(st.InUse, 10)
-		v["db_max_conns"] = strconv.FormatInt(st.Max, 10)
-		v["db_acquires"] = strconv.FormatInt(st.Acquires-r.dbPrev.Acquires, 10)
-		v["db_empty_acquires"] = strconv.FormatInt(st.EmptyAcquires-r.dbPrev.EmptyAcquires, 10)
-		v["db_acquire_wait_ms"] = f(float64(st.AcquireWait-r.dbPrev.AcquireWait)/float64(time.Millisecond), 1)
+		v["db_total_conns"] = st.Total
+		v["db_idle_conns"] = st.Idle
+		v["db_acquired_conns"] = st.InUse
+		v["db_max_conns"] = st.Max
+		v["db_acquires"] = st.Acquires - r.dbPrev.Acquires
+		v["db_empty_acquires"] = st.EmptyAcquires - r.dbPrev.EmptyAcquires
+		v["db_acquire_wait_ms"] = round(float64(st.AcquireWait-r.dbPrev.AcquireWait)/float64(time.Millisecond), 1)
 		r.dbPrev = st
 	}
 
 	reqs, errs := r.http.requests.Load(), r.http.errors.Load()
 	dReqs, dErrs := reqs-r.requests, errs-r.errors
 	r.requests, r.errors = reqs, errs
-	v["http_requests"] = strconv.FormatInt(dReqs, 10)
-	v["http_errors"] = strconv.FormatInt(dErrs, 10)
-	v["http_rps"] = f(float64(dReqs)/secs, 2)
-	v["http_in_flight"] = strconv.FormatInt(r.http.inFlight.Load(), 10)
+	v["http_requests"] = dReqs
+	v["http_errors"] = dErrs
+	v["http_rps"] = round(float64(dReqs)/secs, 2)
+	v["http_in_flight"] = r.http.inFlight.Load()
 
-	v["uptime_s"] = strconv.FormatInt(int64(time.Since(r.started).Seconds()), 10)
+	v["uptime_s"] = int64(time.Since(r.started).Seconds())
 
-	row := make([]string, len(systemColumns))
+	row := make([]any, len(systemColumns))
 	for i, c := range systemColumns {
-		row[i] = v[c]
+		row[i] = v[c] // missing sources stay nil (NULL)
 	}
 	return row
 }
@@ -281,7 +270,6 @@ func SQLDB(db *sql.DB) func() DBStats {
 			Idle:          int64(s.Idle),
 			InUse:         int64(s.InUse),
 			Max:           int64(s.MaxOpenConnections),
-			Acquires:      0,
 			EmptyAcquires: s.WaitCount,
 			AcquireWait:   s.WaitDuration,
 		}
@@ -290,4 +278,7 @@ func SQLDB(db *sql.DB) func() DBStats {
 
 func mb(b uint64) float64 { return float64(b) / (1 << 20) }
 
-func f(v float64, prec int) string { return strconv.FormatFloat(v, 'f', prec, 64) }
+func round(v float64, prec int) float64 {
+	p := math.Pow(10, float64(prec))
+	return math.Round(v*p) / p
+}

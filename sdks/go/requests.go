@@ -1,34 +1,24 @@
-package sdk
+package visionary
 
 import (
 	"context"
 	"log/slog"
+	"math"
 	"net/http"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/styropyr0/visionary/internal/d1"
 )
 
 const tsLayout = "2006-01-02T15:04:05.000Z"
 
-const insertRequestSQL = `INSERT INTO api_logs (
-	request_id, created_at, method, path, route, query, status, duration_ms, ip, user_agent,
-	user_id, user_handle, user_role, request_headers, request_content_type, request_body,
-	request_body_truncated, request_size, response_content_type, response_body,
-	response_body_truncated, response_size, error_code, error_key
-) VALUES (
-	?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, NULLIF(?, ''), NULLIF(?, ''),
-	NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
-	?, ?, NULLIF(?, ''), NULLIF(?, ''),
-	?, ?, NULLIF(?, ''), NULLIF(?, '')
-)`
-
-const purgeRequestsSQL = `DELETE FROM api_logs WHERE id IN (
-	SELECT id FROM api_logs WHERE created_at < ? LIMIT 5000
-)`
+// requestColumns is the insert order; params builds rows in it.
+var requestColumns = []string{
+	"request_id", "created_at", "method", "path", "route", "query", "status", "duration_ms", "ip", "user_agent",
+	"user_id", "user_handle", "user_role", "request_headers", "request_content_type", "request_body",
+	"request_body_truncated", "request_size", "response_content_type", "response_body",
+	"response_body_truncated", "response_size", "error_code", "error_key",
+}
 
 // entry is the raw capture of one request. Redaction and user lookup happen
 // on the writer goroutine, off the request path.
@@ -57,7 +47,8 @@ type entry struct {
 
 type requestWriter struct {
 	cfg     RequestsConfig
-	db      *d1.Client
+	db      store
+	insert  string
 	logger  *slog.Logger
 	redact  *redactor
 	queue   chan *entry
@@ -67,7 +58,7 @@ type requestWriter struct {
 	once    sync.Once
 }
 
-func newRequestWriter(cfg RequestsConfig, db *d1.Client, logger *slog.Logger) *requestWriter {
+func newRequestWriter(cfg RequestsConfig, db store, logger *slog.Logger) *requestWriter {
 	if cfg.QueueSize <= 0 {
 		cfg.QueueSize = 5000
 	}
@@ -89,6 +80,7 @@ func newRequestWriter(cfg RequestsConfig, db *d1.Client, logger *slog.Logger) *r
 	return &requestWriter{
 		cfg:    cfg,
 		db:     db,
+		insert: insertSQL("api_logs", requestColumns, db.stringParams()),
 		logger: logger,
 		redact: newRedactor(cfg.RedactHeaders, cfg.RedactFields, cfg.RedactRequestFields),
 		queue:  make(chan *entry, cfg.QueueSize),
@@ -173,7 +165,7 @@ func (w *requestWriter) write(batch []*entry) {
 	defer cancel()
 
 	users := w.lookupUsers(ctx, batch)
-	stmts := make([]d1.Statement, 0, len(batch))
+	stmts := make([]stmt, 0, len(batch))
 	for _, e := range batch {
 		u := e.User
 		if full, ok := users[u.ID]; ok {
@@ -184,12 +176,12 @@ func (w *requestWriter) write(batch []*entry) {
 				u.Role = full.Role
 			}
 		}
-		stmts = append(stmts, d1.Statement{SQL: insertRequestSQL, Params: w.params(e, u)})
+		stmts = append(stmts, stmt{sql: w.insert, args: w.params(e, u)})
 	}
 
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
-		if err = w.db.Batch(ctx, stmts); err == nil {
+		if err = w.db.batch(ctx, stmts); err == nil {
 			return
 		}
 		if attempt < 3 && !sleepCtx(ctx, time.Duration(attempt)*time.Second) {
@@ -222,7 +214,8 @@ func (w *requestWriter) lookupUsers(ctx context.Context, batch []*entry) map[str
 	return out
 }
 
-func (w *requestWriter) params(e *entry, u User) []string {
+// params returns the row in requestColumns order, typed, with nil for NULL.
+func (w *requestWriter) params(e *entry, u User) []any {
 	var errCode, errKey string
 	if e.Status >= 400 {
 		errCode, errKey = errorFields(e.ResponseBody, w.cfg.ErrorCodeField, w.cfg.ErrorKeyField)
@@ -232,37 +225,45 @@ func (w *requestWriter) params(e *entry, u User) []string {
 		reqBody = w.redact.requestBody(e.RequestBody, e.RequestContentType)
 		respBody = w.redact.responseBody(e.ResponseBody)
 	}
-	return []string{
+	return []any{
 		e.RequestID,
 		e.StartedAt.UTC().Format(tsLayout),
 		e.Method,
 		e.Path,
-		e.Route,
-		e.Query,
-		strconv.Itoa(e.Status),
-		strconv.FormatFloat(float64(e.Duration.Microseconds())/1000, 'f', 3, 64),
-		e.IP,
-		e.UserAgent,
-		u.ID,
-		u.Handle,
-		u.Role,
-		w.redact.headers(e.RequestHeaders),
-		e.RequestContentType,
-		reqBody,
-		boolParam(e.RequestTruncated),
-		strconv.FormatInt(e.RequestSize, 10),
-		e.ResponseContentType,
-		respBody,
-		boolParam(e.ResponseTruncated),
-		strconv.FormatInt(e.ResponseSize, 10),
-		errCode,
-		errKey,
+		nullable(e.Route),
+		nullable(e.Query),
+		e.Status,
+		math.Round(float64(e.Duration.Microseconds())) / 1000,
+		nullable(e.IP),
+		nullable(e.UserAgent),
+		nullable(u.ID),
+		nullable(u.Handle),
+		nullable(u.Role),
+		nullable(w.redact.headers(e.RequestHeaders)),
+		nullable(e.RequestContentType),
+		nullable(reqBody),
+		boolInt(e.RequestTruncated),
+		e.RequestSize,
+		nullable(e.ResponseContentType),
+		nullable(respBody),
+		boolInt(e.ResponseTruncated),
+		e.ResponseSize,
+		nullable(errCode),
+		nullable(errKey),
 	}
+}
+
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // runRetention purges expired rows a minute after start, then daily.
 func (w *requestWriter) runRetention(ctx context.Context) {
-	runDaily(ctx, func() { purge(ctx, w.db, w.logger, purgeRequestsSQL, w.cfg.RetentionDays, "api_logs") })
+	sql := w.db.dialect().purgeSQL("api_logs")
+	runDaily(ctx, func() { purge(ctx, w.db, w.logger, sql, w.cfg.RetentionDays, "api_logs") })
 }
 
 func runDaily(ctx context.Context, f func()) {
@@ -279,13 +280,13 @@ func runDaily(ctx context.Context, f func()) {
 	}
 }
 
-// purge deletes in chunks so no single statement hits D1's execution limits.
-func purge(ctx context.Context, db *d1.Client, logger *slog.Logger, sql string, days int, table string) {
+// purge deletes in chunks so no single statement runs long or hits D1's limits.
+func purge(ctx context.Context, db store, logger *slog.Logger, sql string, days int, table string) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(tsLayout)
 	var total int64
 	for range 200 {
 		reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		changes, err := db.ExecChanges(reqCtx, sql, cutoff)
+		changes, err := db.execChanges(reqCtx, sql, cutoff)
 		cancel()
 		if err != nil {
 			logger.Error("visionary: retention purge failed", "table", table, "deleted", total, "err", err)
@@ -312,9 +313,9 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func boolParam(b bool) string {
+func boolInt(b bool) int {
 	if b {
-		return "1"
+		return 1
 	}
-	return "0"
+	return 0
 }
