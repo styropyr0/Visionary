@@ -382,6 +382,13 @@ SDKs drop the batch on 4xx and retry once later on 5xx.
 }
 ```
 
+Bodies may be gzip-compressed (`Content-Encoding: gzip`); the 64 KB limit applies
+after decompression.
+
+Ids in `api` names: replace a path segment with `:id` when it is all digits, a
+UUID, 16 or more hex characters, or 20 or more characters containing a digit
+(e.g. `/api/trips/8412/photos/3f2a9c...` becomes `/api/trips/:id/photos/:id`).
+
 At most 100 events per request. Kinds:
 
 | Kind | name | Fields |
