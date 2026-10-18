@@ -374,6 +374,9 @@ jobs:
   maven-central-java:
     name: Maven Central (visionary-spring-boot-starter)
     needs: version
+    # Off until the maven-central secrets are all set: set the repository variable
+    # MAVEN_CENTRAL_ENABLED=true (docs/releasing.md, steps 6-7).
+    if: vars.MAVEN_CENTRAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment:
@@ -443,6 +446,9 @@ jobs:
   maven-central-android:
     name: Maven Central (visionary-android)
     needs: version
+    # Off until the maven-central secrets are all set: set the repository variable
+    # MAVEN_CENTRAL_ENABLED=true (docs/releasing.md, steps 6-7).
+    if: vars.MAVEN_CENTRAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment:

@@ -264,6 +264,19 @@ gpg --armor --export-secret-keys ABCDEF0123456789 > visionary-signing.asc
 - Use RSA. The Java job signs with the `gpg` binary, but the Android job signs in memory through
   Gradle, and I have not checked whether Gradle's in-memory signing accepts Ed25519 keys.
 
+### 8. Turn Maven Central on
+
+The two Maven Central jobs are skipped until the repository variable `MAVEN_CENTRAL_ENABLED` is
+`true`, so a release never fails half-configured. Once all four `maven-central` secrets are set:
+
+```sh
+gh variable set MAVEN_CENTRAL_ENABLED --body true --repo styropyr0/Visionary
+```
+
+Then publish an already-released tag to Maven Central with
+`gh workflow run sdks.yml --ref vX.Y.Z -f tag=vX.Y.Z` (the other registries skip the version
+they already have).
+
 ## Cutting a release
 
 1. Make sure `main` contains what you want to ship. Nothing needs bumping.
