@@ -78,7 +78,7 @@ module Visionary
         tcp = Sources::LINUX ? Sources.tcp : {}
 
         host(v, stat, secs)
-        process(v, secs)
+        process(v)
         runtime(v, secs)
         db(v)
         throughput(v, secs, now)
@@ -111,6 +111,7 @@ module Visionary
         @cpu_prev = stat[:cpu]
         @net_prev = Sources.net_dev
         @proc_cpu_prev = Sources.process_cpu_seconds
+        @proc_cpu_at = mono
         heap = Sources.heap
         @gc_count_prev = heap[:gc_count]
         @gc_ms_prev = heap[:gc_ms]
@@ -203,10 +204,14 @@ module Visionary
         @net_prev = net
       end
 
-      def process(v, secs)
+      def process(v)
         cpu = Sources.process_cpu_seconds
-        v["proc_cpu_percent"] = (100.0 * (cpu - @proc_cpu_prev) / secs).round(1) if cpu && @proc_cpu_prev
+        # Timed on its own: under GVL contention the readers before this can
+        # take seconds, which would skew a share of the sample's interval.
+        at = mono
+        v["proc_cpu_percent"] = (100.0 * (cpu - @proc_cpu_prev) / (at - @proc_cpu_at)).round(1) if cpu && @proc_cpu_prev && at > @proc_cpu_at
         @proc_cpu_prev = cpu
+        @proc_cpu_at = at
         st = Sources::LINUX ? Sources.self_status : {}
         v["proc_rss_mb"] = (st[:rss] / MB).round(1) if st[:rss]
         v["proc_threads"] = st[:threads] || Thread.list.size

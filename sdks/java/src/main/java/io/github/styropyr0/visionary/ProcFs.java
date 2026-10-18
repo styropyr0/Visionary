@@ -54,7 +54,8 @@ final class ProcFs {
     record Tcp(long currEstab, long retransSegs) {
     }
 
-    record Memory(Long availableKb, Long cachedKb) {
+    /** {@code usedKb} as psutil and gopsutil count it: page cache and buffers are not used. */
+    record Memory(Long totalKb, Long usedKb, Long availableKb, Long cachedKb) {
     }
 
     record ProcessIo(long readBytes, long writeBytes) {
@@ -113,7 +114,15 @@ final class ProcFs {
             if (cached != null && kb.containsKey("SReclaimable")) {
                 cached += kb.get("SReclaimable");
             }
-            return new Memory(kb.get("MemAvailable"), cached);
+            Long total = kb.get("MemTotal");
+            Long used = null;
+            if (total != null && kb.containsKey("MemFree")) {
+                used = total - kb.get("MemFree") - kb.getOrDefault("Buffers", 0L) - (cached == null ? 0 : cached);
+                if (used < 0 && kb.containsKey("MemAvailable")) {
+                    used = total - kb.get("MemAvailable");
+                }
+            }
+            return new Memory(total, used, kb.get("MemAvailable"), cached);
         } catch (RuntimeException e) {
             return null;
         }

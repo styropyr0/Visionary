@@ -7,8 +7,8 @@ import java.util.Map;
 
 /**
  * The node-exporter style columns (from {@code cpu_count} on, plus host network
- * throughput): MXBeans where the JVM has them, {@code /proc} on Linux for the
- * rest. Counters are turned into per-sample deltas or per-second rates against
+ * throughput, and host CPU and memory on Linux): MXBeans where the JVM has them,
+ * {@code /proc} on Linux for the rest. Counters are turned into per-sample deltas or per-second rates against
  * the previous reading; the first reading is taken at start. Whatever the
  * platform can't report stays NULL.
  */
@@ -92,6 +92,15 @@ final class NodeSampler {
 
     private void sampleMemory(Object[] row) {
         ProcFs.Memory mem = proc.memory();
+        // Replaces the MXBean figures on Linux: those count page cache as used, and inside a
+        // container they are the cgroup's limit and usage rather than the host's memory.
+        if (mem != null && mem.totalKb() != null && mem.totalKb() > 0 && mem.usedKb() != null) {
+            long total = mem.totalKb();
+            long notFree = mem.availableKb() != null ? total - mem.availableKb() : mem.usedKb();
+            set(row, "host_mem_total_mb", Values.round(total / 1024.0, 1));
+            set(row, "host_mem_used_mb", Values.round(mem.usedKb() / 1024.0, 1));
+            set(row, "host_mem_percent", Values.round(notFree * 100.0 / total, 1));
+        }
         if (mem != null && mem.availableKb() != null) {
             set(row, "host_mem_available_mb", Values.round(mem.availableKb() / 1024.0, 1));
         } else if (os instanceof com.sun.management.OperatingSystemMXBean sun && sun.getFreeMemorySize() >= 0) {
@@ -131,6 +140,10 @@ final class NodeSampler {
         if (total <= 0) {
             return;
         }
+        // Replaces getCpuLoad() on Linux, which inside a container with a CPU limit reports the
+        // container's share of that limit rather than the whole machine.
+        long busy = b.total() - b.idle() - b.iowait() - (a.total() - a.idle() - a.iowait());
+        set(row, "host_cpu_percent", share(busy, total));
         set(row, "cpu_user_percent", share(b.user() + b.nice() - a.user() - a.nice(), total));
         set(row, "cpu_system_percent",
                 share(b.system() + b.irq() + b.softirq() - a.system() - a.irq() - a.softirq(), total));

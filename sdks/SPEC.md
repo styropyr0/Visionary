@@ -197,9 +197,9 @@ Counts are integers, measurements floats, `created_at`/`instance` text.
 | `created_at` | sample time, same format as above | | |
 | `instance` | `VISIONARY_INSTANCE` or hostname | | |
 | `interval_s` | seconds since the previous sample (2 decimals) | | |
-| `host_cpu_percent` | whole-machine CPU % since the previous sample | `psutil.cpu_percent(None)` | `OperatingSystemMXBean.getCpuLoad()*100` |
+| `host_cpu_percent` | whole-machine CPU % since the previous sample | `psutil.cpu_percent(None)` | `/proc/stat` on Linux, else `OperatingSystemMXBean.getCpuLoad()*100` |
 | `load_1/5/15` | load average | `os.getloadavg()` | `getSystemLoadAverage()` (load_1 only) |
-| `host_mem_used_mb/total_mb/percent` | host memory | `psutil.virtual_memory()` | `getTotalMemorySize()/getFreeMemorySize()` |
+| `host_mem_used_mb/total_mb/percent` | host memory | `psutil.virtual_memory()` | `/proc/meminfo` on Linux, else `getTotalMemorySize()/getFreeMemorySize()` |
 | `disk_used_percent`, `disk_free_gb` | the working directory's filesystem | `psutil.disk_usage` | `File.getTotalSpace()/getUsableSpace()` |
 | `net_rx_kbps`, `net_tx_kbps` | host network KB/s since previous sample | `psutil.net_io_counters()` | `/proc/net/dev` on Linux, else NULL |
 | `proc_cpu_percent` | this process, % of one core | `Process.cpu_percent(None)` | `getProcessCpuLoad()*100*cores` |

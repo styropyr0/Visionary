@@ -1,7 +1,8 @@
 """Node-exporter style host metrics (the system_metrics columns from cpu_count on).
 
 psutil is used when installed; on Linux, /proc fills the same values without
-it. Anything a platform can't report stays NULL.
+it, including the host and process columns the Recorder reads from psutil.
+Anything a platform can't report stays NULL.
 """
 
 from __future__ import annotations
@@ -33,6 +34,9 @@ _MB = float(1 << 20)
 # disk, so totals are not doubled.
 PARTITION = re.compile(
     r"^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$")
+
+# Clock ticks per second for /proc/self/stat times.
+_CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") and IS_LINUX else 100
 
 _PROC_STAT_CPU = ("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal", "guest", "guest_nice")
 
@@ -72,8 +76,14 @@ class NodeCollector:
                 v["swap_used_mb"] = round(sw.used / _MB, 1)
                 v["swap_total_mb"] = round(sw.total / _MB, 1)
         elif meminfo:
-            if "MemAvailable" in meminfo:
-                v["host_mem_available_mb"] = round(meminfo["MemAvailable"] / _MB, 1)
+            total, avail = meminfo.get("MemTotal"), meminfo.get("MemAvailable")
+            if total and avail is not None:
+                # psutil's definition: used = total - available.
+                v["host_mem_total_mb"] = round(total / _MB, 1)
+                v["host_mem_used_mb"] = round((total - avail) / _MB, 1)
+                v["host_mem_percent"] = round((total - avail) / total * 100.0, 1)
+            if avail is not None:
+                v["host_mem_available_mb"] = round(avail / _MB, 1)
             cached = meminfo.get("Cached", 0) + meminfo.get("SReclaimable", 0)  # as psutil counts it
             if cached:
                 v["host_mem_cached_mb"] = round(cached / _MB, 1)
@@ -95,6 +105,9 @@ class NodeCollector:
             v["procs_running"] = stat["procs_running"]
         if "procs_blocked" in stat:
             v["procs_blocked"] = stat["procs_blocked"]
+
+        if psutil is None and IS_LINUX:
+            _self_status(v)
 
         if "CurrEstab" in snmp:
             v["tcp_established"] = snmp["CurrEstab"]
@@ -142,7 +155,8 @@ class NodeCollector:
         if psutil is not None:
             io = _quiet(psutil.net_io_counters)
             if io is not None:
-                net = (io.packets_recv, io.packets_sent, io.errin + io.errout, io.dropin + io.dropout)
+                net = (io.packets_recv, io.packets_sent, io.errin + io.errout, io.dropin + io.dropout,
+                       io.bytes_recv, io.bytes_sent)
         if net is None and IS_LINUX:
             net = _quiet(_net_dev)
         if net is not None:
@@ -170,6 +184,11 @@ class NodeCollector:
             pio = _quiet(_self_io)
         if pio is not None:
             c["proc_io"] = pio
+
+        if psutil is None and IS_LINUX:
+            ticks = _quiet(_self_cpu_ticks)
+            if ticks is not None:
+                c["proc_cpu"] = ticks
         return c
 
     def _deltas(self, v: Dict[str, Any], now: Dict[str, Any], prev: Dict[str, Any], secs: float) -> None:
@@ -179,6 +198,9 @@ class NodeCollector:
             if total > 0:
                 def pct(*fields: str) -> float:
                     return round(100.0 * sum(a.get(f, 0.0) - b.get(f, 0.0) for f in fields) / total, 1)
+
+                # Busy share as psutil.cpu_percent counts it (idle and iowait are idle).
+                v.setdefault("host_cpu_percent", round(100.0 - pct("idle", "iowait"), 1))
 
                 v["cpu_user_percent"] = pct("user", "nice")
                 v["cpu_system_percent"] = pct("system", "irq", "softirq")
@@ -203,8 +225,11 @@ class NodeCollector:
                     v["disk_busy_percent"] = round(min(100.0, 100.0 * busiest / (secs * 1000.0)), 1)
 
         if "net" in now and "net" in prev:
-            rx, tx, errs, drops = now["net"]
-            prx, ptx, perrs, pdrops = prev["net"]
+            rx, tx, errs, drops, rxb, txb = now["net"]
+            prx, ptx, perrs, pdrops, prxb, ptxb = prev["net"]
+            if rxb >= prxb and txb >= ptxb:
+                v.setdefault("net_rx_kbps", round((rxb - prxb) / 1024.0 / secs, 1))
+                v.setdefault("net_tx_kbps", round((txb - ptxb) / 1024.0 / secs, 1))
             if rx >= prx and tx >= ptx:
                 v["net_rx_pps"] = round((rx - prx) / secs, 1)
                 v["net_tx_pps"] = round((tx - ptx) / secs, 1)
@@ -224,6 +249,10 @@ class NodeCollector:
             if r >= pr and w >= pw:
                 v["proc_read_kbps"] = round((r - pr) / 1024.0 / secs, 1)
                 v["proc_write_kbps"] = round((w - pw) / 1024.0 / secs, 1)
+
+        if "proc_cpu" in now and "proc_cpu" in prev and now["proc_cpu"] >= prev["proc_cpu"]:
+            # % of one core, like psutil's Process.cpu_percent.
+            v["proc_cpu_percent"] = round((now["proc_cpu"] - prev["proc_cpu"]) / _CLK_TCK / secs * 100.0, 1)
 
 
 def _cpu_total(t: Dict[str, float]) -> float:
@@ -285,17 +314,19 @@ def _diskstats() -> Dict[str, tuple]:
 
 
 def _net_dev() -> Optional[tuple]:
-    rx = tx = errs = drops = 0
+    rx = tx = errs = drops = rxb = txb = 0
     with open("/proc/net/dev") as f:
         for line in f:
             if ":" not in line:
                 continue
             p = line.split(":", 1)[1].split()
+            rxb += int(p[0])
             rx += int(p[1])
+            txb += int(p[8])
             tx += int(p[9])
             errs += int(p[2]) + int(p[10])
             drops += int(p[3]) + int(p[11])
-    return rx, tx, errs, drops
+    return rx, tx, errs, drops, rxb, txb
 
 
 def _tcp_snmp() -> Dict[str, int]:
@@ -315,6 +346,30 @@ def _self_io() -> Optional[tuple]:
     if "read_bytes" not in vals:
         return None
     return vals["read_bytes"], vals["write_bytes"]
+
+
+def _self_cpu_ticks() -> int:
+    """utime + stime of this process, in clock ticks."""
+    with open("/proc/self/stat") as f:
+        # Fields after the parenthesised name; utime and stime are fields 14 and 15.
+        rest = f.read().rpartition(")")[2].split()
+    return int(rest[11]) + int(rest[12])
+
+
+def _self_status(v: Dict[str, Any]) -> None:
+    """RSS, threads and open files of this process from /proc/self."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    v["proc_rss_mb"] = round(int(line.split()[1]) * 1024 / _MB, 1)
+                elif line.startswith("Threads:"):
+                    v["proc_threads"] = int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    fds = _quiet(lambda: len(os.listdir("/proc/self/fd")))
+    if fds is not None:
+        v["proc_open_fds"] = fds
 
 
 def _quiet(fn: Any) -> Any:

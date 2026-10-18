@@ -27,9 +27,9 @@ pip install "visionary-sdk[postgres]"     # + psycopg 3
 pip install "visionary-sdk[mysql]"        # + PyMySQL
 ```
 
-Requires Python 3.9+. Without the `system` extra, most host and process
-columns are NULL. Disk usage, thread count, GC and HTTP throughput are still
-recorded, and on Linux the node-level columns are read from `/proc`.
+Requires Python 3.9+. Without the `system` extra, Linux hosts read every host
+and process column from `/proc` instead. On macOS and Windows most of them are
+NULL; disk usage, thread count, GC and HTTP throughput are still recorded.
 
 ## Quickstart
 
@@ -361,8 +361,8 @@ Sources that don't exist on the platform are NULL:
 - **Windows resolution:** disk await comes from whole-second counters there,
   so it is coarse.
 
-On Linux the node columns are read from `/proc` when psutil isn't installed,
-so all of them are filled either way.
+On Linux the host, process and node columns are read from `/proc` when
+psutil isn't installed, so all of them are filled either way.
 
 Older `api_logs` and `system_metrics` tables are upgraded in place at
 startup: missing columns are added with `ALTER TABLE ... ADD COLUMN`, and

@@ -168,6 +168,7 @@ final class SystemSampler {
         if (load >= 0) {
             set(row, "load_1", Values.round(load, 2));
         }
+        // On Linux, node.sample() below replaces the host CPU and memory with /proc figures.
         if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
             double cpu = sun.getCpuLoad();
             if (cpu >= 0) {

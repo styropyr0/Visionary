@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/metrics"
 	"sync"
 	"time"
 
@@ -64,6 +65,9 @@ type recorder struct {
 	netTx    uint64
 	numGC    uint32
 	pauseNs  uint64
+	gcCPU    [2]metrics.Sample // GC and total CPU seconds, cumulative
+	prevGC   float64
+	prevCPU  float64
 	dbPrev   DBStats
 	prev     counters
 	buf      [][]any
@@ -125,6 +129,8 @@ func (r *recorder) prime() {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	r.numGC, r.pauseNs = ms.NumGC, ms.PauseTotalNs
+	r.gcCPU[0].Name, r.gcCPU[1].Name = "/cpu/classes/gc/total:cpu-seconds", "/cpu/classes/total:cpu-seconds"
+	r.prevGC, r.prevCPU = r.readGCCPU()
 	if r.cfg.DB != nil {
 		r.dbPrev = r.cfg.DB()
 	}
@@ -243,7 +249,11 @@ func (r *recorder) sample() []any {
 	v["gc_count"] = int64(ms.NumGC - r.numGC)
 	gcPauseMs := float64(ms.PauseTotalNs-r.pauseNs) / 1e6
 	v["gc_pause_ms"] = round(gcPauseMs, 2)
-	v["gc_cpu_percent"] = round(ms.GCCPUFraction*100, 2)
+	// GCCPUFraction covers the whole run; this is the GC share of this interval.
+	if gc, total := r.readGCCPU(); total > r.prevCPU && gc >= r.prevGC {
+		v["gc_cpu_percent"] = round(100*(gc-r.prevGC)/(total-r.prevCPU), 2)
+		r.prevGC, r.prevCPU = gc, total
+	}
 	r.numGC, r.pauseNs = ms.NumGC, ms.PauseTotalNs
 
 	if r.cfg.DB != nil {
@@ -274,6 +284,16 @@ func (r *recorder) sample() []any {
 		row[i] = v[c] // missing sources stay nil (NULL)
 	}
 	return row
+}
+
+// readGCCPU returns the runtime's estimates of CPU seconds spent on GC and
+// available in total (GOMAXPROCS over wall time), both since start.
+func (r *recorder) readGCCPU() (gc, total float64) {
+	metrics.Read(r.gcCPU[:])
+	if r.gcCPU[0].Value.Kind() != metrics.KindFloat64 || r.gcCPU[1].Value.Kind() != metrics.KindFloat64 {
+		return 0, 0
+	}
+	return r.gcCPU[0].Value.Float64(), r.gcCPU[1].Value.Float64()
 }
 
 // SQLDB reports pool stats for a database/sql pool.
