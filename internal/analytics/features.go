@@ -24,7 +24,7 @@ import (
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema()} {
 		out = append(out, f...)
 	}
 	return out
