@@ -159,12 +159,25 @@ pre,
   --sidebar-w: 60px;
 }
 
+/* Pinned to the viewport while the page scrolls; only .nav scrolls inside it,
+   so the brand and the foot (theme, sign out, user) stay put. */
 .sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
   border-right: 1px solid var(--border);
   min-width: 0;
+  overflow: hidden;
+}
+
+.sidebar > .brand,
+.sidebar > .sidebar-foot {
+  flex-shrink: 0;
 }
 
 .brand {
