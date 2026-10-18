@@ -45,7 +45,9 @@ export function Alerts({ meta }: { meta?: Meta }) {
   const rules = useQuery(`alerts-rules#${tick}.${version}`, (signal) => alertsApi.rules(signal));
   const channels = useQuery(`alerts-channels#${tick}.${version}`, (signal) => alertsApi.channels(signal));
   const firing = (rules.data?.rules ?? []).filter((r) => r.enabled && r.status.state === "firing").length;
-  const error = am.error ?? rules.error ?? channels.error;
+  // A request that failed and has nothing to show yet; one that fails on a
+  // background refresh keeps its last result on screen.
+  const error = [am, rules, channels].find((q) => q.error && !q.data)?.error;
 
   return (
     <>
@@ -68,7 +70,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
             </button>
           ))}
         </nav>
-        {error && !am.data ? (
+        {error ? (
           <ErrorNotice title="Could not load alerts" error={error} />
         ) : !am.data || !rules.data || !channels.data ? (
           <div className="panel-state" style={{ height: 240 }} />

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/styropyr0/visionary/internal/authbridge"
@@ -41,6 +42,10 @@ type Server struct {
 	routesMu sync.Mutex
 	routes   []string
 	routesAt time.Time
+
+	// schemaPending is set while some tables could not be created; Start
+	// keeps retrying until they are.
+	schemaPending atomic.Bool
 }
 
 // New wires the server. static is the built frontend (index.html at its root).
@@ -84,9 +89,12 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 	return s, nil
 }
 
-// Init creates the saved-panels table.
+// Init creates the tables. On failure Start retries in the background, so a
+// database that is briefly unavailable still gets them.
 func (s *Server) Init(ctx context.Context) error {
-	return s.ensureSchema(ctx)
+	err := s.ensureSchema(ctx)
+	s.schemaPending.Store(err != nil)
+	return err
 }
 
 func (s *Server) Handler() http.Handler {

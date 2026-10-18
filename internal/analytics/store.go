@@ -27,28 +27,57 @@ const (
 	maxPromptLen = 2000
 )
 
-// ensureSchema creates Visionary's own table and the two the SDK writes, so
-// dashboards load (empty) before any service reports in.
+// ensureSchema creates Visionary's own tables and the ones the SDKs write, so
+// dashboards load (empty) before any service reports in. Every step runs even
+// when an earlier one fails, so one bad statement never leaves later tables
+// missing; the errors come back together.
 func (s *Server) ensureSchema(ctx context.Context) error {
+	var errs []error
 	// Saved panels live next to api_logs in the same database, so every viewer
 	// of the dashboard sees the same set.
 	for _, schema := range []string{s.q.panelsSchema(), s.q.d.RequestsSchema(), s.q.d.SystemSchema(), s.q.d.TelemetrySchema()} {
 		if err := s.db.ExecScript(ctx, schema); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	if err := s.addColumns(ctx, "system_metrics", sdk.AddedSystemColumns); err != nil {
-		return err
+		errs = append(errs, fmt.Errorf("system_metrics columns: %w", err))
 	}
 	if err := s.addColumns(ctx, "api_logs", sdk.AddedRequestColumns); err != nil {
-		return err
+		errs = append(errs, fmt.Errorf("api_logs columns: %w", err))
 	}
 	for _, schema := range s.featureSchemas() {
 		if err := s.db.ExecScript(ctx, schema); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+// retrySchema runs ensureSchema again until it succeeds, for a database that
+// was unreachable, over quota or too slow at startup. Tables then appear
+// without a restart.
+func (s *Server) retrySchema(ctx context.Context) {
+	wait := time.Minute
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		sctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		err := s.ensureSchema(sctx)
+		cancel()
+		if err == nil {
+			s.schemaPending.Store(false)
+			s.logger.Info("tables created")
+			return
+		}
+		if wait < 15*time.Minute {
+			wait *= 2
+		}
+		s.logger.Warn("create tables failed; retrying", "err", err, "in", wait.String())
+	}
 }
 
 // addColumns brings a table from an older SDK up to the current columns, so

@@ -39,9 +39,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	initCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	// D1 runs each statement as its own HTTP call, and a first upgrade adds
+	// dozens of columns, so this gets a generous budget. Whatever fails is
+	// retried in the background once the server is up.
+	initCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	if err := srv.Init(initCtx); err != nil {
-		logger.Error("create tables", "err", err)
+		logger.Error("create tables; retrying in the background", "err", err)
 	}
 	cancel()
 	// Background work: alert checks, rollups, digests and the like.

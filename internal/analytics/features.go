@@ -43,6 +43,9 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 // Start launches the features' background work. It returns at once; the work
 // stops when ctx ends.
 func (s *Server) Start(ctx context.Context) {
+	if s.schemaPending.Load() {
+		go s.retrySchema(ctx)
+	}
 	s.alertsStart(ctx)
 	s.uptimeStart(ctx)
 	s.rollupsStart(ctx)
