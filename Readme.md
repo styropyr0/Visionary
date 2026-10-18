@@ -223,7 +223,7 @@ binary, `/etc/visionary-agent.env` and
 | `VISIONARY_DISK_PATHS` (`-disk-paths`) | all mounts | Mount points to report; the first fills the disk columns. |
 
 On the server, `VISIONARY_HOST_RETENTION_DAYS` (14) keeps process, mount and
-unit snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (90) security events, and
+unit snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (180) security events, and
 `VISIONARY_SYSTEM_RETENTION_DAYS` (30) the agents' metric rows; hosts silent
 for 30 days leave the inventory. The ingest endpoint is
 `POST /api/agent/v1/report` (gzip JSON, [`internal/agentapi`](internal/agentapi)),
@@ -424,6 +424,81 @@ The essentials (database, session secret, sign-in, OpenAI key) are in
 | `VISIONARY_CLIENT_RATE_PER_IP`, `_PER_KEY` | `120`, `6000` per minute | Client ingest limits. |
 | `VISIONARY_CLIENT_RETENTION_DAYS` | `30` | |
 | `VISIONARY_AUDIT_RETENTION_DAYS` | `365` | |
+
+## Security monitoring
+
+The **Security** page (under Monitor) works from data Visionary already has:
+the request log, the host agent's events and Visionary's own audit log. It
+shows open findings, failed logins, scanner IPs, the blocked/forbidden rate,
+SSH failures and hosts with pending updates; a findings table with filters
+and a detail drawer (the IP's or account's requests around the finding, a
+link to Request logs, and **Investigate** for the analyst); charts of failed
+logins, auth errors, top IPs, probed paths and user agents; host security;
+and recent sensitive actions in Visionary (admins). **Report** opens a
+printable report of the range (`#/security/report?from=&to=`) with a
+**Print / Save as PDF** button.
+
+Findings live in `security_events`. The host agent writes rows with source
+`host`; the server's detectors read `api_logs` every minute and write rows
+with source `api`:
+
+| Kind | Fires when (per 5-minute window) | Critical when |
+|---|---|---|
+| `auth_bruteforce` | an IP has 10+ failed logins | 5× the threshold, or a login from that IP then succeeded |
+| `credential_stuffing` | an IP fails against 5+ different accounts | 5× the threshold, or a login succeeded |
+| `account_targeted` | 5+ IPs fail to sign in as one account | 5× the threshold |
+| `scanner` | an IP asks for 3+ probe paths (`/.env`, `/.git/`, `/wp-admin`, `/actuator`, `../`…) or sends a scanner user agent (sqlmap, nikto, nuclei, masscan, zgrab, gobuster…) | a probe path was answered with 2xx |
+| `rate_abuse` | an IP or user makes 120+ requests/min and 5× its own median of the last hour | 5× the floor |
+| `forbidden_spike` | a user (or a role, across users) gets 20+ 403s and 5× their usual | 5× the threshold |
+
+Everything else is a warning. A failed login is a 401 or 403 on a login
+route, or a 4xx whose `error_key` says the credentials or code were wrong.
+Login routes are those whose route or path contains login, signin, sign-in,
+auth, token, otp, password or session, or match your own globs in
+`VISIONARY_SECURITY_LOGIN_ROUTES`. Accounts come from `user_handle`/`user_id`,
+so `account_targeted` needs your API to set the user on failed logins; request
+bodies are never read and findings never store bodies, query strings or
+secrets (token-like path segments are masked).
+
+**One row per finding, not per minute.** A finding is written once per kind
+and IP (or account) per `VISIONARY_SECURITY_DEDUPE` (10m). While the activity
+goes on, later runs add the new requests to its `count` and can raise its
+severity; after the period a new row starts with only the new requests, so
+`SUM(count)` is the number of occurrences. `rate_abuse` and `forbidden_spike`
+learn each key's usual rate in memory, so they start ten minutes after the
+server does.
+
+Visionary's audit log is read in place: sign-ins and failed sign-ins
+(`auth.sign_in_failed`, with the identifier masked), API keys, notification
+channels, and `team.role_mapping`, written at startup when the sign-in mode or
+role mapping changed since the last start.
+
+**Alerts:** pick **Security findings** (filter by kind, minimum severity,
+source and host; fires per host, IP or account) or **Failed logins** as the
+metric, or start from a preset: brute force, credential stuffing, scanner, any
+critical finding, failed logins spike, SSH brute force, new open port, pending
+security updates. The **weekly digest** gets a security section: new findings
+by severity, top offending IPs, failed logins against the week before, hosts
+with pending updates and notable audit actions.
+
+| Variable | Default | |
+|---|---|---|
+| `VISIONARY_SECURITY` | `true` | `false` turns the API detectors off; host events and the audit log still show. |
+| `VISIONARY_SECURITY_LOGIN_ROUTES` | login-like words | Comma list of route or path globs, e.g. `/auth/*,/api/v1/sessions`. |
+| `VISIONARY_SECURITY_INTERVAL`, `_WINDOW`, `_DEDUPE` | `1m`, `5m`, `10m` | How often detectors run, the window they read, one row per key per. |
+| `VISIONARY_SECURITY_BRUTEFORCE` | `10` | Failed logins from one IP per window. |
+| `VISIONARY_SECURITY_STUFFING_ACCOUNTS` | `5` | Accounts one IP failed against. |
+| `VISIONARY_SECURITY_TARGETED_IPS` | `5` | IPs failing against one account. |
+| `VISIONARY_SECURITY_SCANNER_HITS` | `3` | Probe-path requests from one IP. |
+| `VISIONARY_SECURITY_RATE_MIN`, `_RATE_FACTOR` | `120`, `5` | Requests per minute floor, and times the key's usual rate. |
+| `VISIONARY_SECURITY_FORBIDDEN` | `20` | 403s for one user or role per window. |
+| `VISIONARY_SECURITY_IGNORE_IPS` | — | IPs or CIDRs never flagged (health checks, office, internal services). |
+| `VISIONARY_SECURITY_RETENTION_DAYS` | `180` | Findings kept, all sources; `0` keeps them forever. |
+
+Each run reads the window twice through the `created_at` index (once grouped
+per IP, once per account). On D1, which bills by rows read, that is about
+`2 × window ÷ interval` reads of every request; a longer interval or shorter
+window lowers it.
 
 ## Deploy
 

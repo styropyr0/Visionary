@@ -18,15 +18,24 @@ interface Filters {
   method: string;
   route: string;
   user: string;
+  ip: string;
   search: string;
 }
 
-const EMPTY: Filters = { status: "", method: "", route: "", user: "", search: "" };
+const EMPTY: Filters = { status: "", method: "", route: "", user: "", ip: "", search: "" };
+
+/** Filters passed in the link, e.g. #/logs?ip=203.0.113.9 from a security finding. */
+function linkedFilters(): Filters {
+  const p = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+  const f = { ...EMPTY };
+  for (const k of Object.keys(EMPTY) as (keyof Filters)[]) f[k] = p.get(k) ?? "";
+  return f;
+}
 
 export function Logs({ meta }: { meta: Meta | undefined }) {
   const { resolved, tick } = useApp();
-  const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [debounced, setDebounced] = useState<Filters>(EMPTY);
+  const [filters, setFilters] = useState<Filters>(linkedFilters);
+  const [debounced, setDebounced] = useState<Filters>(filters);
   const [pages, setPages] = useState<Result[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -113,6 +122,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
             options={[{ value: "", label: "All routes" }, ...(meta?.routes ?? []).map((r) => ({ value: r, label: r }))]}
           />
           <input className="input" placeholder="User ID or @handle" value={filters.user} onChange={set("user")} style={{ width: 170 }} aria-label="User" />
+          <input className="input mono" placeholder="IP address" value={filters.ip} onChange={set("ip")} style={{ width: 150 }} aria-label="IP address" />
           <div className="search">
             <Search size={14} />
             <input className="input" placeholder="Path contains, or exact request ID" value={filters.search} onChange={set("search")} aria-label="Search" />

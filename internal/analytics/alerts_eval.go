@@ -338,7 +338,9 @@ func (e *alertEngine) dispatch(r alertRule, ev *alertEvent, at time.Time) {
 		ctx, cancel := context.WithTimeout(e.ctx, 90*time.Second)
 		defer cancel()
 		s := e.s
-		if ev.State == "firing" && s.llm != nil {
+		// Security findings name IPs, which never go to the model; their
+		// message already says what happened.
+		if ev.State == "firing" && s.llm != nil && r.Spec.Metric != "security_events" {
 			ev.Explanation = s.explainAlert(ctx, r, ev, at)
 		}
 		sent := s.sendToChannels(ctx, r.Channels, s.alertNotice(r, ev, ""))

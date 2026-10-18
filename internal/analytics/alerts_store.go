@@ -48,6 +48,12 @@ type alertScope struct {
 	Instance string `json:"instance,omitempty"`
 	Service  string `json:"service,omitempty"`
 	Check    string `json:"check,omitempty"`
+	// security_events rules (security_alerts.go): finding kind, minimum
+	// severity, source (api or host) and host.
+	EventKind     string `json:"event_kind,omitempty"`
+	EventSeverity string `json:"event_severity,omitempty"`
+	Source        string `json:"source,omitempty"`
+	Host          string `json:"host,omitempty"`
 }
 
 // seriesState is the state machine of one rule series (one per instance or

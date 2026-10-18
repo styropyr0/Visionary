@@ -17,6 +17,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  ShieldAlert,
   Sparkles,
   Sun,
 } from "lucide-react";
@@ -36,6 +37,7 @@ export type Route =
   | "errors"
   | "frontend"
   | "uptime"
+  | "security"
   | "explore"
   | "logs"
   | "dashboards"
@@ -43,7 +45,7 @@ export type Route =
   | "alerts"
   | "settings";
 
-export const ROUTES: Route[] = ["overview", "performance", "system", "hosts", "errors", "frontend", "uptime", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
+export const ROUTES: Route[] = ["overview", "performance", "system", "hosts", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
 
 const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -56,6 +58,7 @@ const NAV: { group: string; items: { route: Route; label: string; icon: typeof L
       { route: "errors", label: "Errors", icon: Bug },
       { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
       { route: "uptime", label: "Uptime", icon: Activity },
+      { route: "security", label: "Security", icon: ShieldAlert },
     ],
   },
   {

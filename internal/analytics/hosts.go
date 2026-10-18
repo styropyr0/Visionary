@@ -24,9 +24,8 @@ type hostsState struct {
 	inflight chan struct{}
 	limiter  *rate.Limiter
 
-	retention         int // days for the snapshot tables
-	securityRetention int // days for security_events
-	metricsRetention  int // days for the agents' system_metrics rows
+	retention        int // days for the snapshot tables
+	metricsRetention int // days for the agents' system_metrics rows
 
 	mu      sync.Mutex
 	reportS map[string]float64 // each host's report interval, from its reports
@@ -49,10 +48,9 @@ func (s *Server) hosts() *hostsState {
 		return st.(*hostsState)
 	}
 	st := &hostsState{
-		inflight:          make(chan struct{}, hostsMaxInFlight),
-		limiter:           rate.NewLimiter(rate.Limit(otlpEnvInt("VISIONARY_AGENT_RATE", 50)), 100),
-		retention:         rumEnvInt("VISIONARY_HOST_RETENTION_DAYS", 14),
-		securityRetention: rumEnvInt("VISIONARY_SECURITY_RETENTION_DAYS", 90),
+		inflight:  make(chan struct{}, hostsMaxInFlight),
+		limiter:   rate.NewLimiter(rate.Limit(otlpEnvInt("VISIONARY_AGENT_RATE", 50)), 100),
+		retention: rumEnvInt("VISIONARY_HOST_RETENTION_DAYS", 14),
 		// The same setting as the SDKs' own purge of system_metrics.
 		metricsRetention: rumEnvInt("VISIONARY_SYSTEM_RETENTION_DAYS", 30),
 		reportS:          map[string]float64{},
@@ -113,9 +111,10 @@ Table security_events: created_at, source ('host' from the agent), kind, severit
 }
 
 // hostsRetention trims the host tables 90 s after start and then every
-// 6 hours: snapshots after VISIONARY_HOST_RETENTION_DAYS, security events
-// after VISIONARY_SECURITY_RETENTION_DAYS, the agents' system_metrics rows
-// after VISIONARY_SYSTEM_RETENTION_DAYS, and hosts silent for 30 days.
+// 6 hours: snapshots after VISIONARY_HOST_RETENTION_DAYS, the agents'
+// system_metrics rows after VISIONARY_SYSTEM_RETENTION_DAYS, and hosts silent
+// for 30 days. security_events is trimmed by the security feature
+// (VISIONARY_SECURITY_RETENTION_DAYS), whichever source wrote it.
 func (s *Server) hostsRetention(ctx context.Context) {
 	h := s.hosts()
 	timer := time.NewTimer(90 * time.Second)
@@ -130,9 +129,6 @@ func (s *Server) hostsRetention(ctx context.Context) {
 			for _, t := range []string{"host_processes", "host_mounts", "host_units"} {
 				s.purgeOld(ctx, t, "", h.retention)
 			}
-		}
-		if h.securityRetention > 0 {
-			s.purgeOld(ctx, "security_events", "", h.securityRetention)
 		}
 		if h.metricsRetention > 0 {
 			s.purgeOld(ctx, "system_metrics", "sdk = 'agent'", h.metricsRetention)

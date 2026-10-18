@@ -20,6 +20,7 @@ import (
 //	rum.go       browser and mobile ingestion
 //	team.go      roles, API keys, audit log, dashboards
 //	hosts.go     the host agent's reports and the Hosts view
+//	security.go  security detectors, findings, the Security page and report
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
@@ -40,6 +41,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.rumRoutes(mux)
 	s.teamRoutes(mux)
 	s.hostsRoutes(mux)
+	s.securityRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -57,12 +59,13 @@ func (s *Server) Start(ctx context.Context) {
 	s.teamStart(ctx)
 	s.otlpStart(ctx)
 	s.hostsStart(ctx)
+	s.securityStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.
 func (s *Server) featurePrompt() string {
 	var parts []string
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt()} {
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt()} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}

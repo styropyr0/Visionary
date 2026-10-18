@@ -133,6 +133,15 @@ FROM api_logs WHERE `+where+scope+` GROUP BY `+t+` ORDER BY t`, append(args, sar
 		out.Unit, out.Threshold = "minutes", ptr(sp.Threshold)
 		out.Note = "Each instance's minutes since its last sample are below; this rule has no history to chart."
 
+	case sp.Metric == "security_events":
+		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
+		res, err := s.previewSecurity(ctx, sp, day, tr)
+		if err != nil {
+			return nil, err
+		}
+		out.Result = res
+		out.Note = "Matching findings per hour, by kind. The rule sums them over its window per host, IP or account."
+
 	case sp.Metric == "uptime_failing":
 		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
 		where, args := spansClause(day)

@@ -103,7 +103,7 @@ func alertMetrics(apdexMs int) []metricDef {
 }
 
 func (s *Server) metricByID(id string) (metricDef, bool) {
-	for _, m := range alertMetrics(s.cfg.ApdexMs) {
+	for _, m := range s.allMetrics() {
 		if m.ID == id {
 			return m, true
 		}
@@ -257,6 +257,8 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeLiveness(ctx, r, now)
 	case "uptime_failing":
 		return s.observeUptime(ctx, r, now)
+	case "security_events":
+		return s.observeSecurity(ctx, r, now)
 	}
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok {

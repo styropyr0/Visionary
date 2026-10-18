@@ -17,6 +17,7 @@ import { Frontend } from "./views/Frontend";
 import { Settings } from "./views/Settings";
 import { Uptime } from "./views/Uptime";
 import { Hosts } from "./views/Hosts";
+import { Security } from "./views/Security";
 
 
 function readRoute(): Route {
@@ -103,6 +104,7 @@ export function App() {
         {route === "errors" && <Errors />}
         {route === "frontend" && <Frontend />}
         {route === "uptime" && <Uptime />}
+        {route === "security" && <Security />}
         {route === "dashboards" && <Dashboards />}
         {route === "alerts" && <Alerts meta={meta.data} />}
         {route === "settings" && <Settings user={user} />}

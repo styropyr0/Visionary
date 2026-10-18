@@ -8,6 +8,7 @@ import {
   alertsApi,
   formatAlertValue,
   OPS,
+  RULE_PRESETS,
   type AlertsMeta,
   type Channel,
   type PreviewResponse,
@@ -17,8 +18,9 @@ import {
   type Severity,
 } from "../../lib/alerts";
 import { PreviewChart } from "./PreviewChart";
+import { KINDS } from "../../lib/security";
 
-const GROUP_LABEL: Record<string, string> = { request: "Requests", system: "System", liveness: "Liveness", uptime: "Uptime" };
+const GROUP_LABEL: Record<string, string> = { request: "Requests", system: "System", liveness: "Liveness", uptime: "Uptime", security: "Security" };
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 
 function blank(meta: AlertsMeta): RuleInput {
@@ -135,6 +137,12 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
     }
   };
 
+  const applyPreset = (id: string) => {
+    const p = RULE_PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    setForm((f) => ({ ...f, kind: "threshold", name: f.name || p.name, severity: p.severity, spec: { ...p.spec, scope: { ...p.spec.scope } } }));
+  };
+
   const metricOptions = useMemo(() => {
     const list = form.kind === "anomaly" ? meta.metrics.filter((m) => m.anomaly) : meta.metrics;
     const opts = list.map((m) => ({ value: m.id, label: `${GROUP_LABEL[m.group]} · ${m.label}` }));
@@ -159,6 +167,18 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
       }
     >
       <div className="al-form">
+        {!rule && (
+          <div className="field">
+            <span>Start from a preset</span>
+            <Select
+              label="Preset"
+              value=""
+              options={[{ value: "", label: "Blank rule" }, ...RULE_PRESETS.map((p) => ({ value: p.id, label: p.label }))]}
+              onChange={applyPreset}
+              align="left"
+            />
+          </div>
+        )}
         <label className="field">
           <span>Name</span>
           <input className="input" value={form.name} maxLength={120} placeholder="e.g. Checkout p95 above 800 ms" onChange={(e) => set({ name: e.target.value })} />
@@ -222,6 +242,56 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
               <label className="field">
                 <span>Service</span>
                 <Combobox label="Service" value={sp.scope.service ?? ""} placeholder="Any" options={meta.services} onChange={(v) => setScope("service", v)} />
+              </label>
+            )}
+            {scopes.includes("event_kind") && (
+              <div className="field">
+                <span>Finding kind</span>
+                <Select
+                  label="Finding kind"
+                  value={sp.scope.event_kind ?? ""}
+                  options={[{ value: "", label: "Any kind" }, ...Object.entries(KINDS).map(([k, v]) => ({ value: k, label: v.label }))]}
+                  onChange={(v) => setScope("event_kind", v)}
+                  align="left"
+                />
+              </div>
+            )}
+            {scopes.includes("event_severity") && (
+              <div className="field">
+                <span>Severity</span>
+                <Select
+                  label="Minimum severity"
+                  value={sp.scope.event_severity ?? ""}
+                  options={[
+                    { value: "", label: "Any" },
+                    { value: "warning", label: "Warning and up" },
+                    { value: "critical", label: "Critical" },
+                  ]}
+                  onChange={(v) => setScope("event_severity", v)}
+                  align="left"
+                />
+              </div>
+            )}
+            {scopes.includes("source") && (
+              <div className="field">
+                <span>Source</span>
+                <Select
+                  label="Source"
+                  value={sp.scope.source ?? ""}
+                  options={[
+                    { value: "", label: "Any" },
+                    { value: "api", label: "API detectors" },
+                    { value: "host", label: "Host agent" },
+                  ]}
+                  onChange={(v) => setScope("source", v)}
+                  align="left"
+                />
+              </div>
+            )}
+            {scopes.includes("host") && (
+              <label className="field">
+                <span>Host</span>
+                <input className="input" value={sp.scope.host ?? ""} placeholder="Every host" onChange={(e) => setScope("host", e.target.value)} />
               </label>
             )}
             {scopes.includes("check") && (

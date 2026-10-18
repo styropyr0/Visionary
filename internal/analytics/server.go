@@ -193,6 +193,7 @@ func (s *Server) completeShared(w http.ResponseWriter, r *http.Request, password
 	granted := s.auth.checkShared(password)
 	if granted == roleNone {
 		s.logger.Warn("shared password sign-in failed", "ip", s.auth.clientIP(r))
+		s.auditAs(r, nil, "auth.sign_in_failed", "", map[string]any{"mode": "shared"})
 		writeError(w, http.StatusUnauthorized, "That password isn't right.")
 		return
 	}
@@ -292,6 +293,11 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if res != nil {
 			s.revoke(res.Token)
+		}
+		// A rejected code or password, not an outage: the Security page counts these.
+		var ae *authbridge.APIError
+		if errors.As(err, &ae) && !ae.Unavailable() {
+			s.auditAs(r, nil, "auth.sign_in_failed", maskIdentifier(id), map[string]any{"mode": s.cfg.Auth.Type, "status": ae.Status})
 		}
 		s.apiFail(w, err)
 		return

@@ -36,6 +36,7 @@ var allowedTables = map[string]bool{
 	"API_LOGS": true, "SYSTEM_METRICS": true, "ANALYTICS_PANELS": true,
 	"SPANS": true, "ERRORS": true, "RELEASES": true, "CLIENT_EVENTS": true,
 	"ALERT_EVENTS": true, "UPTIME_RESULTS": true, "ROLLUP_REQUESTS": true, "ROLLUP_SYSTEM": true,
+	"SECURITY_EVENTS": true,
 }
 
 // tableFunctions may stand in a FROM clause.
