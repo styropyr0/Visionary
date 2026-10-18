@@ -52,8 +52,8 @@
   --seq-5: #74aef0;
   --seq-6: #b5d3f7;
   /* Logo inks, lifted so the navy eye stays visible on dark surfaces. */
-  --logo-sun: #c8483c;
-  --logo-eye: #a7bcd6;
+  --logo-sun: #ecebe7;
+  --logo-eye: #5b9fd6;
 }
 
 :root[data-theme="light"] {
@@ -93,8 +93,8 @@
   --seq-5: #1f5fb0;
   --seq-6: #123d77;
   /* The logo's original oxblood and navy inks. */
-  --logo-sun: #962422;
-  --logo-eye: #142a3e;
+  --logo-sun: #221f21;
+  --logo-eye: #03416a;
 }
 
 * {
@@ -1611,8 +1611,8 @@ pre.code {
   border-right: 1px solid var(--border);
   isolation: isolate;
   /* The panel is dark in both themes, so the logo uses its dark inks. */
-  --logo-sun: #c8483c;
-  --logo-eye: #a7bcd6;
+  --logo-sun: #ecebe7;
+  --logo-eye: #5b9fd6;
 }
 
 /* Faint measurement grid behind the brand panel. */
