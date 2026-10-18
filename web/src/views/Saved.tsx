@@ -10,6 +10,7 @@ import { Panel } from "../components/Panel";
 import { useToast } from "../components/Toast";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
+import { ErrorNotice } from "../components/ErrorNotice";
 import "./Dashboards.css";
 
 export function Saved() {
@@ -47,7 +48,7 @@ export function Saved() {
         }
       />
       <div className="content">
-        {panels.error && !panels.data && <div className="notice">Could not load saved panels: {panels.error.message}</div>}
+        {panels.error && !panels.data && <ErrorNotice title="Could not load saved panels" error={panels.error} />}
         {panels.data && list.length === 0 && (
           <section className="panel">
             <div className="empty">
@@ -156,7 +157,7 @@ function AddToDashboard({ panel, onClose }: { panel: SavedPanel; onClose: () => 
 
   return (
     <Modal title={`Add “${panel.title}” to a dashboard`} narrow onClose={onClose}>
-      {list.error && <div className="notice">Could not load dashboards: {list.error.message}</div>}
+      {list.error && <ErrorNotice title="Could not load dashboards" error={list.error} />}
       <div className="saved-dash-list">
         {dashboards.map((d) => (
           <button key={d.id} className="saved-dash-row" disabled={busy} onClick={() => add(d)}>

@@ -16,6 +16,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { LogDetail } from "./Logs";
 import { useTelemetry } from "../lib/telemetry";
 import { CompareVersionsPanel, logIdFor, NPlusOnePanel, SpanGroupsPanel } from "../components/telemetry/PerfPanels";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
 
@@ -104,9 +105,7 @@ export function Performance({ meta }: { meta?: Meta }) {
       />
       <div className="content">
         {summary.error && !summary.data && (
-          <div className="notice" style={{ marginBottom: 12 }}>
-            <span>Could not load performance data: {summary.error.message}</span>
-          </div>
+          <ErrorNotice title="Could not load performance data" error={summary.error} style={{ marginBottom: 12 }} />
         )}
         <div className="grid">
           <StatTile

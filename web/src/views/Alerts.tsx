@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import type { Meta } from "../lib/api";
 import { load, save, useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
@@ -10,6 +9,7 @@ import { ChannelsTab } from "../components/alerts/ChannelsTab";
 import { DigestTab } from "../components/alerts/DigestTab";
 import { RulesTab } from "../components/alerts/RulesTab";
 import { SLOsTab } from "../components/alerts/SLOsTab";
+import { ErrorNotice } from "../components/ErrorNotice";
 import "./Alerts.css";
 
 type Tab = "rules" | "activity" | "channels" | "slos" | "digest";
@@ -69,10 +69,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
           ))}
         </nav>
         {error && !am.data ? (
-          <div className="notice">
-            <AlertTriangle size={16} />
-            <span>{error.message}</span>
-          </div>
+          <ErrorNotice title="Could not load alerts" error={error} />
         ) : !am.data || !rules.data || !channels.data ? (
           <div className="panel-state" style={{ height: 240 }} />
         ) : (

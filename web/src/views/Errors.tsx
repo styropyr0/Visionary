@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Info, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Search, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -14,6 +14,8 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { IssueStatusBadge, MiniSpark, VersionPills } from "../components/telemetry/bits";
 import { StackTrace } from "../components/telemetry/StackTrace";
 import { LogDetail } from "./Logs";
+import { ErrorNotice } from "../components/ErrorNotice";
+import { InfoTip } from "../components/InfoTip";
 import "./Errors.css";
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["value"], series: "series", stack: true, unit: "count" };
@@ -98,9 +100,7 @@ function IssueList({ q }: { q: Q<IssuesResponse> }) {
   return (
     <div className="grid">
       {q.error && !data && (
-        <div className="notice span-12">
-          <span>Could not load errors: {q.error.message}</span>
-        </div>
+        <ErrorNotice className="span-12" title="Could not load errors" error={q.error} />
       )}
       <StatTile label="Occurrences" value={cur ? formatCount(cur.occurrences) : "—"} delta={delta("occurrences")} deltaLabel={previousLabel(range)} upIs="bad" loading={q.loading} />
       <StatTile
@@ -278,9 +278,7 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
     return (
       <>
         <BackLink />
-        <div className="notice">
-          <span>{q.error.message}</span>
-        </div>
+        <ErrorNotice title="Could not load this issue" error={q.error} />
       </>
     );
   }
@@ -348,9 +346,7 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
         <section className="panel span-4">
           <header className="panel-head">
             <h3 className="panel-title">Versions</h3>
-            <span className="panel-info" title="Every version this error occurred in, over all retained history, with when that version was deployed.">
-              <Info size={13} />
-            </span>
+            <InfoTip text="Every version this error occurred in, over all retained history, with when that version was deployed." />
           </header>
           <div className="panel-body">
             {d && d.versions.length > 0 ? (

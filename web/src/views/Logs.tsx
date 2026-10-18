@@ -11,6 +11,7 @@ import { CopyButton, Drawer } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { RequestTelemetry } from "../components/telemetry/RequestTelemetry";
 import { shortVersion } from "../lib/telemetry";
+import { linkify } from "../components/ErrorNotice";
 
 interface Filters {
   status: string;
@@ -131,7 +132,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
 
         <section className="panel logs-panel" aria-busy={first.loading || undefined}>
           {first.loading && <div className="progress" aria-hidden />}
-          {first.error && !merged && <div className="panel-state error">{first.error.message}</div>}
+          {first.error && !merged && <div className="panel-state error">{linkify(first.error.message)}</div>}
           {merged && (
             <div className={`logs-body ${first.loading ? "refetching" : ""}`} style={{ transition: "opacity 160ms" }}>
               <DataTable
@@ -218,7 +219,7 @@ export function LogDetail({ id, onClose }: { id: number; onClose: () => void }) 
         )
       }
     >
-      {q.error && <div className="panel-state error">{q.error.message}</div>}
+      {q.error && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {!rec && !q.error && <div className="panel-state">Loading…</div>}
       {rec && (
         <>

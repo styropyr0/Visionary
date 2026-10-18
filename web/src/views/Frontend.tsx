@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, Info, MonitorSmartphone, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MonitorSmartphone, XCircle } from "lucide-react";
 import type { Result, StatsResponse, Viz } from "../lib/api";
 import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -28,6 +28,8 @@ import { Select } from "../components/Select";
 import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
+import { ErrorNotice, linkify } from "../components/ErrorNotice";
+import { InfoTip } from "../components/InfoTip";
 import "./Frontend.css";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
@@ -112,9 +114,7 @@ export function Frontend() {
       />
       <div className="content">
         {summary.error && !summary.data && (
-          <div className="notice" style={{ marginBottom: 12 }}>
-            <span>Could not load frontend data: {summary.error.message}</span>
-          </div>
+          <ErrorNotice title="Could not load frontend data" error={summary.error} style={{ marginBottom: 12 }} />
         )}
         {empty ? (
           <SetupCard app={app} />
@@ -388,9 +388,7 @@ function VitalTile({
         <div className="stat-label">
           <span className="rum-vital-name">{info.name}</span>
           <span className="rum-vital-full">{info.label}</span>
-          <span className="panel-info" title={`${info.help} Good up to ${limits[0]}, poor above ${limits[1]}.`}>
-            <Info size={12} />
-          </span>
+          <InfoTip text={`${info.help} Good up to ${limits[0]}, poor above ${limits[1]}.`} size={12} />
         </div>
         <div className="stat-value">
           {num}
@@ -495,7 +493,7 @@ function ErrorDrawer({ fingerprint, onClose }: { fingerprint: string; onClose: (
         </span>
       }
     >
-      {q.error && <div className="panel-state error">{q.error.message}</div>}
+      {q.error && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {!q.data && !q.error && <div className="panel-state">Loading…</div>}
       {q.data && rows.length === 0 && <div className="panel-state">No occurrences in this time range.</div>}
       {q.data && latest && (

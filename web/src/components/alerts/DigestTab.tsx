@@ -7,6 +7,7 @@ import { alertsApi, WEEKDAYS, type AlertsMeta, type Channel, type DigestWeek } f
 import { formatCount, formatMs, formatPercent } from "../../lib/format";
 import { formatDateTime, formatLogTime } from "../../lib/time";
 import { KIND_ICON, KIND_LABEL } from "./ChannelsTab";
+import { ErrorNotice } from "../ErrorNotice";
 
 export function DigestTab({ meta, channels, onChange }: { meta: AlertsMeta; channels: Channel[]; onChange: () => void }) {
   const digest = useQuery("digest", (signal) => alertsApi.digest(signal));
@@ -41,7 +42,7 @@ export function DigestTab({ meta, channels, onChange }: { meta: AlertsMeta; chan
           {d && <span className="al-hint al-head-note">{`${formatDateTime(new Date(d.from))} – ${formatDateTime(new Date(d.to))}`}</span>}
         </header>
         <div className="al-digest-body">
-          {digest.error && <div className="notice">{digest.error.message}</div>}
+          {digest.error && <ErrorNotice title="Could not load the digest" error={digest.error} />}
           {!d && !digest.error && <div className="panel-state" style={{ height: 200 }} />}
           {d && (
             <>

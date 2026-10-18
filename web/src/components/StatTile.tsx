@@ -1,5 +1,6 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Info } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
 import { splitUnit } from "../lib/format";
+import { InfoTip } from "./InfoTip";
 
 interface Props {
   label: string;
@@ -32,9 +33,7 @@ export function StatTile({ label, value, description, delta, deltaLabel, upIs, s
         <div className="stat-label">
           {label}
           {description && (
-            <span className="panel-info" title={description}>
-              <Info size={12} />
-            </span>
+            <InfoTip text={description} size={12} />
           )}
         </div>
         <div className="stat-value">

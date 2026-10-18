@@ -6,6 +6,7 @@ import { useQuery } from "../../lib/useQuery";
 import { alertsApi, type AlertEvent, type RuleView } from "../../lib/alerts";
 import { formatLogTime } from "../../lib/time";
 import { SeverityTag, StateBadge } from "./bits";
+import { ErrorNotice } from "../ErrorNotice";
 
 export function ActivityTab({ rules, refreshKey }: { rules: RuleView[]; refreshKey: number }) {
   const { resolved, tick } = useApp();
@@ -48,7 +49,7 @@ export function ActivityTab({ rules, refreshKey }: { rules: RuleView[]; refreshK
         </div>
         <span className="al-hint">{events.data ? `${list.length} event${list.length === 1 ? "" : "s"} in this range` : ""}</span>
       </div>
-      {events.error && <div className="notice">{events.error.message}</div>}
+      {events.error && <ErrorNotice title="Could not load activity" error={events.error} />}
       {events.data && list.length === 0 ? (
         <div className="empty panel">
           <div className="empty-icon">

@@ -238,6 +238,15 @@ pre,
   color: var(--text-1);
 }
 
+.nav-item.danger {
+  color: var(--critical-text);
+}
+
+.nav-item.danger:hover {
+  background: color-mix(in srgb, var(--critical) 10%, transparent);
+  color: var(--critical-text);
+}
+
 .nav-item.active {
   background: var(--accent-wash);
   color: var(--text-1);
@@ -659,6 +668,66 @@ pre,
   display: inline-grid;
   color: var(--text-3);
   cursor: help;
+  border-radius: 50%;
+  outline: none;
+}
+
+.panel-info:hover,
+.panel-info:focus-visible {
+  color: var(--text-1);
+}
+
+.panel-info:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Explanations on hover, in place of the browser's title tooltip. */
+.info-tip {
+  position: fixed;
+  z-index: 100;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  animation: info-tip-in 100ms ease-out;
+}
+
+.info-tip::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--arrow-x, 50%) - 4px);
+  width: 8px;
+  height: 8px;
+  background: var(--surface-1);
+  transform: rotate(45deg);
+}
+
+.info-tip.below::after {
+  top: -4px;
+  box-shadow: -1px -1px 0 0 var(--border-strong);
+}
+
+.info-tip.above::after {
+  bottom: -4px;
+  box-shadow: 1px 1px 0 0 var(--border-strong);
+}
+
+@keyframes info-tip-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .info-tip { animation: none; }
 }
 
 .panel-actions {
@@ -727,7 +796,17 @@ pre,
 }
 
 .panel-state.error {
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.panel-state.error svg {
   color: var(--critical-text);
+}
+
+.panel-state.error .error-link svg {
+  color: inherit;
 }
 
 .panel-state .state-inner {
@@ -1334,6 +1413,74 @@ pre.code {
   flex: none;
   margin-top: 1px;
   color: var(--warning-text);
+}
+
+.error-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--critical) 32%, transparent);
+  border-left: 3px solid var(--critical);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--critical) 8%, var(--surface-1));
+}
+
+.error-notice-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--critical) 16%, transparent);
+  color: var(--critical-text);
+}
+
+.error-notice-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.error-notice-body strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.error-notice-body p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.error-notice > .btn {
+  flex: none;
+}
+
+.error-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.error-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .error-notice {
+    flex-wrap: wrap;
+  }
+  .error-notice > .btn {
+    margin-left: 40px;
+  }
 }
 
 .load-more {

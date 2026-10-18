@@ -28,6 +28,7 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView } from "../components/VizView";
 import { DashGrid, resolveLayout } from "../components/team/DashGrid";
 import { TvMode } from "../components/team/TvMode";
+import { ErrorNotice } from "../components/ErrorNotice";
 import "./Dashboards.css";
 
 type Vars = Partial<Record<VarName, string>>;
@@ -81,7 +82,7 @@ function DashboardList({ list, loading, error, onChanged }: { list: Dashboard[];
         }
       />
       <div className="content">
-        {error && <div className="notice">Could not load dashboards: {error.message}</div>}
+        {error && <ErrorNotice title="Could not load dashboards" error={error} />}
         {!loading && !error && list.length === 0 && (
           <section className="panel">
             <div className="empty">
@@ -249,7 +250,7 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
       <>
         <TopBar title="Dashboards" section="Investigate" />
         <div className="content">
-          <div className="notice">Could not open this dashboard: {loaded.error.message}</div>
+          <ErrorNotice title="Could not open this dashboard" error={loaded.error} />
           <p>
             <a href="#/dashboards">Back to dashboards</a>
           </p>

@@ -21,6 +21,7 @@ import { CopyButton, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { TimeRangePicker, TopBar } from "../components/Toolbar";
+import { ErrorNotice } from "../components/ErrorNotice";
 import "./Settings.css";
 
 type Tab = "members" | "keys" | "audit" | "about";
@@ -109,7 +110,7 @@ function When({ iso }: { iso: string | null }) {
 }
 
 function LoadState({ error, loading, empty }: { error?: Error; loading: boolean; empty?: string }) {
-  if (error) return <div className="settings-empty error">{error.message}</div>;
+  if (error) return <ErrorNotice title="Could not load this section" error={error} />;
   if (loading) return <div className="settings-empty">Loading…</div>;
   return empty ? <div className="settings-empty">{empty}</div> : null;
 }

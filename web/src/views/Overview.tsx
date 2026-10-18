@@ -10,6 +10,7 @@ import { StatTile } from "../components/StatTile";
 import { DataTable, type Column } from "../components/DataTable";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 function usePanel<T = Result>(name: string) {
   const { resolved, tick } = useApp();
@@ -72,9 +73,7 @@ export function Overview() {
       />
       <div className="content">
         {stats.error && !stats.data && (
-          <div className="notice" style={{ marginBottom: 12 }}>
-            <span>Could not load stats: {stats.error.message}</span>
-          </div>
+          <ErrorNotice title="Could not load stats" error={stats.error} style={{ marginBottom: 12 }} />
         )}
         <div className="grid">
           <StatTile

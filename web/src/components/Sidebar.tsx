@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Activity,
   Bell,
@@ -18,6 +19,7 @@ import {
   Sun,
 } from "lucide-react";
 import type { SessionUser } from "../lib/api";
+import { Modal } from "./Modal";
 import { useApp } from "../lib/state";
 import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
 
@@ -99,6 +101,7 @@ function initials(name: string): string {
 
 export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) {
   const { theme, setTheme } = useApp();
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -139,10 +142,30 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           <span className="nav-text">Collapse</span>
         </button>
-        <button className="nav-item" onClick={onSignOut} title={collapsed ? "Sign out" : undefined}>
+        <button className="nav-item danger" onClick={() => setConfirmSignOut(true)} title={collapsed ? "Sign out" : undefined}>
           <LogOut size={16} />
           <span className="nav-text">Sign out</span>
         </button>
+        {confirmSignOut && (
+          <Modal
+            title="Sign out"
+            narrow
+            onClose={() => setConfirmSignOut(false)}
+            footer={
+              <>
+                <button className="btn ghost" onClick={() => setConfirmSignOut(false)}>
+                  Cancel
+                </button>
+                <button className="btn danger" autoFocus onClick={onSignOut}>
+                  <LogOut size={14} />
+                  Sign out
+                </button>
+              </>
+            }
+          >
+            <p style={{ margin: 0 }}>Sign out of Visionary on this device? You’ll need to sign in again to see your data.</p>
+          </Modal>
+        )}
         {user && (
           <div className="user-chip" title={collapsed ? `${user.name} · ${roleLabel(user)}${user.handle ? ` · @${user.handle}` : ""}` : undefined}>
             <span className="avatar" aria-hidden>

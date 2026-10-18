@@ -4,6 +4,7 @@ import { useQuery } from "../../lib/useQuery";
 import { alertsApi, describeCondition, type AlertsMeta, type SLOItem } from "../../lib/alerts";
 import { formatCount } from "../../lib/format";
 import { StateBadge } from "./bits";
+import { ErrorNotice } from "../ErrorNotice";
 
 const WINDOWS: { key: string; pair: number }[] = [
   { key: "5m", pair: 14.4 },
@@ -16,7 +17,7 @@ export function SLOsTab({ meta, refreshKey }: { meta: AlertsMeta; refreshKey: nu
   const { tick } = useApp();
   const slos = useQuery(`slos#${tick}.${refreshKey}`, (signal) => alertsApi.slos(signal));
   const list = slos.data?.slos ?? [];
-  if (slos.error) return <div className="notice">{slos.error.message}</div>;
+  if (slos.error) return <ErrorNotice title="Could not load SLOs" error={slos.error} />;
   if (slos.data && list.length === 0) {
     return (
       <div className="empty panel">

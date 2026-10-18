@@ -14,6 +14,8 @@ import { formatDuration, formatInterval, formatUptime, getIncidents, getPanel, g
 import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, StateBadge } from "./Uptime.parts";
+import { ErrorNotice } from "../components/ErrorNotice";
+import { InfoTip } from "../components/InfoTip";
 
 const LATENCY: Viz = { type: "timeseries", x: "t", y: ["p50", "p95"], unit: "ms" };
 const PHASES: Viz = { type: "timeseries", x: "t", y: ["DNS", "Connect", "TLS", "TTFB"], unit: "ms", stack: true };
@@ -106,7 +108,7 @@ export function UptimeDetail({ id }: { id: number }) {
           All checks
         </a>
         {notFound && <div className="notice">This check no longer exists.</div>}
-        {summary.error && !notFound && !s && <div className="notice">Could not load the check: {summary.error.message}</div>}
+        {summary.error && !notFound && !s && <ErrorNotice title="Could not load the check" error={summary.error} />}
         {c && st && s && (
           <div className="grid">
             <section className="panel span-12 up-head">
@@ -270,9 +272,7 @@ function CertTile({ expires, https }: { expires?: string; https: boolean }) {
       <div className="stat">
         <div className="stat-label">
           Certificate
-          <span className="panel-info" title={`TLS certificate of the last response. Warns when it expires within ${CERT_WARN_DAYS} days.`}>
-            <ShieldCheck size={12} />
-          </span>
+          <InfoTip text={`TLS certificate of the last response. Warns when it expires within ${CERT_WARN_DAYS} days.`} icon={<ShieldCheck size={12} />} />
         </div>
         <div className="stat-value">
           {days === null ? "—" : days < 0 ? "Expired" : days}

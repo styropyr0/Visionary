@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Code2, Info, Table2, Trash2 } from "lucide-react";
+import { AlertTriangle, BarChart3, Code2, Table2, Trash2 } from "lucide-react";
 import type { Result } from "../lib/api";
 import { InspectModal } from "./Modal";
+import { linkify } from "./ErrorNotice";
+import { InfoTip } from "./InfoTip";
 
 interface Props {
   title: string;
@@ -47,7 +49,7 @@ export function Panel({
       <div className="panel-state error">
         <div className="state-inner">
           <AlertTriangle size={18} />
-          <span>{error.message}</span>
+          <span>{linkify(error.message)}</span>
         </div>
       </div>
     );
@@ -63,14 +65,10 @@ export function Panel({
       <header className="panel-head">
         <h3 className="panel-title">{title}</h3>
         {description && (
-          <span className="panel-info" title={description}>
-            <Info size={13} />
-          </span>
+          <InfoTip text={description} />
         )}
         {error && result && (
-          <span className="panel-info" title={error.message} style={{ color: "var(--critical-text)" }}>
-            <AlertTriangle size={13} />
-          </span>
+          <InfoTip text={<>Could not refresh: {linkify(error.message)}</>} icon={<AlertTriangle size={13} />} style={{ color: "var(--critical-text)" }} />
         )}
         <div className="panel-actions">
           {extraActions}

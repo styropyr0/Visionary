@@ -11,6 +11,7 @@ import { useQuery } from "../lib/useQuery";
 import { UptimeDetail } from "./Uptime.detail";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
+import { ErrorNotice } from "../components/ErrorNotice";
 import "./Uptime.css";
 
 /** The selected check lives in the hash (#/uptime?check=3) so detail views can be linked. */
@@ -90,7 +91,7 @@ function UptimeList() {
         }
       />
       <div className="content">
-        {list.error && !data && <div className="notice">Could not load checks: {list.error.message}</div>}
+        {list.error && !data && <ErrorNotice title="Could not load checks" error={list.error} />}
         {data && data.checks.length === 0 && (
           <section className="panel">
             <div className="empty">
