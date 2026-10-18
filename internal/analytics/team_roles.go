@@ -48,7 +48,8 @@ var actionRoles = map[string]role{"view": roleViewer, "edit": roleEditor, "admin
 // roleMapping turns the auth provider's roles into Visionary roles.
 // VISIONARY_ROLE_MAP ("ADMIN=admin,ANALYST=viewer") names them explicitly;
 // any VISIONARY_ALLOWED_ROLES entry the map does not mention is an admin, as
-// before roles existed.
+// before roles existed. The role "*" matches every user of the API, with or
+// without a role ("ADMIN=admin,*=viewer").
 type roleMapping struct {
 	entries []roleEntry
 }
@@ -98,6 +99,11 @@ func (m *roleMapping) resolve(roles []string) role {
 			if strings.EqualFold(e.Provider, r) {
 				best = max(best, parseRole(e.Role))
 			}
+		}
+	}
+	for _, e := range m.entries {
+		if e.Provider == authbridge.AnyRole {
+			best = max(best, parseRole(e.Role))
 		}
 	}
 	return best

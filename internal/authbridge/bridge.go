@@ -44,9 +44,12 @@ type User struct {
 	Roles  []string `json:"roles"`
 }
 
-// Allowed reports whether any of the user's roles is an allowed role.
-// Comparison ignores case.
+// Allowed reports whether any of the user's roles is an allowed role, or
+// every role is allowed ("*"). Comparison ignores case.
 func (b *Bridge) Allowed(u *User) bool {
+	if slices.Contains(b.cfg.AllowedRoles, AnyRole) {
+		return true
+	}
 	for _, r := range u.Roles {
 		if slices.ContainsFunc(b.cfg.AllowedRoles, func(a string) bool { return strings.EqualFold(a, r) }) {
 			return true

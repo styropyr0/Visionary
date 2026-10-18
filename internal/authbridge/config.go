@@ -5,7 +5,7 @@
 //
 // Two flows are supported:
 //   - "otp": request a code for an identifier (phone, email), then verify it.
-//   - "password": send an identifier and password in one call.
+//   - "password": send an identifier and password in one call (Login).
 package authbridge
 
 import (
@@ -26,6 +26,10 @@ const (
 	TypePassword = "password"
 	TypeShared   = "shared"
 	TypeNone     = "none"
+
+	// AnyRole in AllowedRoles or VISIONARY_ROLE_MAP matches every user of the
+	// API, whatever their role.
+	AnyRole = "*"
 
 	LocationNone     = "none"
 	LocationOptional = "optional"
@@ -51,7 +55,11 @@ type Config struct {
 
 	// RequestCode sends the one-time code (otp only).
 	RequestCode *Endpoint `json:"request_code,omitempty"`
-	// Verify exchanges code or password for a token.
+	// Login signs in with identifier and password in one call (password
+	// only). It is stored as Verify once loaded.
+	Login *Endpoint `json:"login,omitempty"`
+	// Verify exchanges the code for a token (otp). Password configs from
+	// before Login may still use it.
 	Verify Endpoint `json:"verify"`
 	// Profile returns the signed-in user. Without it, user fields are read
 	// from the Verify response and the role can't be re-checked later.
@@ -185,7 +193,20 @@ func (c *Config) validate() error {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return errors.New("VISIONARY_AUTH_BASE_URL must be an http(s) URL")
 	}
+	if c.Type == TypePassword {
+		// One call signs in; a code endpoint left over from otp is unused.
+		if c.Login != nil {
+			c.Verify, c.Login = *c.Login, nil
+		}
+		c.RequestCode = nil
+		if c.Verify.Path == "" {
+			return errors.New("password mode needs VISIONARY_AUTH_LOGIN, your API's login endpoint (e.g. POST /auth/login)")
+		}
+	}
 	if c.Type == TypeOTP {
+		if c.Login != nil {
+			return errors.New("VISIONARY_AUTH_LOGIN is for password mode; otp mode uses VISIONARY_AUTH_START and VISIONARY_AUTH_VERIFY")
+		}
 		if c.RequestCode == nil {
 			return errors.New("otp mode needs VISIONARY_AUTH_START (the endpoint that sends the code)")
 		}
@@ -206,8 +227,13 @@ func (c *Config) validate() error {
 		return errors.New("set VISIONARY_AUTH_FIELD_TOKEN, where the token is in the sign-in response (e.g. data.token)")
 	}
 	// VISIONARY_ROLE_MAP also names who may sign in (every role it maps).
-	if c.Fields.Role == "" || (len(c.AllowedRoles) == 0 && strings.TrimSpace(os.Getenv("VISIONARY_ROLE_MAP")) == "") {
-		return errors.New("set VISIONARY_AUTH_FIELD_ROLE and VISIONARY_ALLOWED_ROLES or VISIONARY_ROLE_MAP; Visionary never lets every user of an API in")
+	roleMap := strings.TrimSpace(os.Getenv("VISIONARY_ROLE_MAP"))
+	if len(c.AllowedRoles) == 0 && roleMap == "" {
+		return errors.New(`set VISIONARY_ALLOWED_ROLES or VISIONARY_ROLE_MAP to say who may sign in ("*" lets every user of the API in)`)
+	}
+	// Only "*" works without reading a role from the API.
+	if c.Fields.Role == "" && !onlyAnyRole(c.AllowedRoles, roleMap) {
+		return errors.New(`set VISIONARY_AUTH_FIELD_ROLE, where the user's role is in the API's response (e.g. data.role), or allow every user with VISIONARY_ALLOWED_ROLES=*`)
 	}
 	if c.Identifier.Label == "" {
 		c.Identifier.Label = "Username"
@@ -247,6 +273,22 @@ func (c *Config) validate() error {
 		}
 	}
 	return nil
+}
+
+// onlyAnyRole reports whether every allowed role and role-map entry is "*".
+func onlyAnyRole(allowed []string, roleMap string) bool {
+	names := append([]string{}, allowed...)
+	for _, part := range strings.Split(roleMap, ",") {
+		if name, _, _ := strings.Cut(part, "="); strings.TrimSpace(name) != "" {
+			names = append(names, strings.TrimSpace(name))
+		}
+	}
+	for _, n := range names {
+		if n != AnyRole {
+			return false
+		}
+	}
+	return len(names) > 0
 }
 
 // Public is what the sign-in screen needs; it holds nothing secret.

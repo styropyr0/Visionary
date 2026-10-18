@@ -56,6 +56,7 @@ func ApplyEnv(c *Config, getenv func(string) string) error {
 		name string
 	}{
 		{&c.RequestCode, "VISIONARY_AUTH_START"},
+		{&c.Login, "VISIONARY_AUTH_LOGIN"},
 		{nil, "VISIONARY_AUTH_VERIFY"},
 		{&c.Profile, "VISIONARY_AUTH_PROFILE"},
 		{&c.Logout, "VISIONARY_AUTH_LOGOUT"},

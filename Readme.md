@@ -178,20 +178,18 @@ Every setting is in [`.env.example`](.env.example).
 
 ### Sign-in and roles
 
-Set `VISIONARY_AUTH_MODE`:
+Set `VISIONARY_AUTH_MODE` to one of four modes:
 
-| Mode | Use when | Needs |
+| Mode | Use when | Steps at sign-in |
 |---|---|---|
-| `otp` | Your API already signs users in with a one-time code (SMS or email). | Endpoints and field paths for your API. |
-| `password` | Your API has a username/email + password login. | The same, without the code step. |
-| `shared` | You just want a team password. | `VISIONARY_SHARED_PASSWORD` (12+ characters); optionally `VISIONARY_VIEWER_PASSWORD` for read-only access. |
-| `none` | Local development. | Nothing; never expose it. |
+| `shared` | You just want a team password. | One: the password. |
+| `password` | Your API already has an email/username + password login. | One: identifier and password, sent to your login endpoint. |
+| `otp` | Your API signs users in with a one-time code (SMS or email). | Two: request a code, then enter it. |
+| `none` | Local development only. | None. Never expose it. |
 
-With `otp` and `password`, Visionary calls your API's own endpoints, so nobody
-needs a new account. `VISIONARY_ROLE_MAP` maps your API's roles to Visionary's
-(`ADMIN=admin,ENGINEER=editor,SUPPORT=viewer`); `VISIONARY_ALLOWED_ROLES` on its
-own makes those roles admins. Anyone else's session is logged out straight
-away, and roles are re-checked every few minutes through the profile endpoint.
+With `password` and `otp`, Visionary calls your API's own endpoints, so nobody
+needs a new account and your API decides who someone is. Visionary decides who
+may come in, from the role your API returns:
 
 | Role | Can |
 |---|---|
@@ -199,21 +197,142 @@ away, and roles are re-checked every few minutes through the profile endpoint.
 | editor | Also edit saved panels, dashboards, alert rules and uptime checks. |
 | admin | Also manage API keys, notification channels and role mapping, and read the audit log. |
 
-Everything about the sign-in flow is an environment variable:
+- `VISIONARY_ALLOWED_ROLES=ADMIN,OPS`: users with those roles come in as admins.
+- `VISIONARY_ROLE_MAP=ADMIN=admin,ENGINEER=editor,SUPPORT=viewer`: map each of
+  your roles to a Visionary role. Anyone whose role isn't listed is turned away.
+- `*` matches every user of your API: `VISIONARY_ALLOWED_ROLES=*` lets everyone
+  in as admin, and `VISIONARY_ROLE_MAP=ADMIN=admin,*=viewer` makes your admins
+  admins and everyone else a viewer. With only `*`, `VISIONARY_AUTH_FIELD_ROLE`
+  is optional.
 
-- endpoints: `VISIONARY_AUTH_START`, `_VERIFY`, `_PROFILE`, `_LOGOUT` as
-  `"POST /path"`, with JSON bodies in `..._BODY` using `{{identifier}}`,
-  `{{code}}`, `{{password}}`, `{{latitude}}`, `{{longitude}}`
-- response paths: `VISIONARY_AUTH_FIELD_TOKEN`, `_ROLE`, `_NAME`, `_HANDLE`,
-  `_USER_ID`, `_EXPIRES_AT`, `_SENT_TO`, `_ERROR` (dotted, e.g. `data.token`)
-- the form: `VISIONARY_AUTH_IDENTIFIER_LABEL`, `_INPUT` (`tel`/`email`/`text`),
-  `_NORMALIZE`, `_PATTERN`, `_HINT`, `VISIONARY_AUTH_CODE_LENGTH`
-- extras: `VISIONARY_AUTH_HEADERS` (JSON, sent on every call, e.g. an API key),
-  `VISIONARY_AUTH_TOKEN_HEADER`/`_PREFIX`, and `VISIONARY_AUTH_LOCATION`
-  (`none`/`optional`/`required`) for APIs that expect the device's position.
+Roles are re-checked every few minutes through the profile endpoint, so
+someone who loses a role is signed out.
+
+Copy the preset for your mode into `.env` and change the values for your API.
+Each line says what it does. Field paths are dotted paths into your API's JSON
+responses: `data.token` reads `{"data": {"token": "..."}}`, and `user.roles.0`
+reads the first item of an array.
+
+#### `shared`: one team password
+
+```sh
+VISIONARY_AUTH_MODE=shared
+# The password everyone types, 12+ characters. Signs in as admin.
+VISIONARY_SHARED_PASSWORD=change-me-to-something-long
+# Optional: a second password that signs in as a read-only viewer.
+# VISIONARY_VIEWER_PASSWORD=another-long-password
+```
+
+#### `password`: your API's email + password login (one step)
+
+```sh
+VISIONARY_AUTH_MODE=password
+# Shown on the sign-in screen: "Use your Acme account".
+VISIONARY_AUTH_PROVIDER=Acme
+# Your API's base URL; endpoint paths below are relative to it.
+VISIONARY_AUTH_BASE_URL=https://api.example.com
+
+# The sign-in form's first field.
+VISIONARY_AUTH_IDENTIFIER_LABEL=Email
+# HTML input type: email, tel or text.
+VISIONARY_AUTH_IDENTIFIER_INPUT=email
+# Applied before sending: lowercase, digits or trim.
+VISIONARY_AUTH_IDENTIFIER_NORMALIZE=lowercase
+
+# Your login endpoint, called once with what the user typed.
+# {{identifier}} and {{password}} are replaced with the form values.
+VISIONARY_AUTH_LOGIN=POST /auth/login
+VISIONARY_AUTH_LOGIN_BODY={"email":"{{identifier}}","password":"{{password}}"}
+
+# Where the login response keeps the token (required).
+VISIONARY_AUTH_FIELD_TOKEN=token
+# Where it keeps the user's role: a string or an array of strings.
+VISIONARY_AUTH_FIELD_ROLE=role
+# Optional user details, read from the profile response (or the login
+# response when there is no profile endpoint).
+VISIONARY_AUTH_FIELD_NAME=name
+VISIONARY_AUTH_FIELD_HANDLE=email
+# VISIONARY_AUTH_FIELD_USER_ID=id
+# Token expiry, if the response has one.
+# VISIONARY_AUTH_FIELD_EXPIRES_AT=expires_at
+# Where error responses keep a message to show the user.
+# VISIONARY_AUTH_FIELD_ERROR=message
+
+# Optional: returns the signed-in user, called with the token. Lets Visionary
+# re-check roles while someone is signed in.
+VISIONARY_AUTH_PROFILE=GET /me
+# Optional: called with the token when someone signs out.
+VISIONARY_AUTH_LOGOUT=POST /auth/logout
+
+# Who may sign in (see roles above). * lets every user in.
+VISIONARY_ALLOWED_ROLES=admin
+# VISIONARY_ROLE_MAP=admin=admin,engineer=editor,*=viewer
+```
+
+#### `otp`: your API's one-time code login (two steps)
+
+```sh
+VISIONARY_AUTH_MODE=otp
+VISIONARY_AUTH_PROVIDER=Acme
+VISIONARY_AUTH_BASE_URL=https://api.example.com
+
+# The sign-in form's first field, checked against the pattern before any call.
+VISIONARY_AUTH_IDENTIFIER_LABEL=Phone number
+VISIONARY_AUTH_IDENTIFIER_INPUT=tel
+VISIONARY_AUTH_IDENTIFIER_NORMALIZE=digits
+VISIONARY_AUTH_IDENTIFIER_PATTERN=^[0-9]{8,15}$
+VISIONARY_AUTH_IDENTIFIER_HINT=Enter your phone number as digits.
+# Digits in the code (4-10, default 6), and seconds before "resend" (default 30).
+VISIONARY_AUTH_CODE_LENGTH=6
+# VISIONARY_AUTH_RESEND_SECONDS=30
+
+# Step 1: your endpoint that sends the code.
+VISIONARY_AUTH_START=POST /auth/otp/request
+VISIONARY_AUTH_START_BODY={"phone":"{{identifier}}"}
+# Optional: where its response says the code went ("+91 ****1234").
+# VISIONARY_AUTH_FIELD_SENT_TO=masked_phone
+
+# Step 2: your endpoint that checks the code and returns a token.
+VISIONARY_AUTH_VERIFY=POST /auth/otp/verify
+VISIONARY_AUTH_VERIFY_BODY={"phone":"{{identifier}}","code":"{{code}}"}
+
+# Response fields and optional endpoints, as in password mode.
+VISIONARY_AUTH_FIELD_TOKEN=data.token
+VISIONARY_AUTH_FIELD_ROLE=data.role
+VISIONARY_AUTH_FIELD_NAME=data.name
+VISIONARY_AUTH_PROFILE=GET /me
+VISIONARY_AUTH_LOGOUT=POST /auth/logout
+
+VISIONARY_ROLE_MAP=ADMIN=admin,ENGINEER=editor,SUPPORT=viewer
+```
+
+#### `none`: no sign-in
+
+```sh
+# Everyone is an admin. Local development only; never expose it.
+VISIONARY_AUTH_MODE=none
+```
+
+#### Settings for either API mode
+
+```sh
+# Headers sent on every call to your API, e.g. an API key it requires.
+# VISIONARY_AUTH_HEADERS={"X-Api-Key":"..."}
+# Headers for one endpoint only: VISIONARY_AUTH_LOGIN_HEADERS, VISIONARY_AUTH_PROFILE_HEADERS, ...
+# How later calls send the token (default: Authorization: Bearer <token>).
+# VISIONARY_AUTH_TOKEN_HEADER=Authorization
+# VISIONARY_AUTH_TOKEN_PREFIX="Bearer "
+# Timeout per call to your API (default 15s).
+# VISIONARY_AUTH_TIMEOUT=15s
+# If your API wants the device's position at sign-in: none, optional or required.
+# The browser asks for it, and bodies can use "latitude":"{{latitude}}","longitude":"{{longitude}}".
+# VISIONARY_AUTH_LOCATION=none
+# Turn off an optional endpoint a config file set: VISIONARY_AUTH_PROFILE=off
+```
 
 The same settings can live in a JSON file (`VISIONARY_AUTH_CONFIG`, see
-`examples/auth/`); env vars override the file.
+`examples/auth/`); env vars override the file. Older password configs that set
+the login endpoint as `VISIONARY_AUTH_VERIFY` keep working.
 
 ### Keys
 

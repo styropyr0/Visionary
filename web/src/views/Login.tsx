@@ -207,7 +207,8 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
   };
 
   const IdIcon = cfg.identifier.input === "tel" ? Phone : cfg.identifier.input === "email" ? AtSign : User;
-  const roles = (cfg.allowed_roles ?? []).map((r) => r.toLowerCase()).join(" or ");
+  const allowed = cfg.allowed_roles ?? [];
+  const roles = allowed.map((r) => r.toLowerCase()).join(" or ");
 
   return (
     <form className="auth-form" onSubmit={submit} noValidate>
@@ -219,7 +220,9 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
             ? `Enter the ${codeLength}-digit code we sent you.`
             : shared
               ? "Enter the team password to continue."
-              : `Use your ${cfg.provider} account. Access is limited to ${roles} accounts.`}
+              : allowed.length === 0 || allowed.includes("*")
+                ? `Use your ${cfg.provider} account.`
+                : `Use your ${cfg.provider} account. Access is limited to ${roles} accounts.`}
         </p>
       </div>
 
