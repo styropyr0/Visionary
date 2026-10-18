@@ -85,15 +85,15 @@ export function UptimeDetail({ id }: { id: number }) {
             <RefreshControl busy={summary.loading || latency.loading} />
             {c && s?.can_edit && (
               <>
-                <button className="btn" onClick={() => void run()} disabled={running}>
+                <button type="button" className="btn" onClick={() => void run()} disabled={running}>
                   <RotateCw size={14} className={running ? "spin" : undefined} />
                   Run now
                 </button>
-                <button className="btn" onClick={() => void toggle(c)}>
+                <button type="button" className="btn" onClick={() => void toggle(c)}>
                   {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                   {c.enabled ? "Pause" : "Resume"}
                 </button>
-                <button className="btn" onClick={() => setEditing(true)}>
+                <button type="button" className="btn" onClick={() => setEditing(true)}>
                   <Pencil size={14} />
                   Edit
                 </button>

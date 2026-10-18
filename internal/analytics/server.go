@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.Handle("GET /api/session", s.authed(s.handleSession))
 	mux.Handle("GET /api/meta", s.authed(s.handleMeta))
+	mux.Handle("GET /api/project", s.authed(s.handleProject))
 	mux.Handle("GET /api/overview/{panel}", s.authed(s.handleOverview))
 	mux.Handle("GET /api/system/{panel}", s.authed(s.handleSystem))
 	mux.Handle("GET /api/performance/{panel}", s.authed(s.handlePerformance))

@@ -302,7 +302,7 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
             </div>
           )}
         </div>
-        <button className="btn" onClick={ask} disabled={!d}>
+        <button type="button" className="btn" onClick={ask} disabled={!d}>
           <Sparkles size={14} />
           Ask the analyst
         </button>

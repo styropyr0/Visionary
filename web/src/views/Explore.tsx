@@ -253,7 +253,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
       />
       <div className="analyst">
         <aside className="analyst-rail">
-          <button className="btn rail-new" onClick={() => setActiveId(null)} disabled={running}>
+          <button type="button" className="btn rail-new" onClick={() => setActiveId(null)} disabled={running}>
             <MessageSquarePlus size={15} />
             New analysis
           </button>
@@ -261,13 +261,13 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
           <div className="rail-list">
             {threads.map((t) => (
               <div key={t.id} className={`rail-item ${t.id === activeId ? "on" : ""}`}>
-                <button className="rail-open" onClick={() => !running && setActiveId(t.id)} title={t.title}>
+                <button type="button" className="rail-open" onClick={() => !running && setActiveId(t.id)} title={t.title}>
                   <span className="rail-title">{t.title}</span>
                   <span className="rail-time">
                     {t.turns.length} {t.turns.length === 1 ? "question" : "questions"} · {formatRelative(t.updatedAt)}
                   </span>
                 </button>
-                <button className="icon-btn rail-del" aria-label="Delete analysis" onClick={() => removeThread(t.id)} disabled={running}>
+                <button type="button" className="icon-btn rail-del" aria-label="Delete analysis" onClick={() => removeThread(t.id)} disabled={running}>
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -295,7 +295,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
                 )}
                 <div className="suggest-grid">
                   {SUGGESTIONS.map(({ icon: Icon, group, text }) => (
-                    <button key={text} className="suggest-card" onClick={() => ask(text)} disabled={!askEnabled || running}>
+                    <button type="button" key={text} className="suggest-card" onClick={() => ask(text)} disabled={!askEnabled || running}>
                       <span className="suggest-group">
                         <Icon size={13} />
                         {group}
@@ -380,7 +380,7 @@ function TurnView({ turn, last, onFollowup }: { turn: Turn; last: boolean; onFol
 
       {(turn.steps.length > 0 || working) && (
         <div className={`investigation ${working ? "live" : ""}`}>
-          <button className="investigation-head" onClick={() => setStepsOpen(!stepsOpen)} disabled={working}>
+          <button type="button" className="investigation-head" onClick={() => setStepsOpen(!stepsOpen)} disabled={working}>
             {working ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
             <span>
               {working
@@ -434,7 +434,7 @@ function TurnView({ turn, last, onFollowup }: { turn: Turn; last: boolean; onFol
       {last && !working && turn.followups && turn.followups.length > 0 && (
         <div className="followups">
           {turn.followups.map((f) => (
-            <button key={f} className="followup" onClick={() => onFollowup(f)}>
+            <button type="button" key={f} className="followup" onClick={() => onFollowup(f)}>
               <Sparkles size={12} />
               {f}
             </button>
@@ -460,7 +460,7 @@ function StepView({ step, expandable }: { step: Step; expandable: boolean }) {
         {step.status === "running" ? <Loader2 size={12} className="spin" /> : step.status === "error" ? <X size={12} /> : <Check size={12} />}
       </span>
       <div className="step-body">
-        <button className="step-line" onClick={() => expandable && setOpen(!open)} disabled={!expandable}>
+        <button type="button" className="step-line" onClick={() => expandable && setOpen(!open)} disabled={!expandable}>
           <span className="step-purpose">{step.purpose}</span>
           <span className="step-meta">
             {step.status === "error"
@@ -507,7 +507,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         extraActions={
           // Viewers can explore but not save.
           canEdit ? (
-            <button className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
+            <button type="button" className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
               <BookmarkPlus size={15} />
             </button>
           ) : undefined
@@ -566,10 +566,10 @@ function SaveDialog({
       onClose={onClose}
       footer={
         <>
-          <button className="btn ghost" onClick={onClose}>
+          <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" onClick={submit} disabled={!title.trim() || pending}>
+          <button type="button" className="btn primary" onClick={submit} disabled={!title.trim() || pending}>
             {pending ? "Saving…" : "Save"}
           </button>
         </>

@@ -64,7 +64,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
       <div className="content">
         <div className="tabs" role="tablist">
           {visible.map((t) => (
-            <button key={t.key} role="tab" aria-selected={current === t.key} className={current === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+            <button type="button" key={t.key} role="tab" aria-selected={current === t.key} className={current === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
               {t.label}
             </button>
           ))}
@@ -328,11 +328,11 @@ function KeysTab() {
         actions={
           <>
             {hidden > 0 || showRevoked ? (
-              <button className="btn ghost sm" onClick={() => setShowRevoked(!showRevoked)}>
+              <button type="button" className="btn ghost sm" onClick={() => setShowRevoked(!showRevoked)}>
                 {showRevoked ? "Hide revoked and expired" : `Show revoked and expired (${hidden})`}
               </button>
             ) : null}
-            <button className="btn primary" onClick={() => setCreating(true)}>
+            <button type="button" className="btn primary" onClick={() => setCreating(true)}>
               <Plus size={14} />
               Create key
             </button>
@@ -388,7 +388,7 @@ function KeysTab() {
                       </td>
                       <td className="num">
                         {!k.revoked_at && (
-                          <button className="btn ghost sm" onClick={() => setRevoke(k)}>
+                          <button type="button" className="btn ghost sm" onClick={() => setRevoke(k)}>
                             Revoke
                           </button>
                         )}
@@ -419,10 +419,10 @@ function KeysTab() {
           onClose={() => setRevoke(null)}
           footer={
             <>
-              <button className="btn ghost" onClick={() => setRevoke(null)}>
+              <button type="button" className="btn ghost" onClick={() => setRevoke(null)}>
                 Cancel
               </button>
-              <button className="btn danger" onClick={() => doRevoke(revoke)}>
+              <button type="button" className="btn danger" onClick={() => doRevoke(revoke)}>
                 Revoke
               </button>
             </>
@@ -471,7 +471,7 @@ function CreateKey({ onClose, onCreated }: { onClose: () => void; onCreated: () 
         title="Copy your new key"
         onClose={onClose}
         footer={
-          <button className="btn primary" onClick={onClose}>
+          <button type="button" className="btn primary" onClick={onClose}>
             Done
           </button>
         }
@@ -500,10 +500,10 @@ function CreateKey({ onClose, onCreated }: { onClose: () => void; onCreated: () 
       onClose={onClose}
       footer={
         <>
-          <button className="btn ghost" onClick={onClose}>
+          <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" onClick={submit} disabled={busy}>
+          <button type="button" className="btn primary" onClick={submit} disabled={busy}>
             Create key
           </button>
         </>
@@ -518,7 +518,7 @@ function CreateKey({ onClose, onCreated }: { onClose: () => void; onCreated: () 
           <span>Scope</span>
           <div className="scope-picks" role="radiogroup" aria-label="Scope">
             {(Object.keys(SCOPE_INFO) as KeyScope[]).map((s) => (
-              <button key={s} role="radio" aria-checked={scope === s} className={`scope-pick ${scope === s ? "on" : ""}`} onClick={() => setScope(s)}>
+              <button type="button" key={s} role="radio" aria-checked={scope === s} className={`scope-pick ${scope === s ? "on" : ""}`} onClick={() => setScope(s)}>
                 <strong>{SCOPE_INFO[s].label}</strong>
                 <span>{SCOPE_INFO[s].detail}</span>
               </button>
@@ -606,7 +606,7 @@ function AuditTab() {
             <input className="input" placeholder="User ID or name, then Enter" value={user} onChange={(e) => setUser(e.target.value)} />
           </form>
           {(category || userQuery) && (
-            <button
+            <button type="button"
               className="btn ghost sm"
               onClick={() => {
                 setCategory("");
@@ -657,7 +657,7 @@ function AuditTab() {
         )}
         {more && (
           <div className="load-more">
-            <button className="btn" onClick={loadMore} disabled={loadingMore}>
+            <button type="button" className="btn" onClick={loadMore} disabled={loadingMore}>
               {loadingMore ? "Loading…" : "Load older entries"}
             </button>
           </div>

@@ -57,7 +57,7 @@ export function ErrorNotice({
         {message && <p>{linkify(message)}</p>}
       </div>
       {retry && (
-        <button className="btn" onClick={retry}>
+        <button type="button" className="btn" onClick={retry}>
           <RotateCw size={14} />
           Retry
         </button>

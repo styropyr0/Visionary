@@ -38,7 +38,7 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
           </span>
           <span className="al-hint">Evaluated every {meta.interval_s}s</span>
         </div>
-        <button className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
+        <button type="button" className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
           <Plus size={15} />
           New rule
         </button>
@@ -51,7 +51,7 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
           </div>
           <h3>No alert rules yet</h3>
           <p>Rules watch a metric (latency, errors, traffic, CPU, an instance going quiet, an uptime check), a seasonal baseline, or an SLO's error budget, and notify your channels when they fire.</p>
-          <button className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
+          <button type="button" className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
             <Plus size={15} />
             Create the first rule
           </button>
@@ -145,7 +145,7 @@ function RuleRow({ rule, meta, onEdit, onChange }: { rule: RuleView; meta: Alert
       </td>
       <td onClick={(e) => e.stopPropagation()}>
         <div className="al-row-actions">
-          <button className="icon-btn" title="Evaluate now" aria-label="Evaluate now" onClick={evaluate} disabled={!meta.can_edit}>
+          <button type="button" className="icon-btn" title="Evaluate now" aria-label="Evaluate now" onClick={evaluate} disabled={!meta.can_edit}>
             <Play size={14} />
           </button>
           <MuteMenu rule={rule} disabled={!meta.can_edit} onChange={onChange} />
@@ -179,14 +179,14 @@ function MuteMenu({ rule, disabled, onChange }: { rule: RuleView; disabled: bool
   };
   return (
     <div className="popover-anchor" ref={ref}>
-      <button className={`icon-btn ${muted ? "on" : ""}`} title={muted ? "Muted: change or unmute" : "Mute (snooze)"} aria-label="Mute" onClick={() => setOpen(!open)} disabled={disabled}>
+      <button type="button" className={`icon-btn ${muted ? "on" : ""}`} title={muted ? "Muted: change or unmute" : "Mute (snooze)"} aria-label="Mute" onClick={() => setOpen(!open)} disabled={disabled}>
         {muted ? <BellOff size={14} /> : <BellRing size={14} />}
       </button>
       {open && (
         <div className="popover" role="menu" style={{ minWidth: 180 }}>
           <div className="menu-title">Mute notifications for</div>
           {SNOOZE.map((s) => (
-            <button key={s.m} className="menu-row" role="menuitem" onClick={() => run(s.m)}>
+            <button type="button" key={s.m} className="menu-row" role="menuitem" onClick={() => run(s.m)}>
               <span className="check" />
               {s.label}
             </button>
@@ -194,7 +194,7 @@ function MuteMenu({ rule, disabled, onChange }: { rule: RuleView; disabled: bool
           {muted && (
             <>
               <div className="menu-sep" />
-              <button className="menu-row" role="menuitem" onClick={() => run(0)}>
+              <button type="button" className="menu-row" role="menuitem" onClick={() => run(0)}>
                 <span className="check" />
                 Unmute now
               </button>

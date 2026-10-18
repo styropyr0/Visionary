@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,9 +110,12 @@ func countList(env string) int {
 
 // handleAbout reports the version, database and which features are set up.
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
-	version := "dev"
-	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
-		version = bi.Main.Version
+	version, commit := buildInfo()
+	if version == "" {
+		version = "dev"
+		if len(commit) >= 7 {
+			version = commit[:7]
+		}
 	}
 	dbKeys := map[string]int{}
 	if rows, err := s.db.Query(r.Context(), `SELECT scope, COUNT(*) FROM visionary_api_keys WHERE revoked_at IS NULL GROUP BY scope`); err == nil {

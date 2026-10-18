@@ -37,7 +37,7 @@ export function ChannelsTab({ meta, channels, onChange }: { meta: AlertsMeta; ch
     <>
       <div className="al-toolbar">
         <span className="al-hint">Webhook URLs and secrets are stored on the server and only shown masked.</span>
-        <button className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
+        <button type="button" className="btn primary" onClick={() => setEditing("new")} disabled={!meta.can_edit}>
           <Plus size={15} />
           Add channel
         </button>
@@ -87,15 +87,15 @@ export function ChannelsTab({ meta, channels, onChange }: { meta: AlertsMeta; ch
                 </dl>
                 {c.kind === "email" && !meta.smtp_configured && <p className="form-error">Set VISIONARY_SMTP_HOST and VISIONARY_SMTP_FROM on the server to send email.</p>}
                 <div className="al-card-actions">
-                  <button className="btn sm" onClick={() => test(c)} disabled={busy === c.id || !meta.can_edit}>
+                  <button type="button" className="btn sm" onClick={() => test(c)} disabled={busy === c.id || !meta.can_edit}>
                     <Send size={13} />
                     {busy === c.id ? "Sending…" : "Send test"}
                   </button>
-                  <button className="btn ghost sm" onClick={() => setEditing(c)} disabled={!meta.can_edit}>
+                  <button type="button" className="btn ghost sm" onClick={() => setEditing(c)} disabled={!meta.can_edit}>
                     <Pencil size={13} />
                     Edit
                   </button>
-                  <button className="btn ghost sm" onClick={() => remove(c)} disabled={!meta.can_edit}>
+                  <button type="button" className="btn ghost sm" onClick={() => remove(c)} disabled={!meta.can_edit}>
                     <Trash2 size={13} />
                     Delete
                   </button>
@@ -168,10 +168,10 @@ export function ChannelModal({ channel, onClose, onSaved }: { channel: Channel |
       footer={
         <>
           {err && <span className="form-error" style={{ marginRight: "auto" }}>{err}</span>}
-          <button className="btn ghost" onClick={onClose}>
+          <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" onClick={save} disabled={saving}>
+          <button type="button" className="btn primary" onClick={save} disabled={saving}>
             {saving ? "Saving…" : "Save channel"}
           </button>
         </>
@@ -183,7 +183,7 @@ export function ChannelModal({ channel, onClose, onSaved }: { channel: Channel |
             <span>Kind</span>
             <div className="segmented" role="radiogroup" aria-label="Kind">
               {(Object.keys(KIND_LABEL) as ChannelKind[]).map((k) => (
-                <button key={k} role="radio" aria-checked={form.kind === k} className={form.kind === k ? "on" : ""} onClick={() => set({ kind: k })}>
+                <button type="button" key={k} role="radio" aria-checked={form.kind === k} className={form.kind === k ? "on" : ""} onClick={() => set({ kind: k })}>
                   {KIND_LABEL[k]}
                 </button>
               ))}

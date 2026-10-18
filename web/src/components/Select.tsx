@@ -26,7 +26,7 @@ export function Select({ value, options, onChange, label, icon, maxWidth, align 
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <div className="popover-anchor" ref={ref}>
-      <button className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${current?.label ?? ""}`} style={{ maxWidth }}>
+      <button type="button" className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${current?.label ?? ""}`} style={{ maxWidth }}>
         {icon}
         <span className="btn-label">{current?.label}</span>
         <ChevronDown size={14} />
@@ -36,7 +36,7 @@ export function Select({ value, options, onChange, label, icon, maxWidth, align 
           {options.map((o) => {
             const selected = o.value === value;
             return (
-              <button
+              <button type="button"
                 key={o.value}
                 role="menuitemradio"
                 aria-checked={selected}

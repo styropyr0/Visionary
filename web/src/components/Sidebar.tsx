@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Github,
   Activity,
   Bell,
   Bookmark,
@@ -20,6 +21,9 @@ import {
 } from "lucide-react";
 import type { SessionUser } from "../lib/api";
 import { Modal } from "./Modal";
+import { AboutDrawer } from "./AboutDrawer";
+import { getProject, versionLabel } from "../lib/project";
+import { useQuery } from "../lib/useQuery";
 import { useApp } from "../lib/state";
 import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
 
@@ -102,14 +106,32 @@ function initials(name: string): string {
 export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) {
   const { theme, setTheme } = useApp();
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  // Fetched again each time the About panel opens, so it shows fresh deployments.
+  const [projectRun, setProjectRun] = useState(0);
+  const project = useQuery(`project#${projectRun}`, getProject);
+  const version = versionLabel(project.data);
   return (
     <aside className="sidebar">
       <div className="brand">
         <BrandMark />
         <div className="brand-text">
           <span className="brand-name">Visionary</span>
+          <button type="button"
+            className={`brand-version ${project.data?.update_available ? "update" : ""}`}
+            onClick={() => {
+              setAboutOpen(true);
+              setProjectRun((n) => n + 1);
+            }}
+            title={project.data?.update_available ? `${project.data.latest} is available` : "About Visionary"}
+            aria-label={`About Visionary${version ? `, ${version}` : ""}`}
+          >
+            {version || "About"}
+            <Github size={12} aria-hidden />
+          </button>
         </div>
       </div>
+      {aboutOpen && <AboutDrawer info={project.data} error={project.error} onRefresh={() => setProjectRun((n) => n + 1)} onClose={() => setAboutOpen(false)} />}
       <nav className="nav" aria-label="Main">
         {NAV.map(({ group, items }) => (
           <div className="nav-group" key={group}>
@@ -130,7 +152,7 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
         ))}
       </nav>
       <div className="sidebar-foot">
-        <button
+        <button type="button"
           className="nav-item"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           title={collapsed ? "Toggle theme" : undefined}
@@ -138,11 +160,11 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           <span className="nav-text">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
         </button>
-        <button className="nav-item" onClick={onToggle} title={collapsed ? "Expand sidebar" : undefined}>
+        <button type="button" className="nav-item" onClick={onToggle} title={collapsed ? "Expand sidebar" : undefined}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           <span className="nav-text">Collapse</span>
         </button>
-        <button className="nav-item danger" onClick={() => setConfirmSignOut(true)} title={collapsed ? "Sign out" : undefined}>
+        <button type="button" className="nav-item danger" onClick={() => setConfirmSignOut(true)} title={collapsed ? "Sign out" : undefined}>
           <LogOut size={16} />
           <span className="nav-text">Sign out</span>
         </button>
@@ -153,10 +175,10 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
             onClose={() => setConfirmSignOut(false)}
             footer={
               <>
-                <button className="btn ghost" onClick={() => setConfirmSignOut(false)}>
+                <button type="button" className="btn ghost" onClick={() => setConfirmSignOut(false)}>
                   Cancel
                 </button>
-                <button className="btn danger" autoFocus onClick={onSignOut}>
+                <button type="button" className="btn danger" autoFocus onClick={onSignOut}>
                   <LogOut size={14} />
                   Sign out
                 </button>

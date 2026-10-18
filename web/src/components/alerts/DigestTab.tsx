@@ -125,7 +125,7 @@ function DigestRow({ channel, canEdit, offsetMin, onChange }: { channel: Channel
           options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` }))}
           onChange={(v) => update({ digest_hour: Number(v) })}
         />
-        <button className="btn sm" onClick={sendNow} disabled={sending || !canEdit}>
+        <button type="button" className="btn sm" onClick={sendNow} disabled={sending || !canEdit}>
           <Send size={13} />
           {sending ? "Sending…" : "Send digest now"}
         </button>

@@ -64,7 +64,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
       <div className="content al-page">
         <nav className="tabs" role="tablist" aria-label="Alerts">
           {TABS.map((t) => (
-            <button key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+            <button type="button" key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
               {t.label}
               {t.key === "rules" && firing > 0 && <span className="al-tab-count" aria-label={`${firing} firing`}>{firing}</span>}
             </button>

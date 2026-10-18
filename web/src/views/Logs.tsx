@@ -118,7 +118,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
             <input className="input" placeholder="Path contains, or exact request ID" value={filters.search} onChange={set("search")} aria-label="Search" />
           </div>
           {active && (
-            <button
+            <button type="button"
               className="btn ghost"
               onClick={() => {
                 setFilters(EMPTY);
@@ -145,7 +145,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
               />
               {merged.truncated && (
                 <div className="load-more">
-                  <button className="btn" onClick={loadMore} disabled={loadingMore}>
+                  <button type="button" className="btn" onClick={loadMore} disabled={loadingMore}>
                     {loadingMore ? "Loading…" : "Load older requests"}
                   </button>
                 </div>
@@ -272,7 +272,7 @@ export function LogDetail({ id, onClose }: { id: number; onClose: () => void }) 
           <RequestTelemetry rec={rec} />
           <div className="tabs" role="tablist">
             {(["response", "request", "headers"] as const).map((t) => (
-              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+              <button type="button" key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
                 {t === "response" ? "Response body" : t === "request" ? "Request body" : "Request headers"}
               </button>
             ))}

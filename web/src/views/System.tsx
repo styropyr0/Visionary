@@ -385,7 +385,7 @@ function SpikesPanel({ instance }: { instance: string }) {
       label: "",
       align: "right",
       render: (_v, row) => (
-        <button className="btn sm ghost spike-investigate" onClick={() => investigate(row)}>
+        <button type="button" className="btn sm ghost spike-investigate" onClick={() => investigate(row)}>
           <Sparkles size={13} />
           Investigate
         </button>

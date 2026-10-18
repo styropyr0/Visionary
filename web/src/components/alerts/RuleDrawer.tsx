@@ -152,7 +152,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
       onClose={onClose}
       actions={
         rule && meta.can_edit ? (
-          <button className="icon-btn" onClick={remove} title="Delete rule" aria-label="Delete rule">
+          <button type="button" className="icon-btn" onClick={remove} title="Delete rule" aria-label="Delete rule">
             <Trash2 size={15} />
           </button>
         ) : undefined
@@ -168,7 +168,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
           <span>Type</span>
           <div className="segmented" role="radiogroup" aria-label="Rule type">
             {(["threshold", "anomaly", "slo"] as RuleKind[]).map((k) => (
-              <button key={k} role="radio" aria-checked={form.kind === k} className={form.kind === k ? "on" : ""} onClick={() => setKind(k)}>
+              <button type="button" key={k} role="radio" aria-checked={form.kind === k} className={form.kind === k ? "on" : ""} onClick={() => setKind(k)}>
                 {k === "threshold" ? "Threshold" : k === "anomaly" ? "Anomaly" : "SLO burn rate"}
               </button>
             ))}
@@ -258,7 +258,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
               <span>Sensitivity</span>
               <div className="segmented" role="radiogroup" aria-label="Sensitivity">
                 {["low", "medium", "high"].map((s) => (
-                  <button key={s} role="radio" aria-checked={(sp.sensitivity ?? "medium") === s} className={(sp.sensitivity ?? "medium") === s ? "on" : ""} onClick={() => setSpec({ sensitivity: s })}>
+                  <button type="button" key={s} role="radio" aria-checked={(sp.sensitivity ?? "medium") === s} className={(sp.sensitivity ?? "medium") === s ? "on" : ""} onClick={() => setSpec({ sensitivity: s })}>
                     {s[0].toUpperCase() + s.slice(1)}
                   </button>
                 ))}
@@ -308,7 +308,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             <span>Severity</span>
             <div className="segmented" role="radiogroup" aria-label="Severity">
               {(["info", "warning", "critical"] as Severity[]).map((s) => (
-                <button key={s} role="radio" aria-checked={form.severity === s} className={form.severity === s ? "on" : ""} onClick={() => set({ severity: s })}>
+                <button type="button" key={s} role="radio" aria-checked={form.severity === s} className={form.severity === s ? "on" : ""} onClick={() => set({ severity: s })}>
                   {s[0].toUpperCase() + s.slice(1)}
                 </button>
               ))}
@@ -384,10 +384,10 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
 
         {err && <span className="form-error">{err}</span>}
         <div className="al-actions">
-          <button className="btn ghost" onClick={onClose}>
+          <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" onClick={save} disabled={saving || !meta.can_edit} title={meta.can_edit ? undefined : "Your role cannot change alerts"}>
+          <button type="button" className="btn primary" onClick={save} disabled={saving || !meta.can_edit} title={meta.can_edit ? undefined : "Your role cannot change alerts"}>
             {saving ? "Saving…" : rule ? "Save rule" : "Create rule"}
           </button>
         </div>

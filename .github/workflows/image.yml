@@ -75,5 +75,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Shown in the About panel; branch builds report their commit only.
+          build-args: |
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || '' }}
+            COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

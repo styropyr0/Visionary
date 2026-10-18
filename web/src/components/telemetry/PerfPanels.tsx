@@ -154,7 +154,7 @@ export function NPlusOnePanel({ className, onOpenRequest }: { className: string;
       align: "right",
       render: (v) =>
         v ? (
-          <button
+          <button type="button"
             className="btn sm ghost"
             onClick={(e) => {
               e.stopPropagation();

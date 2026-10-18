@@ -135,7 +135,7 @@ function LibraryFrames({ frames }: { frames: Frame[] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="st-lib">
-      <button className="st-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button type="button" className="st-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         {frames.length} library {frames.length === 1 ? "frame" : "frames"}
         {!open && <span className="st-lib-names">{frames.slice(0, 2).map((f) => shortFn(f.fn)).join(", ")}{frames.length > 2 ? ", …" : ""}</span>}
@@ -163,10 +163,10 @@ export function StackTrace({ stack }: { stack: string }) {
       <div className="st-bar">
         {frames && (
           <div className="btn-group">
-            <button className={`btn sm ${raw ? "" : "on"}`} aria-pressed={!raw} onClick={() => setRaw(false)}>
+            <button type="button" className={`btn sm ${raw ? "" : "on"}`} aria-pressed={!raw} onClick={() => setRaw(false)}>
               Frames
             </button>
-            <button className={`btn sm ${raw ? "on" : ""}`} aria-pressed={raw} onClick={() => setRaw(true)}>
+            <button type="button" className={`btn sm ${raw ? "on" : ""}`} aria-pressed={raw} onClick={() => setRaw(true)}>
               Raw
             </button>
           </div>

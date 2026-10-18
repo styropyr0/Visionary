@@ -110,7 +110,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
           const failed = s.status === "error";
           return (
             <Fragment key={String(s.id ?? i)}>
-              <button className={`wf-grid wf-row ${isOpen ? "open" : ""}`} role="listitem" onClick={() => toggle(i)} aria-expanded={isOpen}>
+              <button type="button" className={`wf-grid wf-row ${isOpen ? "open" : ""}`} role="listitem" onClick={() => toggle(i)} aria-expanded={isOpen}>
                 <span className="wf-name" title={s.name}>
                   {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                   <span className="wf-swatch" style={{ background: KIND_COLOR[s.kind] ?? KIND_COLOR.custom }} />

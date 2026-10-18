@@ -110,7 +110,7 @@ export function TvMode({
           <Select label="Refresh" value={String(prefs.refresh)} options={REFRESH} onChange={(v) => update({ refresh: Number(v) })} />
           <Select label="Cycle" value={String(prefs.cycle)} options={CYCLE} onChange={(v) => update({ cycle: Number(v) })} />
           <span className="tv-clock">{clockFmt.format(now)}</span>
-          <button className="btn" onClick={onExit} title="Leave TV mode (Esc)">
+          <button type="button" className="btn" onClick={onExit} title="Leave TV mode (Esc)">
             <Minimize2 size={14} />
             Exit
           </button>

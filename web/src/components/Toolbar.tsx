@@ -51,7 +51,7 @@ export function TimeRangePicker() {
 
   return (
     <div className="popover-anchor" ref={ref}>
-      <button className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
+      <button type="button" className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
         <Clock size={14} />
         <span>{rangeLabel(range)}</span>
         <ChevronDown size={14} />
@@ -61,7 +61,7 @@ export function TimeRangePicker() {
           {PRESETS.map((p) => {
             const selected = range.kind === "relative" && range.key === p.key;
             return (
-              <button
+              <button type="button"
                 key={p.key}
                 role="menuitemradio"
                 aria-checked={selected}
@@ -89,7 +89,7 @@ export function TimeRangePicker() {
               <input className="input" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
             </label>
             {err && <span className="form-error">{err}</span>}
-            <button className="btn primary sm" onClick={apply}>
+            <button type="button" className="btn primary sm" onClick={apply}>
               Apply range
             </button>
           </div>
@@ -115,10 +115,10 @@ export function RefreshControl({ busy }: { busy?: boolean }) {
 
   return (
     <div className="btn-group popover-anchor" ref={ref}>
-      <button className="btn" onClick={refresh} title="Refresh" aria-label="Refresh">
+      <button type="button" className="btn" onClick={refresh} title="Refresh" aria-label="Refresh">
         <RefreshCw size={14} className={busy ? "spin" : undefined} />
       </button>
-      <button
+      <button type="button"
         className="btn"
         onClick={() => setOpen(!open)}
         title={autoAllowed ? "Auto-refresh" : "Auto-refresh needs a relative range"}
@@ -133,7 +133,7 @@ export function RefreshControl({ busy }: { busy?: boolean }) {
         <div className="popover" role="menu" style={{ minWidth: 160 }}>
           <div className="menu-title">Auto-refresh</div>
           {INTERVALS.map((i) => (
-            <button
+            <button type="button"
               key={i.ms}
               role="menuitemradio"
               aria-checked={i.ms === autoRefresh}

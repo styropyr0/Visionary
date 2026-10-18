@@ -209,10 +209,10 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           onClose={() => setConfirm(false)}
           footer={
             <>
-              <button className="btn" onClick={() => setConfirm(false)}>
+              <button type="button" className="btn" onClick={() => setConfirm(false)}>
                 Cancel
               </button>
-              <button className="btn danger" onClick={() => void remove()}>
+              <button type="button" className="btn danger" onClick={() => void remove()}>
                 Delete check
               </button>
             </>

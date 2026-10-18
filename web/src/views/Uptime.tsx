@@ -82,7 +82,7 @@ function UptimeList() {
             </a>
             <RefreshControl busy={list.loading} />
             {canEdit && (
-              <button className="btn primary" onClick={() => setEditing("new")}>
+              <button type="button" className="btn primary" onClick={() => setEditing("new")}>
                 <Plus size={14} />
                 New check
               </button>
@@ -104,7 +104,7 @@ function UptimeList() {
                 view, alerts, the analyst and the public status page.
               </p>
               {canEdit && (
-                <button className="btn primary" onClick={() => setEditing("new")}>
+                <button type="button" className="btn primary" onClick={() => setEditing("new")}>
                   <Plus size={14} />
                   Add a check
                 </button>
@@ -169,13 +169,13 @@ function UptimeList() {
                         <td className="num" onClick={(e) => e.stopPropagation()}>
                           {canEdit && (
                             <div className="up-actions">
-                              <button className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
+                              <button type="button" className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
                                 <RotateCw size={14} className={running === c.id ? "spin" : undefined} />
                               </button>
-                              <button className="icon-btn" title={c.enabled ? "Pause" : "Resume"} aria-label={c.enabled ? `Pause ${c.name}` : `Resume ${c.name}`} onClick={() => void toggle(c)}>
+                              <button type="button" className="icon-btn" title={c.enabled ? "Pause" : "Resume"} aria-label={c.enabled ? `Pause ${c.name}` : `Resume ${c.name}`} onClick={() => void toggle(c)}>
                                 {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                               </button>
-                              <button className="icon-btn" title="Edit" aria-label={`Edit ${c.name}`} onClick={() => setEditing(c)}>
+                              <button type="button" className="icon-btn" title="Edit" aria-label={`Edit ${c.name}`} onClick={() => setEditing(c)}>
                                 <Pencil size={14} />
                               </button>
                             </div>

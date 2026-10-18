@@ -74,7 +74,7 @@ function DashboardList({ list, loading, error, onChanged }: { list: Dashboard[];
         section="Investigate"
         actions={
           can("edit") && (
-            <button className="btn primary" onClick={() => setCreating(true)}>
+            <button type="button" className="btn primary" onClick={() => setCreating(true)}>
               <Plus size={14} />
               New dashboard
             </button>
@@ -95,7 +95,7 @@ function DashboardList({ list, loading, error, onChanged }: { list: Dashboard[];
                 service selectors and their own time range.
               </p>
               {can("edit") ? (
-                <button className="btn primary" onClick={() => setCreating(true)}>
+                <button type="button" className="btn primary" onClick={() => setCreating(true)}>
                   <Plus size={14} />
                   New dashboard
                 </button>
@@ -321,21 +321,21 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
         actions={
           editing ? (
             <>
-              <button className="btn" onClick={() => setAdding(true)}>
+              <button type="button" className="btn" onClick={() => setAdding(true)}>
                 <Plus size={14} />
                 Add panel
               </button>
-              <button className="btn" onClick={() => setSettings(true)}>
+              <button type="button" className="btn" onClick={() => setSettings(true)}>
                 <Settings2 size={14} />
                 Settings
               </button>
-              <button className="btn" onClick={() => setConfirmDelete(true)} title="Delete dashboard" aria-label="Delete dashboard">
+              <button type="button" className="btn" onClick={() => setConfirmDelete(true)} title="Delete dashboard" aria-label="Delete dashboard">
                 <Trash2 size={14} />
               </button>
-              <button className="btn ghost" onClick={() => setDraft(null)} disabled={busy}>
+              <button type="button" className="btn ghost" onClick={() => setDraft(null)} disabled={busy}>
                 Cancel
               </button>
-              <button className="btn primary" onClick={save} disabled={busy}>
+              <button type="button" className="btn primary" onClick={save} disabled={busy}>
                 Save
               </button>
             </>
@@ -343,7 +343,7 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
             <>
               {rangeControl}
               <RefreshControl busy={loaded.loading} />
-              <button className="btn" onClick={shareLink} title="Copy a link with this range and selections" aria-label="Copy link">
+              <button type="button" className="btn" onClick={shareLink} title="Copy a link with this range and selections" aria-label="Copy link">
                 <Link2 size={14} />
               </button>
               <a className="btn" href={tvLink(plainLink)} title="TV mode: full screen, auto-refresh, cycles through dashboards">
@@ -351,7 +351,7 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
                 TV
               </a>
               {mayEdit && dash && (
-                <button className="btn" onClick={() => setDraft(dash)}>
+                <button type="button" className="btn" onClick={() => setDraft(dash)}>
                   <Pencil size={14} />
                   Edit
                 </button>
@@ -386,7 +386,7 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
                     : "An editor can add panels to it."}
               </p>
               {editing && (
-                <button className="btn primary" onClick={() => setAdding(true)}>
+                <button type="button" className="btn primary" onClick={() => setAdding(true)}>
                   <Plus size={14} />
                   Add panel
                 </button>
@@ -417,10 +417,10 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
           onClose={() => setConfirmDelete(false)}
           footer={
             <>
-              <button className="btn ghost" onClick={() => setConfirmDelete(false)}>
+              <button type="button" className="btn ghost" onClick={() => setConfirmDelete(false)}>
                 Cancel
               </button>
-              <button className="btn danger" onClick={remove}>
+              <button type="button" className="btn danger" onClick={remove}>
                 Delete
               </button>
             </>
@@ -487,7 +487,7 @@ function DashPanelView({
       table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
       extraActions={
         editing && (
-          <button className="icon-btn" title="Remove from dashboard" aria-label="Remove from dashboard" onClick={onRemove}>
+          <button type="button" className="icon-btn" title="Remove from dashboard" aria-label="Remove from dashboard" onClick={onRemove}>
             <X size={15} />
           </button>
         )
@@ -533,10 +533,10 @@ function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () 
   return (
     <Modal title="Add a panel" onClose={onClose}>
       <div className="tabs">
-        <button className={tab === "saved" ? "on" : ""} onClick={() => setTab("saved")}>
+        <button type="button" className={tab === "saved" ? "on" : ""} onClick={() => setTab("saved")}>
           Saved panels ({saved.length})
         </button>
-        <button className={tab === "builtin" ? "on" : ""} onClick={() => setTab("builtin")}>
+        <button type="button" className={tab === "builtin" ? "on" : ""} onClick={() => setTab("builtin")}>
           Built-in panels
         </button>
       </div>
@@ -544,7 +544,7 @@ function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () 
       <div className="dash-pick">
         {tab === "saved" &&
           saved.map((p) => (
-            <button key={p.id} className="dash-pick-row" onClick={() => onAdd("saved", String(p.id), p.viz.type === "stat" ? 3 : 6, p.viz.type === "stat" ? 3 : 6)}>
+            <button type="button" key={p.id} className="dash-pick-row" onClick={() => onAdd("saved", String(p.id), p.viz.type === "stat" ? 3 : 6, p.viz.type === "stat" ? 3 : 6)}>
               <span className="dash-pick-title">{p.title}</span>
               <span className="dim">{p.description || p.prompt || p.viz.type}</span>
             </button>
@@ -554,7 +554,7 @@ function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () 
             <div key={g}>
               <div className="section-label dash-pick-group">{g}</div>
               {BUILTINS.filter((b) => b.group === g).map((b) => (
-                <button key={b.ref} className="dash-pick-row" onClick={() => onAdd("builtin", b.ref, b.viz.type === "table" ? 12 : 6, 6)}>
+                <button type="button" key={b.ref} className="dash-pick-row" onClick={() => onAdd("builtin", b.ref, b.viz.type === "table" ? 12 : 6, 6)}>
                   <span className="dash-pick-title">{b.title}</span>
                   <span className="dim">{b.description}</span>
                 </button>
@@ -607,10 +607,10 @@ function DashboardSettings({ title, initial, onClose, onSave }: { title: string;
       onClose={onClose}
       footer={
         <>
-          <button className="btn ghost" onClick={onClose}>
+          <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" onClick={submit} disabled={busy}>
+          <button type="button" className="btn primary" onClick={submit} disabled={busy}>
             {initial.name ? "Apply" : "Create"}
           </button>
         </>

@@ -28,7 +28,7 @@ export function Modal({ title, onClose, children, footer, narrow }: ModalProps) 
       <div className={`modal ${narrow ? "narrow" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-btn" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -50,7 +50,7 @@ export function Drawer({ title, onClose, children, actions }: { title: ReactNode
           <h2>{title}</h2>
           <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
             {actions}
-            <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
               <X size={16} />
             </button>
           </div>
@@ -65,7 +65,7 @@ export function Drawer({ title, onClose, children, actions }: { title: ReactNode
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
   return (
-    <button
+    <button type="button"
       className="btn ghost sm"
       onClick={() => {
         navigator.clipboard

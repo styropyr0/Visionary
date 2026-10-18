@@ -73,7 +73,7 @@ export function Panel({
         <div className="panel-actions">
           {extraActions}
           {chart && table && (
-            <button
+            <button type="button"
               className={`icon-btn ${view === "table" ? "on" : ""}`}
               title={view === "table" ? "Show chart" : "Show table"}
               aria-label={view === "table" ? "Show chart" : "Show table"}
@@ -83,12 +83,12 @@ export function Panel({
             </button>
           )}
           {result && (
-            <button className="icon-btn" title="Inspect query" aria-label="Inspect query" onClick={() => setInspect(true)}>
+            <button type="button" className="icon-btn" title="Inspect query" aria-label="Inspect query" onClick={() => setInspect(true)}>
               <Code2 size={15} />
             </button>
           )}
           {onDelete && (
-            <button className="icon-btn" title="Delete panel" aria-label="Delete panel" onClick={onDelete}>
+            <button type="button" className="icon-btn" title="Delete panel" aria-label="Delete panel" onClick={onDelete}>
               <Trash2 size={15} />
             </button>
           )}

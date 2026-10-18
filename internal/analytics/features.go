@@ -46,6 +46,7 @@ func (s *Server) Start(ctx context.Context) {
 	if s.schemaPending.Load() {
 		go s.retrySchema(ctx)
 	}
+	s.releasesStart()
 	s.alertsStart(ctx)
 	s.uptimeStart(ctx)
 	s.rollupsStart(ctx)

@@ -82,10 +82,10 @@ export function Saved() {
           onClose={() => setConfirm(null)}
           footer={
             <>
-              <button className="btn ghost" onClick={() => setConfirm(null)}>
+              <button type="button" className="btn ghost" onClick={() => setConfirm(null)}>
                 Cancel
               </button>
-              <button className="btn danger" onClick={() => remove(confirm)}>
+              <button type="button" className="btn danger" onClick={() => remove(confirm)}>
                 Delete
               </button>
             </>
@@ -123,7 +123,7 @@ function SavedPanelView({ panel, onDelete, onAddToDashboard }: { panel: SavedPan
       onDelete={onDelete}
       extraActions={
         onAddToDashboard && (
-          <button className="icon-btn" title="Add to dashboard" aria-label="Add to dashboard" onClick={onAddToDashboard}>
+          <button type="button" className="icon-btn" title="Add to dashboard" aria-label="Add to dashboard" onClick={onAddToDashboard}>
             <LayoutGrid size={15} />
           </button>
         )
@@ -160,7 +160,7 @@ function AddToDashboard({ panel, onClose }: { panel: SavedPanel; onClose: () => 
       {list.error && <ErrorNotice title="Could not load dashboards" error={list.error} />}
       <div className="saved-dash-list">
         {dashboards.map((d) => (
-          <button key={d.id} className="saved-dash-row" disabled={busy} onClick={() => add(d)}>
+          <button type="button" key={d.id} className="saved-dash-row" disabled={busy} onClick={() => add(d)}>
             <span>{d.name}</span>
             <span className="saved-dash-meta">{d.layout.panels.length} panels</span>
           </button>
@@ -169,7 +169,7 @@ function AddToDashboard({ panel, onClose }: { panel: SavedPanel; onClose: () => 
       </div>
       <div className="saved-dash-new">
         <input className="input" placeholder="New dashboard name" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
-        <button className="btn primary" disabled={busy} onClick={() => add(null)}>
+        <button type="button" className="btn primary" disabled={busy} onClick={() => add(null)}>
           Create and add
         </button>
       </div>
