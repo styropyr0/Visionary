@@ -1,2 +1,4 @@
 dist/
 node_modules/
+# Copied from the repository root when packing.
+/LICENSE

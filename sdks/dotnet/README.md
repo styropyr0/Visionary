@@ -23,18 +23,19 @@ framework; database drivers are the application's choice.
 
 ## Install
 
-The package is not on nuget.org yet. Pack it into a local feed:
+From [nuget.org](https://www.nuget.org/packages/Visionary.AspNetCore), for .NET 8 or later:
+
+```sh
+dotnet add package Visionary.AspNetCore
+```
+
+To try an unreleased commit, pack it into a local feed instead:
 
 ```sh
 cd sdks/dotnet/Visionary.AspNetCore
 dotnet pack -c Release -o ../../../local-packages
 dotnet nuget add source "$(pwd)/../../../local-packages" --name visionary-local
-```
-
-Then, in your application:
-
-```sh
-dotnet add package Visionary.AspNetCore --version 0.1.0
+dotnet add package Visionary.AspNetCore --version 0.1.0   # in your application
 ```
 
 ## Quickstart: minimal API

@@ -1,15 +1,21 @@
 [build-system]
-requires = ["hatchling>=1.18"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "visionary-sdk"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Visionary collector: logs API requests, database and HTTP spans, errors and system metrics into your database."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "styropyr0" }]
 requires-python = ">=3.9"
 keywords = ["analytics", "api", "monitoring", "metrics", "django", "fastapi", "flask", "asgi"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Framework :: Django",
@@ -20,14 +26,26 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/styropyr0/Visionary"
+Documentation = "https://github.com/styropyr0/Visionary/tree/main/sdks/python#readme"
+Source = "https://github.com/styropyr0/Visionary/tree/main/sdks/python"
+Issues = "https://github.com/styropyr0/Visionary/issues"
+
 [project.optional-dependencies]
 system = ["psutil>=5.9"]
 postgres = ["psycopg>=3.1"]
 mysql = ["PyMySQL>=1.0"]
 all = ["psutil>=5.9", "psycopg>=3.1", "PyMySQL>=1.0"]
 
+# The single source of the version: src/visionary/__init__.py (__version__), which the
+# SDK also reports as sdk_version. CI rewrites it from the release tag before building.
+[tool.hatch.version]
+path = "src/visionary/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/visionary"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/visionary", "README.md", "pyproject.toml"]
+include = ["src/visionary", "README.md", "LICENSE", "pyproject.toml"]
+exclude = ["__pycache__", "*.py[cod]"]

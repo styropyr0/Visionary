@@ -20,15 +20,8 @@ Requirements: Java 17+, Spring Boot 3.x, a servlet web application (Tomcat, Jett
 
 ## Install
 
-The artifact is not published to Maven Central yet. Build and install it into your
-local Maven repository first:
-
-```sh
-cd sdks/java
-./mvnw install        # Windows: mvnw.cmd install
-```
-
-Then add it to your application.
+From Maven Central, where each release tag is published (the version is the tag without the
+`v`; see the [releases](https://github.com/styropyr0/Visionary/releases)).
 
 Maven:
 
@@ -36,15 +29,27 @@ Maven:
 <dependency>
     <groupId>io.github.styropyr0</groupId>
     <artifactId>visionary-spring-boot-starter</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
-Gradle (with `mavenLocal()` in `repositories`):
+Gradle:
 
 ```kotlin
-implementation("io.github.styropyr0:visionary-spring-boot-starter:0.1.0-SNAPSHOT")
+implementation("io.github.styropyr0:visionary-spring-boot-starter:0.4.0")
 ```
+
+**JitPack**, as an alternative: JitPack builds the whole repository from a tag, and the
+repository's `jitpack.yml` builds only the Android SDK, so this starter is not available there.
+To use an unreleased commit, build it into your local Maven repository instead:
+
+```sh
+cd sdks/java
+./mvnw install        # Windows: mvnw.cmd install
+```
+
+and depend on `io.github.styropyr0:visionary-spring-boot-starter:0.1.0-SNAPSHOT` (the version in
+`pom.xml`) with `mavenLocal()` in your Gradle `repositories`.
 
 ## Quickstart
 

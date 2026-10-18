@@ -11,13 +11,25 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>Visionary.AspNetCore</PackageId>
+    <!-- Dev version. CI packs with -p:Version=<tag without v>; SdkVersion (sdk_version) is read
+         from AssemblyInformationalVersion, which follows Version. -->
     <Version>0.1.0</Version>
     <Authors>styropyr0</Authors>
+    <Company>styropyr0</Company>
+    <Copyright>Copyright styropyr0</Copyright>
     <Description>Request logs, system metrics, spans and errors from ASP.NET Core into the Visionary tables (Cloudflare D1, PostgreSQL, MySQL or SQLite).</Description>
-    <PackageTags>visionary;aspnetcore;analytics;apm;logging;metrics</PackageTags>
-    <PackageProjectUrl>https://github.com/styropyr0/visionary</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/styropyr0/visionary</RepositoryUrl>
+    <PackageTags>visionary;aspnetcore;analytics;apm;monitoring;logging;metrics</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/styropyr0/Visionary/tree/main/sdks/dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/styropyr0/Visionary.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +40,7 @@
     <!-- Copies of sdks/go/schema, byte for byte; see SPEC.md "Tables". -->
     <EmbeddedResource Include="Schema\**\*.sql" LogicalName="Visionary.Schema.%(RecursiveDir)%(Filename)%(Extension)" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

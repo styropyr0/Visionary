@@ -13,7 +13,27 @@ The SDK talks to the server's client ingest endpoint (`POST /api/ingest/client`,
 
 ## Install
 
-The library is not on Maven Central yet. Pick one of these.
+**Maven Central.** Each release tag is published as `io.github.styropyr0:visionary-android`
+(the version is the tag without the `v`; see the
+[releases](https://github.com/styropyr0/Visionary/releases)).
+
+```kotlin
+// settings.gradle.kts: repositories { google(); mavenCentral() }
+dependencies {
+    implementation("io.github.styropyr0:visionary-android:0.4.0")
+}
+```
+
+**JitPack**, as an alternative. Each release tag (from `v0.3.0`) is also built by JitPack through
+the `jitpack.yml` at the repository root. The first request for a new tag starts the build, which
+takes a couple of minutes; the status is at https://jitpack.io/#styropyr0/Visionary.
+
+```kotlin
+// settings.gradle.kts: repositories { maven("https://jitpack.io") }
+dependencies {
+    implementation("com.github.styropyr0:Visionary:v0.4.0")
+}
+```
 
 **As a Gradle module.** Copy (or git-submodule) `sdks/android/visionary` into your project, then:
 
@@ -38,17 +58,6 @@ cd sdks/android
 // settings.gradle.kts: repositories { mavenLocal(); google(); mavenCentral() }
 dependencies {
     implementation("io.github.styropyr0:visionary-android:dev")
-}
-```
-
-**JitPack.** Each release tag (from `v0.3.0`) is built by JitPack through the `jitpack.yml` at
-the repository root. The first request for a new tag starts the build, which takes a couple of
-minutes; the status is at https://jitpack.io/#styropyr0/Visionary.
-
-```kotlin
-// settings.gradle.kts: repositories { maven("https://jitpack.io") }
-dependencies {
-    implementation("com.github.styropyr0:Visionary:v0.3.0")
 }
 ```
 

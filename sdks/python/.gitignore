@@ -3,3 +3,5 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+# Copied from the repository root when packing.
+/LICENSE

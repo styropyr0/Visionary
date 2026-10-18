@@ -1,4 +1,6 @@
 // swift-tools-version:5.9
+// For building and testing from sdks/ios. Apps depend on the repository URL, which resolves the
+// root Package.swift; keep the platforms, products and targets of the two files in step.
 import PackageDescription
 
 let package = Package(

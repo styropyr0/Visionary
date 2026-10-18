@@ -11,26 +11,31 @@ The SDK talks to the server's client ingest endpoint (`POST /api/ingest/client`,
 
 ## Install
 
-Swift Package Manager. SwiftPM resolves a remote URL only when `Package.swift` is at the
-repository root, and this package lives in `sdks/ios` of
-`https://github.com/styropyr0/visionary`. So either:
+Swift Package Manager, from the repository URL. The repository root has a `Package.swift` that
+builds this folder, and release tags (`v0.4.0`, ...) are the package versions.
 
-- **Xcode:** clone the repository (or add it as a git submodule), then File > Add Package
-  Dependencies > Add Local, and pick the `sdks/ios` folder. Add the `Visionary` library to
-  your app target.
-- **Mirror:** publish `sdks/ios` as its own repository (e.g. with `git subtree split`), then
-  add that URL in Xcode or as `.package(url: "<mirror>", from: "0.1.0")`.
-
-In a `Package.swift`, with a checkout of the repository next to your package:
+- **Xcode:** File > Add Package Dependencies, enter `https://github.com/styropyr0/Visionary.git`,
+  choose "Up to Next Major Version" from `0.4.0`, and add the `Visionary` library to your app
+  target.
+- **Package.swift:**
 
 ```swift
 dependencies: [
-    .package(path: "../visionary/sdks/ios"),
+    .package(url: "https://github.com/styropyr0/Visionary.git", from: "0.4.0"),
 ],
 targets: [
-    .target(name: "App", dependencies: [.product(name: "Visionary", package: "ios")]),
+    .target(name: "App", dependencies: [.product(name: "Visionary", package: "Visionary")]),
 ]
 ```
+
+SwiftPM clones the whole repository (the server, the dashboard and the other SDKs too), but
+builds only `sdks/ios/Sources/Visionary`.
+
+To work on the SDK itself, open `sdks/ios/Package.swift` (or use `.package(path:
+"<checkout>/sdks/ios")`, with `package: "ios"` in the product dependency).
+
+There is no CocoaPods pod: the CocoaPods trunk is being sunset (it is scheduled to become
+read-only), so Swift Package Manager is the only supported way to install the SDK.
 
 ## Quickstart
 

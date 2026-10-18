@@ -11,7 +11,34 @@
 
     <name>Visionary Spring Boot Starter</name>
     <description>Visionary collector for Spring Boot: logs API requests, database and HTTP client spans, errors and host, process and JVM metrics into your database.</description>
-    <url>https://github.com/styropyr0/visionary</url>
+    <url>https://github.com/styropyr0/Visionary/tree/main/sdks/java</url>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>styropyr0</id>
+            <name>styropyr0</name>
+            <url>https://github.com/styropyr0</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/styropyr0/Visionary/tree/main/sdks/java</url>
+        <connection>scm:git:https://github.com/styropyr0/Visionary.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/styropyr0/Visionary.git</developerConnection>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/styropyr0/Visionary/issues</url>
+    </issueManagement>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
@@ -76,6 +103,19 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- The repository's LICENSE, shipped as META-INF/LICENSE in every jar. -->
+            <resource>
+                <directory>${project.basedir}/../..</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                </includes>
+            </resource>
+        </resources>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -102,6 +142,18 @@
                     <artifactId>maven-install-plugin</artifactId>
                     <version>3.1.4</version>
                 </plugin>
+                <plugin>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.3.1</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.11.2</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>3.2.7</version>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -126,4 +178,78 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Maven Central release: sources and javadoc jars, GPG signatures, and the upload to
+            the Central Portal. Used by .github/workflows/sdks.yml:
+                mvn -B versions:set -DnewVersion=0.4.0
+                mvn -B -Prelease deploy
+            Credentials come from the <server id="central"> in settings.xml; the signing key from
+            the local gpg keyring, with the passphrase in MAVEN_GPG_PASSPHRASE.
+            Check the release build locally without a key: mvn -Prelease -Dgpg.skip verify
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

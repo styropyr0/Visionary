@@ -1,0 +1,622 @@
+name: SDK packages
+
+# Publishes every SDK to its registry when a release tag is pushed:
+#   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser)
+#   PyPI         visionary-sdk (sdks/python)
+#   RubyGems     visionary-sdk (sdks/ruby)
+#   NuGet        Visionary.AspNetCore (sdks/dotnet)
+#   Maven Central io.github.styropyr0:visionary-spring-boot-starter (sdks/java)
+#                 io.github.styropyr0:visionary-android (sdks/android; JitPack is android.yml)
+# Swift Package Manager needs no upload: it resolves the tag through the root Package.swift.
+# The Go module (sdks/go, its own module) gets a matching sdks/go/vX.Y.Z tag, and the host
+# agent's Linux binaries are attached to the GitHub Release (its image is built by image.yml).
+#
+# The version comes from the tag (v0.4.0 -> 0.4.0) and is written into each manifest at build
+# time only; nothing is committed. Each registry has its own job, so one failure does not block
+# the others, and each job skips (with a notice) a version that is already published, so the
+# workflow can be re-run. One-time registry setup: docs/releasing.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish, e.g. v0.4.0
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: sdks-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Version from tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - id: v
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::'$TAG' is not a release tag like v0.4.0 or v0.4.0-rc.1"
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          {
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing $version from $TAG (prerelease: $prerelease)"
+
+  npm-node:
+    name: npm (visionary-sdk)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/visionary-sdk
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/node
+    env:
+      PACKAGE: visionary-sdk
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      # Node 24 ships npm 11.19+, past the 11.5.1 that trusted publishing needs and the 11.15.0
+      # that `npm stage publish` needs.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - id: check
+        name: Skip if already published
+        run: |
+          npm --version
+          if npm view "$PACKAGE@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$PACKAGE@$VERSION is already on npm; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - if: steps.check.outputs.status == ''
+        run: npm ci
+      - if: steps.check.outputs.status == ''
+        run: npm run build
+      - if: steps.check.outputs.status == ''
+        name: Package contents
+        run: npm pack --dry-run
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Publish
+        env:
+          # Empty once trusted publishing is set up: npm then authenticates through OIDC. Only
+          # needed for the very first publish (see docs/releasing.md).
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          STAGED: ${{ vars.NPM_STAGED_PUBLISH }}
+        run: |
+          tag=latest
+          [ "$PRERELEASE" = true ] && tag=next
+          if [ "$STAGED" = true ]; then
+            npm stage publish --tag "$tag"
+            echo "status=staged (approve it on npmjs.com)" >> "$GITHUB_OUTPUT"
+          else
+            npm publish --tag "$tag"
+            echo "status=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  npm-browser:
+    name: npm (visionary-browser)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/visionary-browser
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/browser
+    env:
+      PACKAGE: visionary-browser
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - id: check
+        name: Skip if already published
+        run: |
+          npm --version
+          if npm view "$PACKAGE@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$PACKAGE@$VERSION is already on npm; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - if: steps.check.outputs.status == ''
+        run: npm ci
+      - if: steps.check.outputs.status == ''
+        run: npm run build
+      - if: steps.check.outputs.status == ''
+        name: Package contents
+        run: npm pack --dry-run
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          STAGED: ${{ vars.NPM_STAGED_PUBLISH }}
+        run: |
+          tag=latest
+          [ "$PRERELEASE" = true ] && tag=next
+          if [ "$STAGED" = true ]; then
+            npm stage publish --tag "$tag"
+            echo "status=staged (approve it on npmjs.com)" >> "$GITHUB_OUTPUT"
+          else
+            npm publish --tag "$tag"
+            echo "status=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  pypi:
+    name: PyPI (visionary-sdk)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/project/visionary-sdk/
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/python
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build twine
+      - id: check
+        name: Skip if already published
+        run: |
+          # PyPI stores the normalized version (0.4.0-rc.1 -> 0.4.0rc1).
+          pyver=$(python -c 'import sys; from packaging.version import Version; print(Version(sys.argv[1]))' "$VERSION")
+          if curl -sf -o /dev/null "https://pypi.org/pypi/visionary-sdk/$pyver/json"; then
+            echo "::notice::visionary-sdk $pyver is already on PyPI; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        # __version__ is both the package version (hatch) and the reported sdk_version.
+        run: |
+          sed -i -E "s/^__version__ = \".*\"$/__version__ = \"$VERSION\"/" src/visionary/__init__.py
+          grep -q "^__version__ = \"$VERSION\"$" src/visionary/__init__.py
+          cp ../../LICENSE LICENSE
+      - if: steps.check.outputs.status == ''
+        name: Build
+        run: |
+          python -m build
+          twine check --strict dist/*
+          ls -l dist
+      - if: steps.check.outputs.status == ''
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          packages-dir: sdks/python/dist/
+      - if: steps.check.outputs.status == ''
+        id: publish
+        run: echo "status=published" >> "$GITHUB_OUTPUT"
+
+  rubygems:
+    name: RubyGems (visionary-sdk)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: rubygems
+      url: https://rubygems.org/gems/visionary-sdk
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/ruby
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      - uses: ruby/setup-ruby@v1.329.0
+        with:
+          ruby-version: "3.3"
+      - id: check
+        name: Skip if already published
+        run: |
+          # RubyGems spells prereleases its own way (0.4.0-rc.1 -> 0.4.0.pre.rc.1).
+          gemver=$(ruby -e 'puts Gem::Version.new(ARGV[0])' "$VERSION")
+          echo "gemver=$gemver" >> "$GITHUB_OUTPUT"
+          if curl -sf -o /dev/null "https://rubygems.org/api/v2/rubygems/visionary-sdk/versions/$gemver.json"; then
+            echo "::notice::visionary-sdk $gemver is already on RubyGems; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        # Visionary::VERSION is both the gem version and the reported sdk_version.
+        run: |
+          sed -i -E "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" lib/visionary/version.rb
+          grep -q "VERSION = \"$VERSION\"" lib/visionary/version.rb
+          cp ../../LICENSE LICENSE
+      - if: steps.check.outputs.status == ''
+        name: Build
+        run: |
+          gem build visionary-sdk.gemspec
+          ls -l -- *.gem
+      - if: steps.check.outputs.status == ''
+        uses: rubygems/configure-rubygems-credentials@v2.1.0
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Push
+        run: |
+          gem push "visionary-sdk-${{ steps.check.outputs.gemver }}.gem"
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  nuget:
+    name: NuGet (Visionary.AspNetCore)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: nuget
+      url: https://www.nuget.org/packages/Visionary.AspNetCore
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/dotnet/Visionary.AspNetCore
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      # The .NET 10 SDK builds both target frameworks (net8.0 and net10.0).
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+      - id: check
+        name: Skip if already published
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER }}
+        run: |
+          if [ -z "$NUGET_USER" ]; then
+            echo "::error::Set the repository variable NUGET_USER to your nuget.org profile name"
+            exit 1
+          fi
+          lower=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
+          if curl -sf "https://api.nuget.org/v3-flatcontainer/visionary.aspnetcore/index.json" | grep -q "\"$lower\""; then
+            echo "::notice::Visionary.AspNetCore $VERSION is already on NuGet; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Pack
+        # Version also sets AssemblyInformationalVersion, which the SDK reports as sdk_version.
+        run: |
+          dotnet pack -c Release -p:Version="$VERSION" -o "$RUNNER_TEMP/nuget"
+          ls -l "$RUNNER_TEMP/nuget"
+      - if: steps.check.outputs.status == ''
+        id: login
+        uses: NuGet/login@v1.2.0
+        with:
+          # The nuget.org profile name (not the email), as a repository variable.
+          user: ${{ vars.NUGET_USER }}
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Push
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        # Pushes the .snupkg symbols package next to the .nupkg as well.
+        run: |
+          dotnet nuget push "$RUNNER_TEMP/nuget/*.nupkg" --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json --skip-duplicate
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  maven-central-java:
+    name: Maven Central (visionary-spring-boot-starter)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/artifact/io.github.styropyr0/visionary-spring-boot-starter
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/java
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      # Writes a settings.xml with <server id="central"> whose credentials are read from the
+      # MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD environment variables of the deploy step.
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          server-id: central
+          server-username-env-var: MAVEN_CENTRAL_USERNAME
+          server-password-env-var: MAVEN_CENTRAL_PASSWORD
+      - id: check
+        name: Skip if already published
+        run: |
+          if curl -sf -o /dev/null "https://repo1.maven.org/maven2/io/github/styropyr0/visionary-spring-boot-starter/$VERSION/visionary-spring-boot-starter-$VERSION.pom"; then
+            echo "::notice::visionary-spring-boot-starter $VERSION is already on Maven Central; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Import signing key
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          for s in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_PRIVATE_KEY MAVEN_GPG_PASSPHRASE; do
+            if [ -z "${!s}" ]; then echo "::error::Secret $s is not set in the maven-central environment"; exit 1; fi
+          done
+          printf '%s\n' "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys --keyid-format long
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        # Implementation-Version in the jar manifest (the reported sdk_version) follows it.
+        run: mvn -B -ntp org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Build, sign and publish
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        # The Central Portal rejects a version it already has, so a re-run after the repo1 check
+        # above (which lags a little behind the Portal) fails with that message instead.
+        run: |
+          mvn -B -ntp -Prelease deploy
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  maven-central-android:
+    name: Maven Central (visionary-android)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/artifact/io.github.styropyr0/visionary-android
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/android
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      # GitHub's Ubuntu runners include the Android SDK (ANDROID_HOME).
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - id: check
+        name: Skip if already published
+        run: |
+          if curl -sf -o /dev/null "https://repo1.maven.org/maven2/io/github/styropyr0/visionary-android/$VERSION/visionary-android-$VERSION.pom"; then
+            echo "::notice::visionary-android $VERSION is already on Maven Central; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Build, sign and publish
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          for s in ORG_GRADLE_PROJECT_mavenCentralUsername ORG_GRADLE_PROJECT_mavenCentralPassword ORG_GRADLE_PROJECT_signingInMemoryKey ORG_GRADLE_PROJECT_signingInMemoryKeyPassword; do
+            if [ -z "${!s}" ]; then echo "::error::A Maven Central secret is missing in the maven-central environment ($s)"; exit 1; fi
+          done
+          # VERSION (the env above) becomes the artifact version, as on JitPack.
+          ./gradlew --no-daemon --stacktrace :visionary:publishAndReleaseToMavenCentral
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  go-module:
+    name: Go module tag
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      status: ${{ steps.tag.outputs.status }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      # sdks/go is its own module, so Go resolves it from tags named sdks/go/vX.Y.Z.
+      - id: tag
+        env:
+          TAG: sdks/go/${{ needs.version.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::notice::$TAG already exists"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git tag "$TAG" HEAD
+          git push origin "refs/tags/$TAG"
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  agent-binaries:
+    name: Host agent binaries
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      status: ${{ steps.upload.outputs.status }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # deploy/agent/install.sh downloads visionary-agent-linux-<arch> from the release.
+      - name: Build
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          mkdir -p out
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags="-s -w -X main.version=$TAG" -o "out/visionary-agent-linux-$arch" ./cmd/visionary-agent
+          done
+          (cd out && sha256sum visionary-agent-linux-* > SHA256SUMS)
+      - id: upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            flags=()
+            [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
+          fi
+          gh release upload "$TAG" out/* --clobber
+          echo "status=published" >> "$GITHUB_OUTPUT"
+
+  github-release:
+    name: GitHub Release
+    needs: [version, npm-node, npm-browser, pypi, rubygems, nuget, maven-central-java, maven-central-android, go-module, agent-binaries]
+    if: always() && needs.version.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: List the packages on the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          status() { # job id -> "published", "already published", "failed", ...
+            jq -r --arg j "$1" '.[$j] | if .result == "success" then (.outputs.status // "done") else .result end' <<< "$NEEDS"
+          }
+          {
+            echo "<!-- sdk-packages -->"
+            echo "## Packages"
+            echo
+            echo "| Registry | Package | Status |"
+            echo "| --- | --- | --- |"
+            echo "| npm | [\`visionary-sdk@$VERSION\`](https://www.npmjs.com/package/visionary-sdk/v/$VERSION) | $(status npm-node) |"
+            echo "| npm | [\`visionary-browser@$VERSION\`](https://www.npmjs.com/package/visionary-browser/v/$VERSION) | $(status npm-browser) |"
+            echo "| PyPI | [\`visionary-sdk $VERSION\`](https://pypi.org/project/visionary-sdk/) | $(status pypi) |"
+            echo "| RubyGems | [\`visionary-sdk $VERSION\`](https://rubygems.org/gems/visionary-sdk) | $(status rubygems) |"
+            echo "| NuGet | [\`Visionary.AspNetCore $VERSION\`](https://www.nuget.org/packages/Visionary.AspNetCore/$VERSION) | $(status nuget) |"
+            echo "| Maven Central | [\`io.github.styropyr0:visionary-spring-boot-starter:$VERSION\`](https://central.sonatype.com/artifact/io.github.styropyr0/visionary-spring-boot-starter/$VERSION) | $(status maven-central-java) |"
+            echo "| Maven Central | [\`io.github.styropyr0:visionary-android:$VERSION\`](https://central.sonatype.com/artifact/io.github.styropyr0/visionary-android/$VERSION) | $(status maven-central-android) |"
+            echo "| JitPack | [\`com.github.styropyr0:Visionary:$TAG\`](https://jitpack.io/#styropyr0/Visionary/$TAG) | see the Android SDK workflow |"
+            echo "| Swift Package Manager | \`.package(url: \"https://github.com/styropyr0/Visionary.git\", from: \"$VERSION\")\` | tag |"
+            echo "| Go | \`go get github.com/styropyr0/visionary/sdks/go@$TAG\` | $(status go-module) |"
+            echo "| Host agent | \`visionary-agent-linux-amd64\`, \`-arm64\` on this release; image \`ghcr.io/styropyr0/visionary-agent:$VERSION\` | $(status agent-binaries) |"
+            echo
+            echo "Maven Central can take up to about 30 minutes to show a new version after it is published."
+            echo "<!-- /sdk-packages -->"
+          } > packages.md
+          cat packages.md >> "$GITHUB_STEP_SUMMARY"
+
+          # Keep any notes already on the release; replace only the block above.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release view "$TAG" --json body --jq .body \
+              | sed '/<!-- sdk-packages -->/,/<!-- \/sdk-packages -->/d' > body.md
+            printf '\n' >> body.md
+            cat packages.md >> body.md
+            gh release edit "$TAG" --notes-file body.md
+          else
+            flags=()
+            [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
+            gh release view "$TAG" --json body --jq .body > body.md
+            printf '\n' >> body.md
+            cat packages.md >> body.md
+            gh release edit "$TAG" --notes-file body.md
+          fi

@@ -12,15 +12,20 @@ Gem::Specification.new do |spec|
     deploy markers and periodic host/process samples to PostgreSQL, MySQL,
     SQLite or Cloudflare D1, on background threads.
   DESC
-  spec.authors = ["Visionary contributors"]
-  spec.homepage = "https://github.com/styropyr0/visionary"
+  spec.authors = ["styropyr0"]
+  spec.license = "Apache-2.0"
+  spec.homepage = "https://github.com/styropyr0/Visionary"
   spec.metadata = {
-    "source_code_uri" => "https://github.com/styropyr0/visionary/tree/main/sdks/ruby",
-    "changelog_uri" => "https://github.com/styropyr0/visionary/blob/main/sdks/ruby/CHANGELOG.md",
+    "homepage_uri" => spec.homepage,
+    "source_code_uri" => "https://github.com/styropyr0/Visionary/tree/main/sdks/ruby",
+    "changelog_uri" => "https://github.com/styropyr0/Visionary/blob/main/sdks/ruby/CHANGELOG.md",
+    "bug_tracker_uri" => "https://github.com/styropyr0/Visionary/issues",
+    "documentation_uri" => "https://github.com/styropyr0/Visionary/tree/main/sdks/ruby#readme",
     "rubygems_mfa_required" => "true"
   }
   spec.required_ruby_version = ">= 3.1"
-  spec.files = Dir["lib/**/*.{rb,sql}"] + %w[README.md CHANGELOG.md]
+  # LICENSE is copied from the repository root before `gem build` (see .github/workflows/sdks.yml).
+  spec.files = Dir["lib/**/*.{rb,sql}"] + %w[README.md CHANGELOG.md] + Dir["LICENSE"]
   spec.require_paths = ["lib"]
   # No runtime dependencies. The database driver is the app's choice:
   # pg, mysql2 or sqlite3 for VISIONARY_DATABASE_URL, or ActiveRecord's pool.
