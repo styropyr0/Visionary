@@ -54,6 +54,13 @@ func (s *Server) listLogs(ctx context.Context, r timeRange, q url.Values) (*Resu
 			args = append(args, strings.TrimPrefix(user, "@"))
 		}
 	}
+	if ip := strings.TrimSpace(q.Get("ip")); ip != "" {
+		if len(ip) > 64 {
+			return nil, &queryError{errors.New("ip is too long")}
+		}
+		where = append(where, "ip = ?")
+		args = append(args, ip)
+	}
 	if search := strings.TrimSpace(q.Get("search")); search != "" {
 		if len(search) > maxSearchLen {
 			return nil, &queryError{errors.New("search is too long")}

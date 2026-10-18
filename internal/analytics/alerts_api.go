@@ -52,7 +52,7 @@ func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	tz := digestTZ()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"metrics":         alertMetrics(s.cfg.ApdexMs),
+		"metrics":         s.allMetrics(),
 		"apdex_ms":        s.cfg.ApdexMs,
 		"slo_target":      s.cfg.SLOTarget,
 		"llm":             s.llm != nil,
@@ -268,7 +268,7 @@ func checkScope(sc alertScope) error {
 	if len(sc.Route) > 512 || len(sc.Service) > 128 || len(sc.Check) > 128 {
 		return badInput("scope value is too long")
 	}
-	return nil
+	return checkSecurityScope(sc)
 }
 
 func (s *Server) handleCreateRule(w http.ResponseWriter, r *http.Request) {

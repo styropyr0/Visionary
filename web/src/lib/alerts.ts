@@ -9,7 +9,7 @@ export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 export interface MetricDef {
   id: string;
   label: string;
-  group: "request" | "system" | "liveness" | "uptime";
+  group: "request" | "system" | "liveness" | "uptime" | "security";
   unit: AlertUnit;
   description: string;
   scopes: string[];
@@ -42,6 +42,11 @@ export interface Scope {
   instance?: string;
   service?: string;
   check?: string;
+  /** security_events rules: finding kind, minimum severity, source (api or host) and host. */
+  event_kind?: string;
+  event_severity?: string;
+  source?: string;
+  host?: string;
 }
 
 export interface RuleSpec {
@@ -288,7 +293,8 @@ export function ruleUnit(rule: { kind: RuleKind; spec: RuleSpec }, metrics: Metr
 export function describeCondition(rule: AlertRule, metrics: MetricDef[]): string {
   const m = metrics.find((x) => x.id === rule.spec.metric);
   const sc = rule.spec.scope ?? {};
-  const where = [sc.method && sc.route ? `${sc.method} ${sc.route}` : sc.route || sc.method, sc.service && `service ${sc.service}`, sc.instance, sc.check && `check ${sc.check}`]
+  const where = [sc.method && sc.route ? `${sc.method} ${sc.route}` : sc.route || sc.method, sc.service && `service ${sc.service}`, sc.instance, sc.check && `check ${sc.check}`,
+    sc.event_kind && sc.event_kind.replace(/_/g, " "), sc.event_severity && `${sc.event_severity} and up`, sc.source && `from ${sc.source}`, sc.host && `host ${sc.host}`]
     .filter(Boolean)
     .join(", ");
   const scoped = where ? ` · ${where}` : "";
@@ -304,3 +310,31 @@ export function describeCondition(rule: AlertRule, metrics: MetricDef[]): string
 export function isMuted(r: AlertRule, now = Date.now()): boolean {
   return !!r.muted_until && Date.parse(r.muted_until) > now;
 }
+
+/** Starting points for new rules, shown above the form. */
+export interface RulePreset {
+  id: string;
+  label: string;
+  name: string;
+  severity: Severity;
+  spec: RuleSpec;
+}
+
+const finding = (scope: Scope, threshold: number, window: string, repeat = ""): RuleSpec => ({ metric: "security_events", scope, op: ">=", threshold, window, for: "0s", repeat });
+
+export const RULE_PRESETS: RulePreset[] = [
+  { id: "bruteforce", label: "Brute-force attempt", name: "Brute-force sign-in attempt", severity: "critical", spec: finding({ event_kind: "auth_bruteforce" }, 1, "10m") },
+  { id: "stuffing", label: "Credential stuffing", name: "Credential stuffing", severity: "critical", spec: finding({ event_kind: "credential_stuffing" }, 1, "10m") },
+  { id: "scanner", label: "Scanner probing the API", name: "Scanner probing the API", severity: "warning", spec: finding({ event_kind: "scanner" }, 1, "15m") },
+  { id: "critical", label: "Any critical finding", name: "Critical security finding", severity: "critical", spec: finding({ event_severity: "critical" }, 1, "10m") },
+  {
+    id: "failed_logins",
+    label: "Failed logins spike",
+    name: "Failed logins above 50 in 5 minutes",
+    severity: "warning",
+    spec: { metric: "failed_logins", scope: {}, op: ">", threshold: 50, window: "5m", for: "0s", repeat: "" },
+  },
+  { id: "ssh", label: "SSH brute force on a host", name: "SSH brute force", severity: "warning", spec: finding({ event_kind: "ssh_failed", source: "host" }, 20, "10m") },
+  { id: "port", label: "New open port on a host", name: "New open port on a host", severity: "warning", spec: finding({ event_kind: "port_opened", source: "host" }, 1, "5m") },
+  { id: "updates", label: "Pending security updates", name: "Pending security updates", severity: "info", spec: finding({ event_kind: "updates_pending", source: "host" }, 1, "1h", "24h") },
+];

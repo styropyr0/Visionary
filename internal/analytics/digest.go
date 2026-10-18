@@ -49,6 +49,7 @@ type digestData struct {
 	Slowest   []digestRoute    `json:"slowest_routes"`
 	Incidents []digestIncident `json:"incidents"`
 	Releases  []digestRelease  `json:"releases"`
+	Security  *securityDigest  `json:"security,omitempty"` // security_digest.go
 }
 
 func (s *Server) digestData(ctx context.Context, now time.Time) (*digestData, error) {
@@ -134,6 +135,7 @@ GROUP BY version, COALESCE(service, '') HAVING MIN(created_at) >= ? ORDER BY fir
 	} else if !missingTable(err, "releases") {
 		s.logger.Info("digest: releases unavailable", "err", err)
 	}
+	d.Security = s.securityDigestData(ctx, mid, now)
 	return d, nil
 }
 
@@ -206,18 +208,19 @@ func digestLines(d *digestData) []string {
 		}
 		lines = append(lines, "New versions: "+strings.Join(v, ", "))
 	}
-	return lines
+	return append(lines, securityDigestLines(d.Security)...)
 }
 
 func (s *Server) digestSummary(ctx context.Context, d *digestData) string {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	data, _ := json.Marshal(d)
+	data, _ := json.Marshal(d.forModel())
 	content, err := s.llm.chatJSON(ctx, []chatMessage{
 		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.cfg.AppName + `'s API. Write the weekly digest from the numbers given: this week against the week before.
 Reply with one JSON object: {"summary": "<4 to 7 short lines separated by \n>"}.
 - First line: the one thing worth knowing this week.
 - Then traffic, p95 and 5xx changes with numbers, the slowest routes that got worse, incidents, and new versions that line up with changes. Say "may be related" for releases, never certain.
+- If "security" has findings, failed logins or hosts with pending updates, end with one line on them, with numbers.
 - Plain text with "- " bullets after the first line. No headings, no SQL.`},
 		{Role: "user", Content: string(data)},
 	})
