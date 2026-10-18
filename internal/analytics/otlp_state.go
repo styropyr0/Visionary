@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/sdks/go/d1"
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 

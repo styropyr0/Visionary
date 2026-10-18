@@ -21,6 +21,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
+COPY sdks/go/go.mod sdks/go/go.sum sdks/go/
 RUN go mod download
 COPY cmd/visionary-agent/ cmd/visionary-agent/
 COPY internal/ internal/

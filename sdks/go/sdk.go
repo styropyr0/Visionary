@@ -39,7 +39,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
 // User is who made a request. Only ID is required; Handle and Role make the

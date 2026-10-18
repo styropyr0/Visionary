@@ -1,7 +1,12 @@
 # Visionary Go SDK
 
 `github.com/styropyr0/visionary/sdks/go` (package `visionary`) records what the
-Visionary dashboards show, straight from a Go service:
+Visionary dashboards show, straight from a Go service. It is its own module, so it brings
+only `pgx` and `gopsutil`, not the server's dependencies:
+
+```sh
+go get github.com/styropyr0/visionary/sdks/go@latest
+```
 
 | Table | What |
 |---|---|

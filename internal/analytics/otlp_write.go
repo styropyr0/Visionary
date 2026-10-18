@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
 // Rows built from an export are written as multi-row INSERTs per table: on

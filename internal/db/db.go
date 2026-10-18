@@ -16,7 +16,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"modernc.org/sqlite"
 
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/sdks/go/d1"
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 

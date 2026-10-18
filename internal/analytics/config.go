@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/styropyr0/visionary/internal/authbridge"
-	"github.com/styropyr0/visionary/internal/d1"
+	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
 type Config struct {

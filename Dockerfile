@@ -18,6 +18,7 @@ ARG VERSION=
 ARG COMMIT=
 WORKDIR /src
 COPY go.mod go.sum ./
+COPY sdks/go/go.mod sdks/go/go.sum sdks/go/
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
