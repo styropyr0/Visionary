@@ -295,3 +295,9 @@ func (s *Server) sendDueDigests(ctx context.Context, now time.Time) {
 		cancel()
 	}
 }
+
+// tzOffsetMinutes is the zone's current offset from UTC, in minutes.
+func tzOffsetMinutes(tz *time.Location) int {
+	_, off := time.Now().In(tz).Zone()
+	return off / 60
+}

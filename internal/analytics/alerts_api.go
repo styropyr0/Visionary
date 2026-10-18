@@ -59,6 +59,8 @@ func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
 		"smtp_configured": ok,
 		"smtp_from":       map[bool]string{true: smtp.From}[ok],
 		"digest_tz":       tzName(tz),
+		// Lets the page show each digest's time in the viewer's own zone.
+		"digest_offset_min": tzOffsetMinutes(tz),
 		"interval_s":      int(s.alertEngine().interval.Seconds()),
 		"routes":          s.knownRoutes(r.Context()),
 		"instances":       names,

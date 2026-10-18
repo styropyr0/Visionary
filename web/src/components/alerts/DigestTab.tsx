@@ -27,7 +27,7 @@ export function DigestTab({ meta, channels, onChange }: { meta: AlertsMeta; chan
           ) : (
             <ul className="al-digest-list">
               {channels.map((c) => (
-                <DigestRow key={c.id} channel={c} canEdit={meta.can_edit} onChange={onChange} />
+                <DigestRow key={c.id} channel={c} canEdit={meta.can_edit} offsetMin={meta.digest_offset_min} onChange={onChange} />
               ))}
             </ul>
           )}
@@ -75,7 +75,7 @@ function WeekStat({ label, cur, prev, fmt, upIsBad }: { label: string; cur: Dige
   );
 }
 
-function DigestRow({ channel, canEdit, onChange }: { channel: Channel; canEdit: boolean; onChange: () => void }) {
+function DigestRow({ channel, canEdit, offsetMin, onChange }: { channel: Channel; canEdit: boolean; offsetMin: number; onChange: () => void }) {
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const Icon = KIND_ICON[channel.kind];
@@ -129,7 +129,24 @@ function DigestRow({ channel, canEdit, onChange }: { channel: Channel; canEdit: 
           {sending ? "Sending…" : "Send digest now"}
         </button>
       </div>
-      <span className="al-hint al-digest-last">{channel.digest_sent_at ? `Last sent ${formatLogTime(channel.digest_sent_at)}` : "Never sent"}</span>
+      <span className="al-hint al-digest-last">
+        {channel.digest_enabled && <>Arrives {localSlot(channel.digest_weekday, channel.digest_hour, offsetMin)} your time · </>}
+        {channel.digest_sent_at ? `Last sent ${formatLogTime(channel.digest_sent_at)}` : "Never sent"}
+      </span>
     </li>
   );
+}
+
+const slotFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" });
+
+/**
+ * The next send slot (weekday and hour in the digest zone, offsetMin from UTC)
+ * written in the viewer's own time zone.
+ */
+function localSlot(weekday: number, hour: number, offsetMin: number): string {
+  const now = new Date();
+  // Any week works for weekday and time; start from this week's Sunday, UTC.
+  const sunday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - now.getUTCDay());
+  const at = sunday + ((weekday * 24 + hour) * 60 - offsetMin) * 60_000;
+  return slotFmt.format(new Date(at));
 }

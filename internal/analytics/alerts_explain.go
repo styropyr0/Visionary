@@ -76,7 +76,8 @@ GROUP BY instance ORDER BY window_cpu DESC LIMIT 10`},
 Reply with one JSON object: {"cause": "<2 to 4 short lines, separated by \n>"}.
 - Lead with the most likely cause, naming the route, error key, instance or resource that moved with the alert, with numbers.
 - Say "likely", not certain. If the data does not point anywhere, say so in one line.
-- Plain text, no markdown headings, no SQL.`
+- Plain text, no markdown headings, no SQL.
+- Readers are in different time zones: never write clock times; say "in the last 30 minutes", "since about 10 minutes before the alert" and so on.`
 	alert := "Alert: " + r.Name + " (" + r.Kind + ", severity " + r.Severity + ")\n" + ev.Message +
 		"\nFired at " + at.UTC().Format(tsLayout) + " UTC.\n\n" + evidence.String()
 	content, err := s.llm.chatJSON(ctx, []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: alert}})

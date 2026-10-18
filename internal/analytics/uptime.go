@@ -150,6 +150,7 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/checks/{id}/{panel}", s.authed(s.handleUptimePanel))
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /status.json", s.handleStatusJSON)
+	mux.HandleFunc("GET /status.js", s.handleStatusScript)
 }
 
 func (s *Server) uptimeStart(ctx context.Context) {

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { Result, Unit } from "../lib/api";
 import { formatValue, humanize, isTimeColumn, toNumber, unitForColumn } from "../lib/format";
-import { formatLogTime } from "../lib/time";
+import { cellTitle, formatLogTime } from "../lib/time";
 
 export interface Column {
   key: string;
@@ -95,7 +95,7 @@ export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey,
                 {cols.map((c) => {
                   const v = row[result.columns.indexOf(c.key)];
                   return (
-                    <td key={c.key} className={c.align === "right" ? "num" : ""} title={typeof v === "string" ? v : undefined}>
+                    <td key={c.key} className={c.align === "right" ? "num" : ""} title={typeof v === "string" ? cellTitle(v) : undefined}>
                       {c.render ? c.render(v, row) : defaultCell(c, v)}
                     </td>
                   );

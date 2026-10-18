@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// The status page is plain server-rendered HTML: no script (the CSP allows
-// only same-origin files), styles inline (allowed), and the theme follows the
-// visitor's system setting. It reloads itself every minute.
+// The status page is server-rendered HTML with inline styles (the CSP allows
+// them) and a theme that follows the visitor's system setting. It reloads
+// itself every minute. Times are written in UTC inside <time> elements;
+// /status.js, a same-origin script the CSP allows, rewrites them into the
+// visitor's own time zone, and without script they stay readable in UTC.
 
 var statusFuncs = template.FuncMap{
 	"pct": func(p *float64) string {
@@ -27,22 +29,12 @@ var statusFuncs = template.FuncMap{
 		}
 		return t.Format("Jan 2")
 	},
-	"when": func(s string) string {
-		t, err := time.Parse(tsLayout, s)
-		if err != nil {
-			return s
-		}
-		return t.Format("Jan 2, 15:04 UTC")
-	},
-	"whenp": func(s *string) string {
+	"when": localTime,
+	"whenp": func(s *string) template.HTML {
 		if s == nil {
 			return ""
 		}
-		t, err := time.Parse(tsLayout, *s)
-		if err != nil {
-			return *s
-		}
-		return t.Format("Jan 2, 15:04 UTC")
+		return localTime(*s)
 	},
 	"dur": func(sec int64) string {
 		d := time.Duration(sec) * time.Second
@@ -107,6 +99,7 @@ var statusTemplate = template.Must(template.New("status").Funcs(statusFuncs).Par
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
 <meta name="robots" content="noindex">
+<script src="/status.js" defer></script>
 <title>{{.Title}} status</title>
 <style>
 :root {
@@ -209,3 +202,24 @@ footer { margin-top: 32px; color: var(--text-3); font-size: 12px; display: flex;
 </body>
 </html>
 `))
+
+// localTime renders a stored timestamp as a <time> element in UTC, for
+// /status.js to show in the visitor's zone. Both parts come from the parsed
+// time, so nothing from the database reaches the HTML unescaped.
+func localTime(s string) template.HTML {
+	t, err := time.Parse(tsLayout, s)
+	if err != nil {
+		return template.HTML(template.HTMLEscapeString(s))
+	}
+	return template.HTML(`<time datetime="` + t.UTC().Format(time.RFC3339) + `">` + t.UTC().Format("Jan 2, 15:04 UTC") + `</time>`)
+}
+
+// statusScript shows the page's times in the visitor's time zone.
+const statusScript = `document.querySelectorAll("time[datetime]").forEach(function (el) {
+  var d = new Date(el.getAttribute("datetime"));
+  if (isNaN(d)) return;
+  el.textContent = new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short"
+  }).format(d);
+});
+`

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { Drawer } from "../Modal";
 import { Select } from "../Select";
+import { Combobox } from "../Combobox";
 import { useToast } from "../Toast";
 import {
   alertsApi,
@@ -202,12 +203,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             {scopes.includes("route") && (
               <label className="field grow">
                 <span>Route</span>
-                <input className="input" list="al-routes" value={sp.scope.route ?? ""} placeholder="All routes" onChange={(e) => setScope("route", e.target.value)} />
-                <datalist id="al-routes">
-                  {meta.routes.map((r) => (
-                    <option key={r} value={r} />
-                  ))}
-                </datalist>
+                <Combobox label="Route" value={sp.scope.route ?? ""} placeholder="All routes" options={meta.routes} onChange={(v) => setScope("route", v)} />
               </label>
             )}
             {scopes.includes("method") && (
@@ -225,12 +221,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             {scopes.includes("service") && (
               <label className="field">
                 <span>Service</span>
-                <input className="input" list="al-services" value={sp.scope.service ?? ""} placeholder="Any" onChange={(e) => setScope("service", e.target.value)} />
-                <datalist id="al-services">
-                  {meta.services.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
+                <Combobox label="Service" value={sp.scope.service ?? ""} placeholder="Any" options={meta.services} onChange={(v) => setScope("service", v)} />
               </label>
             )}
             {scopes.includes("check") && (

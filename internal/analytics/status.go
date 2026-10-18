@@ -222,3 +222,14 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=30")
 	_, _ = w.Write(buf.Bytes())
 }
+
+// handleStatusScript serves the status page's local-time script.
+func (s *Server) handleStatusScript(w http.ResponseWriter, r *http.Request) {
+	if !statusEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(statusScript))
+}

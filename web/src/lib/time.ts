@@ -97,3 +97,25 @@ export function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)$/;
+
+const zoneFmt = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  timeZoneName: "short",
+});
+
+/**
+ * Hover text for a cell: a stored timestamp becomes the viewer's full local
+ * time with its zone; anything else is shown as it is.
+ */
+export function cellTitle(v: string): string {
+  if (!ISO_TIME.test(v)) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : zoneFmt.format(d);
+}

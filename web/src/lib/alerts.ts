@@ -27,6 +27,8 @@ export interface AlertsMeta {
   smtp_configured: boolean;
   smtp_from: string;
   digest_tz: string;
+  /** Current offset of the digest zone from UTC, in minutes. */
+  digest_offset_min: number;
   interval_s: number;
   routes: string[];
   instances: string[];

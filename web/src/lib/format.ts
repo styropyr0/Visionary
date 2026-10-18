@@ -120,9 +120,15 @@ export function humanize(col: string): string {
     t: "Time",
   };
   if (special[col]) return special[col];
-  const s = col.replace(/_/g, " ");
+  const words = col.split("_").map((w) => ACRONYMS[w] ?? w);
+  const s = words.join(" ");
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+// Abbreviations shown in capitals wherever a column name becomes a label.
+const ACRONYMS: Record<string, string> = Object.fromEntries(
+  ["api", "cpu", "db", "dns", "gc", "http", "https", "id", "ids", "io", "ip", "js", "jvm", "os", "ram", "rss", "rps", "sdk", "slo", "sql", "ssl", "tcp", "tls", "ttfb", "ui", "url", "uuid", "lcp", "inp", "cls", "fcp", "otlp", "iops", "kb", "mb", "gb"].map((w) => [w, w.toUpperCase()]),
+);
 
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

@@ -602,7 +602,7 @@ function AuditTab() {
               setUserQuery(user.trim());
             }}
           >
-            <input className="input" placeholder="User id or name, then Enter" value={user} onChange={(e) => setUser(e.target.value)} />
+            <input className="input" placeholder="User ID or name, then Enter" value={user} onChange={(e) => setUser(e.target.value)} />
           </form>
           {(category || userQuery) && (
             <button

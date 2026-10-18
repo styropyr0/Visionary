@@ -1864,3 +1864,19 @@ pre.code {
 .nav-group + .nav-group {
   margin-top: 10px;
 }
+
+/* Combobox: a full-width input whose menu lines up with it. */
+.combobox {
+  width: 100%;
+}
+.combobox .input {
+  width: 100%;
+}
+.combobox-menu {
+  left: 0;
+  right: 0;
+  min-width: 0;
+}
+.menu-row.active {
+  background: var(--hover-wash);
+}
