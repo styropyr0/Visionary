@@ -268,6 +268,7 @@ func (c *Config) Public() Public {
 		CodeLength:    c.CodeLength,
 		ResendSeconds: c.ResendSeconds,
 		Location:      c.Location,
-		AllowedRoles:  c.AllowedRoles,
+		// Never null: the sign-in screen lists them.
+		AllowedRoles: append([]string{}, c.AllowedRoles...),
 	}
 }

@@ -3,16 +3,17 @@ import {
   AlertTriangle,
   ArrowRight,
   AtSign,
+  Bell,
   Eye,
   EyeOff,
-  KeyRound,
   LineChart,
   Loader2,
   Lock,
   MapPin,
+  MessageSquareText,
   Phone,
+  Server,
   ShieldCheck,
-  Sparkles,
   User,
 } from "lucide-react";
 import { api, ApiError, type AuthConfig, type SessionInfo } from "../lib/api";
@@ -206,7 +207,7 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
   };
 
   const IdIcon = cfg.identifier.input === "tel" ? Phone : cfg.identifier.input === "email" ? AtSign : User;
-  const roles = cfg.allowed_roles.map((r) => r.toLowerCase()).join(" or ");
+  const roles = (cfg.allowed_roles ?? []).map((r) => r.toLowerCase()).join(" or ");
 
   return (
     <form className="auth-form" onSubmit={submit} noValidate>
@@ -386,46 +387,44 @@ function BrandPanel({ provider, delegated }: { provider?: string; delegated: boo
       </div>
       <div className="auth-pitch">
         <h2>
-          See what your API is doing, <span>and why.</span>
+          Monitoring for {delegated && provider ? provider : "your API"}, <span>on your own database.</span>
         </h2>
-        <p>Live traffic, latency and server health from your own logs, with an analyst you can ask in plain language.</p>
+        <p>Requests, errors, server health and app performance, with alerts when something changes.</p>
         <ul className="auth-features">
           <li>
             <span className="ico">
               <LineChart size={15} />
             </span>
             <span>
-              <strong>Dashboards that load in seconds</strong>
-              Requests, errors, percentiles and host metrics side by side.
+              <strong>Requests and errors</strong>
+              Every API call with its route, status, latency and user. Errors are grouped by where they happen.
             </span>
           </li>
           <li>
             <span className="ico">
-              <Sparkles size={15} />
+              <Server size={15} />
             </span>
             <span>
-              <strong>Ask why, not just what</strong>
-              “When did latency spike yesterday and what caused it?”
+              <strong>Servers and apps</strong>
+              CPU, memory, disk and database pool from each server, and screen loads and crashes from the web and mobile apps.
             </span>
           </li>
           <li>
             <span className="ico">
-              <KeyRound size={15} />
+              <Bell size={15} />
             </span>
             <span>
-              <strong>Collects its own data</strong>
-              One middleware logs every request; a recorder samples the server. Nothing else to run.
+              <strong>Alerts and uptime</strong>
+              Rules on any metric and scheduled checks on your endpoints, sent to Slack, email or a webhook.
             </span>
           </li>
           <li>
             <span className="ico">
-              <ShieldCheck size={15} />
+              <MessageSquareText size={15} />
             </span>
             <span>
-              <strong>{delegated ? "Your existing sign-in" : "Private by default"}</strong>
-              {delegated
-                ? `Accounts and roles come from ${provider}.`
-                : "Only people with access can open it; queries are read-only."}
+              <strong>Questions in plain words</strong>
+              Ask about the data and get a chart back, with the query it ran.
             </span>
           </li>
         </ul>
