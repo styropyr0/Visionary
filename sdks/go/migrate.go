@@ -48,6 +48,8 @@ var AddedSystemColumns = []Column{
 	{"proc_max_fds", "int"},
 	{"service", "text"},
 	{"version", "text"},
+	{"sdk", "text"},
+	{"runtime", "text"},
 }
 
 // AddedRequestColumns are api_logs columns beyond the original set, in insert

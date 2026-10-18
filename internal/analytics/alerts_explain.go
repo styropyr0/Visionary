@@ -45,7 +45,7 @@ GROUP BY COALESCE(route, path) ORDER BY window_requests DESC LIMIT 15`},
   ` + countIf(inWindow) + ` AS window_count, ` + countIf(inBase) + ` AS baseline_count
 FROM api_logs WHERE ` + where + ` AND status >= 400
 GROUP BY COALESCE(error_key, ` + s.q.text("status") + `), status ORDER BY window_count DESC LIMIT 10`},
-		{"Server metrics per instance: alert window vs yesterday", `SELECT instance,
+		{"Server metrics per instance: alert window vs yesterday (window_goroutines counts goroutines in Go, threads or event-loop handles elsewhere; runtime says which)", `SELECT instance, MAX(runtime) AS runtime,
   ` + s.q.round("AVG(CASE WHEN "+inWindow+" THEN host_cpu_percent END)", 1) + ` AS window_cpu,
   ` + s.q.round("AVG(CASE WHEN "+inBase+" THEN host_cpu_percent END)", 1) + ` AS baseline_cpu,
   ` + s.q.round("MAX(CASE WHEN "+inWindow+" THEN host_mem_percent END)", 1) + ` AS window_mem_max,

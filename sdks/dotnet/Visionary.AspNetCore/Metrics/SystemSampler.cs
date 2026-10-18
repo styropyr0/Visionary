@@ -162,6 +162,8 @@ internal sealed class SystemSampler : BackgroundService
             ["interval_s"] = Math.Round(secs, 2),
             ["service"] = _agent.Service,
             ["version"] = _agent.Version,
+            ["sdk"] = VisionaryAgent.Sdk,
+            ["runtime"] = _agent.Runtime,
         };
 
         // .NET's concurrency unit is the thread pool worker; OS threads are proc_threads.

@@ -91,6 +91,7 @@ func (a otlpAttrs) boolean(key string) bool {
 // otlpResource is what Visionary reads from a resource.
 type otlpResource struct {
 	service, version, instance, runtime, sdkVersion string
+	language                                       string // telemetry.sdk.language
 }
 
 func otlpResourceOf(attrs []*commonpb.KeyValue) *otlpResource {
@@ -109,10 +110,20 @@ func otlpResourceOf(attrs []*commonpb.KeyValue) *otlpResource {
 	if name := a.str("process.runtime.name"); name != "" {
 		r.runtime = otlpClip(strings.TrimSpace(name+" "+a.str("process.runtime.version")), 255)
 	}
+	r.language = otlpClip(a.str("telemetry.sdk.language"), 64)
 	if v := a.str("telemetry.sdk.version"); v != "" {
 		r.sdkVersion = otlpClip(strings.TrimSpace(a.str("telemetry.sdk.language")+" "+v), 255)
 	}
 	return r
+}
+
+// runtimeOrLanguage is the runtime, or the SDK language when the exporter sent
+// no runtime attributes, so the dashboard can still tell the language apart.
+func (r *otlpResource) runtimeOrLanguage() string {
+	if r.runtime != "" {
+		return r.runtime
+	}
+	return r.language
 }
 
 func otlpHexID(b []byte) string {

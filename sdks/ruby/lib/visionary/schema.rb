@@ -46,7 +46,8 @@ module Visionary
       %w[tcp_established int], %w[tcp_retrans int],
       %w[host_procs int], %w[procs_running int], %w[procs_blocked int],
       %w[ctx_switches_ps real], %w[proc_read_kbps real], %w[proc_write_kbps real],
-      %w[proc_max_fds int], %w[service text], %w[version text]
+      %w[proc_max_fds int], %w[service text], %w[version text],
+      %w[sdk text], %w[runtime text]
     ].freeze
 
     SPAN_COLUMNS = %w[

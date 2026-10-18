@@ -187,10 +187,12 @@ table, read its columns (SQLite/D1: `SELECT name FROM pragma_table_info('system_
 PostgreSQL/MySQL: `information_schema.columns` for the current schema or database)
 and run `ALTER TABLE system_metrics ADD COLUMN <name> <type>` for each one missing.
 Types for SQLite / PostgreSQL / MySQL: counts `INTEGER` / `BIGINT` / `BIGINT`,
-measurements `REAL` / `DOUBLE PRECISION` / `DOUBLE`. Ignore "duplicate column"
+measurements `REAL` / `DOUBLE PRECISION` / `DOUBLE`, text `TEXT` / `TEXT` /
+`VARCHAR(255)`. Ignore "duplicate column"
 errors (another instance got there first). `AddedSystemColumns` in
 `sdks/go/migrate.go` is the canonical list and insert order.
-Counts are integers, measurements floats, `created_at`/`instance` text.
+Counts are integers, measurements floats, `created_at`, `instance`, `service`,
+`version`, `sdk` and `runtime` text.
 
 | Column | Meaning | Python | Java |
 |---|---|---|---|
@@ -207,12 +209,12 @@ Counts are integers, measurements floats, `created_at`/`instance` text.
 | `proc_threads` | OS threads | `num_threads()` | `ThreadMXBean.getThreadCount()` |
 | `proc_open_fds` | open files/handles | `num_fds()`/`num_handles()` | `UnixOperatingSystemMXBean.getOpenFileDescriptorCount()` |
 | `goroutines` | concurrency units: goroutines in Go, live threads elsewhere | `threading.active_count()` | `ThreadMXBean.getThreadCount()` |
-| `heap_alloc_mb`, `heap_inuse_mb` | runtime heap used / committed | `tracemalloc` if on, else NULL | `MemoryMXBean` heap used / committed |
+| `heap_alloc_mb`, `heap_inuse_mb` | runtime heap used / committed | `tracemalloc` traced size in both while tracing, else NULL | `MemoryMXBean` heap used / committed |
 | `heap_objects` | live heap objects | `len(gc.get_objects())` is too slow: NULL | NULL |
 | `gc_count` | collections since previous sample | `gc.get_stats()` collections delta | sum of `GarbageCollectorMXBean.getCollectionCount()` deltas |
 | `gc_pause_ms` | GC time since previous sample | measured with `gc.callbacks` | `getCollectionTime()` delta |
 | `gc_cpu_percent` | GC time as % of the interval | derived | derived |
-| `db_*` | pool stats from an optional user callback; `db_acquires`, `db_empty_acquires`, `db_acquire_wait_ms` are per-sample deltas of cumulative counters | callback | HikariCP `HikariPoolMXBean` when present |
+| `db_*` | pool stats from an optional user callback; `db_acquires`, `db_empty_acquires`, `db_acquire_wait_ms` are per-sample deltas of cumulative counters; a counter the pool doesn't have is NULL (Go `SQLDB`: `db_acquires`) | callback, else Django 5.1+ psycopg pools (`OPTIONS["pool"]`) when present | HikariCP `HikariPoolMXBean` when present |
 | `http_requests`, `http_errors` | requests / 5xx finished since previous sample (counted by the middleware even when request logging is off) | | |
 | `http_rps` | `http_requests / interval_s` (2 decimals) | | |
 | `http_in_flight` | requests in progress now | | |
@@ -234,6 +236,9 @@ Counts are integers, measurements floats, `created_at`/`instance` text.
 | `ctx_switches_ps` | host context switches per second | `psutil.cpu_stats().ctx_switches` delta | `/proc/stat` ctxt delta on Linux, else NULL |
 | `proc_read_kbps`, `proc_write_kbps` | this process's I/O per second | `Process.io_counters()` read_bytes/write_bytes | `/proc/self/io` on Linux, else NULL |
 | `proc_max_fds` | soft limit on open files (NULL on Windows or when unlimited) | `resource.getrlimit(RLIMIT_NOFILE)[0]` | `UnixOperatingSystemMXBean.getMaxFileDescriptorCount()` |
+| `service`, `version` | service name and release (see Telemetry) | | |
+| `sdk` | the SDK that wrote the row: `go`, `python`, `java`, `node`, `ruby` or `dotnet` (as `releases.sdk`) | `python` | `java` |
+| `runtime` | language runtime and version, as `releases.runtime` | `_errors.runtime()`, e.g. `CPython 3.13.1` | `Origin.javaRuntime()`, e.g. `OpenJDK 21.0.4` |
 
 Partition rule: skip disk devices matching
 `^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,

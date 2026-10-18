@@ -88,6 +88,8 @@ module Visionary
         @prev = counters
         v["service"] = @cfg.service
         v["version"] = @cfg.version
+        v["sdk"] = "ruby"
+        v["runtime"] = Telemetry.runtime
         Schema::TABLES["system_metrics"].map { |c| v[c] }
       end
 
@@ -178,8 +180,9 @@ module Visionary
         mem = Sources::LINUX ? Sources.meminfo : {}
         if (total = mem["MemTotal"]).to_i.positive?
           cached = mem["Cached"].to_i + mem["SReclaimable"].to_i
-          used = total - mem["MemFree"].to_i - mem["Buffers"].to_i - cached
-          used = total - mem["MemAvailable"].to_i if used.negative?
+          # psutil's definition: used is what isn't available.
+          available = mem["MemAvailable"] || (mem["MemFree"].to_i + mem["Buffers"].to_i + cached)
+          used = total - available
           v["host_mem_used_mb"] = (used / MB).round(1)
           v["host_mem_total_mb"] = (total / MB).round(1)
           v["host_mem_percent"] = (100.0 * used / total).round(1)

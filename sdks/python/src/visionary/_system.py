@@ -9,7 +9,7 @@ import time
 import tracemalloc
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import _spans
+from . import _errors, _spans
 from ._entry import format_ts
 from ._node import NodeCollector
 from ._storage import SYSTEM_COLUMNS, Backend
@@ -92,6 +92,7 @@ class Recorder:
         self._instance = instance
         self._service = cfg.service or None
         self._version = cfg.version or None
+        self._runtime = _errors.runtime()
         self._backend = backend
         self._http = http
         self._logger = logger
@@ -117,6 +118,14 @@ class Recorder:
         self._prime()
         self._thread = threading.Thread(target=self._run, name="visionary-system", daemon=True)
         self._thread.start()
+
+    def set_default_db_stats(self, fn: Any) -> None:
+        """Use fn for the db_* columns unless the app set cfg.db_stats. Safe
+        while the sampler runs: the baseline is read before fn is used."""
+        if self._db_stats is not None:
+            return
+        self._db_prev = _quiet(fn) or {}
+        self._db_stats = fn
 
     def restart_after_fork(self) -> None:
         self._init_state()
@@ -195,6 +204,8 @@ class Recorder:
             "interval_s": round(secs, 2),
             "service": self._service,
             "version": self._version,
+            "sdk": "python",
+            "runtime": self._runtime,
         }
 
         load = _quiet(os.getloadavg) if hasattr(os, "getloadavg") else None
@@ -208,7 +219,8 @@ class Recorder:
 
         v["goroutines"] = threading.active_count()
         if tracemalloc.is_tracing():
-            v["heap_alloc_mb"] = round(tracemalloc.get_traced_memory()[0] / _MB, 1)
+            # No separate committed size: both columns get the traced total.
+            v["heap_alloc_mb"] = v["heap_inuse_mb"] = round(tracemalloc.get_traced_memory()[0] / _MB, 1)
 
         count = _gc_collections()
         pause = self._gc.total

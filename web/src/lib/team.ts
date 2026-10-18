@@ -124,10 +124,13 @@ export interface AuditPage {
 
 export interface About {
   version: string;
+  /** The Go release this Visionary server was built with. */
   go_version: string;
   database: string;
   auth_mode: string;
   features: { name: string; on: boolean; detail: string }[];
+  /** Instances that sent system metrics in the last week, and their runtime. */
+  services?: { service: string; instance: string; sdk: string; runtime: string; last_seen: string }[];
 }
 
 // ---------- Dashboards ----------

@@ -98,6 +98,32 @@ type featureStatus struct {
 	Detail string `json:"detail"`
 }
 
+// connectedService is one instance that sent system metrics this week, with
+// the SDK and language runtime that wrote them (empty from older SDKs).
+type connectedService struct {
+	Service  string `json:"service"`
+	Instance string `json:"instance"`
+	SDK      string `json:"sdk"`
+	Runtime  string `json:"runtime"`
+	LastSeen string `json:"last_seen"`
+}
+
+func (s *Server) connectedServices(ctx context.Context) []connectedService {
+	out := []connectedService{}
+	res, err := s.db.Query(ctx, `SELECT MAX(service), instance, MAX(sdk), MAX(runtime), MAX(created_at) AS last_seen
+FROM system_metrics WHERE created_at >= ? GROUP BY instance ORDER BY last_seen DESC LIMIT 50`,
+		time.Now().UTC().Add(-7*24*time.Hour).Format(tsLayout))
+	if err != nil {
+		return out // no system_metrics table yet
+	}
+	for _, row := range res.Rows {
+		if len(row) == 5 {
+			out = append(out, connectedService{toString(row[0]), toString(row[1]), toString(row[2]), toString(row[3]), toString(row[4])})
+		}
+	}
+	return out
+}
+
 func countList(env string) int {
 	n := 0
 	for _, k := range strings.Split(getEnv(env, ""), ",") {
@@ -147,6 +173,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":    version,
 		"go_version": runtime.Version(),
+		"services":   s.connectedServices(r.Context()),
 		"database":   s.db.Name(),
 		"auth_mode":  s.cfg.Auth.Type,
 		"features":   features,

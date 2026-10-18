@@ -56,6 +56,9 @@ type DBStats struct {
 	Total, Idle, InUse, Max int64
 	Acquires, EmptyAcquires int64
 	AcquireWait             time.Duration
+	// noAcquires marks Acquires as unknown (database/sql has no such
+	// counter), so db_acquires is stored as NULL rather than 0.
+	noAcquires bool
 }
 
 // Config chooses where rows go, in this order: Database (a connection the

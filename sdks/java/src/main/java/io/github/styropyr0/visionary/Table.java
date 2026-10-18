@@ -67,7 +67,7 @@ final class Table {
                     "procs_running", "procs_blocked")
             .real("ctx_switches_ps", "proc_read_kbps", "proc_write_kbps")
             .integer("proc_max_fds")
-            .text("service", "version")
+            .text("service", "version", "sdk", "runtime")
             .build();
 
     // The three telemetry tables share one schema file, telemetry.sql.

@@ -10,6 +10,9 @@ code hasn't. Works under WSGI and ASGI.
 It also records every SQL statement of every database alias as a span (via
 ``execute_wrappers``, the list behind ``connection.execute_wrapper``) and
 every exception Django turns into a 500 (``got_request_exception``).
+
+With Django 5.1+ PostgreSQL pooling (``OPTIONS["pool"]``) and no
+``db_stats`` hook, the ``db_*`` system columns come from Django's pools.
 """
 
 from __future__ import annotations
@@ -54,6 +57,8 @@ class VisionaryMiddleware:
         self._async = markcoroutinefunction is not None and iscoroutinefunction(get_response)
         if self._async:
             markcoroutinefunction(self)
+        if _uses_pool():
+            self.agent.default_db_stats(_pool_stats)
         if self.agent.spans_on:
             install_db_spans()
         if self.agent.errors_on:
@@ -244,6 +249,39 @@ def _db_target(conn: Any) -> str:
         return _db.target_of(conn.vendor, conn.settings_dict.get("NAME"))
     except Exception:
         return "db"
+
+
+def _uses_pool() -> bool:
+    """Whether a PostgreSQL alias turns on Django 5.1+ pooling."""
+    try:
+        from django.conf import settings
+
+        return any("postgresql" in (db.get("ENGINE") or "") and (db.get("OPTIONS") or {}).get("pool")
+                   for db in settings.DATABASES.values())
+    except Exception:
+        return False
+
+
+def _pool_stats() -> Optional[dict]:
+    """db_* stats summed over Django's psycopg pools; None before any exists.
+    Reads the pools Django already made: ``connection.pool`` would create one."""
+    try:
+        from django.db.backends.postgresql.base import DatabaseWrapper
+    except Exception:
+        return None
+    pools = list(getattr(DatabaseWrapper, "_connection_pools", {}).values())
+    if not pools:
+        return None
+    s: dict = {}
+    for pool in pools:
+        for k, n in pool.get_stats().items():
+            s[k] = s.get(k, 0) + n
+    return {
+        "total": s.get("pool_size", 0), "idle": s.get("pool_available", 0),
+        "in_use": s.get("pool_size", 0) - s.get("pool_available", 0), "max": s.get("pool_max", 0),
+        "acquires": s.get("requests_num", 0), "empty_acquires": s.get("requests_queued", 0),
+        "acquire_wait_ms": s.get("requests_wait_ms", 0),
+    }
 
 
 def _route(request: Any) -> str:

@@ -282,8 +282,10 @@ SELECT {{t}} AS t,
 FROM system_metrics WHERE ` + sysWindow + ` AND proc_open_fds IS NOT NULL
 GROUP BY t ORDER BY t`,
 
+		// sdk and runtime say which language wrote the rows, so runtime
+		// charts can use its words (goroutines, threads, heap).
 		"instances": `
-SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples
+SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples, MAX(sdk) AS sdk, MAX(runtime) AS runtime
 FROM system_metrics WHERE created_at >= {{from}} AND created_at < {{to}}
 GROUP BY instance ORDER BY last_seen DESC`,
 	}

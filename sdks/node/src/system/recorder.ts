@@ -6,6 +6,7 @@ import type { Logger } from "../log.js";
 import { errMessage } from "../log.js";
 import { type Value, SYSTEM_COLUMNS, insertSQL } from "../store/sql.js";
 import type { Store } from "../store/store.js";
+import { RUNTIME } from "../telemetry/errors.js";
 import { formatTs, round } from "../util.js";
 import * as linux from "./linux.js";
 
@@ -177,6 +178,8 @@ export class Recorder {
       interval_s: round(secs, 2),
       service: this.opts.service || null,
       version: this.opts.version || null,
+      sdk: "node",
+      runtime: RUNTIME,
     };
     const quiet = <T>(fn: () => T): T | undefined => {
       try {

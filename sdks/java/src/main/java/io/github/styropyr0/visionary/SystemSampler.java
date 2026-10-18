@@ -162,6 +162,8 @@ final class SystemSampler {
         set(row, "instance", origin.instance());
         set(row, "service", origin.service());
         set(row, "version", origin.version());
+        set(row, "sdk", "java");
+        set(row, "runtime", origin.runtime());
         set(row, "interval_s", Values.round(secs, 2));
 
         double load = os.getSystemLoadAverage();

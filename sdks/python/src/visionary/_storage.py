@@ -53,6 +53,7 @@ ADDED_SYSTEM_COLUMNS = [
     ("host_procs", "int"), ("procs_running", "int"), ("procs_blocked", "int"),
     ("ctx_switches_ps", "real"), ("proc_read_kbps", "real"), ("proc_write_kbps", "real"),
     ("proc_max_fds", "int"), ("service", "text"), ("version", "text"),
+    ("sdk", "text"), ("runtime", "text"),
 ]
 SYSTEM_COLUMNS = SYSTEM_COLUMNS + [name for name, _ in ADDED_SYSTEM_COLUMNS]
 

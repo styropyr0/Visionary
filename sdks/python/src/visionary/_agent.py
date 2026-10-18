@@ -7,7 +7,7 @@ import socket
 import threading
 import time
 import weakref
-from typing import Optional
+from typing import Callable, Optional
 
 from . import _errors, _spans
 from ._config import Config, from_env
@@ -126,6 +126,12 @@ class Agent:
                 self._requests.log(ev)
         except Exception:
             logger.exception("visionary: capturing an error failed")
+
+    def default_db_stats(self, fn: Callable[[], Optional[dict]]) -> None:
+        """Fill the db_* columns from fn unless the app set config.db_stats
+        (integration API). Works before or after start()."""
+        if self._system is not None and self.config.db_stats is None:
+            self._system.set_default_db_stats(fn)
 
     def start(self) -> "Agent":
         """Launch the background threads. Tables are created on them, so a slow

@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     proc_write_kbps    DOUBLE,
     proc_max_fds       BIGINT,
     service            VARCHAR(255),
-    version            VARCHAR(255)
+    version            VARCHAR(255),
+    sdk                VARCHAR(255),
+    runtime            VARCHAR(255)
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX idx_system_metrics_instance_created ON system_metrics (instance, created_at);

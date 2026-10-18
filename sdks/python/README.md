@@ -306,6 +306,10 @@ visionary.init(cfg)
 
 If `db_stats()` leaves out a key, that column is stored as NULL.
 
+With Django 5.1+ PostgreSQL pooling (`"OPTIONS": {"pool": ...}`) you don't need
+the hook: when `db_stats` is unset, the Django middleware sums the stats of
+Django's pools the same way. Without a pool the `db_*` columns stay NULL.
+
 ## What is captured
 
 Each request (`api_logs`) records:
@@ -337,7 +341,8 @@ Each sample (`system_metrics`) records:
 - **Runtime:** live Python threads (in the `goroutines` column), the
   `tracemalloc` heap when tracing is on, and GC collections and pause time
   (via `gc.callbacks`).
-- **Database pool:** whatever your `db_stats` hook returns.
+- **Database pool:** whatever your `db_stats` hook returns, or Django's
+  PostgreSQL pools when it isn't set.
 - **HTTP:** requests, 5xx responses, requests per second and in-flight
   requests seen by the integrations. These are counted even when request
   logging is off.

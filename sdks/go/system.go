@@ -199,6 +199,8 @@ func (r *recorder) sample() []any {
 	v["instance"] = r.ident.instance
 	v["service"] = nullable(r.ident.service)
 	v["version"] = nullable(r.ident.version)
+	v["sdk"] = "go"
+	v["runtime"] = runtime.Version()
 	v["interval_s"] = round(secs, 2)
 
 	if pct, err := cpu.Percent(0, false); err == nil && len(pct) > 0 {
@@ -262,7 +264,9 @@ func (r *recorder) sample() []any {
 		v["db_idle_conns"] = st.Idle
 		v["db_acquired_conns"] = st.InUse
 		v["db_max_conns"] = st.Max
-		v["db_acquires"] = st.Acquires - r.dbPrev.Acquires
+		if !st.noAcquires {
+			v["db_acquires"] = st.Acquires - r.dbPrev.Acquires
+		}
 		v["db_empty_acquires"] = st.EmptyAcquires - r.dbPrev.EmptyAcquires
 		v["db_acquire_wait_ms"] = round(float64(st.AcquireWait-r.dbPrev.AcquireWait)/float64(time.Millisecond), 1)
 		r.dbPrev = st
@@ -307,6 +311,7 @@ func SQLDB(db *sql.DB) func() DBStats {
 			Max:           int64(s.MaxOpenConnections),
 			EmptyAcquires: s.WaitCount,
 			AcquireWait:   s.WaitDuration,
+			noAcquires:    true,
 		}
 	}
 }

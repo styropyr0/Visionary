@@ -37,6 +37,8 @@ export const ADDED_SYSTEM_COLUMNS: [string, Kind][] = [
   ["proc_max_fds", "int"],
   ["service", "text"],
   ["version", "text"],
+  ["sdk", "text"],
+  ["runtime", "text"],
 ];
 
 export const ADDED_REQUEST_COLUMNS: [string, Kind][] = [

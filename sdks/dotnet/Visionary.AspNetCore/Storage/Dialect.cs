@@ -91,6 +91,8 @@ internal static class Schema
         new("proc_max_fds", "int"),
         new("service", "text"),
         new("version", "text"),
+        new("sdk", "text"),
+        new("runtime", "text"),
     };
 
     public static readonly string[] SystemColumns = SystemBaseColumns.Concat(AddedSystemColumns.Select(c => c.Name)).ToArray();

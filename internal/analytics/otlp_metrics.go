@@ -18,9 +18,9 @@ import (
 const otlpMetricWindow = 15 // seconds
 
 // otlpSystemCols are the system_metrics columns OTLP can fill, in insert
-// order.
+// order. The first seven come from the resource, the rest from datapoints.
 var otlpSystemCols = []string{
-	"created_at", "instance", "interval_s", "service", "version",
+	"created_at", "instance", "interval_s", "service", "version", "sdk", "runtime",
 	"host_cpu_percent", "cpu_user_percent", "cpu_system_percent", "cpu_iowait_percent", "cpu_steal_percent", "cpu_count",
 	"load_1", "load_5", "load_15",
 	"host_mem_used_mb", "host_mem_total_mb", "host_mem_percent", "host_mem_available_mb", "host_mem_cached_mb",
@@ -211,8 +211,9 @@ func (o *otlpState) metricRowsInto(out *otlpRows, due []*otlpMetricRow) {
 		} else if !ok {
 			o.lastRow[row.key] = at
 		}
-		r := []any{otlpTime(row.at), row.res.instance, interval, otlpNullStr(row.res.service), otlpNullStr(row.res.version)}
-		for _, c := range otlpSystemCols[5:] {
+		r := []any{otlpTime(row.at), row.res.instance, interval, otlpNullStr(row.res.service), otlpNullStr(row.res.version),
+			"otlp", otlpNullStr(row.res.runtimeOrLanguage())}
+		for _, c := range otlpSystemCols[7:] {
 			v, ok := vals[c]
 			switch {
 			case !ok || math.IsNaN(v) || math.IsInf(v, 0):

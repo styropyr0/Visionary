@@ -706,10 +706,43 @@ function AboutTab() {
             <span>{d.database}</span>
             <span>Sign-in mode</span>
             <span className="mono">{d.auth_mode}</span>
-            <span>Go</span>
-            <span className="mono">{d.go_version}</span>
+            <span>Built with</span>
+            <span className="mono">{d.go_version.replace(/^go/, "Go ")}</span>
           </div>
         </div>
+      </Card>
+      <Card
+        title="Connected services"
+        description="Instances that sent system metrics in the last week, and the SDK and language runtime they run. This is your services' runtime; the Go version above is Visionary's own."
+      >
+        {(d.services ?? []).length === 0 ? (
+          <div className="settings-body">
+            <span className="dim">No instance has sent system metrics in the last week.</span>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Instance</th>
+                  <th>Runtime</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.services!.map((x) => (
+                  <tr key={x.instance}>
+                    <td>{x.service || <span className="dim">—</span>}</td>
+                    <td className="mono">{x.instance}</td>
+                    <td className="mono">{x.runtime || x.sdk || <span className="dim">Update the SDK to report it</span>}</td>
+                    <td title={formatFull(new Date(x.last_seen))}>{formatRelative(x.last_seen)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
       <Card
         title="Features"

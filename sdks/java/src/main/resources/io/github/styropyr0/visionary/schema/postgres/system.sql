@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     proc_write_kbps    DOUBLE PRECISION,
     proc_max_fds       BIGINT,
     service            TEXT,
-    version            TEXT
+    version            TEXT,
+    sdk                TEXT,
+    runtime            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

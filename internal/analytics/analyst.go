@@ -404,7 +404,8 @@ Table system_metrics: one row per server instance every ~15 seconds. May be empt
 - process: proc_cpu_percent (percent of one core), proc_rss_mb, proc_threads, proc_open_fds, proc_max_fds, proc_read_kbps, proc_write_kbps
 - Columns a platform cannot report are NULL (iowait, steal, TCP and disk busy are Linux-only).
 - service, version: the service and release that sent the sample
-- Go runtime: goroutines, heap_alloc_mb, heap_inuse_mb, heap_objects, gc_count, gc_pause_ms (both per sample), gc_cpu_percent
+- sdk TEXT (go, python, java, node, ruby, dotnet or otlp) and runtime TEXT (e.g. go1.26.2, CPython 3.13.1, OpenJDK 21.0.4): the language that wrote the row, NULL from older SDKs. Name runtime columns in that language's words.
+- language runtime: goroutines (goroutines in Go; live threads in Python, Ruby and the JVM; thread-pool threads in .NET; active event-loop handles in Node), heap_alloc_mb, heap_inuse_mb (Go heap, JVM heap, V8 heap, .NET GC heap; Python only while tracemalloc is on), heap_objects, gc_count, gc_pause_ms (both per sample), gc_cpu_percent
 - database pool: db_total_conns, db_idle_conns, db_acquired_conns (in use), db_max_conns, db_acquires, db_empty_acquires (had to wait), db_acquire_wait_ms (per sample)
 - HTTP: http_requests, http_errors (5xx), http_rps, http_in_flight, uptime_s
 ` + featureNotes(s.featurePrompt()) + `

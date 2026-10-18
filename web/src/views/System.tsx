@@ -6,6 +6,7 @@ import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { formatLogTime } from "../lib/time";
+import { langOf, relabel, wordsFor, type RuntimeWords } from "../lib/runtime";
 import { sparkPoints } from "../charts/option";
 import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
@@ -22,6 +23,8 @@ interface PanelDef {
   span: string;
   /** Says why a panel can be empty, e.g. a Linux-only source. */
   empty?: string;
+  /** Description and series labels in the service language's words. */
+  runtime?: (w: RuntimeWords) => { description: string; labels: Record<string, string> };
 }
 
 const LINUX_ONLY = "Not reported by this host. This metric is collected on Linux.";
@@ -55,7 +58,14 @@ const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
     text: "Available memory is what new work can use without swapping; cached memory is page cache the kernel gives back under pressure.",
     panels: [
       { name: "memory_detail", title: "Host memory", description: "Memory in use, available to new work, and held as page cache.", viz: { type: "timeseries", x: "t", y: ["used", "available", "cached"], unit: "bytes" }, span: "span-6" },
-      { name: "process_memory", title: "Process memory", description: "Resident memory of this process and its runtime heap in use.", viz: { type: "timeseries", x: "t", y: ["rss_bytes", "heap_bytes"], unit: "bytes" }, span: "span-6" },
+      {
+        name: "process_memory",
+        title: "Process memory",
+        description: "Resident memory of this process and its runtime heap in use.",
+        viz: { type: "timeseries", x: "t", y: ["rss_bytes", "heap_bytes"], unit: "bytes" },
+        span: "span-6",
+        runtime: (w) => ({ description: w.heapHelp, labels: { rss_bytes: "Resident memory", heap_bytes: w.heap } }),
+      },
       { name: "swap", title: "Swap", description: "Swap in use against the total. Steady swap use under load slows everything down.", viz: { type: "timeseries", x: "t", y: ["swap_used", "swap_total"], unit: "bytes" }, span: "span-6", empty: "No swap reported by this host." },
       { name: "memory", title: "Host memory used", description: "Percent of host memory in use.", viz: { type: "timeseries", x: "t", y: ["host_memory"], unit: "percent" }, span: "span-6" },
     ],
@@ -86,7 +96,14 @@ const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
     title: "Process and runtime",
     text: "The service process itself: concurrency, garbage collection, file handles and its own I/O.",
     panels: [
-      { name: "goroutines", title: "Concurrency", description: "Goroutines (Go) or live threads, and OS threads. A steady climb usually means a leak or stuck work.", viz: { type: "timeseries", x: "t", y: ["goroutines", "threads"], unit: "count" }, span: "span-4" },
+      {
+        name: "goroutines",
+        title: "Concurrency",
+        description: "Goroutines (Go) or live threads, and OS threads. A steady climb usually means a leak or stuck work.",
+        viz: { type: "timeseries", x: "t", y: ["goroutines", "threads"], unit: "count" },
+        span: "span-4",
+        runtime: (w) => ({ description: w.concurrencyHelp, labels: { goroutines: w.concurrency, threads: "OS threads" } }),
+      },
       { name: "gc", title: "GC pause", description: "Total garbage-collection pause per interval.", viz: { type: "timeseries", x: "t", y: ["gc_pause_ms"], unit: "ms" }, span: "span-4" },
       { name: "file_descriptors", title: "Open files", description: "Open files and sockets against the process limit. Hitting the limit makes new connections fail.", viz: { type: "timeseries", x: "t", y: ["open_files", "limit_files"], unit: "count" }, span: "span-4" },
       { name: "process_io", title: "Process read/write speed", description: "How fast this process reads and writes, to disk and other files.", viz: { type: "timeseries", x: "t", y: ["read_bytes", "write_bytes"], unit: "bytes_per_s" }, span: "span-6" },
@@ -128,7 +145,25 @@ export function System() {
   const net = useSystem("network", instance);
 
   const missing = instances.error instanceof ApiError && instances.error.status === 404;
-  const names = (instances.data?.rows ?? []).map((r) => String(r[0]));
+  const rows = useMemo(() => instances.data?.rows ?? [], [instances.data]);
+  const names = rows.map((r) => String(r[0]));
+  // The language of the shown instances: one instance's, or the one they all
+  // share. Mixed or unknown falls back to neutral words.
+  const runtimes = useMemo(() => {
+    const cols = instances.data?.columns ?? [];
+    const si = cols.indexOf("sdk");
+    const ri = cols.indexOf("runtime");
+    return new Map(rows.map((r) => [String(r[0]), { lang: langOf(r[si], r[ri]), runtime: ri >= 0 && r[ri] ? String(r[ri]) : "" }]));
+  }, [instances.data, rows]);
+  const words = useMemo(() => {
+    const shown = instance ? [runtimes.get(instance)] : [...runtimes.values()];
+    const langs = new Set(shown.map((x) => x?.lang ?? null));
+    return wordsFor(langs.size === 1 ? [...langs][0] : null);
+  }, [runtimes, instance]);
+  const instanceLabel = (n: string) => {
+    const r = runtimes.get(n)?.runtime;
+    return r ? `${n} · ${r}` : n;
+  };
   const s = useMemo(() => {
     const r = stats.data;
     if (!r || r.rows.length === 0) return null;
@@ -157,7 +192,7 @@ export function System() {
                 icon={<Server size={14} />}
                 value={instance}
                 onChange={setInstance}
-                options={[{ value: "", label: "All instances" }, ...names.map((n) => ({ value: n, label: n }))]}
+                options={[{ value: "", label: "All instances" }, ...names.map((n) => ({ value: n, label: instanceLabel(n) }))]}
                 maxWidth={240}
               />
             )}
@@ -305,7 +340,7 @@ export function System() {
             />
 
             {SECTIONS.map((sec) => (
-              <SectionPanels key={sec.title} {...sec} instance={instance} />
+              <SectionPanels key={sec.title} {...sec} instance={instance} words={words} />
             ))}
 
             <Section title="Notable moments" />
@@ -317,12 +352,12 @@ export function System() {
   );
 }
 
-function SectionPanels({ title, text, panels, instance }: (typeof SECTIONS)[number] & { instance: string }) {
+function SectionPanels({ title, text, panels, instance, words }: (typeof SECTIONS)[number] & { instance: string; words: RuntimeWords }) {
   return (
     <>
       <Section title={title} text={text} />
       {panels.map((p) => (
-        <SystemPanel key={p.name} {...p} instance={instance} />
+        <SystemPanel key={p.name} {...p} instance={instance} words={words} />
       ))}
     </>
   );
@@ -337,22 +372,25 @@ function formatUptime(sec: number): string {
   return `${m}m`;
 }
 
-function SystemPanel({ name, title, description, viz, span, empty, instance }: PanelDef & { instance: string }) {
+function SystemPanel({ name, title, description, viz, span, empty, runtime, instance, words }: PanelDef & { instance: string; words: RuntimeWords }) {
   const tokens = useChartTokens();
   const q = useSystem(name, instance);
   const height = span === "span-3" ? 180 : 220;
+  const lang = runtime?.(words);
+  const data = q.data && lang ? relabel(q.data, lang.labels) : q.data;
+  if (lang) viz = { ...viz, y: viz.y?.map((y) => lang.labels[y] ?? y) };
   return (
     <Panel
       className={span}
       title={title}
-      description={description}
-      result={q.data}
+      description={lang?.description ?? description}
+      result={data}
       loading={q.loading}
       error={q.error}
       bodyHeight={height}
-      note={vizNote(q.data, viz, tokens)}
-      chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} empty={empty} />}
-      table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
+      note={vizNote(data, viz, tokens)}
+      chart={data && <VizView result={data} viz={viz} height={height} title={title} empty={empty} />}
+      table={data && <DataTable result={data} maxHeight={height} defaultUnit={viz.unit} />}
     />
   );
 }
