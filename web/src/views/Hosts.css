@@ -1,0 +1,137 @@
+/* Hosts view: the fleet table and one host's detail. */
+
+.host-tile > .panel { height: 100%; }
+
+.host-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.host-status.online { color: var(--good-text); }
+.host-status.stale { color: var(--warning-text); }
+.host-status.offline { color: var(--critical-text); }
+.host-status.large { font-size: 15px; font-weight: 600; }
+
+.host-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.host-name a { font-weight: 500; }
+.host-name .mono { font-size: 11.5px; }
+
+.host-meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+.host-meter-bar {
+  display: inline-block;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.host-meter-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.host-meter-bar .ok { background: var(--good); }
+.host-meter-bar .warn { background: var(--warning); }
+.host-meter-bar .bad { background: var(--critical); }
+
+.host-bad { color: var(--critical-text); font-weight: 600; }
+.host-warn { color: var(--warning-text); font-weight: 600; }
+
+.host-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.host-search svg {
+  position: absolute;
+  left: 10px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.host-search .input {
+  width: 220px;
+  max-width: 50vw;
+  padding-left: 30px;
+}
+
+.host-install .host-steps {
+  max-width: 720px;
+  margin: 4px 0 0;
+  padding-left: 20px;
+  text-align: left;
+}
+.host-install .host-steps li { margin-bottom: 12px; }
+.host-install .host-steps a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.host-install pre.code {
+  margin-top: 6px;
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+  word-break: normal;
+}
+
+.host-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.host-back:hover { color: var(--text-1); }
+
+.host-head { padding: 14px 16px; }
+.host-head-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.host-head-text { min-width: 0; flex: 1; }
+.host-head-os { font-size: 14px; font-weight: 500; }
+.host-head-text .dim { color: var(--text-3); font-size: 12px; }
+.host-kv {
+  grid-template-columns: repeat(auto-fill, minmax(110px, max-content) minmax(140px, 1fr));
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.host-cmd {
+  display: inline-block;
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 12px;
+}
+
+.host-unit.failed,
+.host-sev.critical { color: var(--critical-text); font-weight: 600; }
+.host-unit.active { color: var(--good-text); }
+.host-unit.not-found,
+.host-unit.inactive { color: var(--text-3); }
+.host-sev.warning { color: var(--warning-text); font-weight: 600; }
+.host-sev.info { color: var(--text-2); }
+
+@media (max-width: 720px) {
+  .host-head-main { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .host-kv { grid-template-columns: 110px minmax(0, 1fr); }
+}

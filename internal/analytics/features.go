@@ -19,6 +19,7 @@ import (
 //	otlp.go      OpenTelemetry (OTLP/HTTP) ingestion
 //	rum.go       browser and mobile ingestion
 //	team.go      roles, API keys, audit log, dashboards
+//	hosts.go     the host agent's reports and the Hosts view
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
@@ -38,6 +39,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.otlpRoutes(mux)
 	s.rumRoutes(mux)
 	s.teamRoutes(mux)
+	s.hostsRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -54,12 +56,13 @@ func (s *Server) Start(ctx context.Context) {
 	s.rumStart(ctx)
 	s.teamStart(ctx)
 	s.otlpStart(ctx)
+	s.hostsStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.
 func (s *Server) featurePrompt() string {
 	var parts []string
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt()} {
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt()} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}

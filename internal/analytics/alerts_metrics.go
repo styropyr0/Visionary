@@ -94,7 +94,7 @@ func alertMetrics(apdexMs int) []metricDef {
 		sys("db_wait_ms", "DB pool wait time", "ms", "Total time spent waiting for a database connection over the window.", "SUM(db_acquire_wait_ms)", ">", 1000),
 		sys("in_flight", "Requests in flight", "count", "Most requests in progress at once.", "MAX(http_in_flight)", ">", 100),
 		{ID: "instance_silent", Label: "Instance stopped reporting", Group: "liveness", Unit: "minutes",
-			Description: "Minutes since an instance last wrote a system_metrics row. Fires per instance.",
+			Description: "Minutes since an instance (or a host agent) last wrote a system_metrics row. Fires per instance.",
 			Scopes:      systemScopes, Op: ">", Threshold: 5, UpIsBad: true},
 		{ID: "uptime_failing", Label: "Uptime check failing", Group: "uptime", Unit: "count",
 			Description: "Consecutive failed results of an uptime check, newest first. Fires per check.",

@@ -64,6 +64,7 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 | Anything with OpenTelemetry | [OTLP/HTTP](docs/otlp.md) at `/v1/traces`, `/v1/metrics`, `/v1/logs` |
 | Browsers | [`sdks/browser`](sdks/browser) |
 | Android (Kotlin) and iOS (Swift) | [`sdks/android`](sdks/android), [`sdks/ios`](sdks/ios) |
+| Any Linux VM, no app needed | The [host agent](#host-agent), [`cmd/visionary-agent`](cmd/visionary-agent) |
 
 Server SDKs write straight to the database, batched in the background; they
 never block a request, and a database that is down never breaks one. They all
@@ -166,6 +167,67 @@ alerts get a short explanation from the same data.
 
 Query results go to the model provider so it can reason about them. Columns
 holding IPs, user agents, headers and request/response bodies are masked first.
+
+## Host agent
+
+The SDKs see the host an app runs on. The agent watches any machine on its own
+(a database box, a worker, a bastion) and fills the **Hosts** view. It posts
+to the server over HTTPS with a **server** ingest key (Settings → API keys, or
+`VISIONARY_INGEST_KEYS`) and never needs database credentials.
+
+Every 15 s it samples CPU, memory, swap, disks, network and load (the same
+`system_metrics` columns the SDKs write, with `sdk = 'agent'`, so the System
+view and alert rules such as "Instance stopped reporting" cover agent hosts
+too). Once a minute it reports those samples plus:
+
+- inventory: OS, kernel, architecture, CPUs, memory, boot time, primary address;
+- the top 15 processes by CPU and by memory (command lines clipped, obvious
+  secrets such as `--password=...` and tokens masked);
+- every real mount: space and inodes used;
+- failed systemd services, and the state of those in `VISIONARY_AGENT_UNITS`;
+- security findings (Linux): failed and successful SSH logins and sudo from
+  `/var/log/auth.log`, `/var/log/secure` or journald; listening ports opened or
+  closed; pending package updates every 6 hours (apt, dnf, yum, apk); reboots.
+
+While the server is unreachable it keeps up to an hour of reports in memory and
+retries with backoff.
+
+Docker (the flags let it see the host instead of the container):
+
+```sh
+docker run -d --name visionary-agent --restart unless-stopped \
+  --pid=host --net=host -v /:/host:ro \
+  -e HOST_ROOT=/host -e HOST_PROC=/host/proc -e HOST_SYS=/host/sys -e HOST_ETC=/host/etc \
+  -e VISIONARY_URL=https://visionary.example.com -e VISIONARY_KEY=<server key> \
+  ghcr.io/styropyr0/visionary-agent:latest
+```
+
+Build the image with `docker build -f Dockerfile.agent -t visionary-agent .`.
+systemd: [`deploy/agent/install.sh`](deploy/agent/install.sh) installs the
+binary, `/etc/visionary-agent.env` and
+[`visionary-agent.service`](deploy/agent/visionary-agent.service)
+(`VISIONARY_AGENT_BINARY=./visionary-agent` installs one you built with
+`go build ./cmd/visionary-agent`).
+
+| Variable (flag) | Default | |
+|---|---|---|
+| `VISIONARY_URL` (`-url`) | | The Visionary server. |
+| `VISIONARY_KEY` (`-key`) | | A server ingest key. |
+| `VISIONARY_HOST` (`-host`) | the host name | Name shown in Visionary (`system_metrics.instance`). |
+| `VISIONARY_SERVICE` (`-service`) | | Service the host belongs to. |
+| `VISIONARY_AGENT_INTERVAL` (`-interval`) | `15s` | Sample interval. |
+| `VISIONARY_AGENT_REPORT` (`-report`) | `1m` | Report interval. |
+| `VISIONARY_AGENT_UNITS` (`-units`) | | systemd services to watch, comma-separated. |
+| `VISIONARY_AGENT_SECURITY` (`-security`) | `true` | SSH, sudo, port and update findings. |
+| `VISIONARY_AGENT_AUTH_LOG` (`-auth-log`) | auto | A log file, `journald` or `off`. |
+| `VISIONARY_DISK_PATHS` (`-disk-paths`) | all mounts | Mount points to report; the first fills the disk columns. |
+
+On the server, `VISIONARY_HOST_RETENTION_DAYS` (14) keeps process, mount and
+unit snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (90) security events, and
+`VISIONARY_SYSTEM_RETENTION_DAYS` (30) the agents' metric rows; hosts silent
+for 30 days leave the inventory. The ingest endpoint is
+`POST /api/agent/v1/report` (gzip JSON, [`internal/agentapi`](internal/agentapi)),
+rate limited like OTLP (`VISIONARY_AGENT_RATE`, 50 per second).
 
 ## Run the server
 

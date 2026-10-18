@@ -57,6 +57,9 @@ type recorder struct {
 	diskDir string
 	started time.Time
 	http    httpCounters
+	// hostOnly leaves out the process, runtime, database and HTTP columns
+	// (HostSampler).
+	hostOnly bool
 
 	last     time.Time
 	requests int64
@@ -188,6 +191,16 @@ func (r *recorder) flush(ctx context.Context) {
 // sample reads every source once. A source that fails (load average where
 // unsupported, file descriptors without permission) is stored as NULL.
 func (r *recorder) sample() []any {
+	v := r.values()
+	row := make([]any, len(systemColumns))
+	for i, c := range systemColumns {
+		row[i] = v[c] // missing sources stay nil (NULL)
+	}
+	return row
+}
+
+// values reads every source once, by column name.
+func (r *recorder) values() map[string]any {
 	now := time.Now()
 	secs := now.Sub(r.last).Seconds()
 	r.last = now
@@ -227,6 +240,10 @@ func (r *recorder) sample() []any {
 		r.netRx, r.netTx = rx, tx
 	}
 
+	if r.hostOnly {
+		r.sampleExtra(v, secs)
+		return v
+	}
 	if r.proc != nil {
 		if pct, err := r.proc.Percent(0); err == nil {
 			v["proc_cpu_percent"] = round(pct, 1)
@@ -282,12 +299,7 @@ func (r *recorder) sample() []any {
 
 	v["uptime_s"] = int64(time.Since(r.started).Seconds())
 	r.sampleExtra(v, secs)
-
-	row := make([]any, len(systemColumns))
-	for i, c := range systemColumns {
-		row[i] = v[c] // missing sources stay nil (NULL)
-	}
-	return row
+	return v
 }
 
 // readGCCPU returns the runtime's estimates of CPU seconds spent on GC and

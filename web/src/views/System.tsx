@@ -15,7 +15,7 @@ import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 
-interface PanelDef {
+export interface PanelDef {
   name: string;
   title: string;
   description: string;
@@ -29,7 +29,7 @@ interface PanelDef {
 
 const LINUX_ONLY = "Not reported by this host. This metric is collected on Linux.";
 
-const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
+export const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
   {
     title: "CPU",
     text: "How busy the machine is and where the time goes. iowait means CPUs idle while waiting on disk; steal means the hypervisor gave the time to another VM.",
@@ -134,8 +134,13 @@ function useSystem<T = Result>(name: string, instance: string) {
   return useQuery<T>(`sys-${name}?${qs}#${tick}`, (signal) => api<T>(`/api/system/${name}?${qs}`, { signal }));
 }
 
+/** #/system?instance=web-1 opens the view on one instance (the Hosts view links here). */
+function readInstance(): string {
+  return new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("instance") ?? "";
+}
+
 export function System() {
-  const [instance, setInstance] = useState("");
+  const [instance, setInstance] = useState(readInstance);
   const instances = useSystem("instances", "");
   const stats = useSystem("stats", instance);
   const cpu = useSystem("cpu", instance);
@@ -372,7 +377,7 @@ function formatUptime(sec: number): string {
   return `${m}m`;
 }
 
-function SystemPanel({ name, title, description, viz, span, empty, runtime, instance, words }: PanelDef & { instance: string; words: RuntimeWords }) {
+export function SystemPanel({ name, title, description, viz, span, empty, runtime, instance, words }: PanelDef & { instance: string; words: RuntimeWords }) {
   const tokens = useChartTokens();
   const q = useSystem(name, instance);
   const height = span === "span-3" ? 180 : 220;

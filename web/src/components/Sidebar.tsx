@@ -6,6 +6,7 @@ import {
   Bookmark,
   Bug,
   Gauge,
+  HardDrive,
   LayoutDashboard,
   LayoutGrid,
   LogOut,
@@ -31,6 +32,7 @@ export type Route =
   | "overview"
   | "performance"
   | "system"
+  | "hosts"
   | "errors"
   | "frontend"
   | "uptime"
@@ -41,7 +43,7 @@ export type Route =
   | "alerts"
   | "settings";
 
-export const ROUTES: Route[] = ["overview", "performance", "system", "errors", "frontend", "uptime", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
+export const ROUTES: Route[] = ["overview", "performance", "system", "hosts", "errors", "frontend", "uptime", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
 
 const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -50,6 +52,7 @@ const NAV: { group: string; items: { route: Route; label: string; icon: typeof L
       { route: "overview", label: "API overview", icon: LayoutDashboard },
       { route: "performance", label: "Performance", icon: Gauge },
       { route: "system", label: "System", icon: Server },
+      { route: "hosts", label: "Hosts", icon: HardDrive },
       { route: "errors", label: "Errors", icon: Bug },
       { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
       { route: "uptime", label: "Uptime", icon: Activity },

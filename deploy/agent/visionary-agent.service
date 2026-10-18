@@ -1,0 +1,27 @@
+# systemd unit of the Visionary host agent. install.sh puts it in
+# /etc/systemd/system and the settings in /etc/visionary-agent.env:
+#   VISIONARY_URL=https://visionary.example.com
+#   VISIONARY_KEY=<server ingest key>
+#   VISIONARY_AGENT_UNITS=nginx,postgresql
+[Unit]
+Description=Visionary host agent
+Documentation=https://github.com/styropyr0/Visionary#host-agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/visionary-agent.env
+ExecStart=/usr/local/bin/visionary-agent
+Restart=always
+RestartSec=10
+# Root reads every process, the auth log and other processes' sockets; the
+# agent writes nothing to disk.
+User=root
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
