@@ -7,7 +7,8 @@ plugins {
 }
 
 group = "io.github.styropyr0"
-version = "0.1.0"
+// JitPack sets VERSION to the tag being built (v0.3.0 -> 0.3.0); local builds are "dev".
+version = System.getenv("VERSION")?.removePrefix("v")?.takeIf { it.isNotBlank() } ?: "dev"
 
 android {
     namespace = "io.github.styropyr0.visionary"

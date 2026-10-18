@@ -37,18 +37,18 @@ cd sdks/android
 ```kotlin
 // settings.gradle.kts: repositories { mavenLocal(); google(); mavenCentral() }
 dependencies {
-    implementation("io.github.styropyr0:visionary-android:0.1.0")
+    implementation("io.github.styropyr0:visionary-android:dev")
 }
 ```
 
-**JitPack style.** JitPack builds from the repository root, so this needs a `jitpack.yml` there
-that runs `cd sdks/android && ./gradlew :visionary:publishReleasePublicationToMavenLocal`. With
-that in place and a tag built:
+**JitPack.** Each release tag (from `v0.3.0`) is built by JitPack through the `jitpack.yml` at
+the repository root. The first request for a new tag starts the build, which takes a couple of
+minutes; the status is at https://jitpack.io/#styropyr0/Visionary.
 
 ```kotlin
 // settings.gradle.kts: repositories { maven("https://jitpack.io") }
 dependencies {
-    implementation("com.github.styropyr0.visionary:visionary-android:<tag>")
+    implementation("com.github.styropyr0:Visionary:v0.3.0")
 }
 ```
 

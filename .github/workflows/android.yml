@@ -1,0 +1,47 @@
+name: Android SDK
+
+# JitPack builds a version only when it is first requested. Requesting each new
+# tag here builds it right away, and fails this run if the build breaks.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build, e.g. v0.3.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  jitpack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      BASE: https://jitpack.io/com/github/${{ github.repository_owner }}/${{ github.event.repository.name }}
+      API: https://jitpack.io/api/builds/com.github.${{ github.repository_owner }}/${{ github.event.repository.name }}
+    steps:
+      - name: Build on JitPack
+        run: |
+          pom="$BASE/$TAG/${{ github.event.repository.name }}-$TAG.pom"
+          # The first request starts the build and may time out while it runs.
+          curl -s -o /dev/null -m 60 "$pom" || true
+          for i in $(seq 1 60); do
+            status=$(curl -s -m 30 "$API/$TAG" | sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p')
+            echo "JitPack status: ${status:-unknown}"
+            case "$status" in
+              ok) break ;;
+              Error|error) break ;;
+            esac
+            sleep 15
+          done
+          echo "::group::JitPack build log"
+          curl -s -m 60 "$BASE/$TAG/build.log" | tail -80
+          echo "::endgroup::"
+          if [ "$status" != "ok" ]; then
+            echo "::error::JitPack build for $TAG did not succeed (status: ${status:-unknown})"
+            exit 1
+          fi
+          echo "Published com.github.${{ github.repository_owner }}:${{ github.event.repository.name }}:$TAG"
