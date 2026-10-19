@@ -147,11 +147,12 @@ func containerFilter(r *http.Request) (string, error) {
 var containerListColumns = []string{
 	"host", "name", "image", "project", "state", "health", "restarts", "exit_code", "oom_killed", "started_at", "finished_at",
 	"cpu_percent", "cpu_cores", "cpu_limit_cores", "mem_used_mb", "mem_limit_mb", "mem_percent", "pids", "ports",
-	"events", "warnings", "last_seen",
+	"events", "warnings", "last_seen", "source",
 }
 
 // GET /api/containers?from=&to=: every container in each host's latest
-// report, with its latest sample and its events in the range.
+// report, with its latest sample and its events in the range, then the
+// containers the SDKs report (containers_sdk.go).
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
 	if err != nil {
@@ -160,6 +161,16 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	out := &Result{Columns: containerListColumns, Rows: [][]any{}}
+	if err := s.agentContainers(ctx, tr, out); err != nil {
+		s.fail(w, err)
+		return
+	}
+	out.Rows = append(out.Rows, s.sdkContainers(ctx, tr)...)
+	writeJSON(w, http.StatusOK, out)
+}
+
+// agentContainers adds the containers in the agents' latest reports to out.
+func (s *Server) agentContainers(ctx context.Context, tr timeRange, out *Result) error {
 	// The latest report of each host within the last day: a host whose
 	// engine went away keeps its last known containers for a while.
 	recent := time.Now().UTC().Add(-24 * time.Hour).Format(tsLayout)
@@ -173,11 +184,9 @@ ORDER BY c.project, c.name
 LIMIT 2000`, recent)
 	if err != nil {
 		if missingTable(err, "host_containers") {
-			writeJSON(w, http.StatusOK, out)
-			return
+			return nil
 		}
-		s.fail(w, err)
-		return
+		return err
 	}
 	since := time.Now().UTC().Add(-10 * time.Minute).Format(tsLayout)
 	latest := s.containerLookup(ctx, `
@@ -209,10 +218,10 @@ FROM container_events WHERE created_at >= ? AND created_at < ? GROUP BY host, co
 		out.Rows = append(out.Rows, []any{
 			row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10],
 			cell(m, 0), cell(m, 1), row[11], cell(m, 2), memLimit, cell(m, 4), cell(m, 5), row[13],
-			evCount, evWarn, row[14],
+			evCount, evWarn, row[14], "agent",
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	return nil
 }
 
 // containerLookup runs a query whose first two columns are host and
@@ -234,31 +243,49 @@ func (s *Server) containerLookup(ctx context.Context, sql string, args ...any) m
 	return out
 }
 
-// GET /api/containers/events?from=&to=&host=&container=: newest first, at
-// most 500.
+// GET /api/containers/events?from=&to=&host=&container=&source=: newest
+// first, at most 500. source=sdk reads one SDK container's OOM kills; without
+// a container the SDKs' join the agents'.
 func (s *Server) handleContainerEvents(w http.ResponseWriter, r *http.Request) {
 	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	filter, err := containerFilter(r)
+	cols := []string{"created_at", "host", "container", "image", "kind", "severity", "exit_code", "detail", "count"}
+	query := r.URL.Query()
+	out := emptyResult(cols)
+	if query.Get("source") != "sdk" {
+		filter, err := containerFilter(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		q := `SELECT ` + strings.Join(cols, ", ") + ` FROM container_events
+WHERE created_at >= ? AND created_at < ?` + filter + ` ORDER BY created_at DESC LIMIT 500`
+		rows, err := s.db.Query(r.Context(), q, tr.From.Format(tsLayout), tr.To.Format(tsLayout))
+		switch {
+		case err == nil:
+			out = dbResult(rows, q)
+		case !missingTable(err, "container_events"):
+			s.fail(w, err)
+			return
+		}
+		if query.Get("container") != "" {
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
+	}
+	sdk, err := s.sdkContainerEvents(r, tr)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	q := `SELECT created_at, host, container, image, kind, severity, exit_code, detail, count FROM container_events
-WHERE created_at >= ? AND created_at < ?` + filter + ` ORDER BY created_at DESC LIMIT 500`
-	rows, err := s.db.Query(r.Context(), q, tr.From.Format(tsLayout), tr.To.Format(tsLayout))
-	if err != nil {
-		if missingTable(err, "container_events") {
-			writeJSON(w, http.StatusOK, emptyResult([]string{"created_at", "host", "container", "image", "kind", "severity", "exit_code", "detail", "count"}))
-			return
-		}
-		s.fail(w, err)
-		return
+	mergeByTime(out, sdk, true)
+	if len(out.Rows) > 500 {
+		out.Rows = out.Rows[:500]
 	}
-	writeJSON(w, http.StatusOK, dbResult(rows, q))
+	writeJSON(w, http.StatusOK, out)
 }
 
 // containerPanel is one chart: per container (series) across containers,
@@ -295,9 +322,12 @@ GROUP BY t ORDER BY t`
 	}
 }
 
-// GET /api/containers/panels/{panel}?from=&to=&host=&container=
+// GET /api/containers/panels/{panel}?from=&to=&host=&container=&source=:
+// source=sdk charts one SDK container; without a container the SDKs' series
+// join the agents'.
 func (s *Server) handleContainerPanel(w http.ResponseWriter, r *http.Request) {
-	p, ok := containerPanels(s.q)[r.PathValue("panel")]
+	panel := r.PathValue("panel")
+	p, ok := containerPanels(s.q)[panel]
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
@@ -307,23 +337,49 @@ func (s *Server) handleContainerPanel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	one := r.URL.Query().Get("container") != ""
+	if r.URL.Query().Get("source") == "sdk" {
+		res, err := s.sdkContainerPanel(r, panel, one, tr)
+		switch {
+		case err != nil:
+			writeError(w, http.StatusBadRequest, err.Error())
+		case res == nil:
+			writeJSON(w, http.StatusOK, emptyResult([]string{"t"}))
+		default:
+			writeJSON(w, http.StatusOK, res)
+		}
+		return
+	}
 	filter, err := containerFilter(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	sql := p.all
-	if r.URL.Query().Get("container") != "" {
+	if one {
 		sql = p.one
 	}
 	res, err := s.execTemplate(r.Context(), strings.ReplaceAll(sql, "{{filter}}", filter), tr, true)
-	if err != nil {
-		if missingTable(err, "container_metrics") {
-			writeJSON(w, http.StatusOK, emptyResult([]string{"t", "series", "value"}))
-			return
-		}
+	if err != nil && !missingTable(err, "container_metrics") {
 		s.fail(w, err)
 		return
+	}
+	if !one {
+		sdk, serr := s.sdkContainerPanel(r, panel, false, tr)
+		if serr != nil {
+			writeError(w, http.StatusBadRequest, serr.Error())
+			return
+		}
+		switch {
+		case sdk == nil:
+		case res == nil:
+			res = sdk
+		default:
+			mergeByTime(res, sdk.Rows, false)
+		}
+	}
+	if res == nil {
+		res = emptyResult([]string{"t", "series", "value"})
 	}
 	writeJSON(w, http.StatusOK, res)
 }

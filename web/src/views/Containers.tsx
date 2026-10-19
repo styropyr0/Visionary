@@ -16,13 +16,19 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import "./Containers.css";
 
-/** The container lives in the hash (#/containers/db-1/postgres) so it can be linked. */
-function readTarget(): { host: string; name: string } {
-  const m = window.location.hash.match(/^#\/?containers\/([^/?]+)\/([^?]+)/);
-  return m ? { host: decodeURIComponent(m[1]), name: decodeURIComponent(m[2]) } : { host: "", name: "" };
+/**
+ * The container lives in the hash (#/containers/db-1/postgres) so it can be linked.
+ * One an SDK reports (Railway, Render, Kubernetes...) carries ?source=sdk: its
+ * host is the instance and its name the service.
+ */
+function readTarget(): { host: string; name: string; sdk: boolean } {
+  const m = window.location.hash.match(/^#\/?containers\/([^/?]+)\/([^?]+)(?:\?(.*))?/);
+  if (!m) return { host: "", name: "", sdk: false };
+  return { host: decodeURIComponent(m[1]), name: decodeURIComponent(m[2]), sdk: new URLSearchParams(m[3] ?? "").get("source") === "sdk" };
 }
 
-const containerHref = (host: string, name: string) => `#/containers/${encodeURIComponent(host)}/${encodeURIComponent(name)}`;
+const containerHref = (host: string, name: string, source?: unknown) =>
+  `#/containers/${encodeURIComponent(host)}/${encodeURIComponent(name)}${source === "sdk" ? "?source=sdk" : ""}`;
 
 export function Containers() {
   const [target, setTarget] = useState(readTarget);
@@ -31,7 +37,7 @@ export function Containers() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  return target.name ? <ContainerDetail key={`${target.host}/${target.name}`} {...target} /> : <ContainerList />;
+  return target.name ? <ContainerDetail key={`${target.host}/${target.name}/${target.sdk}`} {...target} /> : <ContainerList />;
 }
 
 function useContainers() {
@@ -52,7 +58,10 @@ function records(r: Result | undefined): Record<string, unknown>[] {
   return r.rows.map((row) => Object.fromEntries(r.columns.map((c, i) => [c, row[i]])));
 }
 
-const STATE_TONE: Record<string, string> = { running: "ok", restarting: "warn", paused: "warn", exited: "bad", dead: "bad", created: "muted", removing: "muted" };
+const STATE_TONE: Record<string, string> = { running: "ok", restarting: "warn", paused: "warn", exited: "bad", dead: "bad", stopped: "bad", created: "muted", removing: "muted" };
+
+/** Where a list row came from: the host agent or the service's own SDK. */
+const SOURCE = 22;
 
 function StateBadge({ state, health }: { state: unknown; health?: unknown }) {
   const s = String(state ?? "");
@@ -77,7 +86,8 @@ const KIND_LABEL: Record<string, string> = {
 
 const bytesMB = (v: unknown) => (toNumber(v) === null ? dim : formatBytes(toNumber(v)! * 1048576));
 
-const eventColumns = (withContainer: boolean): Column[] => [
+/** sdk holds the "host/name" keys of the containers the SDKs report, so their events link to the right view. */
+const eventColumns = (withContainer: boolean, sdk?: Set<string>): Column[] => [
   { key: "created_at", label: "Time", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
   ...(withContainer
     ? [
@@ -85,7 +95,7 @@ const eventColumns = (withContainer: boolean): Column[] => [
           key: "container",
           label: "Container",
           render: (v: unknown, row: unknown[]) => (
-            <a className="mono" href={containerHref(String(row[1]), String(v))} onClick={(e) => e.stopPropagation()}>
+            <a className="mono" href={containerHref(String(row[1]), String(v), sdk?.has(`${row[1]}/${v}`) ? "sdk" : "agent")} onClick={(e) => e.stopPropagation()}>
               {String(v)}
             </a>
           ),
@@ -125,6 +135,8 @@ function ContainerList() {
   const sumKind = (k: string) => ev.filter((e) => e.kind === k).reduce((a, e) => a + (toNumber(e.count) ?? 0), 0);
   const nearLimit = rows.filter((r) => (toNumber(r.mem_percent) ?? 0) >= 90).length;
   const filter: Record<string, string> = host ? { host } : {};
+  const sdkKeys = useMemo(() => new Set(records(list.data).filter((r) => r.source === "sdk").map((r) => `${r.host}/${r.name}`)), [list.data]);
+  const onlySDK = all.length > 0 && sdkKeys.size === all.length;
 
   const columns: Column[] = [
     {
@@ -132,10 +144,10 @@ function ContainerList() {
       label: "Container",
       render: (v, row) => (
         <span className="host-name">
-          <a href={containerHref(String(row[0]), String(v))} onClick={(e) => e.stopPropagation()}>
+          <a href={containerHref(String(row[0]), String(v), row[SOURCE])} onClick={(e) => e.stopPropagation()}>
             {String(v)}
           </a>
-          <span className="mono dim ctr-image">{String(row[2] ?? "")}</span>
+          <span className="mono dim ctr-image">{row[SOURCE] === "sdk" ? "reported by the SDK" : String(row[2] ?? "")}</span>
         </span>
       ),
     },
@@ -155,7 +167,7 @@ function ContainerList() {
       ),
     },
     { key: "mem_percent", label: "Of limit", align: "right", render: (v) => <Meter value={v} /> },
-    { key: "restarts", align: "right", render: (v) => (toNumber(v) ? <span className="host-warn">{formatCount(toNumber(v)!)}</span> : <span className="dim">0</span>) },
+    { key: "restarts", align: "right", render: (v) => (v == null ? dim : toNumber(v) ? <span className="host-warn">{formatCount(toNumber(v)!)}</span> : <span className="dim">0</span>) },
     {
       key: "started_at",
       label: "Up",
@@ -204,10 +216,11 @@ function ContainerList() {
         {list.data && list.data.rows.length === 0 && (
           <div className="grid">
             <InstallAgent title="No containers yet">
-              The host agent reports every Docker or Podman container on the machine it runs on: state, health, restarts, CPU and memory
-              against each container's limits, network and disk, plus OOM kills, crashes and failed health checks. It finds the engine's
-              socket on its own (<code className="mono">/var/run/docker.sock</code> or Podman's), or set{" "}
-              <code className="mono">VISIONARY_AGENT_DOCKER</code>.
+              A service on a container platform (Railway, Render, Kubernetes, Cloud Run, ECS, Azure Container Apps) shows up here on its
+              own: its Visionary SDK reports the container's CPU and memory against its limits, throttling and OOM kills. On your own
+              machines the host agent reports every Docker or Podman container: state, health, restarts, CPU and memory against each
+              container's limits, network and disk, plus OOM kills, crashes and failed health checks. It finds the engine's socket on its
+              own (<code className="mono">/var/run/docker.sock</code> or Podman's), or set <code className="mono">VISIONARY_AGENT_DOCKER</code>.
             </InstallAgent>
           </div>
         )}
@@ -246,23 +259,33 @@ function ContainerList() {
                   </label>
                 </div>
               </header>
-              <DataTable result={shown} columns={columns} rowKey={(r) => `${r[0]}/${r[1]}`} onRowClick={(r) => (window.location.hash = containerHref(String(r[0]), String(r[1])))} />
+              <DataTable result={shown} columns={columns} rowKey={(r) => `${r[0]}/${r[1]}`} onRowClick={(r) => (window.location.hash = containerHref(String(r[0]), String(r[1]), r[SOURCE]))} />
             </section>
 
-            <Section title="Usage" text="Each running container, from the agent's samples. CPU is a percent of the container's CPU limit, or of all the machine's CPUs when it has none." />
+            <Section
+              title="Usage"
+              text={`Each running container, from the agent's samples${sdkKeys.size ? " and the SDKs' (one series per service)" : ""}. CPU is a percent of the container's CPU limit, or of all the machine's CPUs when it has none.`}
+            />
             <ContainerChart path="cpu" params={filter} title="CPU" description="Average CPU per container." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "percent" }} span="span-6" />
             <ContainerChart path="memory" params={filter} title="Memory" description="Memory in use per container, without page cache." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "bytes", stack: true }} span="span-6" />
-            <ContainerChart path="network" params={filter} title="Network" description="Bytes received plus sent per second, per container. Empty for containers on the host network." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "bytes_per_s" }} span="span-6" />
-            <ContainerChart path="disk" params={filter} title="Disk" description="Bytes read plus written per second, per container." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "bytes_per_s" }} span="span-6" />
+            {!onlySDK && (
+              <>
+                <ContainerChart path="network" params={filter} title="Network" description="Bytes received plus sent per second, per container (agent only). Empty for containers on the host network." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "bytes_per_s" }} span="span-6" />
+                <ContainerChart path="disk" params={filter} title="Disk" description="Bytes read plus written per second, per container (agent only)." viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "bytes_per_s" }} span="span-6" />
+              </>
+            )}
 
-            <Section title="Events" text="Restarts, out-of-memory kills, exits and health check changes the agent saw between its reports." />
+            <Section
+              title="Events"
+              text={onlySDK ? "Out-of-memory kills the SDKs counted in their containers. Restarts, exits and health checks need the host agent." : "Restarts, out-of-memory kills, exits and health check changes the agent saw between its reports, and the out-of-memory kills the SDKs counted."}
+            />
             <Panel
               className="span-12"
               title="Container events"
               result={events.data}
               loading={events.loading}
               error={events.error}
-              table={events.data && (events.data.rows.length === 0 ? <div className="panel-state">No container events in this range.</div> : <DataTable result={events.data} columns={eventColumns(true)} maxHeight={420} />)}
+              table={events.data && (events.data.rows.length === 0 ? <div className="panel-state">No container events in this range.</div> : <DataTable result={events.data} columns={eventColumns(true, sdkKeys)} maxHeight={420} />)}
             />
           </div>
         )}
@@ -299,13 +322,23 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
   const exit = c.exit_code == null ? null : Number(c.exit_code);
   const oom = !!toNumber(c.oom_killed);
   const at = running ? started : finished;
+  const up: Fact = {
+    label: running ? "Up for" : "Stopped",
+    value: at ? (running ? formatUptime((Date.now() - at.getTime()) / 1000) : formatRelative(at.toISOString())) : "—",
+    sub: at ? `${running ? "since" : "at"} ${formatDateTime(at)}` : undefined,
+    title: at ? formatFull(at) : undefined,
+  };
+  const limits: Fact[] = [
+    { label: "CPU limit", value: cpuLimit ? `${cpuLimit} ${cpuLimit === 1 ? "core" : "cores"}` : "None" },
+    { label: "Memory limit", value: memLimit ? formatBytes(memLimit * 1048576) : "None" },
+  ];
+  if (c.source === "sdk") {
+    // The SDK sees its own process and cgroup, not the engine: no restarts, exits or ports.
+    const ooms = toNumber(c.events) ?? 0;
+    return [{ ...up, label: running ? "Process up for" : "Stopped reporting" }, ...limits, { label: "Out-of-memory kills", value: formatCount(ooms), tone: ooms > 0 ? "bad" : undefined }];
+  }
   return [
-    {
-      label: running ? "Up for" : "Stopped",
-      value: at ? (running ? formatUptime((Date.now() - at.getTime()) / 1000) : formatRelative(at.toISOString())) : "—",
-      sub: at ? `${running ? "since" : "at"} ${formatDateTime(at)}` : undefined,
-      title: at ? formatFull(at) : undefined,
-    },
+    up,
     { label: "Restarts", value: formatCount(restarts), tone: restarts > 0 ? "warn" : undefined },
     {
       label: "Last exit",
@@ -313,17 +346,16 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
       sub: exit !== null && oom ? `code ${exit}` : undefined,
       tone: oom ? "bad" : exit !== null && exit !== 0 && exit !== 143 ? "warn" : undefined,
     },
-    { label: "CPU limit", value: cpuLimit ? `${cpuLimit} ${cpuLimit === 1 ? "core" : "cores"}` : "None" },
-    { label: "Memory limit", value: memLimit ? formatBytes(memLimit * 1048576) : "None" },
+    ...limits,
     { label: "Processes", value: toNumber(c.pids) === null ? "—" : formatCount(toNumber(c.pids)!) },
     { label: "Ports", value: c.ports ? String(c.ports) : "None", mono: !!c.ports, title: c.ports ? String(c.ports) : undefined },
   ];
 }
 
-function ContainerDetail({ host, name }: { host: string; name: string }) {
+function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk: boolean }) {
   const list = useContainers();
-  const c = records(list.data).find((r) => r.host === host && r.name === name);
-  const params = { host, container: name };
+  const c = records(list.data).find((r) => r.host === host && r.name === name && (r.source === "sdk") === sdk);
+  const params: Record<string, string> = sdk ? { host, container: name, source: "sdk" } : { host, container: name };
   const events = useContainerData("events", params);
   const cpuLimit = toNumber(c?.cpu_limit_cores);
   const memLimit = toNumber(c?.mem_limit_mb);
@@ -337,7 +369,7 @@ function ContainerDetail({ host, name }: { host: string; name: string }) {
           <>
             <a className="btn ghost" href={`#/system?instance=${encodeURIComponent(host)}`}>
               <ExternalLink size={14} />
-              Machine in System
+              {sdk ? "Instance in System" : "Machine in System"}
             </a>
             <TimeRangePicker />
             <RefreshControl busy={list.loading} />
@@ -349,17 +381,25 @@ function ContainerDetail({ host, name }: { host: string; name: string }) {
           <ArrowLeft size={14} />
           All containers
         </a>
-        {list.data && !c && <div className="notice">This container is not in the latest report of {host}. Its history is below.</div>}
+        {list.data && !c && (
+          <div className="notice">{sdk ? `Instance ${host} has not reported its container in the last hour. Its history is below.` : `This container is not in the latest report of ${host}. Its history is below.`}</div>
+        )}
         <div className="grid">
           {c && (
             <HeadCard
               icon={<Box size={20} />}
               title={name}
               subtitle={
-                <>
-                  <span className="mono">{String(c.image ?? "")}</span>
-                  {c.project ? ` · Compose project ${String(c.project)}` : ""} · on {host}
-                </>
+                sdk ? (
+                  <>
+                    Reported by the service's SDK from its cgroup · instance <span className="mono">{host}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="mono">{String(c.image ?? "")}</span>
+                    {c.project ? ` · Compose project ${String(c.project)}` : ""} · on {host}
+                  </>
+                )
               }
               badge={<StateBadge state={c.state} health={c.health} />}
               meta={`Reported ${formatRelative(String(c.last_seen))}`}
@@ -373,10 +413,24 @@ function ContainerDetail({ host, name }: { host: string; name: string }) {
           <ContainerChart path="memory" params={params} title="Memory" description="Memory in use against the limit (the machine's memory when there is none)." viz={{ type: "timeseries", x: "t", y: ["used", "limit_bytes"], unit: "bytes" }} span="span-6" />
           <ContainerChart path="memory_percent" params={params} title="Memory of limit" description="At 100% the kernel kills the container's process (out of memory)." viz={{ type: "timeseries", x: "t", y: ["avg_used", "peak_used"], unit: "percent" }} span="span-6" />
 
-          <Section title="I/O" text="Rates between two samples. Containers on the host network report no network of their own." />
-          <ContainerChart path="network" params={params} title="Network" description="Bytes received and sent per second." viz={{ type: "timeseries", x: "t", y: ["received", "sent"], unit: "bytes_per_s" }} span="span-4" />
-          <ContainerChart path="disk" params={params} title="Disk" description="Bytes read and written per second." viz={{ type: "timeseries", x: "t", y: ["read_bytes", "written_bytes"], unit: "bytes_per_s" }} span="span-4" />
-          <ContainerChart path="pids" params={params} title="Processes" description="Processes and threads in the container." viz={{ type: "timeseries", x: "t", y: ["pids"], unit: "count" }} span="span-4" />
+          {sdk ? (
+            <Section
+              title="I/O"
+              text={
+                <>
+                  Network, disk and the process's own numbers are on the <a href={`#/system?instance=${encodeURIComponent(host)}`}>System view of {host}</a>. State, health and
+                  restarts need the host agent, which a container platform does not let run.
+                </>
+              }
+            />
+          ) : (
+            <>
+              <Section title="I/O" text="Rates between two samples. Containers on the host network report no network of their own." />
+              <ContainerChart path="network" params={params} title="Network" description="Bytes received and sent per second." viz={{ type: "timeseries", x: "t", y: ["received", "sent"], unit: "bytes_per_s" }} span="span-4" />
+              <ContainerChart path="disk" params={params} title="Disk" description="Bytes read and written per second." viz={{ type: "timeseries", x: "t", y: ["read_bytes", "written_bytes"], unit: "bytes_per_s" }} span="span-4" />
+              <ContainerChart path="pids" params={params} title="Processes" description="Processes and threads in the container." viz={{ type: "timeseries", x: "t", y: ["pids"], unit: "count" }} span="span-4" />
+            </>
+          )}
 
           <Section title="Events" />
           <Panel

@@ -43,7 +43,10 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **Containers:** every Docker or Podman container on the machines the host
   agent watches: state, health, restarts, CPU and memory against each
   container's limits, network and disk, and OOM kills, crashes and failed
-  health checks.
+  health checks. A service on a container platform (Railway, Render,
+  Kubernetes, Cloud Run, ECS, Azure Container Apps) is listed on its own, no
+  agent needed: its SDK reports the container's CPU and memory against its
+  limits, throttling and OOM kills.
 - **Errors:** exceptions and panics grouped into issues, with stacks, the
   versions they appear in, new and regressed issues, and links to the request.
 - **Request logs** with a waterfall of every query and outbound call.
