@@ -48,6 +48,50 @@ export function Meter({ value }: { value: unknown }) {
   );
 }
 
+export interface Fact {
+  label: string;
+  value: ReactNode;
+  /** A second, quieter line under the value. */
+  sub?: ReactNode;
+  /** Exact value on hover, e.g. a full timestamp. */
+  title?: string;
+  mono?: boolean;
+  tone?: "warn" | "bad";
+}
+
+/**
+ * The head of a machine or container: what it is and its state on top, then
+ * its facts as label-over-value cells that wrap on narrow screens.
+ */
+export function HeadCard({ icon, title, subtitle, badge, meta, facts }: { icon: ReactNode; title: string; subtitle: ReactNode; badge: ReactNode; meta?: ReactNode; facts: Fact[] }) {
+  return (
+    <section className="panel span-12 head-card">
+      <div className="head-top">
+        <div className="head-icon" aria-hidden>
+          {icon}
+        </div>
+        <div className="head-text">
+          <h2 className="head-title">{title}</h2>
+          <div className="head-sub">{subtitle}</div>
+        </div>
+        <div className="head-state">
+          {badge}
+          {meta && <div className="head-meta">{meta}</div>}
+        </div>
+      </div>
+      <dl className="head-facts">
+        {facts.map((f) => (
+          <div key={f.label} className={`head-fact ${f.tone ?? ""}`} title={f.title}>
+            <dt>{f.label}</dt>
+            <dd className={f.mono ? "mono" : undefined}>{f.value}</dd>
+            {f.sub && <dd className="head-fact-sub">{f.sub}</dd>}
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 /** How to install the host agent, with this server's URL filled in. */
 export function InstallAgent({ title, children }: { title: string; children: ReactNode }) {
   const url = window.location.origin;

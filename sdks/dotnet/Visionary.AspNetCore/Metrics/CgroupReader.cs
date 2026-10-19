@@ -17,6 +17,12 @@ internal sealed class CgroupReader
 {
     private static readonly string[] ContainerMarkers = { "docker", "kubepods", "containerd", "libpod", "lxc" };
 
+    /// <summary>
+    /// Variables container platforms set in every container: Kubernetes, Railway, Render, Heroku,
+    /// Cloud Run, ECS/Fargate and Azure Container Apps.
+    /// </summary>
+    private static readonly string[] ContainerEnv = { "KUBERNETES_SERVICE_HOST", "RAILWAY_SERVICE_ID", "RENDER_SERVICE_ID", "DYNO", "K_SERVICE", "ECS_CONTAINER_METADATA_URI_V4", "CONTAINER_APP_NAME" };
+
     private readonly bool _v2;
     private readonly string? _cpuDir; // v2: the cgroup; v1: the cpu controller's directory
     private readonly string? _cpuAcct; // v1: the cpuacct controller's directory
@@ -240,13 +246,13 @@ internal sealed class CgroupReader
     private static bool HasController(string list, string name) => list.Split(',').Contains(name);
 
     /// <summary>
-    /// Tells a container from a process on the host by the runtimes' marker files, the cgroup path
-    /// and Kubernetes' environment.
+    /// Tells a container from a process on the host by the runtimes' marker files, the platforms'
+    /// variables and the cgroup path.
     /// </summary>
     private static bool InContainer(string root, string cgroups) =>
         File.Exists(Join(root, ".dockerenv"))
         || File.Exists(Join(root, "run/.containerenv"))
-        || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("KUBERNETES_SERVICE_HOST"))
+        || ContainerEnv.Any(k => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(k)))
         || ContainerMarkers.Any(k => cgroups.Contains(k, StringComparison.Ordinal));
 
     /// <summary>Joins cgroup paths, which start with "/", under a directory.</summary>

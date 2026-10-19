@@ -3,11 +3,11 @@ import { ArrowLeft, Box, ExternalLink, Search, Server } from "lucide-react";
 import { api, rangeQuery, type Result, type Viz } from "../lib/api";
 import { formatBytes, formatCount, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
-import { formatLogTime, formatRelative } from "../lib/time";
+import { formatDateTime, formatFull, formatLogTime, formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { DataTable, type Column } from "../components/DataTable";
 import { ErrorNotice } from "../components/ErrorNotice";
-import { dim, formatUptime, InstallAgent, Meter } from "../components/Machine";
+import { dim, formatUptime, HeadCard, InstallAgent, Meter, type Fact } from "../components/Machine";
 import { Panel } from "../components/Panel";
 import { Section } from "../components/Section";
 import { Select } from "../components/Select";
@@ -290,6 +290,36 @@ function ContainerChart({ path, params, title, description, viz, span, empty }: 
   );
 }
 
+/** The facts of the container's head card. */
+function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, memLimit: number | null): Fact[] {
+  const running = c.state === "running";
+  const started = c.started_at ? new Date(String(c.started_at)) : null;
+  const finished = c.finished_at ? new Date(String(c.finished_at)) : null;
+  const restarts = toNumber(c.restarts) ?? 0;
+  const exit = c.exit_code == null ? null : Number(c.exit_code);
+  const oom = !!toNumber(c.oom_killed);
+  const at = running ? started : finished;
+  return [
+    {
+      label: running ? "Up for" : "Stopped",
+      value: at ? (running ? formatUptime((Date.now() - at.getTime()) / 1000) : formatRelative(at.toISOString())) : "—",
+      sub: at ? `${running ? "since" : "at"} ${formatDateTime(at)}` : undefined,
+      title: at ? formatFull(at) : undefined,
+    },
+    { label: "Restarts", value: formatCount(restarts), tone: restarts > 0 ? "warn" : undefined },
+    {
+      label: "Last exit",
+      value: exit === null ? "—" : oom ? "Out of memory" : `Code ${exit}`,
+      sub: exit !== null && oom ? `code ${exit}` : undefined,
+      tone: oom ? "bad" : exit !== null && exit !== 0 && exit !== 143 ? "warn" : undefined,
+    },
+    { label: "CPU limit", value: cpuLimit ? `${cpuLimit} ${cpuLimit === 1 ? "core" : "cores"}` : "None" },
+    { label: "Memory limit", value: memLimit ? formatBytes(memLimit * 1048576) : "None" },
+    { label: "Processes", value: toNumber(c.pids) === null ? "—" : formatCount(toNumber(c.pids)!) },
+    { label: "Ports", value: c.ports ? String(c.ports) : "None", mono: !!c.ports, title: c.ports ? String(c.ports) : undefined },
+  ];
+}
+
 function ContainerDetail({ host, name }: { host: string; name: string }) {
   const list = useContainers();
   const c = records(list.data).find((r) => r.host === host && r.name === name);
@@ -322,37 +352,19 @@ function ContainerDetail({ host, name }: { host: string; name: string }) {
         {list.data && !c && <div className="notice">This container is not in the latest report of {host}. Its history is below.</div>}
         <div className="grid">
           {c && (
-            <section className="panel span-12 host-head">
-              <div className="host-head-main">
-                <Box size={18} aria-hidden />
-                <div className="host-head-text">
-                  <div className="host-head-os">
-                    <StateBadge state={c.state} health={c.health} />
-                    <span className="mono"> · {String(c.image ?? "")}</span>
-                  </div>
-                  <div className="dim">
-                    On {host}
-                    {c.project ? ` · Compose project ${String(c.project)}` : ""} · reported {formatRelative(String(c.last_seen))}
-                  </div>
-                </div>
-              </div>
-              <dl className="kv host-kv">
-                <dt>Started</dt>
-                <dd>{c.started_at ? `${formatLogTime(String(c.started_at))} (${formatRelative(String(c.started_at))})` : "—"}</dd>
-                <dt>Restarts</dt>
-                <dd>{formatCount(toNumber(c.restarts) ?? 0)}</dd>
-                <dt>Last exit</dt>
-                <dd>{c.exit_code == null ? "—" : `code ${String(c.exit_code)}${toNumber(c.oom_killed) ? " (out of memory)" : ""}${c.finished_at ? ` · ${formatRelative(String(c.finished_at))}` : ""}`}</dd>
-                <dt>CPU limit</dt>
-                <dd>{cpuLimit ? `${cpuLimit} cores` : "None"}</dd>
-                <dt>Memory limit</dt>
-                <dd>{memLimit ? formatBytes(memLimit * 1048576) : "None"}</dd>
-                <dt>Processes</dt>
-                <dd>{toNumber(c.pids) === null ? "—" : formatCount(toNumber(c.pids)!)}</dd>
-                <dt>Ports</dt>
-                <dd className="mono">{c.ports ? String(c.ports) : "—"}</dd>
-              </dl>
-            </section>
+            <HeadCard
+              icon={<Box size={20} />}
+              title={name}
+              subtitle={
+                <>
+                  <span className="mono">{String(c.image ?? "")}</span>
+                  {c.project ? ` · Compose project ${String(c.project)}` : ""} · on {host}
+                </>
+              }
+              badge={<StateBadge state={c.state} health={c.health} />}
+              meta={`Reported ${formatRelative(String(c.last_seen))}`}
+              facts={containerFacts(c, cpuLimit, memLimit)}
+            />
           )}
 
           <Section title="CPU and memory" text={`CPU is a percent of the container's limit${cpuLimit ? ` (${cpuLimit} cores)` : ", or of all the machine's CPUs since it has none"}. Memory leaves out page cache, as docker stats does.`} />

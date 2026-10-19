@@ -10,6 +10,9 @@ module Visionary
     class Cgroup
       MB = 1024.0 * 1024
       MARKERS = %w[docker kubepods containerd libpod lxc].freeze
+      # Variables container platforms set in every container: Kubernetes,
+      # Railway, Render, Heroku, Cloud Run, ECS/Fargate and Azure Container Apps.
+      CONTAINER_ENV = %w[KUBERNETES_SERVICE_HOST RAILWAY_SERVICE_ID RENDER_SERVICE_ID DYNO K_SERVICE ECS_CONTAINER_METADATA_URI_V4 CONTAINER_APP_NAME].freeze
 
       # The process's cgroup; nil off Linux or when there is none to read.
       # root and env are for tests.
@@ -98,10 +101,10 @@ module Visionary
       end
 
       # Tells a container from a process on the host by the runtimes' marker
-      # files, the cgroup path and Kubernetes' environment.
+      # files, the platforms' variables and the cgroup path.
       def in_container?(text, env)
         File.exist?(path(".dockerenv")) || File.exist?(path("run/.containerenv")) ||
-          !env["KUBERNETES_SERVICE_HOST"].to_s.empty? || MARKERS.any? { |k| text.include?(k) }
+          CONTAINER_ENV.any? { |k| !env[k].to_s.empty? } || MARKERS.any? { |k| text.include?(k) }
       end
 
       def read_int(file)

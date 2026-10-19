@@ -42,11 +42,27 @@ final class CgroupReader {
         if (!System.getProperty("os.name", "").startsWith("Linux")) {
             return null;
         }
-        return open(Path.of("/"), System.getenv("KUBERNETES_SERVICE_HOST"));
+        String platform = null;
+        for (String k : CONTAINER_ENV) {
+            String v = System.getenv(k);
+            if (v != null && !v.isEmpty()) {
+                platform = v;
+            }
+        }
+        return open(Path.of("/"), platform);
     }
 
-    /** Reads {@code proc/self/cgroup} and {@code sys/fs/cgroup} under {@code root}. */
-    static CgroupReader open(Path root, String kubernetesHost) {
+    /**
+     * Variables container platforms set in every container: Kubernetes, Railway, Render, Heroku,
+     * Cloud Run, ECS/Fargate and Azure Container Apps.
+     */
+    private static final String[] CONTAINER_ENV = {"KUBERNETES_SERVICE_HOST", "RAILWAY_SERVICE_ID", "RENDER_SERVICE_ID", "DYNO", "K_SERVICE", "ECS_CONTAINER_METADATA_URI_V4", "CONTAINER_APP_NAME"};
+
+    /**
+     * Reads {@code proc/self/cgroup} and {@code sys/fs/cgroup} under {@code root}; {@code platform}
+     * is the value of a container platform's variable, null outside one.
+     */
+    static CgroupReader open(Path root, String platform) {
         String cgroups;
         try {
             cgroups = Files.readString(root.resolve("proc/self/cgroup"));
@@ -55,7 +71,7 @@ final class CgroupReader {
         }
         boolean inContainer = Files.exists(root.resolve(".dockerenv"))
                 || Files.exists(root.resolve("run/.containerenv"))
-                || (kubernetesHost != null && !kubernetesHost.isEmpty());
+                || (platform != null && !platform.isEmpty());
         for (String mark : CONTAINER_MARKS) {
             inContainer |= cgroups.contains(mark);
         }

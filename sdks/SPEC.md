@@ -250,7 +250,11 @@ Container (the `container_*` columns, **Linux only**, else NULL): read the
 process's own cgroup, so a service in a container reports its container's
 use against its real limits (the `host_*` columns describe the machine under
 it). Fill them only when the process runs in a container (`/.dockerenv` or
-`/run/.containerenv` exists, `KUBERNETES_SERVICE_HOST` is set, or
+`/run/.containerenv` exists, a container platform's variable is set
+(`KUBERNETES_SERVICE_HOST`, `RAILWAY_SERVICE_ID` for Railway,
+`RENDER_SERVICE_ID` for Render, `DYNO` for Heroku, `K_SERVICE` for Cloud Run,
+`ECS_CONTAINER_METADATA_URI_V4` for ECS/Fargate, `CONTAINER_APP_NAME` for
+Azure Container Apps), or
 `/proc/self/cgroup` mentions `docker`, `kubepods`, `containerd`, `libpod` or
 `lxc`) or when its cgroup sets a CPU or memory limit; otherwise leave all six
 NULL. Take a baseline at start like the other deltas. `sdks/go/cgroup.go` is

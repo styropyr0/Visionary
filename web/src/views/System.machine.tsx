@@ -1,10 +1,11 @@
 import { api, ApiError, type Result } from "../lib/api";
 import { formatBytes, formatCount, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
-import { formatLogTime, formatRelative } from "../lib/time";
+import { formatDateTime, formatFull, formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { DataTable } from "../components/DataTable";
-import { dim, formatUptime, InstallAgent, Meter, pct, StatusBadge, type HostStatus } from "../components/Machine";
+import { Server } from "lucide-react";
+import { dim, formatUptime, HeadCard, InstallAgent, Meter, pct, StatusBadge, type HostStatus } from "../components/Machine";
 import { Panel } from "../components/Panel";
 import { Section } from "../components/Section";
 
@@ -79,38 +80,45 @@ export function MachineHead({ host, machines, onPick }: { host: string; machines
   if (m.error instanceof ApiError && m.error.status === 404) return null; // an SDK instance without the agent
   const h = m.data?.host;
   if (!h) return null;
+  const booted = h.boot_time ? new Date(h.boot_time) : null;
   return (
-    <section className="panel span-12 host-head">
-      <div className="host-head-main">
-        <StatusBadge status={h.status} large />
-        <div className="host-head-text">
-          <div className="host-head-os">
-            {h.host} · {h.os ?? "Unknown OS"}
-            {h.kernel && <span className="dim"> · kernel {h.kernel}</span>}
-          </div>
-          <div className="dim">
-            Host agent: last report {formatRelative(h.last_seen)} · every {formatCount(h.report_s)}s{h.service && ` · service ${h.service}`}
-          </div>
-        </div>
-      </div>
-      <dl className="kv host-kv">
-        <dt>Address</dt>
-        <dd className="mono">{h.ip ?? "—"}</dd>
-        <dt>Architecture</dt>
-        <dd>{h.arch ?? "—"}</dd>
-        <dt>CPUs</dt>
-        <dd>{h.cpu_count ?? "—"}</dd>
-        <dt>Memory</dt>
-        <dd>{h.mem_total_mb ? formatBytes(h.mem_total_mb * 1048576) : "—"}</dd>
-        <dt>Booted</dt>
-        <dd>{h.boot_time ? `${formatLogTime(h.boot_time)} (${formatRelative(h.boot_time)})` : "—"}</dd>
-        <dt>Agent</dt>
-        <dd>{h.agent_version ?? "—"}</dd>
-        <dt>First seen</dt>
-        <dd>{formatLogTime(h.first_seen)}</dd>
-      </dl>
-    </section>
+    <HeadCard
+      icon={<Server size={20} />}
+      title={h.host}
+      subtitle={[osName(h.os), h.arch, h.service && `service ${h.service}`].filter(Boolean).join(" · ")}
+      badge={<StatusBadge status={h.status} />}
+      meta={
+        <span title={`Watched since ${formatFull(new Date(h.first_seen))}`}>
+          Reported {formatRelative(h.last_seen)} · every {formatCount(h.report_s)}s
+        </span>
+      }
+      facts={[
+        { label: "Address", value: h.ip ?? "—", mono: true },
+        { label: "CPUs", value: h.cpu_count ?? "—" },
+        { label: "Memory", value: h.mem_total_mb ? formatBytes(h.mem_total_mb * 1048576) : "—" },
+        {
+          label: "Up for",
+          value: booted ? formatUptime((Date.now() - booted.getTime()) / 1000) : "—",
+          sub: booted ? `since ${formatDateTime(booted)}` : undefined,
+          title: booted ? formatFull(booted) : undefined,
+        },
+        { label: "Kernel", value: kernelName(h.kernel), mono: true, title: h.kernel ?? undefined },
+        { label: "Agent", value: h.agent_version ?? "—", mono: true },
+      ]}
+    />
   );
+}
+
+/** "Microsoft Windows 11 Pro" reads as "Windows 11 Pro". */
+function osName(os: string | null): string {
+  return (os ?? "Unknown OS").replace(/^Microsoft\s+/, "");
+}
+
+/** Windows repeats its build: "10.0.26300.9711 Build 26300.9711". */
+function kernelName(k: string | null): string {
+  if (!k) return "—";
+  const m = k.match(/^(.*?)\s+Build\s+(\S+)$/);
+  return m && m[1].includes(m[2]) ? m[1] : k;
 }
 
 /** Every machine with an agent, when the project has several. */

@@ -17,6 +17,9 @@ from ._node import IS_LINUX
 _MB = float(1 << 20)
 
 _CONTAINER_MARKS = ("docker", "kubepods", "containerd", "libpod", "lxc")
+# Variables container platforms set in every container: Kubernetes, Railway,
+# Render, Heroku, Cloud Run, ECS/Fargate and Azure Container Apps.
+_CONTAINER_ENV = ("KUBERNETES_SERVICE_HOST", "RAILWAY_SERVICE_ID", "RENDER_SERVICE_ID", "DYNO", "K_SERVICE", "ECS_CONTAINER_METADATA_URI_V4", "CONTAINER_APP_NAME")
 
 
 class CgroupReader:
@@ -166,9 +169,9 @@ class CgroupReader:
 
     def _in_container(self, cgroups: str) -> bool:
         """Tells a container from a process on the host by the runtimes' marker
-        files, the cgroup path and Kubernetes' environment."""
+        files, the platforms' variables and the cgroup path."""
         if (os.path.exists(self._path("/.dockerenv")) or os.path.exists(self._path("/run/.containerenv"))
-                or os.environ.get("KUBERNETES_SERVICE_HOST")):
+                or any(os.environ.get(k) for k in _CONTAINER_ENV)):
             return True
         return any(k in cgroups for k in _CONTAINER_MARKS)
 

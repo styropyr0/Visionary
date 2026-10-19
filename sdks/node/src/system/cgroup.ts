@@ -70,10 +70,10 @@ export class CgroupReader {
   }
 
   /** Tells a container from a process on the host by the runtimes' marker
-   * files, the cgroup path and Kubernetes' environment. */
+   * files, the platforms' variables and the cgroup path. */
   private inContainer(cgroups: string): boolean {
     if (existsSync(this.at("/.dockerenv")) || existsSync(this.at("/run/.containerenv"))) return true;
-    if (this.root === "/" && process.env.KUBERNETES_SERVICE_HOST) return true;
+    if (this.root === "/" && CONTAINER_ENV.some((k) => process.env[k])) return true;
     return ["docker", "kubepods", "containerd", "libpod", "lxc"].some((k) => cgroups.includes(k));
   }
 
@@ -181,6 +181,10 @@ interface Counters {
 }
 
 const MB = 1 << 20;
+
+/** Variables container platforms set in every container: Kubernetes, Railway,
+ * Render, Heroku, Cloud Run, ECS/Fargate and Azure Container Apps. */
+const CONTAINER_ENV = ["KUBERNETES_SERVICE_HOST", "RAILWAY_SERVICE_ID", "RENDER_SERVICE_ID", "DYNO", "K_SERVICE", "ECS_CONTAINER_METADATA_URI_V4", "CONTAINER_APP_NAME"];
 
 function read(p: string): string | undefined {
   try {

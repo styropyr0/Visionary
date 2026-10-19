@@ -97,22 +97,6 @@
 }
 .host-back:hover { color: var(--text-1); }
 
-.host-head { padding: 14px 16px; }
-.host-head-main {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-bottom: 14px;
-}
-.host-head-text { min-width: 0; flex: 1; }
-.host-head-os { font-size: 14px; font-weight: 500; }
-.host-head-text .dim { color: var(--text-3); font-size: 12px; }
-.host-kv {
-  grid-template-columns: repeat(auto-fill, minmax(110px, max-content) minmax(140px, 1fr));
-  margin: 0;
-  font-size: 12.5px;
-}
-
 .host-cmd {
   display: inline-block;
   max-width: 520px;
@@ -131,9 +115,92 @@
 .host-sev.warning { color: var(--warning-text); font-weight: 600; }
 .host-sev.info { color: var(--text-2); }
 
+/* The head card of a machine or container. */
+.head-card { overflow: hidden; }
+.head-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+}
+.head-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+.head-text { min-width: 0; flex: 1; }
+.head-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.head-sub {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.head-sub .mono { font-size: 12px; }
+.head-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: none;
+  text-align: right;
+}
+.head-meta { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+
+.head-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.head-fact {
+  min-width: 0;
+  padding: 12px 18px;
+  border-right: 1px solid var(--border);
+  margin-right: -1px; /* the last cell of a row hides its divider under the card edge */
+}
+.head-fact dt {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.head-fact dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.head-fact dd.mono { font-size: 13px; }
+.head-fact dd.head-fact-sub {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.head-fact.warn dd:not(.head-fact-sub) { color: var(--warning-text); }
+.head-fact.bad dd:not(.head-fact-sub) { color: var(--critical-text); }
+
 @media (max-width: 720px) {
-  .host-head-main { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .host-kv { grid-template-columns: 110px minmax(0, 1fr); }
+  .head-top { flex-wrap: wrap; padding: 14px 16px; }
+  .head-state { flex-direction: row; align-items: center; gap: 10px; width: 100%; justify-content: flex-start; }
+  .head-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .head-fact { padding: 10px 16px; }
 }
 
 .machine-hint > summary {

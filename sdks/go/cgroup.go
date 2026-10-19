@@ -89,11 +89,21 @@ func hasController(list, name string) bool {
 	return false
 }
 
+// containerEnv are variables that container platforms set in every container:
+// Kubernetes, Railway, Render, Heroku, Cloud Run, ECS/Fargate and Azure
+// Container Apps.
+var containerEnv = []string{"KUBERNETES_SERVICE_HOST", "RAILWAY_SERVICE_ID", "RENDER_SERVICE_ID", "DYNO", "K_SERVICE", "ECS_CONTAINER_METADATA_URI_V4", "CONTAINER_APP_NAME"}
+
 // inContainer tells a container from a process on the host by the
-// runtimes' marker files, the cgroup path and Kubernetes' environment.
+// runtimes' marker files, the platforms' variables and the cgroup path.
 func inContainer(cgroups string) bool {
-	if exists("/.dockerenv") || exists("/run/.containerenv") || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	if exists("/.dockerenv") || exists("/run/.containerenv") {
 		return true
+	}
+	for _, k := range containerEnv {
+		if os.Getenv(k) != "" {
+			return true
+		}
 	}
 	for _, k := range []string{"docker", "kubepods", "containerd", "libpod", "lxc"} {
 		if strings.Contains(cgroups, k) {
