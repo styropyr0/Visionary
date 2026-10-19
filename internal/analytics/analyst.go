@@ -402,6 +402,7 @@ Table system_metrics: one row per server instance every ~15 seconds. May be empt
 - network: net_rx_kbps, net_tx_kbps, net_rx_pps, net_tx_pps, net_errors, net_drops (per sample), tcp_established, tcp_retrans (per sample)
 - host processes: host_procs, procs_running, procs_blocked (waiting on I/O), ctx_switches_ps
 - process: proc_cpu_percent (percent of one core), proc_rss_mb, proc_threads, proc_open_fds, proc_max_fds, proc_read_kbps, proc_write_kbps
+- the service's own container (its cgroup; NULL outside a container without limits): container_cpu_cores (cores used), container_cpu_limit (cores; NULL is no limit), container_cpu_throttled_percent, container_mem_used_mb, container_mem_limit_mb (NULL is no limit), container_oom_kills (per sample). In a container the host_* columns describe the machine underneath, not the container.
 - Columns a platform cannot report are NULL (iowait, steal, TCP and disk busy are Linux-only).
 - service, version: the service and release that sent the sample
 - sdk TEXT (go, python, java, node, ruby, dotnet, otlp, or agent for the host agent) and runtime TEXT (e.g. go1.26.2, CPython 3.13.1, OpenJDK 21.0.4): the language that wrote the row, NULL from older SDKs. Name runtime columns in that language's words.

@@ -14,6 +14,7 @@ import { Section } from "../components/Section";
 import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
+import { MachineHead, MachineSnapshots, machineFor, useMachines } from "./System.machine";
 
 export interface PanelDef {
   name: string;
@@ -128,13 +129,25 @@ export const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
   },
 ];
 
+/** The service's own container (its cgroup), shown when the SDK reports one. */
+const CONTAINER_SECTION: (typeof SECTIONS)[number] = {
+  title: "Container",
+  text: "The service's own container, measured by the SDK against the container's limits. In a container the host charts below describe the machine underneath, not what the service may use.",
+  panels: [
+    { name: "container_cpu", title: "Container CPU", description: "Cores the container used, its peak, and its CPU limit (no line: no limit).", viz: { type: "timeseries", x: "t", y: ["cores_used", "peak_cores", "cpu_limit"], unit: "none" }, span: "span-6" },
+    { name: "container_memory", title: "Container memory", description: "Memory in use (without page cache, as docker stats counts it) against the container's limit. At the limit the kernel kills the process.", viz: { type: "timeseries", x: "t", y: ["used", "memory_limit"], unit: "bytes" }, span: "span-6" },
+    { name: "container_throttling", title: "CPU throttling", description: "Share of scheduling periods in which the container hit its CPU limit and had to wait. Steady throttling slows requests down.", viz: { type: "timeseries", x: "t", y: ["throttled"], unit: "percent" }, span: "span-6", empty: "No CPU limit, so nothing is throttled." },
+    { name: "container_oom", title: "Out-of-memory kills", description: "Processes the kernel killed in the container for exceeding its memory limit.", viz: { type: "bar", x: "t", y: ["oom_kills"], unit: "count" }, span: "span-6", empty: "No out-of-memory kills reported." },
+  ],
+};
+
 function useSystem<T = Result>(name: string, instance: string) {
   const { resolved, tick } = useApp();
   const qs = rangeQuery(resolved.from, resolved.to, { instance });
   return useQuery<T>(`sys-${name}?${qs}#${tick}`, (signal) => api<T>(`/api/system/${name}?${qs}`, { signal }));
 }
 
-/** #/system?instance=web-1 opens the view on one instance (the Hosts view links here). */
+/** #/system?instance=web-1 opens the view on one instance (the Containers view links here). */
 function readInstance(): string {
   return new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("instance") ?? "";
 }
@@ -148,6 +161,8 @@ export function System() {
   const disk = useSystem("disk_busy", instance);
   const diskIO = useSystem("disk_throughput", instance);
   const net = useSystem("network", instance);
+  const machines = useMachines();
+  const machine = machineFor(instance, machines.data);
 
   const missing = instances.error instanceof ApiError && instances.error.status === 404;
   const rows = useMemo(() => instances.data?.rows ?? [], [instances.data]);
@@ -183,6 +198,9 @@ export function System() {
   const perCore = loadNow !== null && cores ? loadNow / cores : null;
   const swapTotal = n("swap_total");
   const fdsLimit = n("fds_limit");
+  const ctrMem = n("ctr_mem_now");
+  const ctrMemLimit = n("ctr_mem_limit");
+  const inContainer = ctrMem !== null || n("ctr_cpu_now") !== null;
   const speed = (v: number) => `${formatBytes(v)}/s`;
 
   return (
@@ -344,9 +362,27 @@ export function System() {
               footer={n("db_max") !== null ? `peak ${formatCount(n("db_max")!)}` : "No pool stats recorded"}
             />
 
+            {inContainer && (
+              <StatTile
+                label="Container memory"
+                description="Memory the service's container uses, against its limit."
+                value={dash(ctrMem, (v) => formatBytes(v * 1048576))}
+                delta={null}
+                deltaLabel=""
+                upIs="bad"
+                loading={stats.loading}
+                footer={ctrMemLimit ? `limit ${formatBytes(ctrMemLimit * 1048576)} · ${formatPercent((100 * (ctrMem ?? 0)) / ctrMemLimit)} used` : "No memory limit"}
+              />
+            )}
+
+            <MachineHead host={machine} machines={machines.data} onPick={setInstance} />
+
+            {inContainer && <SectionPanels {...CONTAINER_SECTION} instance={instance} words={words} />}
             {SECTIONS.map((sec) => (
               <SectionPanels key={sec.title} {...sec} instance={instance} words={words} />
             ))}
+
+            <MachineSnapshots host={machine} />
 
             <Section title="Notable moments" />
             <SpikesPanel instance={instance} />

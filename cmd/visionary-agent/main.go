@@ -7,12 +7,13 @@
 // SDK's sampler; once a minute it posts those samples with the inventory, the
 // top processes, every real mount, failed and watched systemd units, and the
 // security findings since the last report (SSH logins, sudo, listening ports,
-// pending updates). The wire format is internal/agentapi.
+// pending updates). With Docker or Podman on the host it also reports every
+// container: its state, CPU, memory, network and disk use, and restarts, OOM
+// kills, exits and failed health checks. The wire format is internal/agentapi.
 //
 //	VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=... visionary-agent
 //
-// In a container it reads the host through HOST_PROC, HOST_SYS, HOST_ETC and
-// HOST_ROOT (see Dockerfile.agent and "Host agent" in Readme.md).
+// It runs on the host itself (deploy/agent/install.sh), not in a container.
 package main
 
 import (
@@ -49,6 +50,7 @@ type config struct {
 	security bool
 	disks    []string
 	authLog  string // a log file, "journald", "off", or "" to pick one
+	docker   string // the engine's socket, "off", or "" to find one
 }
 
 func main() {
@@ -83,6 +85,7 @@ func loadConfig(args []string) (config, error) {
 	fs.BoolVar(&c.security, "security", envBool("VISIONARY_AGENT_SECURITY", true), "collect SSH, sudo, port and update findings (VISIONARY_AGENT_SECURITY)")
 	disks := fs.String("disk-paths", os.Getenv("VISIONARY_DISK_PATHS"), "comma-separated mount points to report; the first fills the disk columns (VISIONARY_DISK_PATHS)")
 	fs.StringVar(&c.authLog, "auth-log", os.Getenv("VISIONARY_AGENT_AUTH_LOG"), `auth log to read: a file, "journald" or "off" (VISIONARY_AGENT_AUTH_LOG, default auto)`)
+	fs.StringVar(&c.docker, "docker", os.Getenv("VISIONARY_AGENT_DOCKER"), `container engine socket: a path, "off", or empty to find Docker or Podman (VISIONARY_AGENT_DOCKER)`)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -107,7 +110,7 @@ func loadConfig(args []string) (config, error) {
 		c.report = c.interval
 	}
 	if c.host == "" {
-		c.host = machineName()
+		c.host, _ = os.Hostname()
 	}
 	c.host = hostName(c.host)
 	return c, nil
@@ -121,7 +124,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if len(cfg.disks) > 0 {
 		diskPath = cfg.disks[0]
 	}
-	sampler := visionary.NewHostSampler(hostPath(diskPath), cfg.interval)
+	sampler := visionary.NewHostSampler(diskPath, cfg.interval)
 	a := newAgent(cfg, logger)
 	snd := newSender(cfg, logger)
 	go snd.run(ctx)
@@ -129,7 +132,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 		go a.updates.run(ctx)
 	}
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
-		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security)
+		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"))
 
 	sampleT := time.NewTicker(cfg.interval)
 	defer sampleT.Stop()
@@ -149,6 +152,9 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 			return nil
 		case <-sampleT.C:
 			samples = append(samples, sample(sampler))
+			if a.docker != nil {
+				a.docker.sample(ctx)
+			}
 		case <-reportT.C:
 			snd.enqueue(a.report(ctx, samples))
 			samples = nil
@@ -172,44 +178,16 @@ func sample(h *visionary.HostSampler) agentapi.Sample {
 	return agentapi.Sample{At: at, Values: values}
 }
 
-// hostRoot is where the host's filesystem is mounted: "/" on the host
-// itself, e.g. "/host" in a container started with -v /:/host:ro.
-var hostRoot = func() string {
-	if r := strings.TrimSpace(os.Getenv("HOST_ROOT")); r != "" {
-		return r
-	}
-	return "/"
-}()
-
-// hostPath is p (a path on the host) as this process sees it.
-func hostPath(p string) string {
-	if hostRoot == "/" {
-		return p
-	}
-	return filepath.Join(hostRoot, p)
-}
-
-// procPath is a path under the host's /proc.
+// procPath is a path under /proc.
 func procPath(parts ...string) string {
-	root := strings.TrimSpace(os.Getenv("HOST_PROC"))
-	if root == "" {
-		root = "/proc"
-	}
-	return filepath.Join(append([]string{root}, parts...)...)
+	return filepath.Join(append([]string{"/proc"}, parts...)...)
 }
 
-// machineName is the host's own name: /etc/hostname of the host when it is
-// mounted, else the kernel's.
-func machineName() string {
-	if hostRoot != "/" {
-		if b, err := os.ReadFile(hostPath("/etc/hostname")); err == nil {
-			if n := strings.TrimSpace(string(b)); n != "" {
-				return n
-			}
-		}
+func fallbackStr(v, def string) string {
+	if v == "" {
+		return def
 	}
-	n, _ := os.Hostname()
-	return n
+	return v
 }
 
 var badHostChars = regexp.MustCompile(`[^A-Za-z0-9._:-]+`)

@@ -142,6 +142,19 @@ FROM api_logs WHERE `+where+scope+` GROUP BY `+t+` ORDER BY t`, append(args, sar
 		out.Result = res
 		out.Note = "Matching findings per hour, by kind. The rule sums them over its window per host, IP or account."
 
+	case sp.Metric == "container_events":
+		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
+		res, err := s.previewContainerEvents(ctx, sp, day, tr)
+		if err != nil {
+			if missingTable(err, "container_events") {
+				out.Note = "No container events yet: the host agent reports them from Docker or Podman."
+				return out, nil
+			}
+			return nil, err
+		}
+		out.Result = res
+		out.Note = "Matching container events per hour, by kind. The rule sums them over its window per container."
+
 	case sp.Metric == "uptime_failing":
 		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
 		where, args := spansClause(day)

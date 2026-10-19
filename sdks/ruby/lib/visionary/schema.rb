@@ -47,7 +47,10 @@ module Visionary
       %w[host_procs int], %w[procs_running int], %w[procs_blocked int],
       %w[ctx_switches_ps real], %w[proc_read_kbps real], %w[proc_write_kbps real],
       %w[proc_max_fds int], %w[service text], %w[version text],
-      %w[sdk text], %w[runtime text]
+      %w[sdk text], %w[runtime text],
+      %w[container_cpu_cores real], %w[container_cpu_limit real],
+      %w[container_cpu_throttled_percent real], %w[container_mem_used_mb real],
+      %w[container_mem_limit_mb real], %w[container_oom_kills int]
     ].freeze
 
     SPAN_COLUMNS = %w[

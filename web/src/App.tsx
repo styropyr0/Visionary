@@ -16,7 +16,7 @@ import { Errors } from "./views/Errors";
 import { Frontend } from "./views/Frontend";
 import { Settings } from "./views/Settings";
 import { Uptime } from "./views/Uptime";
-import { Hosts } from "./views/Hosts";
+import { Containers } from "./views/Containers";
 import { Security } from "./views/Security";
 
 
@@ -100,7 +100,7 @@ export function App() {
         {route === "overview" && <Overview />}
         {route === "performance" && <Performance meta={meta.data} />}
         {route === "system" && <System />}
-        {route === "hosts" && <Hosts />}
+        {route === "containers" && <Containers />}
         {route === "errors" && <Errors />}
         {route === "frontend" && <Frontend />}
         {route === "uptime" && <Uptime />}

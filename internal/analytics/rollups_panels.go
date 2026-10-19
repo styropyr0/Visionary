@@ -332,7 +332,9 @@ var latestRef = regexp.MustCompile(`\(SELECT [a-z0-9_]+ FROM latest\)`)
 // rawSystemColumn matches a system_metrics column name standing alone (the
 // rollup columns carry suffixes, so they do not match).
 var rawSystemColumn = func() *regexp.Regexp {
-	names := []string{"cpu_count", "interval_s", "uptime_s", "disk_free_gb", "host_mem_total_mb", "heap_alloc_mb", "heap_objects", "gc_count", "gc_cpu_percent", "db_idle_conns", "db_acquires", "disk_total_gb", "host_procs"}
+	names := []string{"cpu_count", "interval_s", "uptime_s", "disk_free_gb", "host_mem_total_mb", "heap_alloc_mb", "heap_objects", "gc_count", "gc_cpu_percent", "db_idle_conns", "db_acquires", "disk_total_gb", "host_procs",
+		// Not rolled up: the container panels always read raw rows.
+		"container_cpu_cores", "container_cpu_limit", "container_cpu_throttled_percent", "container_mem_used_mb", "container_mem_limit_mb", "container_oom_kills"}
 	for _, m := range sysMetrics {
 		if m.expr == "" {
 			names = append(names, m.name)

@@ -1,4 +1,4 @@
-/* Hosts view: the fleet table and one host's detail. */
+/* The machine sections of System and the Containers view. */
 
 .host-tile > .panel { height: 100%; }
 
@@ -135,3 +135,12 @@
   .host-head-main { flex-direction: column; align-items: flex-start; gap: 8px; }
   .host-kv { grid-template-columns: 110px minmax(0, 1fr); }
 }
+
+.machine-hint > summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12.5px;
+  padding: 4px 0;
+}
+.machine-hint > summary:hover { color: var(--text-1); }
+.machine-hint[open] > summary { margin-bottom: 10px; }

@@ -59,8 +59,8 @@ func newAuthCollector(a *agent, setting string) *authCollector {
 			return c
 		}
 		for _, p := range []string{"/var/log/auth.log", "/var/log/secure"} {
-			if _, err := os.Stat(hostPath(p)); err == nil {
-				c.mode, c.path = "file", hostPath(p)
+			if _, err := os.Stat(p); err == nil {
+				c.mode, c.path = "file", p
 				break
 			}
 		}
@@ -68,7 +68,6 @@ func newAuthCollector(a *agent, setting string) *authCollector {
 			c.mode = "journald"
 		}
 	default:
-		// An explicit file is read as given, not under HOST_ROOT.
 		c.mode, c.path = "file", setting
 	}
 	if c.mode == "file" {
@@ -460,7 +459,7 @@ func (u *updateChecker) take() []agentapi.Event {
 }
 
 func pendingUpdates(ctx context.Context) (total, security int, err error) {
-	has := func(p string) bool { _, err := os.Stat(hostPath(p)); return err == nil }
+	has := func(p string) bool { _, err := os.Stat(p); return err == nil }
 	const wait = 5 * time.Minute
 	switch {
 	case has("/usr/lib/update-notifier/apt-check"):

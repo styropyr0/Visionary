@@ -14,7 +14,7 @@ REPO="${VISIONARY_AGENT_REPO:-styropyr0/Visionary}"
 VERSION="${VISIONARY_AGENT_VERSION:-latest}"
 
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
-command -v systemctl >/dev/null || { echo "systemd not found; run the agent in Docker instead" >&2; exit 1; }
+command -v systemctl >/dev/null || { echo "systemd not found; run /usr/local/bin/visionary-agent under your init system instead" >&2; exit 1; }
 
 case "$(uname -m)" in
   x86_64 | amd64) ARCH=amd64 ;;
@@ -45,7 +45,7 @@ grep -v -e '^VISIONARY_URL=' -e '^VISIONARY_KEY=' "$ENV" > "$ENV.tmp" || true
 {
   echo "VISIONARY_URL=$VISIONARY_URL"
   echo "VISIONARY_KEY=$VISIONARY_KEY"
-  for v in VISIONARY_HOST VISIONARY_SERVICE VISIONARY_AGENT_UNITS VISIONARY_AGENT_INTERVAL VISIONARY_AGENT_REPORT VISIONARY_AGENT_SECURITY VISIONARY_DISK_PATHS; do
+  for v in VISIONARY_HOST VISIONARY_SERVICE VISIONARY_AGENT_UNITS VISIONARY_AGENT_INTERVAL VISIONARY_AGENT_REPORT VISIONARY_AGENT_SECURITY VISIONARY_AGENT_AUTH_LOG VISIONARY_AGENT_DOCKER VISIONARY_DISK_PATHS; do
     eval "val=\${$v:-}"
     if [ -n "$val" ]; then
       sed -i "/^$v=/d" "$ENV.tmp"

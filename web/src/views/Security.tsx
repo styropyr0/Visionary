@@ -589,7 +589,7 @@ function SecurityTable({
   );
 }
 
-const NO_AGENT = "Install the Visionary host agent on your VMs to see SSH logins, open ports and pending updates";
+const NO_AGENT = "Install the Visionary host agent on your machines to see SSH logins, open ports and pending updates";
 
 function HostSecurity({ hosts }: { hosts: number }) {
   const status = useSecurityPanel("host_status");
@@ -603,8 +603,8 @@ function HostSecurity({ hosts }: { hosts: number }) {
             <ShieldAlert size={20} />
           </div>
           <p>{NO_AGENT}.</p>
-          <a className="btn" href="#/hosts">
-            Set up hosts
+          <a className="btn" href="#/system">
+            Set up the host agent
           </a>
         </div>
       ) : (

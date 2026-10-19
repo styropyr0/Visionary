@@ -36,6 +36,14 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   core, memory, swap, disk space and I/O (throughput, IOPS, busy, latency),
   network (bytes, packets, errors, TCP), processes, the process itself
   (CPU, memory, I/O, open files), runtime heap and GC, and the database pool.
+  In a container it also shows the service's own CPU and memory against the
+  container's limits, throttling and OOM kills. With the
+  [host agent](#host-agent) it adds the machine's details, every drive, the
+  top processes and failed systemd services.
+- **Containers:** every Docker or Podman container on the machines the host
+  agent watches: state, health, restarts, CPU and memory against each
+  container's limits, network and disk, and OOM kills, crashes and failed
+  health checks.
 - **Errors:** exceptions and panics grouped into issues, with stacks, the
   versions they appear in, new and regressed issues, and links to the request.
 - **Request logs** with a waterfall of every query and outbound call.
@@ -170,44 +178,49 @@ holding IPs, user agents, headers and request/response bodies are masked first.
 
 ## Host agent
 
-The SDKs see the host an app runs on. The agent watches any machine on its own
-(a database box, a worker, a bastion) and fills the **Hosts** view. It posts
-to the server over HTTPS with a **server** ingest key (Settings → API keys, or
-`VISIONARY_INGEST_KEYS`) and never needs database credentials.
+The SDKs see the host an app runs on. The agent watches the whole machine,
+with or without an app on it (a database box, a worker, a bastion, the VM your
+containers run on). It posts to the server over HTTPS with a **server** ingest
+key (Settings → API keys, or `VISIONARY_INGEST_KEYS`) and never needs database
+credentials. What it reports shows up in three places:
 
-Every 15 s it samples CPU, memory, swap, disks, network and load (the same
-`system_metrics` columns the SDKs write, with `sdk = 'agent'`, so the System
-view and alert rules such as "Instance stopped reporting" cover agent hosts
-too). Once a minute it reports those samples plus:
-
-- inventory: OS, kernel, architecture, CPUs, memory, boot time, primary address;
-- the top 15 processes by CPU and by memory (command lines clipped, obvious
-  secrets such as `--password=...` and tokens masked);
-- every real mount: space and inodes used;
-- failed systemd services, and the state of those in `VISIONARY_AGENT_UNITS`;
-- security findings (Linux): failed and successful SSH logins and sudo from
+- **System:** every 15 s it samples CPU, memory, swap, disks, network and load
+  (the same `system_metrics` columns the SDKs write, with `sdk = 'agent'` and
+  the machine's name as the instance, so the charts and alert rules such as
+  "Instance stopped reporting" cover it too). Once a minute it adds the
+  machine's details (OS, kernel, architecture, CPUs, memory, boot time,
+  address), every real mount with space and inodes used, the top 15 processes
+  by CPU and by memory (command lines clipped, obvious secrets such as
+  `--password=...` and tokens masked), and failed systemd services plus those
+  in `VISIONARY_AGENT_UNITS`.
+- **Containers:** with Docker or Podman on the machine, every container: state,
+  health, restarts, last exit code, limits and published ports once a minute,
+  and every 15 s each running container's CPU (against its limit), throttling,
+  memory (against its limit, without page cache, as `docker stats` counts it),
+  network, disk and process count. Between reports it records restarts, OOM
+  kills, exits and health checks that start or stop failing. The agent finds
+  `/var/run/docker.sock` or Podman's socket on its own (or `DOCKER_HOST`).
+- **Security** (Linux): failed and successful SSH logins and sudo from
   `/var/log/auth.log`, `/var/log/secure` or journald; listening ports opened or
   closed; pending package updates every 6 hours (apt, dnf, yum, apk); reboots.
 
 While the server is unreachable it keeps up to an hour of reports in memory and
 retries with backoff.
 
-Docker (the flags let it see the host instead of the container):
+It runs on the machine itself as a systemd service, as root, so it can read
+other users' processes, the auth log and the container engine's socket:
 
 ```sh
-docker run -d --name visionary-agent --restart unless-stopped \
-  --pid=host --net=host -v /:/host:ro \
-  -e HOST_ROOT=/host -e HOST_PROC=/host/proc -e HOST_SYS=/host/sys -e HOST_ETC=/host/etc \
-  -e VISIONARY_URL=https://visionary.example.com -e VISIONARY_KEY=<server key> \
-  ghcr.io/styropyr0/visionary-agent:latest
+curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \
+  | sudo VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=<server key> sh
 ```
 
-Build the image with `docker build -f Dockerfile.agent -t visionary-agent .`.
-systemd: [`deploy/agent/install.sh`](deploy/agent/install.sh) installs the
-binary, `/etc/visionary-agent.env` and
-[`visionary-agent.service`](deploy/agent/visionary-agent.service)
-(`VISIONARY_AGENT_BINARY=./visionary-agent` installs one you built with
-`go build ./cmd/visionary-agent`).
+[`install.sh`](deploy/agent/install.sh) downloads the release binary for the
+machine's architecture and installs `/etc/visionary-agent.env` and
+[`visionary-agent.service`](deploy/agent/visionary-agent.service). Settings
+passed to it (any variable below) go into the env file;
+`VISIONARY_AGENT_BINARY=./visionary-agent` installs one you built with
+`go build ./cmd/visionary-agent`.
 
 | Variable (flag) | Default | |
 |---|---|---|
@@ -220,12 +233,14 @@ binary, `/etc/visionary-agent.env` and
 | `VISIONARY_AGENT_UNITS` (`-units`) | | systemd services to watch, comma-separated. |
 | `VISIONARY_AGENT_SECURITY` (`-security`) | `true` | SSH, sudo, port and update findings. |
 | `VISIONARY_AGENT_AUTH_LOG` (`-auth-log`) | auto | A log file, `journald` or `off`. |
+| `VISIONARY_AGENT_DOCKER` (`-docker`) | auto | The Docker or Podman socket, or `off`. |
 | `VISIONARY_DISK_PATHS` (`-disk-paths`) | all mounts | Mount points to report; the first fills the disk columns. |
 
-On the server, `VISIONARY_HOST_RETENTION_DAYS` (14) keeps process, mount and
-unit snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (180) security events, and
-`VISIONARY_SYSTEM_RETENTION_DAYS` (30) the agents' metric rows; hosts silent
-for 30 days leave the inventory. The ingest endpoint is
+On the server, `VISIONARY_HOST_RETENTION_DAYS` (14) keeps process, mount, unit
+and container snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (180) security
+events, and `VISIONARY_SYSTEM_RETENTION_DAYS` (30) the agents' metric rows and
+the container metrics and events; machines silent for 30 days leave the
+inventory. The ingest endpoint is
 `POST /api/agent/v1/report` (gzip JSON, [`internal/agentapi`](internal/agentapi)),
 rate limited like OTLP (`VISIONARY_AGENT_RATE`, 50 per second).
 

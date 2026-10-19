@@ -54,6 +54,9 @@ type alertScope struct {
 	EventSeverity string `json:"event_severity,omitempty"`
 	Source        string `json:"source,omitempty"`
 	Host          string `json:"host,omitempty"`
+	// Container rules (hosts_containers.go): the container's name. Host and
+	// EventKind narrow them too.
+	Container string `json:"container,omitempty"`
 }
 
 // seriesState is the state machine of one rule series (one per instance or

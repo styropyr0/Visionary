@@ -169,6 +169,9 @@ from `GC.stat`, heap from `GC.stat` slot and page counts, threads from
 `/proc/self/status` (else `Thread.list`). Pool columns come from the
 ActiveRecord pool when it exists, or from `c.db_stats = -> { { total:, idle:,
 in_use:, max: } }`. On macOS and Windows most host columns are NULL.
+In a container (or a cgroup with a CPU or memory limit) the `container_*`
+columns come from the process's own cgroup, v2 or v1: CPU used, limit and
+throttling, memory used (without inactive page cache) and limit, OOM kills.
 
 ## Configuration
 

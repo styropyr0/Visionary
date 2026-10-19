@@ -93,6 +93,12 @@ internal static class Schema
         new("version", "text"),
         new("sdk", "text"),
         new("runtime", "text"),
+        new("container_cpu_cores", "real"),
+        new("container_cpu_limit", "real"),
+        new("container_cpu_throttled_percent", "real"),
+        new("container_mem_used_mb", "real"),
+        new("container_mem_limit_mb", "real"),
+        new("container_oom_kills", "int"),
     };
 
     public static readonly string[] SystemColumns = SystemBaseColumns.Concat(AddedSystemColumns.Select(c => c.Name)).ToArray();

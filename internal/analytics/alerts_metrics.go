@@ -32,6 +32,7 @@ type metricDef struct {
 
 	table       string
 	perInstance bool
+	keyCol      string // the column a grouped metric fans out by; empty is instance
 	pct         float64                      // percentile of duration_ms, 0 when not one
 	agg         func(windowSec int64) string // aggregate over the rows in a window
 	minRequests int64                        // fewer rows than this is "no data"
@@ -129,6 +130,8 @@ func scopeClause(m metricDef, sc alertScope) (string, []any) {
 	add("method", "method", sc.Method)
 	add("instance", "instance", sc.Instance)
 	add("service", "service", sc.Service)
+	add("container", "container", sc.Container)
+	add("host", "host", sc.Host)
 	return b.String(), args
 }
 
@@ -169,8 +172,9 @@ SELECT '' AS k, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN duration_ms END
 	}
 	agg := m.agg(int64(span.To.Sub(span.From).Seconds()))
 	if grouped {
-		return `SELECT instance AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
-GROUP BY instance ORDER BY instance`, args
+		key := m.groupKey()
+		return `SELECT ` + key + ` AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
+GROUP BY ` + key + ` ORDER BY ` + key, args
 	}
 	return `SELECT '' AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope, args
 }
@@ -194,11 +198,20 @@ FROM r GROUP BY t ORDER BY t`, args
 	}
 	agg := m.agg(bucket)
 	if grouped {
-		return `SELECT ` + t + ` AS t, instance AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
-GROUP BY ` + t + `, instance ORDER BY t`, args
+		key := m.groupKey()
+		return `SELECT ` + t + ` AS t, ` + key + ` AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
+GROUP BY ` + t + `, ` + key + ` ORDER BY t`, args
 	}
 	return `SELECT ` + t + ` AS t, '' AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
 GROUP BY ` + t + ` ORDER BY t`, args
+}
+
+// groupKey is the column a grouped metric fans out by.
+func (m metricDef) groupKey() string {
+	if m.keyCol != "" {
+		return m.keyCol
+	}
+	return "instance"
 }
 
 func fnum(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
@@ -259,6 +272,8 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeUptime(ctx, r, now)
 	case "security_events":
 		return s.observeSecurity(ctx, r, now)
+	case "container_events":
+		return s.observeContainerEvents(ctx, r, now)
 	}
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok {
@@ -268,7 +283,7 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 	sql, args := s.valueSQL(m, r.Spec.Scope, timeSpan{now.Add(-w), now}, m.perInstance)
 	res, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
-		if m.table == "system_metrics" && missingTable(err, "system_metrics") {
+		if m.table != "api_logs" && missingTable(err, m.table) {
 			return nil, nil
 		}
 		return nil, err

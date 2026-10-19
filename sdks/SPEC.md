@@ -239,6 +239,40 @@ Counts are integers, measurements floats, `created_at`, `instance`, `service`,
 | `service`, `version` | service name and release (see Telemetry) | | |
 | `sdk` | the SDK that wrote the row: `go`, `python`, `java`, `node`, `ruby` or `dotnet` (as `releases.sdk`) | `python` | `java` |
 | `runtime` | language runtime and version, as `releases.runtime` | `_errors.runtime()`, e.g. `CPython 3.13.1` | `Origin.javaRuntime()`, e.g. `OpenJDK 21.0.4` |
+| `container_cpu_cores` | CPU used by the process's own cgroup, in cores, since the previous sample (3 decimals) | see Container below | same |
+| `container_cpu_limit` | the cgroup's CPU limit in cores; NULL when unlimited (2 decimals) | | |
+| `container_cpu_throttled_percent` | throttled CFS periods / periods since the previous sample × 100; 0 when there were no periods and a CPU limit is set, else NULL | | |
+| `container_mem_used_mb` | cgroup memory in use minus its inactive page cache, as `docker stats` counts it | | |
+| `container_mem_limit_mb` | the cgroup's memory limit; NULL when unlimited | | |
+| `container_oom_kills` | OOM kills in the cgroup since the previous sample (integer) | | |
+
+Container (the `container_*` columns, **Linux only**, else NULL): read the
+process's own cgroup, so a service in a container reports its container's
+use against its real limits (the `host_*` columns describe the machine under
+it). Fill them only when the process runs in a container (`/.dockerenv` or
+`/run/.containerenv` exists, `KUBERNETES_SERVICE_HOST` is set, or
+`/proc/self/cgroup` mentions `docker`, `kubepods`, `containerd`, `libpod` or
+`lxc`) or when its cgroup sets a CPU or memory limit; otherwise leave all six
+NULL. Take a baseline at start like the other deltas. `sdks/go/cgroup.go` is
+the reference.
+
+- Find the cgroup in `/proc/self/cgroup`. A `0::<path>` line is cgroup v2:
+  the directory is `/sys/fs/cgroup/<path>`, or `/sys/fs/cgroup` itself when
+  that does not exist (inside a cgroup namespace the path is `/`). Otherwise
+  (v1) the `memory`, `cpu` and `cpuacct` lines name each controller's path
+  under `/sys/fs/cgroup/<controllers>/`, with the same fallback to the mount.
+- v2: CPU limit from `cpu.max` (`max 100000` is unlimited, else quota /
+  period); CPU time `usage_usec` (× 1000 for ns), `nr_periods` and
+  `nr_throttled` from `cpu.stat`; memory `memory.current`, limit `memory.max`
+  (`max` is unlimited), page cache `inactive_file` from `memory.stat`; OOM
+  kills `oom_kill` from `memory.events`.
+- v1: CPU limit `cpu.cfs_quota_us` / `cpu.cfs_period_us` (quota -1 is
+  unlimited); CPU time `cpuacct.usage` (ns); `nr_periods`, `nr_throttled` from
+  `cpu.stat`; memory `memory.usage_in_bytes`, limit `memory.limit_in_bytes`
+  (2^62 or more is unlimited), page cache `total_inactive_file` from
+  `memory.stat`; OOM kills `oom_kill` from `memory.oom_control` (newer kernels
+  only, else NULL).
+- A counter that went down (the cgroup was reset) gives NULL for that sample.
 
 Partition rule: skip disk devices matching
 `^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,

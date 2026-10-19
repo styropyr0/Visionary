@@ -68,6 +68,9 @@ final class Table {
             .real("ctx_switches_ps", "proc_read_kbps", "proc_write_kbps")
             .integer("proc_max_fds")
             .text("service", "version", "sdk", "runtime")
+            .real("container_cpu_cores", "container_cpu_limit", "container_cpu_throttled_percent",
+                    "container_mem_used_mb", "container_mem_limit_mb")
+            .integer("container_oom_kills")
             .build();
 
     // The three telemetry tables share one schema file, telemetry.sql.

@@ -21,6 +21,7 @@ internal sealed class SystemSampler : BackgroundService
     private readonly List<object?[]> _buffer = new();
     private readonly long _started = Stopwatch.GetTimestamp();
     private HostSampler? _host;
+    private CgroupReader? _cgroup; // null off Linux and outside a cgroup
     private bool _schemaReady;
 
     // Previous readings, touched only on the sampler loop.
@@ -144,6 +145,8 @@ internal sealed class SystemSampler : BackgroundService
         _gcPause = GC.GetTotalPauseDuration();
         _db = ReadDb();
         _host!.Prime();
+        _cgroup = CgroupReader.Open();
+        _cgroup?.Prime();
     }
 
     private object?[] Sample()
@@ -218,6 +221,14 @@ internal sealed class SystemSampler : BackgroundService
         {
             // The host columns are best effort; the rest of the row still counts.
             _agent.Logger.LogDebug(e, "visionary: host metrics failed");
+        }
+        try
+        {
+            _cgroup?.Sample(v);
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: container metrics failed");
         }
 
         var row = new object?[Schema.SystemColumns.Length];

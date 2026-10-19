@@ -1,0 +1,34 @@
+/* Containers view: the container table and one container's detail. */
+
+.ctr-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ctr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.ctr-state.ok .ctr-dot { background: var(--good); }
+.ctr-state.warn { color: var(--warning-text); }
+.ctr-state.warn .ctr-dot { background: var(--warning); }
+.ctr-state.bad { color: var(--critical-text); }
+.ctr-state.bad .ctr-dot { background: var(--critical); }
+.ctr-state.muted { color: var(--text-3); }
+.ctr-health { font-weight: 400; color: inherit; opacity: 0.85; }
+
+.ctr-image,
+.ctr-ports {
+  display: inline-block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 11.5px;
+}
+.ctr-mem { white-space: nowrap; }

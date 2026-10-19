@@ -8,6 +8,7 @@ import { type Value, SYSTEM_COLUMNS, insertSQL } from "../store/sql.js";
 import type { Store } from "../store/store.js";
 import { RUNTIME } from "../telemetry/errors.js";
 import { formatTs, round } from "../util.js";
+import { CgroupReader } from "./cgroup.js";
 import * as linux from "./linux.js";
 
 /** Pool stats for the db_* columns. acquires, emptyAcquires and
@@ -85,6 +86,8 @@ export class Recorder {
   private prevGcMs = 0;
   private prevDb: DbStats = {};
   private prev: Cumulative = {};
+  /** undefined off Linux and when the process has no cgroup to read */
+  private cgroup?: CgroupReader;
 
   constructor(
     private readonly opts: RecorderOptions,
@@ -131,6 +134,8 @@ export class Recorder {
     this.prevGcMs = this.gcMs;
     this.prevDb = this.readDb() ?? {};
     this.prev = readCumulative();
+    this.cgroup = CgroupReader.open();
+    this.cgroup?.prime();
   }
 
   private tick(): void {
@@ -255,6 +260,7 @@ export class Recorder {
     v.uptime_s = Math.floor((Date.now() - this.startedAt) / 1000);
 
     this.node(v, secs);
+    this.cgroup?.sample(v);
     return SYSTEM_COLUMNS.map((c) => v[c] ?? null);
   }
 

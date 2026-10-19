@@ -32,6 +32,14 @@ type Report struct {
 	// (VISIONARY_AGENT_UNITS). Nil when systemd is not readable.
 	Units  []Unit  `json:"units,omitempty"`
 	Events []Event `json:"events,omitempty"`
+	// Containers are the Docker (or Podman) containers on the host, running
+	// and stopped, at report time. Nil when no container engine answered.
+	Containers []Container `json:"containers,omitempty"`
+	// ContainerSamples are per-container readings taken with Samples.
+	ContainerSamples []ContainerSample `json:"container_samples,omitempty"`
+	// ContainerEvents are restarts, OOM kills, exits and failed health
+	// checks seen since the previous report.
+	ContainerEvents []ContainerEvent `json:"container_events,omitempty"`
 }
 
 // Inventory describes the machine.
@@ -95,4 +103,60 @@ type Event struct {
 	Count  int    `json:"count"`            // occurrences; updates_pending: total updates
 	// Security is the security-only update count (updates_pending).
 	Security int `json:"security,omitempty"`
+}
+
+// Container is one container in the latest report.
+type Container struct {
+	ID      string `json:"id"`   // the full container ID
+	Name    string `json:"name"` // without the leading slash
+	Image   string `json:"image"`
+	Project string `json:"project,omitempty"` // the Compose project, when there is one
+	// State is created, running, paused, restarting, removing, exited or dead.
+	State string `json:"state"`
+	// Health is healthy, unhealthy or starting; empty without a health check.
+	Health   string `json:"health,omitempty"`
+	Restarts int    `json:"restarts"` // restarts by the restart policy since created
+	// ExitCode is the last exit code, nil while the container never exited.
+	ExitCode   *int    `json:"exit_code,omitempty"`
+	OOMKilled  bool    `json:"oom_killed,omitempty"` // the last exit was an OOM kill
+	StartedAt  string  `json:"started_at,omitempty"`
+	FinishedAt string  `json:"finished_at,omitempty"`
+	CPULimit   float64 `json:"cpu_limit,omitempty"`    // cores; 0 is no limit
+	MemLimitMB float64 `json:"mem_limit_mb,omitempty"` // 0 is no limit
+	Ports      string  `json:"ports,omitempty"`        // published ports, e.g. "0.0.0.0:8080->80/tcp"
+}
+
+// ContainerColumns are the values a ContainerSample may carry, the
+// container_metrics columns after created_at, host and container:
+//
+//   - cpu_percent: CPU used as a percent of the container's CPU limit, or of
+//     the host's CPUs when it has none; cpu_cores: cores used.
+//   - cpu_throttled_percent: share of CFS periods in which it was throttled.
+//   - mem_used_mb (without page cache, as docker stats), mem_limit_mb (the
+//     host's memory when it has no limit), mem_percent.
+//   - net_rx_kbps, net_tx_kbps, blk_read_kbps, blk_write_kbps: rates since
+//     the previous sample; pids: processes and threads now.
+var ContainerColumns = []string{
+	"cpu_percent", "cpu_cores", "cpu_throttled_percent",
+	"mem_used_mb", "mem_limit_mb", "mem_percent",
+	"net_rx_kbps", "net_tx_kbps", "blk_read_kbps", "blk_write_kbps", "pids",
+}
+
+// ContainerSample is one container_metrics row of a running container.
+type ContainerSample struct {
+	At        string             `json:"at"`
+	Container string             `json:"container"` // the name
+	Values    map[string]float64 `json:"values"`
+}
+
+// ContainerEvent is something that happened to a container between two
+// reports. The server sets the severity.
+type ContainerEvent struct {
+	// Kind is restarted, oom_killed, exited, unhealthy or healthy.
+	Kind      string `json:"kind"`
+	Container string `json:"container"`
+	Image     string `json:"image,omitempty"`
+	ExitCode  *int   `json:"exit_code,omitempty"`
+	Detail    string `json:"detail,omitempty"`
+	Count     int    `json:"count"` // restarted: restarts since the previous report
 }

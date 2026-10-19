@@ -9,13 +9,15 @@ import (
 	"github.com/styropyr0/visionary/internal/db"
 )
 
-// The Hosts view's endpoints. Charts come from GET /api/system/{panel} with
-// instance = the host, so only the fleet table and the snapshots live here.
+// The System view's machine endpoints, for hosts the agent watches. Charts
+// come from GET /api/system/{panel} with instance = the host, so only the
+// machine list and the snapshots live here. Security findings are the
+// Security page's.
 
-// hostFleetColumns is the fleet table, one row per host.
-var hostFleetColumns = []string{
+// machineColumns is the machine list, one row per host.
+var machineColumns = []string{
 	"host", "service", "os", "status", "cpu_percent", "mem_percent", "disk_percent", "load_per_core", "uptime_s",
-	"failed_units", "security_24h", "security_warnings_24h", "last_seen", "ip", "agent_version", "report_s",
+	"failed_units", "containers", "last_seen", "ip", "agent_version", "report_s",
 }
 
 // hostStatus is online within three report intervals of the last report,
@@ -35,12 +37,12 @@ func hostStatus(lastSeen string, reportS float64, now time.Time) (string, float6
 	return "offline", age
 }
 
-// GET /api/hosts: every host in host_inventory with its latest metrics,
-// fullest disk, failed units and security events of the last 24 hours.
-func (s *Server) handleHosts(w http.ResponseWriter, r *http.Request) {
+// GET /api/system/machines: every host in host_inventory with its latest
+// metrics, fullest disk, failed units and running containers.
+func (s *Server) handleMachines(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
-	out := &Result{Columns: hostFleetColumns, Rows: [][]any{}}
+	out := &Result{Columns: machineColumns, Rows: [][]any{}}
 	inv, err := s.db.Query(ctx, `SELECT host, service, os, last_seen, ip, agent_version FROM host_inventory ORDER BY host LIMIT 5000`)
 	if err != nil {
 		if missingTable(err, "host_inventory") {
@@ -53,7 +55,6 @@ func (s *Server) handleHosts(w http.ResponseWriter, r *http.Request) {
 	// Current values come from the last hour only: an older sample says
 	// nothing about the host now.
 	recent := now.Add(-time.Hour).Format(tsLayout)
-	day := now.Add(-24 * time.Hour).Format(tsLayout)
 	metrics := s.hostLookup(ctx, `
 SELECT m.instance, m.host_cpu_percent, m.host_mem_percent, m.load_1 / NULLIF(m.cpu_count, 0), m.uptime_s
 FROM system_metrics AS m
@@ -72,9 +73,12 @@ FROM host_units AS u
 JOIN (SELECT host, MAX(created_at) AS at FROM host_units WHERE created_at >= ? GROUP BY host) AS l
   ON l.host = u.host AND l.at = u.created_at
 GROUP BY u.host`, recent)
-	events := s.hostLookup(ctx, `
-SELECT host, COUNT(*), `+countIf("severity <> 'info'")+`
-FROM security_events WHERE source = 'host' AND created_at >= ? GROUP BY host`, day)
+	containers := s.hostLookup(ctx, `
+SELECT c.host, `+countIf("c.state = 'running'")+`
+FROM host_containers AS c
+JOIN (SELECT host, MAX(created_at) AS at FROM host_containers WHERE created_at >= ? GROUP BY host) AS l
+  ON l.host = c.host AND l.at = c.created_at
+GROUP BY c.host`, recent)
 
 	h := s.hosts()
 	for _, row := range inv.Rows {
@@ -88,15 +92,12 @@ FROM security_events WHERE source = 'host' AND created_at >= ? GROUP BY host`, d
 			}
 			return nil
 		}
-		failed := cell(units[host], 0) // NULL when systemd is not readable
-		secTotal, secWarn := any(int64(0)), any(int64(0))
-		if e := events[host]; e != nil {
-			secTotal, secWarn = cell(e, 0), cell(e, 1)
-		}
+		failed := cell(units[host], 0)               // NULL when systemd is not readable
+		running := cell(containers[host], 0) // NULL without a container engine
 		out.Rows = append(out.Rows, []any{
 			host, row[1], row[2], status,
 			cell(m, 0), cell(m, 1), cell(disks[host], 0), roundCell(cell(m, 2), 2), cell(m, 3),
-			failed, secTotal, secWarn, row[3], row[4], row[5], ri,
+			failed, running, row[3], row[4], row[5], ri,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -130,18 +131,12 @@ func roundCell(v any, prec int) any {
 	return finite(f, prec)
 }
 
-// GET /api/hosts/{host}?from=&to=: the host's inventory and status, its
-// latest process, mount and unit snapshots, and its security events in the
-// range (newest first, at most 200).
-func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
+// GET /api/system/machines/{host}: the host's inventory and status, and its
+// latest process, mount and unit snapshots.
+func (s *Server) handleMachine(w http.ResponseWriter, r *http.Request) {
 	host := r.PathValue("host")
 	if !instanceName.MatchString(host) {
 		writeError(w, http.StatusBadRequest, "invalid host name")
-		return
-	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	ctx := r.Context()
@@ -176,20 +171,11 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 		}
 		return dbResult(rows, q)
 	}
-	events := emptyResult([]string{"created_at", "kind", "severity", "actor", "ip", "target", "detail", "count"})
-	eq := `SELECT created_at, kind, severity, actor, ip, target, detail, count FROM security_events
-WHERE host = ? AND source = 'host' AND created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 200`
-	if rows, err := s.db.Query(ctx, eq, host, tr.From.Format(tsLayout), tr.To.Format(tsLayout)); err == nil {
-		events = dbResult(rows, eq)
-	} else if !missingTable(err, "security_events") {
-		s.logger.Warn("host events", "err", err)
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"host":      info,
 		"processes": snapshot("host_processes", "created_at, pid, name, username, cpu_percent, rss_mb, cmdline", "cpu_percent DESC, rss_mb DESC"),
 		"mounts":    snapshot("host_mounts", "created_at, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent", "mount"),
 		"units":     snapshot("host_units", "created_at, unit, state, sub", "unit"),
-		"events":    events,
 	})
 }
 

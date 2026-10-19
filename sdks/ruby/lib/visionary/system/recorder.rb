@@ -90,6 +90,7 @@ module Visionary
         v["version"] = @cfg.version
         v["sdk"] = "ruby"
         v["runtime"] = Telemetry.runtime
+        @cgroup&.sample(v)
         Schema::TABLES["system_metrics"].map { |c| v[c] }
       end
 
@@ -119,6 +120,8 @@ module Visionary
         @gc_ms_prev = heap[:gc_ms]
         @db_prev = db_stats || {}
         @prev = read_counters(stat, Sources::LINUX ? Sources.tcp : {})
+        @cgroup = Cgroup.detect # nil off Linux
+        @cgroup&.prime
       end
 
       def run

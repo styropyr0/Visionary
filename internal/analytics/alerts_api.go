@@ -265,6 +265,9 @@ func checkScope(sc alertScope) error {
 	if sc.Instance != "" && !instanceName.MatchString(sc.Instance) {
 		return badInput("invalid instance name")
 	}
+	if sc.Container != "" && !instanceName.MatchString(sc.Container) {
+		return badInput("invalid container name")
+	}
 	if len(sc.Route) > 512 || len(sc.Service) > 128 || len(sc.Check) > 128 {
 		return badInput("scope value is too long")
 	}

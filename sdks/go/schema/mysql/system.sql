@@ -70,7 +70,13 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     service            VARCHAR(255),
     version            VARCHAR(255),
     sdk                VARCHAR(255),
-    runtime            VARCHAR(255)
+    runtime            VARCHAR(255),
+    container_cpu_cores DOUBLE,
+    container_cpu_limit DOUBLE,
+    container_cpu_throttled_percent DOUBLE,
+    container_mem_used_mb DOUBLE,
+    container_mem_limit_mb DOUBLE,
+    container_oom_kills BIGINT
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX idx_system_metrics_instance_created ON system_metrics (instance, created_at);

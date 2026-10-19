@@ -73,6 +73,7 @@ type recorder struct {
 	prevCPU  float64
 	dbPrev   DBStats
 	prev     counters
+	cgroup   *cgroupReader // nil off Linux and for HostSampler
 	buf      [][]any
 	stop     chan struct{}
 	done     chan struct{}
@@ -138,6 +139,11 @@ func (r *recorder) prime() {
 		r.dbPrev = r.cfg.DB()
 	}
 	r.prev = readCounters(r.proc)
+	if !r.hostOnly {
+		if r.cgroup = newCgroupReader(); r.cgroup != nil {
+			r.cgroup.prime()
+		}
+	}
 }
 
 func (r *recorder) run(ctx context.Context) {
@@ -299,6 +305,9 @@ func (r *recorder) values() map[string]any {
 
 	v["uptime_s"] = int64(time.Since(r.started).Seconds())
 	r.sampleExtra(v, secs)
+	if r.cgroup != nil {
+		r.cgroup.sample(v)
+	}
 	return v
 }
 

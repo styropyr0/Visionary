@@ -28,6 +28,9 @@ const (
 	hostMaxMounts    = 200
 	hostMaxUnits     = 500
 	hostMaxEvents    = 1000
+	// A container sample per running container per host sample.
+	hostMaxContainers       = 500
+	hostMaxContainerSamples = 20000
 )
 
 var (
@@ -142,7 +145,7 @@ func reportTime(v string, now time.Time) (string, bool) {
 // counts what it kept per kind.
 func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 	rows := &otlpRows{}
-	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0}
+	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0}
 	host, service := rep.Host, otlpNullStr(clip(rep.Service, 128))
 	runtime := otlpNullStr(clip(rep.Runtime, 128))
 	now := time.Now()
@@ -206,6 +209,7 @@ func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 			otlpNullStr(detail), int64(count)})
 		n["events"]++
 	}
+	containerRows(rep, at, rows, n)
 	return rows, n
 }
 

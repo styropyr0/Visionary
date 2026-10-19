@@ -271,6 +271,7 @@ JVM's MXBeans everywhere, plus `/proc` on Linux.
 | This process | `proc_cpu_percent`, `proc_threads`, `goroutines` (live JVM threads) | MXBeans | all |
 | | `proc_open_fds`, `proc_max_fds` | `UnixOperatingSystemMXBean` | Linux, macOS |
 | | `proc_rss_mb`, `proc_read_kbps`, `proc_write_kbps` | `/proc/self/status`, `/proc/self/io` | Linux |
+| Container | `container_cpu_cores`, `container_cpu_limit`, `container_cpu_throttled_percent`, `container_mem_used_mb`, `container_mem_limit_mb`, `container_oom_kills` (the process's own cgroup; filled only in a container or when the cgroup sets a CPU or memory limit) | `/sys/fs/cgroup` (v2 or v1) | Linux |
 | JVM | `heap_alloc_mb`, `heap_inuse_mb` (heap used / committed), `gc_count`, `gc_pause_ms`, `gc_cpu_percent` | `MemoryMXBean`, `GarbageCollectorMXBean` | all |
 | Pool | `db_total_conns`, `db_idle_conns`, `db_acquired_conns`, `db_max_conns` | `HikariPoolMXBean`, when the app's `DataSource` is a `HikariDataSource` | all |
 | HTTP | `http_requests`, `http_errors`, `http_rps`, `http_in_flight`, `uptime_s` | the filter | all |

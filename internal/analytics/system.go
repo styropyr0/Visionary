@@ -57,7 +57,11 @@ SELECT
   (SELECT proc_open_fds FROM latest) AS fds_now,
   (SELECT proc_max_fds FROM latest) AS fds_limit,
   (SELECT ` + q.round("AVG(net_rx_kbps + net_tx_kbps) * 1024", 0) + ` FROM r) AS net_bytes_avg,
-  (SELECT ` + q.round("MAX(net_rx_kbps + net_tx_kbps) * 1024", 0) + ` FROM r) AS net_bytes_max`,
+  (SELECT ` + q.round("MAX(net_rx_kbps + net_tx_kbps) * 1024", 0) + ` FROM r) AS net_bytes_max,
+  (SELECT container_mem_used_mb FROM latest) AS ctr_mem_now,
+  (SELECT container_mem_limit_mb FROM latest) AS ctr_mem_limit,
+  (SELECT container_cpu_cores FROM latest) AS ctr_cpu_now,
+  (SELECT container_cpu_limit FROM latest) AS ctr_cpu_limit`,
 
 		"cpu": `
 SELECT {{t}} AS t,
@@ -185,6 +189,34 @@ SELECT {{t}} AS t,
   ` + q.round("AVG(host_mem_available_mb) * 1048576.0", 0) + ` AS available,
   ` + q.round("AVG(host_mem_cached_mb) * 1048576.0", 0) + ` AS cached
 FROM system_metrics WHERE ` + sysWindow + `
+GROUP BY t ORDER BY t`,
+
+		// The service's own container (its cgroup), from the SDKs.
+		"container_cpu": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(container_cpu_cores)", 3) + ` AS cores_used,
+  MAX(container_cpu_cores) AS peak_cores,
+  MAX(container_cpu_limit) AS cpu_limit
+FROM system_metrics WHERE ` + sysWindow + ` AND container_cpu_cores IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"container_memory": `
+SELECT {{t}} AS t,
+  ` + q.round("MAX(container_mem_used_mb) * 1048576.0", 0) + ` AS used,
+  ` + q.round("MAX(container_mem_limit_mb) * 1048576.0", 0) + ` AS memory_limit
+FROM system_metrics WHERE ` + sysWindow + ` AND container_mem_used_mb IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"container_throttling": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(container_cpu_throttled_percent)", 1) + ` AS throttled
+FROM system_metrics WHERE ` + sysWindow + ` AND container_cpu_throttled_percent IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"container_oom": `
+SELECT {{t}} AS t,
+  SUM(container_oom_kills) AS oom_kills
+FROM system_metrics WHERE ` + sysWindow + ` AND container_oom_kills IS NOT NULL
 GROUP BY t ORDER BY t`,
 
 		"swap": `

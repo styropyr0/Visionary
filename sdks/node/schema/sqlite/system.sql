@@ -70,7 +70,13 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     service            TEXT,
     version            TEXT,
     sdk                TEXT,
-    runtime            TEXT
+    runtime            TEXT,
+    container_cpu_cores REAL,
+    container_cpu_limit REAL,
+    container_cpu_throttled_percent REAL,
+    container_mem_used_mb REAL,
+    container_mem_limit_mb REAL,
+    container_oom_kills INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

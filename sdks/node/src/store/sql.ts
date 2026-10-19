@@ -39,6 +39,12 @@ export const ADDED_SYSTEM_COLUMNS: [string, Kind][] = [
   ["version", "text"],
   ["sdk", "text"],
   ["runtime", "text"],
+  ["container_cpu_cores", "real"],
+  ["container_cpu_limit", "real"],
+  ["container_cpu_throttled_percent", "real"],
+  ["container_mem_used_mb", "real"],
+  ["container_mem_limit_mb", "real"],
+  ["container_oom_kills", "int"],
 ];
 
 export const ADDED_REQUEST_COLUMNS: [string, Kind][] = [

@@ -37,6 +37,7 @@ final class SystemSampler {
     private final PoolStats pool;
     private final File disk = new File(System.getProperty("user.dir", ".")).getAbsoluteFile();
     private final NodeSampler node = new NodeSampler(disk);
+    private final CgroupReader cgroup = CgroupReader.open(); // null off Linux
     private final ScheduledExecutorService executor;
 
     private final OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
@@ -111,6 +112,9 @@ final class SystemSampler {
         gcTimeMs = gc[1];
         procCpuNs = processCpuTime();
         node.prime();
+        if (cgroup != null) {
+            cgroup.prime();
+        }
         if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
             sun.getCpuLoad();
         }
@@ -242,6 +246,13 @@ final class SystemSampler {
         } catch (RuntimeException e) {
             // The node columns are best effort; the rest of the row still counts.
             log.debug("visionary: node metrics failed", e);
+        }
+        if (cgroup != null) {
+            try {
+                cgroup.sample(row);
+            } catch (RuntimeException e) {
+                log.debug("visionary: container metrics failed", e);
+            }
         }
         return row;
     }

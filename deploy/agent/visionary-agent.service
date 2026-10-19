@@ -15,8 +15,8 @@ EnvironmentFile=/etc/visionary-agent.env
 ExecStart=/usr/local/bin/visionary-agent
 Restart=always
 RestartSec=10
-# Root reads every process, the auth log and other processes' sockets; the
-# agent writes nothing to disk.
+# Root reads every process, the auth log, other processes' sockets and the
+# Docker or Podman socket; the agent writes nothing to disk.
 User=root
 NoNewPrivileges=true
 ProtectSystem=full

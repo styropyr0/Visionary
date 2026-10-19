@@ -16,8 +16,11 @@ import (
 // report a minute to POST /api/agent/v1/report (hosts_ingest.go). Its samples
 // go to system_metrics with sdk = 'agent', so the System view and the alert
 // rules see agent hosts like any instance; inventory, snapshots and security
-// findings go to the tables of hosts_schema.go. The Hosts view reads them
-// through GET /api/hosts and GET /api/hosts/{host} (hosts_api.go).
+// findings go to the tables of hosts_schema.go, containers too. The System
+// view reads the machine through GET /api/system/machines[/{host}]
+// (hosts_api.go), the Containers view its containers through
+// GET /api/containers/... (hosts_containers.go), and the Security page the
+// findings.
 
 // hostsState is the feature's runtime state, hung off the Server like rum's.
 type hostsState struct {
@@ -84,7 +87,7 @@ func (h *hostsState) noteInterval(host string, sec float64) {
 func init() {
 	// The analyst may read the host tables. security_events is shared with
 	// the server's own detectors.
-	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS"} {
+	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS", "HOST_CONTAINERS", "CONTAINER_METRICS", "CONTAINER_EVENTS"} {
 		allowedTables[t] = true
 	}
 }
@@ -92,8 +95,9 @@ func init() {
 func (s *Server) hostsRoutes(mux *http.ServeMux) {
 	// Public: the agent authenticates with a server ingest key, like OTLP.
 	mux.HandleFunc("POST "+agentapi.Path, s.handleAgentReport)
-	mux.Handle("GET /api/hosts", s.authed(s.handleHosts))
-	mux.Handle("GET /api/hosts/{host}", s.authed(s.handleHost))
+	mux.Handle("GET /api/system/machines", s.authed(s.handleMachines))
+	mux.Handle("GET /api/system/machines/{host}", s.authed(s.handleMachine))
+	s.containerRoutes(mux)
 }
 
 func (s *Server) hostsStart(ctx context.Context) {
@@ -101,19 +105,22 @@ func (s *Server) hostsStart(ctx context.Context) {
 }
 
 func (s *Server) hostsPrompt() string {
-	return `Hosts: machines watched by the standalone host agent (cmd/visionary-agent). Their samples are system_metrics rows with sdk = 'agent', instance = the host name and runtime = the OS (e.g. 'Ubuntu 24.04 (linux 6.8.0)'); process, runtime, database and HTTP columns are NULL there, and uptime_s is the host's uptime.
+	return hostsPromptText + "\n" + containersPrompt
+}
+
+const hostsPromptText = `Hosts: machines watched by the standalone host agent (cmd/visionary-agent). Their samples are system_metrics rows with sdk = 'agent', instance = the host name and runtime = the OS (e.g. 'Ubuntu 24.04 (linux 6.8.0)'); process, runtime, database and HTTP columns are NULL there, and uptime_s is the host's uptime.
 Table host_inventory: one row per host. host (= system_metrics.instance), service, os, kernel, arch, cpu_count, mem_total_mb, boot_time, agent_version, ip, first_seen, last_seen (the last report).
 Snapshot tables, one set of rows per host per report (about a minute); for the current state use each host's latest created_at:
 - host_processes: created_at, host, pid, name, username, cpu_percent (percent of one core), rss_mb, cmdline. The top processes by CPU and by memory.
 - host_mounts: created_at, host, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent.
 - host_units: created_at, host, unit, state ('active', 'inactive', 'failed', ...), sub. Failed systemd services plus the watched ones.
 Table security_events: created_at, source ('host' from the agent), kind, severity ('info', 'warning', 'critical'), host, service, actor, ip, target, detail, count (occurrences one row stands for). Host kinds: ssh_failed (actor = user tried, ip), ssh_login, sudo (target = command), port_opened / port_closed (target like 'tcp 0.0.0.0:5432 postgres'), updates_pending (count = updates, detail = 'N security'), reboot. Sum count, not rows, for attempt totals.`
-}
 
 // hostsRetention trims the host tables 90 s after start and then every
 // 6 hours: snapshots after VISIONARY_HOST_RETENTION_DAYS, the agents'
 // system_metrics rows after VISIONARY_SYSTEM_RETENTION_DAYS, and hosts silent
-// for 30 days. security_events is trimmed by the security feature
+// for 30 days. host_containers follows the snapshots, container_metrics and
+// container_events the metrics. security_events is trimmed by the security feature
 // (VISIONARY_SECURITY_RETENTION_DAYS), whichever source wrote it.
 func (s *Server) hostsRetention(ctx context.Context) {
 	h := s.hosts()
@@ -126,12 +133,14 @@ func (s *Server) hostsRetention(ctx context.Context) {
 		case <-timer.C:
 		}
 		if h.retention > 0 {
-			for _, t := range []string{"host_processes", "host_mounts", "host_units"} {
+			for _, t := range []string{"host_processes", "host_mounts", "host_units", "host_containers"} {
 				s.purgeOld(ctx, t, "", h.retention)
 			}
 		}
 		if h.metricsRetention > 0 {
 			s.purgeOld(ctx, "system_metrics", "sdk = 'agent'", h.metricsRetention)
+			s.purgeOld(ctx, "container_metrics", "", h.metricsRetention)
+			s.purgeOld(ctx, "container_events", "", h.metricsRetention)
 		}
 		cutoff := time.Now().UTC().AddDate(0, 0, -hostForgetDays).Format(tsLayout)
 		cctx, cancel := context.WithTimeout(ctx, time.Minute)

@@ -20,7 +20,10 @@ import {
 import { PreviewChart } from "./PreviewChart";
 import { KINDS } from "../../lib/security";
 
-const GROUP_LABEL: Record<string, string> = { request: "Requests", system: "System", liveness: "Liveness", uptime: "Uptime", security: "Security" };
+const GROUP_LABEL: Record<string, string> = { request: "Requests", system: "System", liveness: "Liveness", uptime: "Uptime", security: "Security", container: "Containers" };
+
+/** Kinds of container_events. */
+const CONTAINER_KINDS: Record<string, string> = { restarted: "Restarted", oom_killed: "Out-of-memory kill", exited: "Exited", unhealthy: "Health check failing", healthy: "Healthy again" };
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 
 function blank(meta: AlertsMeta): RuleInput {
@@ -246,11 +249,15 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             )}
             {scopes.includes("event_kind") && (
               <div className="field">
-                <span>Finding kind</span>
+                <span>{sp.metric === "container_events" ? "Event" : "Finding kind"}</span>
                 <Select
-                  label="Finding kind"
+                  label={sp.metric === "container_events" ? "Event" : "Finding kind"}
                   value={sp.scope.event_kind ?? ""}
-                  options={[{ value: "", label: "Any kind" }, ...Object.entries(KINDS).map(([k, v]) => ({ value: k, label: v.label }))]}
+                  options={
+                    sp.metric === "container_events"
+                      ? [{ value: "", label: "Any event" }, ...Object.entries(CONTAINER_KINDS).map(([k, label]) => ({ value: k, label }))]
+                      : [{ value: "", label: "Any kind" }, ...Object.entries(KINDS).map(([k, v]) => ({ value: k, label: v.label }))]
+                  }
                   onChange={(v) => setScope("event_kind", v)}
                   align="left"
                 />
@@ -288,10 +295,16 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
                 />
               </div>
             )}
+            {scopes.includes("container") && (
+              <label className="field">
+                <span>Container</span>
+                <input className="input" value={sp.scope.container ?? ""} placeholder="Each container" onChange={(e) => setScope("container", e.target.value)} />
+              </label>
+            )}
             {scopes.includes("host") && (
               <label className="field">
-                <span>Host</span>
-                <input className="input" value={sp.scope.host ?? ""} placeholder="Every host" onChange={(e) => setScope("host", e.target.value)} />
+                <span>{metric?.group === "container" ? "Machine" : "Host"}</span>
+                <input className="input" value={sp.scope.host ?? ""} placeholder={metric?.group === "container" ? "Every machine" : "Every host"} onChange={(e) => setScope("host", e.target.value)} />
               </label>
             )}
             {scopes.includes("check") && (

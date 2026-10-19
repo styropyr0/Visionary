@@ -9,7 +9,7 @@ export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 export interface MetricDef {
   id: string;
   label: string;
-  group: "request" | "system" | "liveness" | "uptime" | "security";
+  group: "request" | "system" | "liveness" | "uptime" | "security" | "container";
   unit: AlertUnit;
   description: string;
   scopes: string[];
@@ -47,6 +47,8 @@ export interface Scope {
   event_severity?: string;
   source?: string;
   host?: string;
+  /** Container rules: the container's name. */
+  container?: string;
 }
 
 export interface RuleSpec {
@@ -320,6 +322,8 @@ export interface RulePreset {
   spec: RuleSpec;
 }
 
+const containerEvent = (kind: string, threshold: number, window: string): RuleSpec => ({ metric: "container_events", scope: { event_kind: kind }, op: ">=", threshold, window, for: "0s", repeat: "" });
+
 const finding = (scope: Scope, threshold: number, window: string, repeat = ""): RuleSpec => ({ metric: "security_events", scope, op: ">=", threshold, window, for: "0s", repeat });
 
 export const RULE_PRESETS: RulePreset[] = [
@@ -337,4 +341,14 @@ export const RULE_PRESETS: RulePreset[] = [
   { id: "ssh", label: "SSH brute force on a host", name: "SSH brute force", severity: "warning", spec: finding({ event_kind: "ssh_failed", source: "host" }, 20, "10m") },
   { id: "port", label: "New open port on a host", name: "New open port on a host", severity: "warning", spec: finding({ event_kind: "port_opened", source: "host" }, 1, "5m") },
   { id: "updates", label: "Pending security updates", name: "Pending security updates", severity: "info", spec: finding({ event_kind: "updates_pending", source: "host" }, 1, "1h", "24h") },
+  { id: "ctr_restarts", label: "Container restart loop", name: "Container restarting repeatedly", severity: "critical", spec: containerEvent("restarted", 3, "10m") },
+  { id: "ctr_oom", label: "Container killed out of memory", name: "Container out-of-memory kill", severity: "critical", spec: containerEvent("oom_killed", 1, "10m") },
+  { id: "ctr_unhealthy", label: "Container health check failing", name: "Container unhealthy", severity: "warning", spec: containerEvent("unhealthy", 1, "5m") },
+  {
+    id: "ctr_memory",
+    label: "Container near its memory limit",
+    name: "Container memory above 90% of its limit",
+    severity: "warning",
+    spec: { metric: "container_memory", scope: {}, op: ">", threshold: 90, window: "5m", for: "5m", repeat: "" },
+  },
 ];

@@ -21,8 +21,9 @@ Some packages need no upload:
 - **Go**: `sdks/go` is its own module. The workflow pushes a matching `sdks/go/v0.4.0` tag,
   which is what `go get github.com/styropyr0/visionary/sdks/go@v0.4.0` resolves.
 - **Host agent**: the `visionary-agent-linux-amd64` and `-arm64` binaries (plus `SHA256SUMS`)
-  are attached to the GitHub Release; the image `ghcr.io/styropyr0/visionary-agent` is built by
-  [`image.yml`](../.github/workflows/image.yml).
+  are attached to the GitHub Release, where
+  [`deploy/agent/install.sh`](../deploy/agent/install.sh) downloads them. It runs on the host, so
+  there is no image.
 - **CocoaPods** is skipped on purpose: its trunk is being sunset (it is scheduled to become read-only).
 
 The version always comes from the tag (`v0.4.0` becomes `0.4.0`, and `v0.4.0-rc.1` becomes a

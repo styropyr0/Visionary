@@ -40,6 +40,7 @@ type agent struct {
 	auth    *authCollector
 	ports   *portCollector
 	updates *updateChecker
+	docker  *dockerCollector // nil when VISIONARY_AGENT_DOCKER is off
 }
 
 type procTime struct {
@@ -51,6 +52,9 @@ const topProcesses = 15
 
 func newAgent(cfg config, logger *slog.Logger) *agent {
 	a := &agent{cfg: cfg, log: logger}
+	if cfg.docker != "off" {
+		a.docker = newDockerCollector(a, cfg.docker)
+	}
 	if cfg.security {
 		a.auth = newAuthCollector(a, cfg.authLog)
 		a.ports = &portCollector{a: a}
@@ -81,6 +85,10 @@ func (a *agent) report(ctx context.Context, samples []agentapi.Sample) *agentapi
 		Processes: a.processes(now),
 		Mounts:    a.mounts(),
 		Units:     a.units(ctx),
+	}
+	if a.docker != nil {
+		rep.Containers, rep.ContainerEvents = a.docker.report(ctx)
+		rep.ContainerSamples = a.docker.takeSamples()
 	}
 	if a.cfg.security {
 		rep.Events = append(rep.Events, a.auth.collect(ctx)...)
@@ -239,11 +247,10 @@ func (a *agent) processes(now time.Time) []agentapi.Process {
 	return out
 }
 
-// passwdNames maps uids to user names from the host's /etc/passwd, which in a
-// container is not the container's own.
+// passwdNames maps uids to user names from /etc/passwd.
 func passwdNames() map[uint32]string {
 	out := map[uint32]string{}
-	b, err := os.ReadFile(hostPath("/etc/passwd"))
+	b, err := os.ReadFile("/etc/passwd")
 	if err != nil {
 		return out
 	}
@@ -292,10 +299,10 @@ func (a *agent) mounts() []agentapi.Mount {
 			if !want[mp] {
 				continue
 			}
-		} else if pseudoFS[p.Fstype] || underAny(mp, pseudoMounts) || (hostRoot != "/" && underAny(mp, []string{hostRoot})) || devices[p.Device] {
+		} else if pseudoFS[p.Fstype] || underAny(mp, pseudoMounts) || devices[p.Device] {
 			continue
 		}
-		u, err := disk.Usage(hostPath(mp))
+		u, err := disk.Usage(mp)
 		if err != nil || u.Total == 0 {
 			continue
 		}
@@ -373,17 +380,11 @@ func (a *agent) units(ctx context.Context) []agentapi.Unit {
 	return units
 }
 
-// hostCommand runs a program of the host: directly on the host, through
-// chroot into HOST_ROOT in a container.
+// hostCommand runs a program of the host with a fixed environment.
 func hostCommand(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	var cmd *exec.Cmd
-	if hostRoot != "/" {
-		cmd = exec.CommandContext(ctx, "chroot", append([]string{hostRoot, name}, args...)...)
-	} else {
-		cmd = exec.CommandContext(ctx, name, args...)
-	}
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "SYSTEMD_COLORS=0"}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

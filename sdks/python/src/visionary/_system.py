@@ -10,6 +10,7 @@ import tracemalloc
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import _errors, _spans
+from ._cgroup import CgroupReader
 from ._entry import format_ts
 from ._node import NodeCollector
 from ._storage import SYSTEM_COLUMNS, Backend
@@ -112,6 +113,7 @@ class Recorder:
             except Exception:
                 self._proc = None
         self._node = NodeCollector(self._proc, self._disk_path)
+        self._cgroup = _quiet(CgroupReader.find)  # None off Linux
 
     def start(self) -> None:
         self._gc.install()
@@ -158,6 +160,8 @@ class Recorder:
         if self._db_stats is not None:
             self._db_prev = _quiet(self._db_stats) or {}
         self._node.prime()
+        if self._cgroup is not None:
+            _quiet(self._cgroup.prime)
 
     def _run(self) -> None:
         _spans.mark_internal()
@@ -242,6 +246,8 @@ class Recorder:
         v["http_in_flight"] = in_flight
         v["uptime_s"] = int(now - self._started)
         self._node.sample(v, secs)
+        if self._cgroup is not None:
+            _quiet(lambda: self._cgroup.sample(v))
         return tuple(v.get(c) for c in SYSTEM_COLUMNS)
 
     def _disk(self, v: Dict[str, Any]) -> None:
