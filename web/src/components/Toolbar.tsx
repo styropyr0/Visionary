@@ -6,10 +6,13 @@ import { PRESETS, rangeLabel, toLocalInput } from "../lib/time";
 export function usePopover() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // A FloatingMenu lives in a portal, outside ref: clicks in it are inside too.
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current && !ref.current.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDown);
@@ -19,7 +22,7 @@ export function usePopover() {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  return { open, setOpen, ref };
+  return { open, setOpen, ref, menuRef };
 }
 
 /** Preset rows first; a custom range sits behind a hairline in the footer. */

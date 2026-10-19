@@ -2319,3 +2319,8 @@ pre.code {
 .menu-row.active {
   background: var(--hover-wash);
 }
+
+/* Menus drawn in a portal over drawers and modals (Floating.tsx). */
+.popover.floating {
+  z-index: 70;
+}

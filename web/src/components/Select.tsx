@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { FloatingMenu } from "./Floating";
 import { usePopover } from "./Toolbar";
 
 export interface Option {
@@ -22,7 +23,7 @@ interface Props {
 
 /** A dropdown styled like the toolbar's other menus (the time range picker). */
 export function Select({ value, options, onChange, label, icon, maxWidth, align = "right" }: Props) {
-  const { open, setOpen, ref } = usePopover();
+  const { open, setOpen, ref, menuRef } = usePopover();
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <div className="popover-anchor" ref={ref}>
@@ -32,7 +33,7 @@ export function Select({ value, options, onChange, label, icon, maxWidth, align 
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="popover menu-scroll" role="menu" style={align === "left" ? { minWidth: 200, left: 0, right: "auto" } : { minWidth: 200 }}>
+        <FloatingMenu anchor={ref} menuRef={menuRef} align={align} className="menu-scroll" role="menu" style={{ minWidth: 200 }}>
           {options.map((o) => {
             const selected = o.value === value;
             return (
@@ -51,7 +52,7 @@ export function Select({ value, options, onChange, label, icon, maxWidth, align 
               </button>
             );
           })}
-        </div>
+        </FloatingMenu>
       )}
     </div>
   );

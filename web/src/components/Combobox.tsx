@@ -1,5 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Check } from "lucide-react";
+import { FloatingMenu } from "./Floating";
 import { usePopover } from "./Toolbar";
 
 interface Props {
@@ -19,7 +20,7 @@ const MAX_SHOWN = 50;
  * the value is free text but usually one of a known list (routes, services).
  */
 export function Combobox({ value, onChange, options, placeholder, label }: Props) {
-  const { open, setOpen, ref } = usePopover();
+  const { open, setOpen, ref, menuRef } = usePopover();
   const [active, setActive] = useState(-1);
 
   const matches = useMemo(() => {
@@ -67,7 +68,7 @@ export function Combobox({ value, onChange, options, placeholder, label }: Props
         onKeyDown={onKey}
       />
       {open && matches.length > 0 && (
-        <div className="popover menu-scroll combobox-menu" role="listbox">
+        <FloatingMenu anchor={ref} menuRef={menuRef} matchWidth className="menu-scroll combobox-menu" role="listbox">
           {matches.map((o, i) => (
             <button
               key={o}
@@ -83,7 +84,7 @@ export function Combobox({ value, onChange, options, placeholder, label }: Props
               <span className="menu-label">{o}</span>
             </button>
           ))}
-        </div>
+        </FloatingMenu>
       )}
     </div>
   );
