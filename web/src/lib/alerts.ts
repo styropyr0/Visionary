@@ -211,10 +211,46 @@ export interface DigestPreview {
     to: string;
     this_week: DigestWeek;
     previous_week: DigestWeek;
-    slowest_routes: { route: string; requests: number; p95_ms: number; previous_p95_ms: number | null }[];
+    slowest_routes: { route: string; requests: number; p95_ms: number; previous_p95_ms: number | null }[] | null;
     incidents: { rule: string; severity: Severity; count: number }[] | null;
     releases: { version: string; service: string; first_seen: string }[] | null;
+    days: { day: string; requests: number; errors_5xx: number }[] | null;
+    regressed_routes: DigestChange[] | null;
+    improved_routes: DigestChange[] | null;
+    busiest_routes: { route: string; requests: number; previous_requests: number }[] | null;
+    errors?: {
+      total: number;
+      previous_total: number;
+      new_issues: number;
+      top: { type: string; message: string; route: string; count: number; new: boolean }[] | null;
+    };
+    uptime: { check: string; availability: number; previous_availability: number | null; failures: number; avg_ms: number }[] | null;
+    machines: { instance: string; avg_cpu: number | null; peak_cpu: number | null; peak_memory: number | null; peak_disk: number | null }[] | null;
+    containers?: {
+      restarts: number;
+      oom_kills: number;
+      exits: number;
+      unhealthy: number;
+      worst: { container: string; restarts: number; oom_kills: number; unhealthy: number }[] | null;
+    };
+    web_vitals: { name: string; p75: number; previous_p75: number | null; rating: "good" | "needs_improvement" | "poor" }[] | null;
+    security?: {
+      findings_by_severity: Record<string, number>;
+      findings_by_kind: { kind: string; count: number }[] | null;
+      top_ips: { ip: string; findings: number; kinds: string }[] | null;
+      failed_logins: number;
+      previous_failed_logins: number;
+      hosts_with_pending_updates: { host: string; pending: number }[] | null;
+    };
   };
+}
+
+export interface DigestChange {
+  route: string;
+  requests: number;
+  p95_ms: number;
+  previous_p95_ms: number;
+  change_pct: number;
 }
 
 export interface DigestWeek {
@@ -253,6 +289,9 @@ export const alertsApi = {
   testChannel: (id: number) => api<{ ok: boolean; error?: string }>(`/api/alerts/channels/${id}/test`, { method: "POST", json: {} }),
   sendDigest: (id: number) => api<{ ok: boolean; error?: string }>(`/api/alerts/channels/${id}/digest`, { method: "POST", json: {} }),
   digest: (signal?: AbortSignal) => api<DigestPreview>("/api/alerts/digest", { signal }),
+  digestSummary: () => api<{ summary: string }>("/api/alerts/digest/summary", { method: "POST", json: {} }),
+  /** The email version, served sandboxed for an iframe. */
+  digestEmailURL: "/api/alerts/digest/email",
 };
 
 export function formatAlertValue(v: number | null | undefined, unit: AlertUnit): string {

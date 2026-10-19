@@ -216,6 +216,39 @@ func (s *Server) handleSendDigest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// handleDigestSummary asks the analyst for this week's summary, as the
+// digest itself would.
+func (s *Server) handleDigestSummary(w http.ResponseWriter, r *http.Request) {
+	if s.llm == nil {
+		writeError(w, http.StatusNotFound, "no model is configured")
+		return
+	}
+	d, err := s.digestData(r.Context(), time.Now().UTC())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	text := s.digestSummary(r.Context(), d)
+	if text == "" {
+		writeError(w, http.StatusBadGateway, "the model did not return a summary; try again")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"summary": text})
+}
+
+// handleDigestEmail is this week's digest as the email renders it, without
+// the summary (a model call), for the page to preview in a sandboxed frame.
+func (s *Server) handleDigestEmail(w http.ResponseWriter, r *http.Request) {
+	d, err := s.digestData(r.Context(), time.Now().UTC())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	_, _ = w.Write([]byte(s.digestHTML(d, "")))
+}
+
 // handleDigestPreview shows what this week's digest would say.
 func (s *Server) handleDigestPreview(w http.ResponseWriter, r *http.Request) {
 	d, err := s.digestData(r.Context(), time.Now().UTC())

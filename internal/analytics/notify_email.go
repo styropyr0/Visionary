@@ -53,7 +53,9 @@ func isLoopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func sendEmail(ctx context.Context, to []string, subject, body string) error {
+// sendEmail sends body as plain text, with html as the formatted alternative
+// when it is set.
+func sendEmail(ctx context.Context, to []string, subject, body, html string) error {
 	cfg, ok := smtpFromEnv()
 	if !ok {
 		return errors.New("email needs VISIONARY_SMTP_HOST and VISIONARY_SMTP_FROM")
@@ -115,7 +117,7 @@ func sendEmail(ctx context.Context, to []string, subject, body string) error {
 	if err != nil {
 		return fmt.Errorf("smtp data: %w", err)
 	}
-	if _, err := w.Write(buildMessage(from.String(), to, subject, body)); err != nil {
+	if _, err := w.Write(buildMessage(from.String(), to, subject, body, html)); err != nil {
 		return fmt.Errorf("smtp write: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -124,7 +126,7 @@ func sendEmail(ctx context.Context, to []string, subject, body string) error {
 	return c.Quit()
 }
 
-func buildMessage(from string, to []string, subject, body string) []byte {
+func buildMessage(from string, to []string, subject, body, html string) []byte {
 	id := make([]byte, 12)
 	_, _ = rand.Read(id)
 	host := "visionary.local"
@@ -143,11 +145,27 @@ func buildMessage(from string, to []string, subject, body string) []byte {
 	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
 	b.WriteString("Message-ID: <" + hex.EncodeToString(id) + "@" + host + ">\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
 	// The SMTP data writer dot-stuffs lines itself.
-	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
-		b.WriteString(line + "\r\n")
+	writeLines := func(text string) {
+		for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+			b.WriteString(line + "\r\n")
+		}
 	}
+	if html == "" {
+		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+		b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+		writeLines(body)
+		return []byte(b.String())
+	}
+	// Plain text first: clients show the last part they can render.
+	boundary := "visionary-" + hex.EncodeToString(id)
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
+	for _, part := range []struct{ kind, text string }{{"text/plain", body}, {"text/html", html}} {
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: " + part.kind + "; charset=utf-8\r\n")
+		b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+		writeLines(part.text)
+	}
+	b.WriteString("--" + boundary + "--\r\n")
 	return []byte(b.String())
 }

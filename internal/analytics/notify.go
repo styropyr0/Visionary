@@ -174,6 +174,8 @@ type notice struct {
 	Runbook string
 	At      time.Time
 	Payload map[string]any // the generic webhook's body
+	// HTML is an email's formatted version, sent next to the plain text.
+	HTML string
 }
 
 func (n notice) color() int {
@@ -301,7 +303,7 @@ func (s *Server) sendNotice(ctx context.Context, c alertChannel, n notice) error
 		body["title"], body["text"] = n.Title, n.plain()
 		return postJSON(ctx, c.Config.URL, body, []byte(c.Config.Secret))
 	case "email":
-		return sendEmail(ctx, c.Config.To, n.Title, n.plain())
+		return sendEmail(ctx, c.Config.To, n.Title, n.plain(), n.HTML)
 	}
 	return errors.New("unknown channel kind")
 }

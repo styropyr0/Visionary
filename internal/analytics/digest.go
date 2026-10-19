@@ -10,7 +10,8 @@ import (
 )
 
 // The weekly digest: last week against the week before (traffic, p95, 5xx,
-// slowest routes, incidents from alert_events, new versions from releases).
+// slowest routes, incidents from alert_events, new versions from releases),
+// plus the sections of digest_more.go and security_digest.go.
 // With a model configured the analyst writes the summary; otherwise it is a
 // plain list of the numbers. Each channel opts in with its own weekday and
 // hour, in VISIONARY_DIGEST_TZ (or the server's zone).
@@ -50,6 +51,17 @@ type digestData struct {
 	Incidents []digestIncident `json:"incidents"`
 	Releases  []digestRelease  `json:"releases"`
 	Security  *securityDigest  `json:"security,omitempty"` // security_digest.go
+
+	// digest_more.go
+	Days       []digestDay       `json:"days"`
+	Regressed  []digestChange    `json:"regressed_routes"`
+	Improved   []digestChange    `json:"improved_routes"`
+	Busiest    []digestBusy      `json:"busiest_routes"`
+	Errors     *digestErrors     `json:"errors,omitempty"`
+	Uptime     []digestCheck     `json:"uptime"`
+	Machines   []digestMachine   `json:"machines"`
+	Containers *digestContainers `json:"containers,omitempty"`
+	Vitals     []digestVital     `json:"web_vitals"`
 }
 
 func (s *Server) digestData(ctx context.Context, now time.Time) (*digestData, error) {
@@ -92,22 +104,25 @@ FROM o GROUP BY wk, route HAVING COUNT(*) >= 20`, span...)
 	if err != nil {
 		return nil, err
 	}
-	prev := map[string]float64{}
+	cur, prev := map[string]digestRoute{}, map[string]digestRoute{}
 	for _, row := range res.Rows {
 		p, _ := cellFloat(row[3])
+		r := digestRoute{Route: toString(row[1]), Requests: toInt(row[2]), P95: p}
 		if toInt(row[0]) == 1 {
-			d.Slowest = append(d.Slowest, digestRoute{Route: toString(row[1]), Requests: toInt(row[2]), P95: p})
+			cur[r.Route] = r
+			d.Slowest = append(d.Slowest, r)
 		} else {
-			prev[toString(row[1])] = p
+			prev[r.Route] = r
 		}
 	}
 	sort.Slice(d.Slowest, func(i, j int) bool { return d.Slowest[i].P95 > d.Slowest[j].P95 })
 	d.Slowest = head(d.Slowest, 5)
 	for i := range d.Slowest {
 		if p, ok := prev[d.Slowest[i].Route]; ok {
-			d.Slowest[i].PrevP95 = ptr(p)
+			d.Slowest[i].PrevP95 = ptr(p.P95)
 		}
 	}
+	d.Regressed, d.Improved, d.Busiest = routeChanges(cur, prev)
 
 	res, err = s.db.Query(ctx, `SELECT `+week+` AS wk, rule_name, severity, COUNT(*) FROM alert_events
 WHERE created_at >= ? AND created_at < ? AND state = 'firing' GROUP BY `+week+`, rule_name, severity ORDER BY COUNT(*) DESC`, span...)
@@ -136,6 +151,12 @@ GROUP BY version, COALESCE(service, '') HAVING MIN(created_at) >= ? ORDER BY fir
 		s.logger.Info("digest: releases unavailable", "err", err)
 	}
 	d.Security = s.securityDigestData(ctx, mid, now)
+	d.Days = s.digestDays(ctx, mid, now)
+	d.Errors = s.digestErrorsData(ctx, start, mid, now)
+	d.Uptime = s.digestUptimeData(ctx, start, mid, now)
+	d.Machines = s.digestMachinesData(ctx, mid, now)
+	d.Containers = s.digestContainersData(ctx, mid, now)
+	d.Vitals = s.digestVitalsData(ctx, start, mid, now)
 	return d, nil
 }
 
@@ -149,6 +170,7 @@ func (s *Server) digestNotice(ctx context.Context, d *digestData) notice {
 			n.Note = text
 		}
 	}
+	n.HTML = s.digestHTML(d, n.Note)
 	n.Payload = map[string]any{"event": "digest", "data": d, "summary": n.Note}
 	return n
 }
@@ -191,6 +213,18 @@ func digestLines(d *digestData) []string {
 			lines = append(lines, l)
 		}
 	}
+	if len(d.Regressed) > 0 {
+		lines = append(lines, "Slower than last week (p95):")
+		for _, r := range d.Regressed {
+			lines = append(lines, fmt.Sprintf("  %s: %s, was %s (%+.0f%%)", r.Route, formatUnit(r.P95, "ms"), formatUnit(r.PrevP95, "ms"), r.ChangePct))
+		}
+	}
+	if len(d.Improved) > 0 {
+		lines = append(lines, "Faster than last week (p95):")
+		for _, r := range d.Improved {
+			lines = append(lines, fmt.Sprintf("  %s: %s, was %s (%+.0f%%)", r.Route, formatUnit(r.P95, "ms"), formatUnit(r.PrevP95, "ms"), r.ChangePct))
+		}
+	}
 	if len(d.Incidents) > 0 {
 		lines = append(lines, "Incidents:")
 		for _, i := range d.Incidents {
@@ -208,6 +242,7 @@ func digestLines(d *digestData) []string {
 		}
 		lines = append(lines, "New versions: "+strings.Join(v, ", "))
 	}
+	lines = append(lines, moreDigestLines(d)...)
 	return append(lines, securityDigestLines(d.Security)...)
 }
 
@@ -219,7 +254,8 @@ func (s *Server) digestSummary(ctx context.Context, d *digestData) string {
 		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.cfg.AppName + `'s API. Write the weekly digest from the numbers given: this week against the week before.
 Reply with one JSON object: {"summary": "<4 to 7 short lines separated by \n>"}.
 - First line: the one thing worth knowing this week.
-- Then traffic, p95 and 5xx changes with numbers, the slowest routes that got worse, incidents, and new versions that line up with changes. Say "may be related" for releases, never certain.
+- Then traffic, p95 and 5xx changes with numbers, the routes that got slower ("regressed_routes"), incidents, and new versions that line up with changes. Say "may be related" for releases, never certain.
+- Mention errors (new issues), uptime checks below 99.9%, machines with peak CPU or memory above 90%, container restarts or OOM kills, and Web Vitals rated poor, only when they are there and notable.
 - If "security" has findings, failed logins or hosts with pending updates, end with one line on them, with numbers.
 - Plain text with "- " bullets after the first line. No headings, no SQL.`},
 		{Role: "user", Content: string(data)},

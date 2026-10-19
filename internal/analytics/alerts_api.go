@@ -27,6 +27,8 @@ func (s *Server) alertsRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/alerts/channels/{id}/test", s.authed(s.handleTestChannel))
 	mux.Handle("POST /api/alerts/channels/{id}/digest", s.authed(s.handleSendDigest))
 	mux.Handle("GET /api/alerts/digest", s.authed(s.handleDigestPreview))
+	mux.Handle("POST /api/alerts/digest/summary", s.authed(s.handleDigestSummary))
+	mux.Handle("GET /api/alerts/digest/email", s.authed(s.handleDigestEmail))
 }
 
 func pathID(r *http.Request) (int64, bool) {
