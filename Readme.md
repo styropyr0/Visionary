@@ -178,6 +178,8 @@ holding IPs, user agents, headers and request/response bodies are masked first.
 
 ## Host agent
 
+The agent is not the Visionary server: it is a helper you install on a machine
+to report it to your server ([`cmd/visionary-agent`](cmd/visionary-agent)).
 The SDKs see the host an app runs on. The agent watches the whole machine,
 with or without an app on it (a database box, a worker, a bastion, the VM your
 containers run on). It posts to the server over HTTPS with a **server** ingest

@@ -603,7 +603,7 @@ jobs:
             echo "| JitPack | [\`com.github.styropyr0:Visionary:$TAG\`](https://jitpack.io/#styropyr0/Visionary/$TAG) | see the Android SDK workflow |"
             echo "| Swift Package Manager | \`.package(url: \"https://github.com/styropyr0/Visionary.git\", from: \"$VERSION\")\` | tag |"
             echo "| Go | \`go get github.com/styropyr0/visionary/sdks/go@$TAG\` | $(status go-module) |"
-            echo "| Host agent | \`visionary-agent-linux-amd64\`, \`-arm64\` on this release | $(status agent-binaries) |"
+            echo "| Host agent (watches a machine; not the Visionary server) | \`visionary-agent-linux-amd64\`, \`-arm64\` on this release ([what it is](https://github.com/styropyr0/Visionary/blob/$TAG/cmd/visionary-agent/README.md)) | $(status agent-binaries) |"
             echo
             echo "Maven Central can take up to about 30 minutes to show a new version after it is published."
             echo "<!-- /sdk-packages -->"
