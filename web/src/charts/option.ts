@@ -149,11 +149,11 @@ function shapeTimeseries(res: Result, viz: Viz, t: ChartTokens): { series: Shape
 export function tooltipBox(t: ChartTokens) {
   return {
     backgroundColor: t.surface,
-    borderColor: t.border,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: [8, 10] as [number, number],
-    textStyle: { color: t.text1, fontSize: 12 },
-    extraCssText: "border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.28);",
+    textStyle: { color: t.text1, fontSize: 12.5 },
+    // The same box as .info-tip, so chart tips match every other tooltip.
+    extraCssText: "border-radius:var(--radius);box-shadow:var(--shadow-pop);",
     confine: true,
   };
 }

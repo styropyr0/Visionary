@@ -974,7 +974,8 @@ pre,
   box-shadow: 0 0 0 2px var(--accent);
 }
 
-/* Explanations on hover, in place of the browser's title tooltip. */
+/* The one tooltip: info icons, warnings, titles (TitleTips) and, through
+   tooltipBox, chart tips all share this box. */
 .info-tip {
   position: fixed;
   z-index: 100;
@@ -989,7 +990,7 @@ pre,
   line-height: 1.5;
   letter-spacing: normal;
   text-transform: none;
-  white-space: normal;
+  white-space: pre-line;
   overflow-wrap: anywhere;
   pointer-events: none;
   animation: info-tip-in 100ms ease-out;
@@ -1340,7 +1341,7 @@ table.data .dim {
 .tt {
   min-width: 160px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-1);
 }
 

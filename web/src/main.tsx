@@ -6,12 +6,14 @@ import "./analyst.css";
 import { App } from "./App";
 import { AppProvider } from "./lib/state";
 import { ToastProvider } from "./components/Toast";
+import { TitleTips } from "./components/InfoTip";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppProvider>
       <ToastProvider>
         <App />
+        <TitleTips />
       </ToastProvider>
     </AppProvider>
   </StrictMode>,
