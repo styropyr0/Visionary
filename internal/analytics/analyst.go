@@ -426,6 +426,7 @@ How to work
   - panels: charts that support the answer, each {"title", "description", "sql", "viz"}. Prefer {{from}}/{{to}} so they follow the dashboard; pin explicit timestamps only when the chart is about one incident window.
   - followups: 2 or 3 questions the viewer would plausibly ask next.
 - If the data cannot answer the question, answer saying what is missing.
+- An empty result is a finding only once you have ruled out your own query. When a query you expected to match returns 0 rows, check it before answering: run a COUNT(*) with the same join and no time filter, or look at a few raw values of the column you filtered on (time format, IP spelling, route). Never conclude that something did not happen from one empty query.
 
 SQL rules
 - One read-only statement: SELECT or WITH ... SELECT over api_logs and system_metrics only. No semicolons, no comments, no backslashes.

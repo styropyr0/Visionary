@@ -100,7 +100,7 @@ func (q sqlDialect) promptRules() string {
 - No percentile function: use the rank method below. Integer division is DIV.
 - Round with ROUND(x, 2). Count a condition with SUM(cond) or SUM(CASE WHEN cond THEN 1 ELSE 0 END). Every derived table needs an alias.`
 	}
-	return `- Dialect: SQLite. created_at is TEXT; compare it as text, or use strftime/julianday for date functions.
+	return `- Dialect: SQLite. created_at is TEXT; compare it as text, or use strftime/julianday for date functions. Never wrap a bound in datetime() or date(): they return '2026-10-22 05:00:00' (a space, no Z), which never matches the stored text. Write created_at >= '2026-10-22T05:00:00.000Z'.
 - No percentile function: use the rank method below.
 - Round with ROUND(x, 2). Count a condition with SUM(CASE WHEN cond THEN 1 ELSE 0 END).`
 }

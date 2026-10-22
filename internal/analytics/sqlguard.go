@@ -3,7 +3,9 @@ package analytics
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // Every query that is not built by this package (model output, edited SQL,
@@ -99,7 +101,28 @@ func validateReadOnly(sql string) (string, error) {
 	if err := checkTables(toks); err != nil {
 		return "", err
 	}
-	return sql, nil
+	return storedTimeLiterals(sql), nil
+}
+
+// timeCall is datetime('<timestamp>') around a literal UTC timestamp.
+var timeCall = regexp.MustCompile(`(?i)\bdatetime\(\s*'(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(?:Z|[+-]00:?00)?'\s*\)`)
+
+// storedTimeLiterals rewrites datetime('2026-10-22T05:00:00Z') into
+// '2026-10-22T05:00:00.000Z'. created_at is text in that exact format, and
+// SQLite's datetime() returns '2026-10-22 05:00:00' instead: compared as
+// text, the space sorts before the T, so a range written that way silently
+// matches nothing (and other databases have no datetime() at all).
+func storedTimeLiterals(sql string) string {
+	return timeCall.ReplaceAllStringFunc(sql, func(call string) string {
+		lit := timeCall.FindStringSubmatch(call)[1]
+		lit = strings.Replace(lit, " ", "T", 1)
+		for _, layout := range []string{"2006-01-02T15:04:05.999999999", "2006-01-02T15:04"} {
+			if t, err := time.Parse(layout, lit); err == nil {
+				return "'" + t.UTC().Format(tsLayout) + "'"
+			}
+		}
+		return call
+	})
 }
 
 // checkTables requires every table reference (after FROM or JOIN, and each
