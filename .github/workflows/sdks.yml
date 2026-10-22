@@ -367,10 +367,16 @@ jobs:
         name: Push
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        # Pushes the .snupkg symbols package next to the .nupkg as well.
+        # Pushes the .snupkg symbols package next to the .nupkg as well. The main
+        # package goes first; the optional profiling package can't hold it back
+        # (a new package ID needs the key to be allowed to create it on nuget.org).
         run: |
-          dotnet nuget push "$RUNNER_TEMP/nuget/*.nupkg" --api-key "$NUGET_API_KEY" \
+          dotnet nuget push "$RUNNER_TEMP/nuget/Visionary.AspNetCore.$VERSION.nupkg" --api-key "$NUGET_API_KEY" \
             --source https://api.nuget.org/v3/index.json --skip-duplicate
+          if ! dotnet nuget push "$RUNNER_TEMP/nuget/Visionary.AspNetCore.Profiling.$VERSION.nupkg" --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json --skip-duplicate; then
+            echo "::warning::Visionary.AspNetCore.Profiling was not published: allow this key or trusted publishing policy to push it on nuget.org"
+          fi
           echo "status=published" >> "$GITHUB_OUTPUT"
 
   maven-central-java:
