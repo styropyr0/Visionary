@@ -527,3 +527,154 @@
   background: var(--accent-wash);
   color: var(--text-1);
 }
+
+/* ---------- Span detail drawer ---------- */
+
+.drawer.wide {
+  width: min(920px, 100vw);
+}
+
+.sd {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.sd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sd-section .rt-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sd-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.sd-change {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+
+/* For a call, slower and more of it is worse. */
+.sd-change.up {
+  color: var(--warning-text);
+}
+
+.sd-change.down {
+  color: var(--text-3);
+}
+
+.sd-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.sd-chart-label {
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.sd-variants {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sd-variant + .sd-variant {
+  border-top: 1px solid var(--border);
+}
+
+.sd-variant-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sd-variant-head:hover,
+.sd-variant.open .sd-variant-head {
+  background: var(--hover-wash);
+}
+
+.sd-variant-head > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.sd-variant-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-variant-stats {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sd-variant-total {
+  width: 110px;
+}
+
+.sd-variant-body {
+  padding: 8px 10px 10px 31px;
+  background: var(--surface-2);
+}
+
+.sd-variant-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.sd-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sd-error svg {
+  flex: none;
+  color: var(--critical-text);
+}
+
+.sd-error-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

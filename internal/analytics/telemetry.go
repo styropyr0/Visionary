@@ -20,6 +20,7 @@ func (s *Server) telemetryRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/telemetry/errors/{fingerprint}", s.authed(s.handleErrorIssue))
 	mux.Handle("GET /api/telemetry/requests/{request_id}", s.authed(s.handleRequestTelemetry))
 	mux.Handle("GET /api/telemetry/spans", s.authed(s.handleSpanGroups))
+	mux.Handle("GET /api/telemetry/spans/detail", s.authed(s.handleSpanDetail))
 	mux.Handle("GET /api/telemetry/nplusone", s.authed(s.handleNPlusOne))
 	mux.Handle("GET /api/telemetry/routes", s.authed(s.handleRouteCalls))
 	mux.Handle("GET /api/telemetry/releases", s.authed(s.handleReleases))

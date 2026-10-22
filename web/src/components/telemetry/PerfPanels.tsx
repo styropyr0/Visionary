@@ -7,11 +7,12 @@ import { DataTable, type Column } from "../DataTable";
 import { Panel } from "../Panel";
 import { Select } from "../Select";
 import { KIND_COLOR } from "./Waterfall";
+import { SpanDetailDrawer } from "./SpanDetail";
 import "./telemetry.css";
 import "./perf.css";
 
 const NO_SPANS =
-  "No spans in this range. SDKs with telemetry record each database and outbound call of requests slower than VISIONARY_SPAN_THRESHOLD_MS (100 ms by default) or answering 5xx.";
+  "No spans in this range. SDKs with telemetry record each database and outbound call of every request; older SDK versions kept them only for slow and failed requests.";
 
 /** Opens the log entry of a request found by its request_id. */
 export async function logIdFor(requestId: string): Promise<number | null> {
@@ -91,10 +92,24 @@ function spanColumns(res: Result, kind: string): Column[] {
   ];
 }
 
-/** Span names of one kind by total time: the statements or hosts that cost the most. */
-export function SpanGroupsPanel({ kind, title, description, className }: { kind: "db" | "http"; title: string; description: string; className: string }) {
+/** Span names of one kind by total time: the statements or hosts that cost the most. Open one for its detail. */
+export function SpanGroupsPanel({
+  kind,
+  title,
+  description,
+  className,
+  onOpenRequest,
+}: {
+  kind: "db" | "http";
+  title: string;
+  description: string;
+  className: string;
+  onOpenRequest: (requestId: string) => void;
+}) {
   const q = useTelemetry("spans", { kind });
+  const [open, setOpen] = useState<string | null>(null);
   return (
+    <>
     <Panel
       className={className}
       title={title}
@@ -105,9 +120,22 @@ export function SpanGroupsPanel({ kind, title, description, className }: { kind:
       bodyHeight={160}
       table={
         q.data &&
-        (q.data.rows.length === 0 ? <div className="panel-state empty-why">{NO_SPANS}</div> : <DataTable result={q.data} columns={spanColumns(q.data, kind)} maxHeight={420} />)
+        (q.data.rows.length === 0 ? (
+          <div className="panel-state empty-why">{NO_SPANS}</div>
+        ) : (
+          <DataTable
+            result={q.data}
+            columns={spanColumns(q.data, kind)}
+            maxHeight={420}
+            onRowClick={(row) => setOpen(String(row[0]))}
+            rowKey={(row) => row[0]}
+            selectedKey={open ?? undefined}
+          />
+        ))
       }
     />
+    {open !== null && <SpanDetailDrawer kind={kind} name={open} onClose={() => setOpen(null)} onOpenRequest={onOpenRequest} />}
+    </>
   );
 }
 
@@ -171,7 +199,7 @@ export function NPlusOnePanel({ className, onOpenRequest }: { className: string;
     <Panel
       className={className}
       title="N+1 suspects"
-      description="Routes where one statement or host is called 10 or more times in a single request: usually a query per item in a loop. Batch them (an IN list, a join, a bulk endpoint). Counted over requests that kept spans, which are the slow and failed ones."
+      description="Routes where one statement or host is called 10 or more times in a single request: usually a query per item in a loop. Batch them (an IN list, a join, a bulk endpoint). Counted over requests that kept their calls."
       result={q.data}
       loading={q.loading}
       error={q.error}

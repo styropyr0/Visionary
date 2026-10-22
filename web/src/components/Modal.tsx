@@ -40,12 +40,12 @@ export function Modal({ title, onClose, children, footer, narrow }: ModalProps) 
   );
 }
 
-export function Drawer({ title, onClose, children, actions }: { title: ReactNode; onClose: () => void; children: ReactNode; actions?: ReactNode }) {
+export function Drawer({ title, onClose, children, actions, className = "" }: { title: ReactNode; onClose: () => void; children: ReactNode; actions?: ReactNode; className?: string }) {
   useEscape(onClose);
   return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true">
+      <aside className={`drawer ${className}`} role="dialog" aria-modal="true">
         <div className="drawer-head">
           <h2>{title}</h2>
           <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>

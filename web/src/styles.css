@@ -673,6 +673,11 @@ pre,
   color: #fff;
 }
 
+.btn.danger:hover:not(:disabled) {
+  background: var(--critical);
+  filter: brightness(1.1);
+}
+
 .btn.ghost {
   border-color: transparent;
   background: transparent;
@@ -1335,6 +1340,93 @@ table.data .dim {
 
 .flag.bad { color: var(--critical-text); }
 .flag.warn { color: var(--warning-text); }
+
+/* ---------- Slowest requests: exclusions and route groups ---------- */
+
+.slow-exclude-btn.on {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+.slow-exclude {
+  width: 340px;
+  padding: 8px;
+}
+
+.slow-exclude-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.slow-exclude-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.slow-exclude-list li .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slow-exclude-add {
+  display: flex;
+  gap: 6px;
+}
+
+.slow-exclude-add .combobox {
+  flex: 1;
+  min-width: 0;
+}
+
+.slow-exclude-help {
+  margin: 8px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.slow-exclude-clear {
+  width: 100%;
+}
+
+.slow-row-exclude {
+  opacity: 0;
+}
+
+tr:hover .slow-row-exclude,
+.slow-row-exclude:focus-visible {
+  opacity: 1;
+}
+
+/* Fixed columns: an expanded route's request table cannot resize the rows. */
+.slow-groups {
+  table-layout: fixed;
+}
+
+.slow-group-route {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slow-group-body > td {
+  padding: 0 0 8px 28px;
+  background: var(--surface-2);
+}
+
+.slow-group-body .table-wrap {
+  border-left: 2px solid var(--border-strong);
+}
 
 /* ---------- Chart tooltip (ECharts renders it into the chart's DOM) ---------- */
 

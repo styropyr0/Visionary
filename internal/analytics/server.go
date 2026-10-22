@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/project", s.authed(s.handleProject))
 	mux.Handle("GET /api/overview/{panel}", s.authed(s.handleOverview))
 	mux.Handle("GET /api/system/{panel}", s.authed(s.handleSystem))
+	mux.Handle("GET /api/performance/slow-requests", s.authed(s.handleSlowRequests))
 	mux.Handle("GET /api/performance/{panel}", s.authed(s.handlePerformance))
 	mux.Handle("POST /api/analyst", s.authed(s.handleAnalyst))
 	mux.Handle("POST /api/query", s.authed(s.handleQuery))

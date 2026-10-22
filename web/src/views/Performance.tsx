@@ -3,7 +3,7 @@ import { api, rangeQuery, type Meta, type Result, type StatsResponse, type Viz }
 import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatLogTime, previousLabel } from "../lib/time";
+import { previousLabel } from "../lib/time";
 import { sparkPoints } from "../charts/option";
 import { buildLatencyHeatmap, LATENCY_BANDS } from "../charts/heatmap";
 import { Chart } from "../components/Chart";
@@ -17,6 +17,7 @@ import { LogDetail } from "./Logs";
 import { useTelemetry } from "../lib/telemetry";
 import { CompareVersionsPanel, logIdFor, NPlusOnePanel, SpanGroupsPanel } from "../components/telemetry/PerfPanels";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { SlowRequestsPanel } from "./Performance.slow";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
 
@@ -49,7 +50,6 @@ export function Performance({ meta }: { meta?: Meta }) {
   const histogram = usePerf("histogram");
   const routes = usePerf<StatsResponse>("routes");
   const routeP95 = usePerf("route_p95");
-  const slowest = usePerf("slowest");
   const users = usePerf("users");
   const saturation = usePerf("saturation");
   const calls = useTelemetry("routes");
@@ -60,7 +60,7 @@ export function Performance({ meta }: { meta?: Meta }) {
       .catch(() => undefined);
   };
 
-  const all = [summary, percentiles, apdex, heatmap, histogram, routes, routeP95, slowest, users, saturation, calls];
+  const all = [summary, percentiles, apdex, heatmap, histogram, routes, routeP95, users, saturation, calls];
   const busy = all.some((q) => q.loading);
 
   const cur = rowObject(summary.data?.current);
@@ -89,6 +89,14 @@ export function Performance({ meta }: { meta?: Meta }) {
 
   const histResult = useMemo(() => labelBands(histogram.data), [histogram.data]);
   const regressions = useMemo(() => findRegressions(routes.data), [routes.data]);
+  // "POST /api/export" for each route seen, as exclusion suggestions.
+  const routeNames = useMemo(() => {
+    const res = routes.data?.current;
+    if (!res) return [];
+    const m = res.columns.indexOf("method");
+    const r = res.columns.indexOf("route");
+    return res.rows.map((row) => `${String(row[m])} ${String(row[r])}`);
+  }, [routes.data]);
   const routeRows = useMemo(() => withCalls(withPreviousP95(routes.data), calls.data), [routes.data, calls.data]);
 
   return (
@@ -252,39 +260,26 @@ export function Performance({ meta }: { meta?: Meta }) {
             table={users.data && <DataTable result={users.data} columns={userColumns} maxHeight={320} />}
           />
 
-          <Panel
-            className="span-12"
-            title="Slowest requests"
-            description="The 25 slowest individual requests in the range. Open one to see its headers and bodies."
-            result={slowest.data}
-            loading={slowest.loading}
-            error={slowest.error}
-            bodyHeight={200}
-            table={
-              slowest.data && (
-                <DataTable
-                  result={slowest.data}
-                  columns={slowestColumns}
-                  maxHeight={420}
-                  onRowClick={(row) => setOpenLog(toNumber(row[0]))}
-                  rowKey={(row) => row[0]}
-                  selectedKey={openLog ?? undefined}
-                />
-              )
-            }
-          />
+          <SlowRequestsPanel routes={routeNames} openLog={openLog} onOpenLog={setOpenLog} />
 
           <Section
             title="Database and outbound calls"
-            text="Where requests wait on other systems, from the spans the SDKs keep for slow and failed requests. Statements are grouped by their first keyword and table, outbound calls by method and host."
+            text="Where requests wait on other systems, from the calls the SDKs record for each request. Statements are grouped by their first keyword and table, outbound calls by method and host."
           />
           <SpanGroupsPanel
             className="span-12"
             kind="db"
             title="Slowest queries"
-            description="Database statements by total time spent in them, with the slowest instance of each (literals replaced by ?) and the routes that run them most."
+            description="Database statements by total time spent in them, with the slowest instance of each (literals replaced by ?) and the routes that run them most. Open one for its timeline, distribution, statements, routes and slowest calls."
+            onOpenRequest={openRequest}
           />
-          <SpanGroupsPanel className="span-12" kind="http" title="Outbound calls" description="Outbound HTTP calls by host, by total time, with the routes that make them most." />
+          <SpanGroupsPanel
+            className="span-12"
+            kind="http"
+            title="Outbound calls"
+            description="Outbound HTTP calls by host, by total time, with the routes that make them most. Open one for its timeline, distribution, URLs, routes and slowest calls."
+            onOpenRequest={openRequest}
+          />
           <NPlusOnePanel className="span-12" onOpenRequest={openRequest} />
 
           <Section title="Releases" text="Dashed lines on the charts mark deploys. Compare two versions to see what a release changed, route by route." />
@@ -540,24 +535,3 @@ const userColumns: Column[] = [
   { key: "slowest_ms", label: "Slowest", align: "right", render: msCell },
 ];
 
-const slowestColumns: Column[] = [
-  { key: "created_at", label: "Time", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span>, width: 150 },
-  { key: "method", render: (v) => <span className="method">{String(v)}</span>, width: 70 },
-  { key: "route", render: (v, row) => <span className="mono" title={String(row[4])}>{String(v)}</span> },
-  {
-    key: "status",
-    align: "right",
-    render: (v) => {
-      const n = toNumber(v) ?? 0;
-      return (
-        <span className={`status s${Math.floor(n / 100)}`}>
-          <span className="dot" aria-hidden />
-          {String(v)}
-        </span>
-      );
-    },
-  },
-  { key: "duration_ms", label: "Duration", align: "right", render: msCell },
-  { key: "user_handle", label: "User", render: (v, row) => (v ? `@${String(v)}` : row[8] != null ? <span className="dim">#{String(row[8])}</span> : <span className="dim">—</span>) },
-  { key: "response_size", label: "Size", align: "right", render: (v) => formatBytes(toNumber(v) ?? 0) },
-];
