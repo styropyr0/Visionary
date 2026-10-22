@@ -26,10 +26,9 @@ import (
 
 const sessionCookie = "visionary_session"
 
-// unavailableGrace keeps signed-in users working through a short outage of the
-// auth API, which is often exactly when the dashboard is needed. Past it,
-// sessions fail closed until access can be confirmed again.
-const unavailableGrace = time.Hour
+// recheckTimeout bounds a role check, so an API that hangs delays one request
+// at most this long.
+const recheckTimeout = 5 * time.Second
 
 // session is what the cookie carries. It is encrypted, so the API token never
 // reaches page scripts or logs.
@@ -70,6 +69,9 @@ type auth struct {
 	// instances reject it at their next role check, when the API refuses the
 	// revoked token.
 	signedOut map[string]time.Time
+	// retryAt holds, per token, when to ask an unreachable API again; until
+	// then the session is served from its cookie without waiting on it.
+	retryAt map[string]time.Time
 }
 
 type loginLimiter struct {
@@ -124,6 +126,7 @@ func newAuth(cfg Config, bridge *authbridge.Bridge) (*auth, bool, error) {
 		bridge:         bridge,
 		limiters:       make(map[string]*loginLimiter),
 		signedOut:      make(map[string]time.Time),
+		retryAt:        make(map[string]time.Time),
 	}, ephemeral, nil
 }
 
@@ -256,6 +259,35 @@ func (a *auth) markSignedOut(s *session) {
 	a.signedOut[tokenKey(s.Token)] = s.expiresAt()
 }
 
+// waitingForAPI reports a token whose last check found the API unreachable,
+// until its retry time comes.
+func (a *auth) waitingForAPI(key string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	at, ok := a.retryAt[key]
+	if ok && time.Now().After(at) {
+		delete(a.retryAt, key)
+		return false
+	}
+	return ok
+}
+
+func (a *auth) retryLater(key string, expires time.Time) {
+	now := time.Now()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k, at := range a.retryAt {
+		if now.After(at) {
+			delete(a.retryAt, k)
+		}
+	}
+	at := now.Add(a.checkEvery)
+	if !expires.IsZero() && expires.Before(at) {
+		at = expires
+	}
+	a.retryAt[key] = at
+}
+
 func (a *auth) isSignedOut(s *session) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -264,30 +296,38 @@ func (a *auth) isSignedOut(s *session) bool {
 }
 
 var (
-	errNotAllowed     = errors.New("this account doesn't have access to Visionary")
-	errSessionEnded   = errors.New("your session has ended, sign in again")
-	errAPIUnreachable = errors.New("can't reach the sign-in service to confirm your access, try again shortly")
+	errNotAllowed   = errors.New("this account doesn't have access to Visionary")
+	errSessionEnded = errors.New("your session has ended, sign in again")
 )
 
 // confirm re-checks the token and role with the API once every checkEvery.
 // It returns the session to keep and whether it changed (so the cookie must
 // be rewritten). Concurrent requests for one token share one API call. When
 // the API has no profile endpoint, sessions simply run to expiry.
+//
+// The cookie itself is the proof of sign-in: it is sealed with the session
+// secret and carries its expiry. The API is asked only whether the account
+// still has access, so while it is down (unreachable, 5xx, rate limiting)
+// signed-in users keep working until their session expires, and the check is
+// retried every checkEvery instead of on every request. Only an answer from
+// the API (token revoked, role removed) ends a session early.
 func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) {
 	if !a.bridge.CanRecheck() || time.Since(s.checkedAt()) < a.checkEvery {
 		return s, false, nil
 	}
-	v, err, _ := a.checks.Do(tokenKey(s.Token), func() (any, error) {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
+	key := tokenKey(s.Token)
+	if a.waitingForAPI(key) {
+		return s, false, nil
+	}
+	v, err, _ := a.checks.Do(key, func() (any, error) {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recheckTimeout)
 		defer cancel()
 		return a.bridge.Recheck(cctx, s.Token)
 	})
 	if err != nil {
 		if authbridge.IsUnavailable(err) {
-			if time.Since(s.checkedAt()) < unavailableGrace {
-				return s, false, nil
-			}
-			return nil, false, errAPIUnreachable
+			a.retryLater(key, s.expiresAt())
+			return s, false, nil
 		}
 		return nil, false, errSessionEnded
 	}

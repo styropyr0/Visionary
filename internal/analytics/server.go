@@ -158,9 +158,7 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 			err = errNotAllowed
 		}
 		if err != nil {
-			if !errors.Is(err, errAPIUnreachable) {
-				s.auth.clear(w, r)
-			}
+			s.auth.clear(w, r)
 			s.logger.Info("session rejected", "user_id", sess.UserID, "reason", err.Error())
 			writeError(w, http.StatusUnauthorized, err.Error())
 			return

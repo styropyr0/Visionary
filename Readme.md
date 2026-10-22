@@ -314,8 +314,14 @@ may come in, from the role your API returns:
   admins and everyone else a viewer. With only `*`, `VISIONARY_AUTH_FIELD_ROLE`
   is optional.
 
-Roles are re-checked every few minutes through the profile endpoint, so
-someone who loses a role is signed out.
+Roles are re-checked every few minutes (`VISIONARY_ROLE_CHECK_INTERVAL`, 5m)
+through the profile endpoint, so someone who loses a role is signed out. The
+session cookie itself is the proof of sign-in, so Visionary does not depend on
+your API for each request: while the API is down, slow, rate limiting or
+failing, signed-in users keep working until their session expires, and the
+check is retried at the same interval instead of on every page. Only an answer
+from the API (the token revoked, the role removed) ends a session early.
+Signing *in* still needs the API.
 
 Copy the preset for your mode into `.env` and change the values for your API.
 Each line says what it does. Field paths are dotted paths into your API's JSON

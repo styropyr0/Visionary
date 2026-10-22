@@ -78,7 +78,11 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("auth api %d: %s", e.Status, e.Message)
 }
 
-func (e *APIError) Unavailable() bool { return e.Status == 0 || e.Status >= 500 }
+// Unavailable is an API that could not answer: unreachable, timing out, rate
+// limiting or failing. It says nothing about the token.
+func (e *APIError) Unavailable() bool {
+	return e.Status == 0 || e.Status == http.StatusRequestTimeout || e.Status == http.StatusTooManyRequests || e.Status >= 500
+}
 
 func IsUnavailable(err error) bool {
 	var ae *APIError
