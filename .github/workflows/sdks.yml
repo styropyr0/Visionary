@@ -4,7 +4,7 @@ name: SDK packages
 #   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser)
 #   PyPI         visionary-sdk (sdks/python)
 #   RubyGems     visionary-sdk (sdks/ruby)
-#   NuGet        Visionary.AspNetCore (sdks/dotnet)
+#   NuGet        Visionary.AspNetCore and Visionary.AspNetCore.Profiling (sdks/dotnet)
 #   Maven Central io.github.styropyr0:visionary-spring-boot-starter (sdks/java)
 #                 io.github.styropyr0:visionary-android (sdks/android; JitPack is android.yml)
 # Swift Package Manager needs no upload: it resolves the tag through the root Package.swift.
@@ -351,8 +351,10 @@ jobs:
       - if: steps.check.outputs.status == ''
         name: Pack
         # Version also sets AssemblyInformationalVersion, which the SDK reports as sdk_version.
+        # The optional profiling package ships at the same version: it uses the main package's internals.
         run: |
           dotnet pack -c Release -p:Version="$VERSION" -o "$RUNNER_TEMP/nuget"
+          dotnet pack ../Visionary.AspNetCore.Profiling -c Release -p:Version="$VERSION" -o "$RUNNER_TEMP/nuget"
           ls -l "$RUNNER_TEMP/nuget"
       - if: steps.check.outputs.status == ''
         id: login
@@ -598,6 +600,7 @@ jobs:
             echo "| PyPI | [\`visionary-sdk $VERSION\`](https://pypi.org/project/visionary-sdk/) | $(status pypi) |"
             echo "| RubyGems | [\`visionary-sdk $VERSION\`](https://rubygems.org/gems/visionary-sdk) | $(status rubygems) |"
             echo "| NuGet | [\`Visionary.AspNetCore $VERSION\`](https://www.nuget.org/packages/Visionary.AspNetCore/$VERSION) | $(status nuget) |"
+            echo "| NuGet | [\`Visionary.AspNetCore.Profiling $VERSION\`](https://www.nuget.org/packages/Visionary.AspNetCore.Profiling/$VERSION) (optional CPU profiles) | $(status nuget) |"
             echo "| Maven Central | [\`io.github.styropyr0:visionary-spring-boot-starter:$VERSION\`](https://central.sonatype.com/artifact/io.github.styropyr0/visionary-spring-boot-starter/$VERSION) | $(status maven-central-java) |"
             echo "| Maven Central | [\`io.github.styropyr0:visionary-android:$VERSION\`](https://central.sonatype.com/artifact/io.github.styropyr0/visionary-android/$VERSION) | $(status maven-central-android) |"
             echo "| JitPack | [\`com.github.styropyr0:Visionary:$TAG\`](https://jitpack.io/#styropyr0/Visionary/$TAG) | see the Android SDK workflow |"
