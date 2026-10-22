@@ -62,6 +62,68 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **Team:** viewer, editor and admin roles from your own auth, API keys, and an
   audit log.
 
+## Integrate in three steps
+
+Each step works on its own; stop wherever the detail is enough. Times are for
+a typical API in one service.
+
+**1. Requests, errors and the server (about 15 minutes).** Add your
+language's SDK, wrap the router in its middleware and set
+`VISIONARY_DATABASE_URL` (or the [D1 variables](#sdk-settings)). Then
+[run the server](#run-the-server) and point its sign-in at your API.
+
+- You get every request with route, status, duration, user and redacted
+  bodies; panics and handled errors grouped into issues; CPU, memory, GC and
+  the database pool; Performance, Apdex and SLOs; uptime checks; alerts;
+  security findings.
+- Worth the extra line: attach the signed-in user (`SetUser`), and with a
+  router that has route patterns (chi, Express, Django…) report the pattern,
+  so `/users/42` and `/users/43` count as one route.
+
+**2. Database and outbound calls (another 15–30 minutes).** One line where
+the database pool is created, and the HTTP hook. Each request's breakdown
+then shows its queries and outbound calls on a timeline, and Performance gets
+slowest queries, outbound calls by host and N+1 detection.
+
+- The HTTP hook differs by language: Node patches `http` and `fetch` itself;
+  Python needs `visionary.instrument_http()`; Go needs `visionary.Transport`
+  on every `http.Client` you build (or uses `http.DefaultClient`, which is
+  instrumented for you). Search your code for each place a client is made.
+
+**3. No blind spots (as long as it takes).** The middleware cannot see what
+it is not handed, so some time inside a request stays **Untracked**: calls
+made by vendor SDKs that build their own HTTP client (AWS S3 or R2, OpenAI,
+Stripe, Firebase), calls made without the request's context, Redis and queue
+clients, and your own CPU work. Each is a small code change, listed in
+[What the middleware sees](#what-the-middleware-sees-and-what-needs-code),
+with copy-paste examples in each SDK's README.
+
+**Check your coverage.** Open Performance → Slowest requests and open a slow
+request:
+
+- *Untracked* above a few percent: the hatched row sits where the time went
+  ("1.2 s after `SELECT attributed`"); the code that runs next makes a call
+  the SDK cannot see. Hook its client or wrap it in a custom span.
+- *Database* or *Outbound HTTP* missing from Calls: that hook is not
+  installed (the totals are empty, not zero).
+- An outbound call you know happens is missing: it was made without the
+  request's context, or through a client without the hook.
+
+**Things that trip people up**
+
+- **Your own rate limiting.** A load test from one machine mostly measures
+  your rate limiter: requests rejected with 429 crowd out the rest. Test from
+  several addresses, or raise the limit while testing.
+- **Traffic spikes on SQLite or D1.** The SDK writes in the background and
+  never slows a request; when writes cannot keep up it drops rows and logs
+  `visionary: queue full; rows dropped`. For thousands of requests a second,
+  use PostgreSQL or MySQL.
+- **`.env` comments.** Lines must start with `#`. A line starting with `;`
+  makes the whole file unreadable, and the server starts as if no settings
+  were given ("choose a sign-in mode").
+- **Calls in goroutines or background jobs** after the response is written
+  are stored on their own, not in the request.
+
 ## Collect
 
 | Source | Where |
