@@ -170,7 +170,7 @@ same settings as attributes. The full list and semantics are in
 | `VISIONARY_SERVICE` | empty | service name on every row |
 | `VISIONARY_RELEASE` | platform commit variable | release on every row; see [Telemetry](#telemetry-spans-errors-releases) |
 | `VISIONARY_SPANS` | `true` | spans and call totals on/off |
-| `VISIONARY_SPAN_THRESHOLD_MS` | `100` | store spans of requests at least this slow (or 5xx) |
+| `VISIONARY_SPAN_THRESHOLD_MS` | `100` | store spans outside a request at least this slow |
 | `VISIONARY_SPAN_MAX` | `100` | span rows per request; later calls still count in the totals |
 | `VISIONARY_ERRORS` | `true` | error capture on/off |
 | `VISIONARY_INSTRUMENT_HTTP` | `false` | Python only: call `instrument_http()` at start |
@@ -178,6 +178,14 @@ same settings as attributes. The full list and semantics are in
 Booleans accept `true/false/1/0/yes/no`.
 
 ## Telemetry (spans, errors, releases)
+
+The middleware records the request; the calls inside it are recorded only when
+their client is hooked. Outbound HTTP is **not** hooked until you call
+`visionary.instrument_http()` (or set `VISIONARY_INSTRUMENT_HTTP=true`); that
+also covers boto3 and other SDKs built on `urllib3`, `requests` or `httpx`.
+Wrap the rest (Redis, queues, CPU work such as hashing) in `visionary.span(...)`.
+Anything left shows as **Untracked** in the request's breakdown; see
+[What the middleware sees](../../Readme.md#what-the-middleware-sees-and-what-needs-code).
 
 ### Service and release
 
@@ -194,10 +202,9 @@ the release is known, one `releases` row (`sdk = python`, `runtime` such as
 
 Every call the SDK can see is counted into `db_count`, `db_ms`, `http_count`
 and `http_ms` on the request's `api_logs` row (NULL for a kind of call that is
-not instrumented). When the request took at least `VISIONARY_SPAN_THRESHOLD_MS`
-or answered 5xx, its first `VISIONARY_SPAN_MAX` calls are also stored as
+not instrumented). Its first `VISIONARY_SPAN_MAX` calls are also stored as
 `spans` rows, in start order. Spans outside a request are stored when they
-take at least the threshold themselves, with `request_id` NULL.
+take at least `VISIONARY_SPAN_THRESHOLD_MS` themselves, with `request_id` NULL.
 
 The request is found through a contextvar, so spans from sync views, thread
 pools that copy the context (FastAPI sync endpoints, `asgiref`,

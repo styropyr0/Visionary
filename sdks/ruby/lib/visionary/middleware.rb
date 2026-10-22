@@ -150,7 +150,7 @@ module Visionary
         response_body: resp_capture.bytes, response_truncated: resp_capture.truncated?,
         response_size: [self.class.header(res_headers, "content-length").to_i, resp_capture.size].max,
         totals: tel&.spans_on ? ctx.totals : [nil, nil, nil, nil],
-        span_rows: tel ? tel.request_span_rows(ctx, duration, status) : [],
+        span_rows: tel ? tel.request_span_rows(ctx) : [],
         error_rows: tel ? ctx.errors.map { |row| tel.error_row(row, ctx, route, user_id) } : []
       )
       agent.enqueue([:request, entry])

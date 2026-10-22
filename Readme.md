@@ -114,6 +114,33 @@ visionary.CaptureError(r.Context(), err)                                   // ha
 See [`sdks/go/README.md`](sdks/go/README.md) for `database/sql`, chi route
 patterns, user lookup and pool stats. Each SDK's README has its own quickstart.
 
+### What the middleware sees, and what needs code
+
+The middleware alone records every request: route, status, duration, user,
+bodies and errors. It cannot see *inside* the request. Each call the request
+makes is recorded only when the client making it is hooked:
+
+| Inside a request | Recorded by |
+|---|---|
+| Database queries | The SDK's hook for your driver (pgx tracer, wrapped `database/sql`, ORM integration). One line where the pool is created. |
+| Outbound HTTP through your own clients | The SDK's HTTP hook. Node patches `http`/`fetch` itself; in Go, every `http.Client` needs `visionary.Transport` (or use `http.DefaultClient`). |
+| Calls made by a vendor SDK (AWS S3 or R2, OpenAI, Stripe, Firebase…) | Nothing, until you hand that SDK a traced HTTP client. They build their own clients, so the hook above never sees them. |
+| Cache, queue and RPC clients (Redis, SQS, gRPC) | A custom span around the call, or the client's own hook calling one. |
+| Your own code: hashing, image work, JSON of a big response, loops | A custom span, if you want it named. |
+
+Two more rules: a call joins its request only when it carries the request's
+context (Go: pass `r.Context()` down, use `http.NewRequestWithContext`; a bare
+`http.Post` has none), and work started in a goroutine or thread that outlives
+the response is stored on its own, not in the request.
+
+**Untracked time.** A request's breakdown lays its calls on a timeline. Any
+stretch that no recorded call covers is shown as *Untracked*: the request was
+busy, but not in anything the SDK could see. Overlapping calls count once, so
+untracked = duration − the time covered by at least one call. A large untracked
+share means one of the rows above is missing, and the hatched row's position
+says where: "1.2 s after `SELECT attributed`" points at the code that runs next.
+Hook that client or wrap that code, and the row gets a name.
+
 ### SDK settings
 
 Every server SDK reads the same variables.
@@ -135,7 +162,7 @@ Every server SDK reads the same variables.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | | Keys redacted in requests only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `..._ERROR_KEY_FIELD` | `error.code`, `error.key` | Where your error responses keep their codes. |
 | `VISIONARY_SPANS` | `true` | Database and outbound call timing. |
-| `VISIONARY_SPAN_THRESHOLD_MS` | `100` | Keep individual calls for requests at least this slow (or failed); totals are always kept. |
+| `VISIONARY_SPAN_THRESHOLD_MS` | `100` | Keep calls made outside any request (jobs, startup) at least this slow; every request keeps its calls. |
 | `VISIONARY_SPAN_MAX` | `100` | Calls kept per request. |
 | `VISIONARY_ERRORS` | `true` | Exception and panic capture. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | |

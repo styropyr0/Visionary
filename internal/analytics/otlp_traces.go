@@ -228,7 +228,7 @@ func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows
 			}
 		}
 		status := otlpRequestStatus(sp)
-		r.keepSpans = o.spansOn && (otlpDurationMs(sp.sp) >= o.thresholdMs || status >= 500)
+		r.keepSpans = o.spansOn
 		if !o.spansOn {
 			rows.add(otlpRequestsTable, otlpRequestRow(sp, r, status, nil, nil, nil, nil))
 		} else {

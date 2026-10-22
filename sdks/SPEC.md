@@ -320,11 +320,11 @@ work): a database statement, an outbound HTTP request, a cache or queue call.
 - **Always**, for every logged request: count the calls and sum their durations
   into `db_count`, `db_ms`, `http_count`, `http_ms` on the `api_logs` row (kinds
   `cache`/`queue`/`custom` only become span rows).
-- **Span rows** are stored when the request took at least
-  `VISIONARY_SPAN_THRESHOLD_MS` (default 100) or answered ≥ 500, at most
+- **Span rows** are stored for every logged request, at most
   `VISIONARY_SPAN_MAX` (default 100) per request, in start order; calls beyond
   the cap still count in the totals. Spans outside any request are stored when
-  they themselves take at least the threshold, with `request_id` NULL.
+  they themselves take at least `VISIONARY_SPAN_THRESHOLD_MS` (default 100),
+  with `request_id` NULL.
 - `VISIONARY_SPANS=false` turns span capture off (totals and rows).
 
 Columns:

@@ -155,6 +155,12 @@ builder.Services.AddVisionary(o => o.LookupUser = async (id, ct) =>
 
 ## Spans
 
+The middleware records the request; the calls inside it are recorded only when
+their client is hooked: EF Core, ADO.NET drivers with diagnostics and
+`HttpClient` are. Wrap the rest (Redis, queues, CPU work) in
+`Visionary.StartSpan`. Anything left shows as **Untracked** in the request's
+breakdown; see [What the middleware sees](../../Readme.md#what-the-middleware-sees-and-what-needs-code).
+
 Without any code, the package records:
 
 - **`HttpClient`** calls (any handler, including `IHttpClientFactory` clients), from
@@ -167,8 +173,9 @@ Without any code, the package records:
 
 Statements are stored sanitized (literals become `?`, `IN (...)` lists collapse),
 never with parameter values. Every logged request gets `db_count`, `db_ms`,
-`http_count` and `http_ms`; span rows are kept for requests slower than
-`VISIONARY_SPAN_THRESHOLD_MS` or answering 5xx, at most `VISIONARY_SPAN_MAX` each.
+`http_count` and `http_ms`; span rows are kept for every request, at most
+`VISIONARY_SPAN_MAX` each. Calls outside a request are kept when they take at
+least `VISIONARY_SPAN_THRESHOLD_MS`.
 
 Plain ADO.NET on a driver without diagnostics (for example Dapper on SQLite) is
 not visible; time such calls, or cache and queue calls, by hand:

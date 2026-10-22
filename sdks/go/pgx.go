@@ -173,12 +173,15 @@ func (t *pgxTracer) TraceCopyFromEnd(ctx context.Context, conn *pgx.Conn, data p
 	}
 }
 
-// TracePrepareStart records explicit Prepare calls that reach the server;
-// already prepared statements cost nothing and are skipped.
+// TracePrepareStart records Prepare calls that reach the server; already
+// prepared statements cost nothing and are skipped. The prepare pgx makes
+// for a query runs inside that query's span, so it does not count again in
+// the request's totals.
 func (t *pgxTracer) TracePrepareStart(ctx context.Context, conn *pgx.Conn, data pgx.TracePrepareStartData) context.Context {
 	if s := beginSpan(ctx, KindDB); s != nil {
 		s.rec.sql = data.SQL
 		s.rec.prefix = "PREPARE "
+		_, s.rec.nested = ctx.Value(pgxQueryKey{}).(*activeSpan)
 		ctx = context.WithValue(ctx, pgxPrepareKey{}, s)
 	}
 	for _, n := range t.next {

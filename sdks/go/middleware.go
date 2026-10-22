@@ -161,8 +161,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 					e.RequestSize = max(e.RequestSize, reqCapture.size)
 				}
 				if ann.trace != nil {
-					keep := e.Duration >= a.cfg.SpanThreshold || e.Status >= 500
-					e.Totals, e.Spans = ann.trace.finish(keep)
+					e.Totals, e.Spans = ann.trace.finish()
 				}
 				ann.mu.Lock()
 				e.User = ann.user

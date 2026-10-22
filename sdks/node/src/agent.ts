@@ -201,7 +201,7 @@ export class Agent {
       }
     }
     this.writer.push({ entry });
-    if (cfg.spans && state.spans.length > 0 && (entry.durationMs >= cfg.spanThresholdMs || entry.status >= 500)) {
+    if (cfg.spans && state.spans.length > 0) {
       for (const row of state.spans.sort((a, b) => a.slot - b.slot)) this.pushSpan(row, state.requestId);
     }
   }

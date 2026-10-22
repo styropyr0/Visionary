@@ -159,7 +159,6 @@ internal sealed class VisionaryMiddleware
             }
             var (totals, spans) = state.Close();
             var durationMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            var keepSpans = durationMs >= o.SpanThresholdMs || status >= 500;
             var responseHeaders = ctx.Response.Headers;
             _agent.Enqueue(new RequestEntry
             {
@@ -184,7 +183,7 @@ internal sealed class VisionaryMiddleware
                 ResponseTruncated = resCapture?.Truncated ?? false,
                 ResponseSize = Math.Max(ctx.Response.ContentLength ?? 0, resCapture?.Written ?? 0),
                 Totals = _agent.SpansOn ? totals : null,
-                Spans = _agent.SpansOn && keepSpans ? spans : Array.Empty<SpanRecord>(),
+                Spans = _agent.SpansOn ? spans : Array.Empty<SpanRecord>(),
             });
         }
         catch (Exception e)

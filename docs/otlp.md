@@ -96,11 +96,10 @@ NULL.
 `error` is the status message or the exception message; `row_count` comes from
 `db.response.returned_rows` / `db.rows_affected`. Span rows link to their
 request's `request_id` with `offset_ms` from the request start, and follow the
-contract's rules per request: stored when the request took at least
-`VISIONARY_SPAN_THRESHOLD_MS` or answered 5xx, at most `VISIONARY_SPAN_MAX` in
-start order, while the totals count every call. Spans outside any request are
-stored when they themselves take at least the threshold, with `request_id`
-NULL.
+contract's rules per request: stored for every request, at most
+`VISIONARY_SPAN_MAX` in start order, while the totals count every call. Spans
+outside any request are stored when they themselves take at least
+`VISIONARY_SPAN_THRESHOLD_MS`, with `request_id` NULL.
 
 Exporters send spans as they end, so children usually arrive before their
 request span and sometimes in an earlier export. Spans whose request has not

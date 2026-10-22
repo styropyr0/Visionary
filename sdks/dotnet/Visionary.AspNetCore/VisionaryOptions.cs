@@ -96,7 +96,7 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_SPANS (default true): database and outbound HTTP spans and per-request totals.</summary>
     public bool Spans { get; set; } = true;
 
-    /// <summary>VISIONARY_SPAN_THRESHOLD_MS (default 100): span rows are kept for requests at least this slow.</summary>
+    /// <summary>VISIONARY_SPAN_THRESHOLD_MS (default 100): spans outside a request are kept when at least this slow.</summary>
     public double SpanThresholdMs { get; set; } = 100;
 
     /// <summary>VISIONARY_SPAN_MAX (default 100): span rows per request.</summary>

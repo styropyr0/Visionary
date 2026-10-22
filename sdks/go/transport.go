@@ -3,6 +3,7 @@ package visionary
 import (
 	"net/http"
 	"strconv"
+	"sync"
 )
 
 // Transport returns an http.RoundTripper that records each outbound request
@@ -19,7 +20,23 @@ func Transport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
 	}
+	if t, ok := base.(*tracedTransport); ok {
+		return t
+	}
 	return &tracedTransport{base: base}
+}
+
+var defaultClientOnce sync.Once
+
+// instrumentDefaultClient makes http.Get, http.Post and other calls through
+// http.DefaultClient record spans. http.DefaultTransport itself is left
+// alone: code often asserts it is an *http.Transport to clone it.
+func instrumentDefaultClient() {
+	defaultClientOnce.Do(func() {
+		if http.DefaultClient.Transport == nil {
+			http.DefaultClient.Transport = Transport(nil)
+		}
+	})
 }
 
 type tracedTransport struct{ base http.RoundTripper }

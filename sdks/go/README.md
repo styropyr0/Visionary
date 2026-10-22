@@ -116,6 +116,13 @@ Spans are named `METHOD host` and end when the response headers arrive.
 Transport errors and 5xx responses are marked `error`. Query strings are never
 stored.
 
+`http.DefaultClient` is instrumented at `Start` (`VISIONARY_INSTRUMENT_HTTP=false`
+turns that off), so `http.Get`, `http.Post` and `http.DefaultClient.Do` are
+recorded too. A call joins the request's breakdown only when it carries the
+handler's context: `http.Post(url, ...)` has none, so prefer
+`http.NewRequestWithContext(ctx, ...)` with `http.DefaultClient.Do`. Without a
+context the call is stored on its own when it takes the span threshold.
+
 ### Anything else
 
 ```go
@@ -124,18 +131,71 @@ val, err := rdb.Get(ctx, key).Result()
 end(err)
 ```
 
-Kinds: `KindDB`, `KindHTTP`, `KindCache`, `KindQueue`, `KindCustom`.
+Kinds: `KindDB`, `KindHTTP`, `KindCache`, `KindQueue`, `KindCustom`. Wrap
+CPU-heavy steps too (hashing, image resizing, building a report): the
+request's breakdown shows time outside every span as untracked, and a custom
+span names it.
+
+### Covering everything a request does
+
+`Middleware` records the request; it cannot see the calls inside it. A call
+appears in the request's breakdown only when its client reports to the SDK
+*and* it gets the request's context. Whatever is left shows up as
+**Untracked** in the breakdown, placed where it happened, which tells you
+which of these is missing:
+
+**Vendor SDKs build their own HTTP clients.** `visionary.Transport` on your
+clients does not reach them; hand them a traced one:
+
+```go
+// AWS SDK v2: S3, Cloudflare R2, SQS, SES…
+traced := &http.Client{Transport: visionary.Transport(awshttp.NewBuildableClient().GetTransport())}
+cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithHTTPClient(traced))
+
+// openai-go, and Google APIs (Firebase, Maps): both take an *http.Client
+client := openai.NewClient(option.WithHTTPClient(&http.Client{Transport: visionary.Transport(nil)}))
+```
+
+**Pass the context all the way down.** `http.Post(url, …)` and
+`client.Get(url)` carry none, so the call cannot join its request:
+
+```go
+req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+resp, err := client.Do(req)
+```
+
+The same goes for `db.Query` against `db.QueryContext`, and for anything a
+service method calls: take `ctx` and pass it on.
+
+**Clients without a hook** (Redis, gRPC, a queue): wrap the call.
+
+```go
+end := visionary.StartSpan(ctx, visionary.KindCache, "GET session")
+val, err := rdb.Get(ctx, key).Result()
+end(err)
+```
+
+**Your own CPU work** (bcrypt, image resizing, rendering a report) takes no
+call, so it stays untracked unless you name it:
+
+```go
+end := visionary.StartSpan(ctx, visionary.KindCustom, "hash otp")
+hash, err := bcrypt.GenerateFromPassword(code, bcrypt.DefaultCost)
+end(err)
+```
+
+**Work that outlives the response** (`go sendEmail(ctx, …)` after writing
+it) is stored on its own once the request is logged, when it takes the span
+threshold, rather than in the request.
 
 ### What is stored
 
 - Every logged request gets `db_count`/`db_ms` and `http_count`/`http_ms`
   (NULL for a kind no hook is installed for).
-- Span rows are kept for requests that took at least
-  `VISIONARY_SPAN_THRESHOLD_MS` (100) or answered ≥ 500, at most
-  `VISIONARY_SPAN_MAX` (100) per request, in start order. Calls beyond the cap
-  still count in the totals.
+- Span rows are kept for every request, at most `VISIONARY_SPAN_MAX` (100)
+  per request, in start order. Calls beyond the cap still count in the totals.
 - Calls outside requests (workers, startup) are stored when they alone take
-  the threshold, with no `request_id`.
+  `VISIONARY_SPAN_THRESHOLD_MS` (100), with no `request_id`.
 - Statements are sanitized: literals become `?`, `IN (...)` lists become
   `IN (?)`. Parameter values are never stored. Names are `SELECT users`,
   `INSERT bookings`, `BEGIN`.

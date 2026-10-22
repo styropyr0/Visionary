@@ -99,12 +99,11 @@ class Agent:
         return _spans.Trace(request_id, t0, self.config.span_max)
 
     def finish_trace(self, entry: Entry, trace: Optional[_spans.Trace]) -> None:
-        """Copy call totals and, for slow or failed requests, the spans onto
-        the entry (integration API, after status and duration are set)."""
+        """Copy call totals and the spans onto the entry (integration API,
+        after status and duration are set)."""
         if trace is None:
             return
-        slow = entry.duration * 1000.0 >= self.config.span_threshold_ms or entry.status >= 500
-        entry.spans = trace.close(slow)
+        entry.spans = trace.close()
         if _spans.db_visible:
             entry.db_count, entry.db_ms = trace.db_count, trace.db_ms
         if _spans.http_visible:

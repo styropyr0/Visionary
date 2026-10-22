@@ -83,13 +83,15 @@ type Config struct {
 	Service string
 	Release string
 
-	// Spans turns on per-request call capture: db_*/http_* totals on every
-	// logged request, and span rows for requests that took at least
-	// SpanThreshold or answered 5xx, at most SpanMax per request. Calls
+	// Spans turns on per-request call capture: db_*/http_* totals and span
+	// rows on every logged request, at most SpanMax per request. Calls
 	// outside a request are kept when they alone take SpanThreshold.
 	Spans         bool
 	SpanThreshold time.Duration
 	SpanMax       int
+	// InstrumentHTTP makes http.DefaultClient (http.Get, http.Post, ...)
+	// record its calls; other clients need Transport.
+	InstrumentHTTP bool
 	// Errors records panics that reach Middleware and CaptureError calls.
 	Errors bool
 
@@ -175,6 +177,7 @@ type SystemConfig struct {
 //	VISIONARY_SPANS=true|false           (default true)
 //	VISIONARY_SPAN_THRESHOLD_MS          (default 100)
 //	VISIONARY_SPAN_MAX                   (default 100)
+//	VISIONARY_INSTRUMENT_HTTP=true|false (default true)
 //	VISIONARY_ERRORS=true|false          (default true)
 func FromEnv() Config {
 	return Config{
@@ -185,13 +188,14 @@ func FromEnv() Config {
 			APIToken:   env("D1_API_TOKEN", ""),
 			APIBase:    env("D1_API_BASE", ""),
 		},
-		Instance:      env("VISIONARY_INSTANCE", ""),
-		Service:       env("VISIONARY_SERVICE", ""),
-		Release:       releaseFromEnv(),
-		Spans:         envBool("VISIONARY_SPANS", true),
-		SpanThreshold: time.Duration(envInt("VISIONARY_SPAN_THRESHOLD_MS", 100)) * time.Millisecond,
-		SpanMax:       envInt("VISIONARY_SPAN_MAX", 100),
-		Errors:        envBool("VISIONARY_ERRORS", true),
+		Instance:       env("VISIONARY_INSTANCE", ""),
+		Service:        env("VISIONARY_SERVICE", ""),
+		Release:        releaseFromEnv(),
+		Spans:          envBool("VISIONARY_SPANS", true),
+		SpanThreshold:  time.Duration(envInt("VISIONARY_SPAN_THRESHOLD_MS", 100)) * time.Millisecond,
+		SpanMax:        envInt("VISIONARY_SPAN_MAX", 100),
+		InstrumentHTTP: envBool("VISIONARY_INSTRUMENT_HTTP", true),
+		Errors:         envBool("VISIONARY_ERRORS", true),
 		Requests: RequestsConfig{
 			Enabled:             envBool("VISIONARY_LOG_REQUESTS", true),
 			PathPrefix:          env("VISIONARY_LOG_PATH_PREFIX", ""),
@@ -302,6 +306,9 @@ func (a *Agent) Start(ctx context.Context) {
 	if a.writer != nil {
 		a.writer.start(ctx)
 		active.Store(a)
+		if a.cfg.Spans && a.cfg.InstrumentHTTP {
+			instrumentDefaultClient()
+		}
 	}
 	if a.system != nil {
 		if err := a.db.execScript(schemaCtx, d.SystemSchema()); err != nil {

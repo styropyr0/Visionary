@@ -148,6 +148,13 @@ is known, one `releases` row is written at start (`sdk` = `java`, `runtime` such
 
 ## Spans
 
+The filter records the request; the calls inside it are recorded only when
+their client is hooked: the wrapped `DataSource` and the Spring HTTP clients
+below. Vendor SDKs with their own HTTP stack (the AWS SDK, Firebase) and CPU
+work are not seen until you wrap them in `Visionary.span`. Anything left
+shows as **Untracked** in the request's breakdown; see
+[What the middleware sees](../../Readme.md#what-the-middleware-sees-and-what-needs-code).
+
 Captured automatically, with no code changes:
 
 - **JDBC**: every `DataSource` bean of the application is wrapped in a lightweight
@@ -176,10 +183,10 @@ Captured automatically, with no code changes:
   Kinds are `db`, `http`, `cache`, `queue` and `custom`.
 
 Every logged request gets `db_count`, `db_ms`, `http_count` and `http_ms` (all calls,
-also beyond the cap). Span rows are stored when the request took at least
-`VISIONARY_SPAN_THRESHOLD_MS` (default 100) or answered 5xx, at most `VISIONARY_SPAN_MAX`
+also beyond the cap). Span rows are stored for every request, at most `VISIONARY_SPAN_MAX`
 (default 100) per request, in start order. Spans outside a request (scheduled jobs,
-background threads) are stored on their own when they take at least the threshold.
+background threads) are stored on their own when they take at least
+`VISIONARY_SPAN_THRESHOLD_MS` (default 100).
 
 Spans join the request through a thread-local. Work handed to another thread joins it when:
 

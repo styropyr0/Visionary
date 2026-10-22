@@ -54,6 +54,9 @@ type spanRecord struct {
 	failed      bool
 	err         string
 	rows        int64 // -1 when the driver did not say
+	// nested marks a call made inside another recorded call (the prepare of
+	// a query): it is a span row but its time is already in the totals.
+	nested bool
 }
 
 // spanTotals are the per-request aggregates stored on the api_logs row.
@@ -96,11 +99,12 @@ func (t *trace) add(s *spanRecord) bool {
 	if t.closed {
 		return false
 	}
-	switch s.kind {
-	case KindDB:
+	switch {
+	case s.nested:
+	case s.kind == KindDB:
 		t.totals.dbCount++
 		t.totals.dbTime += s.duration
-	case KindHTTP:
+	case s.kind == KindHTTP:
 		t.totals.httpCount++
 		t.totals.httpTime += s.duration
 	}
@@ -111,16 +115,13 @@ func (t *trace) add(s *spanRecord) bool {
 	return true
 }
 
-// finish closes the trace and returns its totals and, when keep is set, its
-// spans in start order. Spans that end later are stored on their own.
-func (t *trace) finish(keep bool) (*spanTotals, []*spanRecord) {
+// finish closes the trace and returns its totals and its spans in start
+// order. Spans that end later are stored on their own.
+func (t *trace) finish() (*spanTotals, []*spanRecord) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.closed = true
 	totals := t.totals
-	if !keep {
-		return &totals, nil
-	}
 	spans := t.spans
 	t.spans = nil
 	slices.SortStableFunc(spans, func(a, b *spanRecord) int { return a.start.Compare(b.start) })

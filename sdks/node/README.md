@@ -159,11 +159,17 @@ missing on the writer, once per distinct user per batch.
 
 ## Spans
 
+The middleware records the request; the calls inside it are recorded only when
+their client is hooked. `http`, `https` and `fetch` are patched for you, so
+most vendor SDKs (AWS, Stripe, OpenAI) are covered. Wrap what isn't a call:
+Redis or queue clients without a hook, and CPU work such as hashing or image
+processing, in `visionary.span(...)`. Anything left shows as **Untracked** in
+the request's breakdown; see [What the middleware sees](../../Readme.md#what-the-middleware-sees-and-what-needs-code).
+
 For every logged request the SDK counts database and outbound HTTP calls and
-their total time into `db_count`, `db_ms`, `http_count`, `http_ms`. Requests
-that took at least `VISIONARY_SPAN_THRESHOLD_MS` (100) or answered 5xx also
-get up to `VISIONARY_SPAN_MAX` (100) `spans` rows, in start order. Calls
-outside a request are stored when they take at least the threshold.
+their total time into `db_count`, `db_ms`, `http_count`, `http_ms`, and up to
+`VISIONARY_SPAN_MAX` (100) `spans` rows, in start order. Calls outside a
+request are stored when they take at least `VISIONARY_SPAN_THRESHOLD_MS` (100).
 
 Outbound HTTP is recorded automatically: `fetch` and `undici` through their
 diagnostics channels, and `http`/`https` (axios, got, node-fetch, most API

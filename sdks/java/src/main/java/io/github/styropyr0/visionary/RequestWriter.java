@@ -39,7 +39,6 @@ final class RequestWriter {
     private final Store store;
     private final Origin origin;
     private final boolean logRequests;
-    private final double spanThresholdMs;
     private final Redactor redactor;
     private final ErrorFields errorFields;
     private final VisionaryUserLookup userLookup;
@@ -59,7 +58,6 @@ final class RequestWriter {
         this.store = store;
         this.origin = origin;
         this.logRequests = cfg.logRequests();
-        this.spanThresholdMs = cfg.spanThresholdMs();
         this.redactor = new Redactor(cfg.redactHeaders(), cfg.redactFields(), cfg.redactRequestFields(), json);
         this.errorFields = new ErrorFields(json, cfg.errorCodeField(), cfg.errorKeyField());
         this.userLookup = userLookup;
@@ -222,9 +220,9 @@ final class RequestWriter {
         }
     }
 
-    /** Span rows are kept for slow requests and for those that answered 5xx. */
+    /** Span rows are kept for every request that recorded them. */
     private boolean keepSpans(RequestEntry e) {
-        return e.telemetry() != null && (e.durationMs() >= spanThresholdMs || e.status() >= 500);
+        return e.telemetry() != null;
     }
 
     /** Resolves each distinct user missing a handle or role once per batch. */

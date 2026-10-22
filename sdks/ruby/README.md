@@ -100,6 +100,12 @@ user per batch, for users missing a handle or role.
 
 ## Spans and errors
 
+The middleware records the request; the calls inside it are recorded only when
+their client is hooked (see below). Wrap the rest (a Redis or queue client
+without a hook, CPU work such as image processing) in `Visionary.span`.
+Anything left shows as **Untracked** in the request's breakdown; see
+[What the middleware sees](../../Readme.md#what-the-middleware-sees-and-what-needs-code).
+
 - **Database:** every `sql.active_record` notification except `SCHEMA` and
   cached queries becomes a `db` span named after the statement (`SELECT
   users`, `INSERT bookings`, `BEGIN`), with the statement sanitized (literals
@@ -111,10 +117,9 @@ user per batch, for users missing a handle or role.
 
 Every logged request gets `db_count`, `db_ms`, `http_count`, `http_ms`
 (`db_*` are NULL when ActiveRecord isn't loaded and no `db` span was
-recorded). Span rows are stored only for requests that took at least
-`VISIONARY_SPAN_THRESHOLD_MS` or answered 5xx, at most `VISIONARY_SPAN_MAX`
-per request; spans outside requests are stored when they take at least the
-threshold themselves. Visionary's own writes never become spans.
+recorded). Span rows are stored for every request, at most
+`VISIONARY_SPAN_MAX` per request; spans outside requests are stored when they
+take at least `VISIONARY_SPAN_THRESHOLD_MS` themselves. Visionary's own writes never become spans.
 
 Exceptions that escape the app are recorded and re-raised unchanged; the
 middleware logs the request as 500. Errors are grouped by a fingerprint over

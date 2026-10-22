@@ -95,10 +95,10 @@ class Trace:
                 self.spans.append(span)
             return True
 
-    def close(self, keep_spans: bool) -> List["Span"]:
+    def close(self) -> List["Span"]:
         with self.lock:
             self.closed = True
-            spans = sorted(self.spans, key=lambda s: s.offset_ms or 0.0) if keep_spans else []
+            spans = sorted(self.spans, key=lambda s: s.offset_ms or 0.0)
             self.spans = []
             return spans
 

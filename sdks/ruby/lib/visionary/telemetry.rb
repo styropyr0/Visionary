@@ -69,9 +69,9 @@ module Visionary
          span.target, span.detail, span.offset_ms, span.duration_ms, span.status, span.error, span.row_count]
       end
 
-      # Rows for a finished request's spans when it was slow or failed.
-      def request_span_rows(ctx, duration_ms, status)
-        return [] unless @spans_on && (duration_ms >= @threshold || status >= 500)
+      # Rows for a finished request's spans, kept for every request.
+      def request_span_rows(ctx)
+        return [] unless @spans_on
         ctx.spans.map { |s| span_row(s) }
       end
 
