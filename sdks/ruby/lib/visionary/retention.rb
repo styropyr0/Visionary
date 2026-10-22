@@ -8,7 +8,8 @@ module Visionary
     EVERY = 24 * 3600
     MAX_ROUNDS = 200
 
-    # tables: { "api_logs" => days, ... }; 0 days keeps forever.
+    # tables: { "api_logs" => days, ... }; 0 days (the default) purges nothing
+    # and starts no thread: the Visionary server applies Settings → Retention.
     def initialize(store, logger, tables)
       @store = store
       @logger = logger
@@ -46,6 +47,8 @@ module Visionary
         n = begin
           @store.changes(sql, [cutoff])
         rescue StandardError => e
+          # The server creates profiles; before it has, there is nothing to purge.
+          return total if table == "profiles" && e.message.match?(/no such table|does(?:n't| not) exist/i)
           @logger.error("visionary: retention purge of #{table} failed after #{total} rows: #{e.message}")
           return total
         end

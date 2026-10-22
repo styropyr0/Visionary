@@ -80,26 +80,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, e.at.Format(tsLayout), e.userID, e.userName, e
 	}
 }
 
-// auditRetention deletes entries older than VISIONARY_AUDIT_RETENTION_DAYS,
-// at startup and every six hours.
-func (s *Server) auditRetention(ctx context.Context) {
-	tick := time.NewTicker(6 * time.Hour)
-	defer tick.Stop()
-	for {
-		cutoff := time.Now().UTC().AddDate(0, 0, -s.team().retentionDays).Format(tsLayout)
-		cctx, cancel := context.WithTimeout(ctx, time.Minute)
-		if err := s.db.Exec(cctx, `DELETE FROM audit_log WHERE created_at < ?`, cutoff); err != nil && ctx.Err() == nil {
-			s.logger.Warn("audit retention", "err", err)
-		}
-		cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
-}
-
 // handleAudit lists entries newest first. Filters: action ("panel" matches
 // panel.*, "panel.create" only that), user (id or name), from/to, and before
 // (an id, for paging).
@@ -163,5 +143,5 @@ FROM audit_log WHERE `+strings.Join(where, " AND ")+` ORDER BY id DESC LIMIT `+s
 			"role": toString(row[4]), "action": toString(row[5]), "target": toString(row[6]), "detail": detail, "ip": toString(row[8]),
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "retention_days": s.team().retentionDays, "more": len(entries) == limit})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "retention_days": s.retentionDays("audit"), "more": len(entries) == limit})
 }

@@ -678,3 +678,134 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Query plan ---------- */
+
+.qp {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.qp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qp-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qp-when {
+  font-size: 12px;
+}
+
+.qp-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.qp-msg {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.qp-summary {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-wash);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.qp-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.qp-findings li {
+  display: flex;
+  gap: 8px;
+}
+
+.qp-findings li svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.qp-findings li.warning svg {
+  color: var(--warning-text);
+}
+
+.qp-findings li.info svg {
+  color: var(--text-3);
+}
+
+.qp-plan {
+  margin-top: 8px;
+  max-height: 320px;
+  white-space: pre;
+  overflow: auto;
+}
+
+/* Work a request left running after its response. */
+.wf-response {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  z-index: 1;
+  border-left: 1.5px dashed var(--text-3);
+  pointer-events: none;
+}
+
+.wf-response-swatch {
+  width: 0;
+  height: 12px;
+  border-left: 1.5px dashed var(--text-3);
+}
+
+.wf-late {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.rt-bg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-bg-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.rt-bg-item > svg {
+  color: var(--series-6);
+}

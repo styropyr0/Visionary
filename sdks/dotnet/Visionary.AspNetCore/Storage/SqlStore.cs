@@ -90,6 +90,25 @@ internal sealed class SqlStore : IStore
         return names;
     }
 
+    public async Task<List<string?[]>> RowsAsync(string query, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct).ConfigureAwait(false);
+        await using var cmd = lease.Connection.CreateCommand();
+        cmd.CommandText = query;
+        var rows = new List<string?[]>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var row = new string?[reader.FieldCount];
+            for (var i = 0; i < row.Length; i++)
+            {
+                row[i] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture);
+            }
+            rows.Add(row);
+        }
+        return rows;
+    }
+
     private async Task<Lease> OpenAsync(CancellationToken ct)
     {
         if (_gate is not null)

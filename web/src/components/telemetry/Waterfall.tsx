@@ -25,9 +25,11 @@ export const KIND_COLOR: Record<string, string> = {
   cache: "var(--series-3)",
   queue: "var(--series-4)",
   custom: "var(--series-7)",
+  graphql: "var(--series-5)",
+  background: "var(--series-6)",
 };
 
-const KIND_LABEL: Record<string, string> = { db: "Database", http: "HTTP", cache: "Cache", queue: "Queue", custom: "Custom" };
+const KIND_LABEL: Record<string, string> = { db: "Database", http: "HTTP", cache: "Cache", queue: "Queue", custom: "Custom", graphql: "GraphQL", background: "Background" };
 
 export function toSpans(res: Result | undefined): SpanRow[] {
   return records(res).map((r) => ({
@@ -68,12 +70,30 @@ const GAP_MIN_MS = 5;
 const GAP_MIN_SHARE = 0.02;
 
 /**
+ * The calls the request waited for: not background work it started, nor the
+ * calls made inside that work or after the response.
+ */
+export function waitedFor(spans: SpanRow[], requestMs: number): SpanRow[] {
+  const bg = spans.filter((s) => s.kind === "background");
+  const inside = (s: SpanRow) => bg.some((b) => b !== s && s.offset >= b.offset && s.offset + s.duration <= b.offset + b.duration);
+  return spans.filter((s) => s.kind !== "background" && s.offset < requestMs && !inside(s));
+}
+
+/** Background work a request started, and the calls that ended after its response. */
+export function afterResponse(spans: SpanRow[], requestMs: number): { background: SpanRow[]; late: number } {
+  return {
+    background: spans.filter((s) => s.kind === "background"),
+    late: spans.filter((s) => s.kind !== "background" && s.offset + s.duration > requestMs + 0.5).length,
+  };
+}
+
+/**
  * Stretches of the request that no recorded call covers: the app's own code
  * (CPU work, rendering) or calls the SDK cannot see. Overlapping and nested
  * calls (a query and its prepare) count once.
  */
 export function untracked(spans: SpanRow[], requestMs: number): { gaps: Gap[]; ms: number } {
-  const sorted = [...spans].sort((a, b) => a.offset - b.offset);
+  const sorted = waitedFor(spans, requestMs).sort((a, b) => a.offset - b.offset);
   const raw: Gap[] = [];
   let at = 0;
   let after = "";
@@ -113,6 +133,9 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
     return items.sort((a, b) => (a.span ?? a.gap!).offset - (b.span ?? b.gap!).offset || (a.gap ? -1 : 1));
   }, [spans, requestMs]);
   const hasGaps = rows.some((r) => r.gap);
+  // Work that outlived the response: mark where the response was sent.
+  const responseAt = total > requestMs + 0.5 && requestMs > 0 ? (100 * requestMs) / total : null;
+  const responseLine = responseAt !== null && <span className="wf-response" style={{ left: `${responseAt}%` }} aria-hidden />;
 
   const toggle = (i: number) =>
     setOpen((o) => {
@@ -135,6 +158,12 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
           <span className="wf-legend-item">
             <span className="wf-swatch wf-gap-fill" />
             Untracked
+          </span>
+        )}
+        {responseAt !== null && (
+          <span className="wf-legend-item">
+            <span className="wf-response-swatch" aria-hidden />
+            Response sent
           </span>
         )}
         <span className="dim" style={{ marginLeft: "auto" }}>
@@ -168,11 +197,17 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
                   <span className="wf-swatch" style={{ background: KIND_COLOR[s.kind] ?? KIND_COLOR.custom }} />
                   <span className="wf-label mono">{s.name}</span>
                   {repeated.has(s.name) && <span className="wf-repeat" title={`Repeated ${N_PLUS_ONE}+ times in this request`}>N+1</span>}
+                  {s.kind !== "background" && responseAt !== null && s.offset + s.duration > requestMs + 0.5 && (
+                    <span className="wf-late" title="Ended after the response was sent: work the request left running.">
+                      after response
+                    </span>
+                  )}
                 </span>
                 <span className="wf-track">
                   {[25, 50, 75].map((g) => (
                     <span key={g} className="wf-gridline" style={{ left: `${g}%` }} />
                   ))}
+                  {responseLine}
                   <span
                     className={`wf-bar ${failed ? "failed" : ""}`}
                     style={{ left: `${Math.min(left, 100 - width)}%`, width: `${width}%`, background: KIND_COLOR[s.kind] ?? KIND_COLOR.custom }}

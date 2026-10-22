@@ -1,6 +1,7 @@
 package io.github.styropyr0.visionary;
 
 import java.net.URI;
+import java.util.function.Consumer;
 
 /**
  * Span and error capture. The JDBC proxy, the HTTP client interceptors and the
@@ -9,21 +10,26 @@ import java.net.URI;
  */
 final class Telemetry {
 
-    private static final int MAX_DETAIL = 2000;
+    /** Long enough that a statement can still be planned with EXPLAIN. */
+    static final int MAX_DETAIL = 8000;
     private static volatile Telemetry active;
 
     final boolean spans;
     final boolean errors;
     final double spanThresholdMs;
     final int spanMax;
-    private final RequestWriter writer;
+    private final Consumer<Queued> writer;
     private final Errors limiter = new Errors();
 
     Telemetry(VisionaryConfig cfg, RequestWriter writer) {
-        this.spans = cfg.spans();
-        this.errors = cfg.errors();
-        this.spanThresholdMs = cfg.spanThresholdMs();
-        this.spanMax = cfg.spanMax();
+        this(cfg.spans(), cfg.errors(), cfg.spanThresholdMs(), cfg.spanMax(), writer::enqueue);
+    }
+
+    Telemetry(boolean spans, boolean errors, double spanThresholdMs, int spanMax, Consumer<Queued> writer) {
+        this.spans = spans;
+        this.errors = errors;
+        this.spanThresholdMs = spanThresholdMs;
+        this.spanMax = spanMax;
         this.writer = writer;
     }
 
@@ -71,14 +77,21 @@ final class Telemetry {
         }
     }
 
+    /**
+     * A finished span joins its request while the request is running. One that ends
+     * after the request was logged is stored on its own, still with the request's id
+     * and offset: the first {@code spanMax} of them whatever their duration, later
+     * ones (and spans outside any request) only from the threshold up. Each late span
+     * takes one of those places, slow or not.
+     */
     void finished(VisionarySpan span) {
         span.detail = Values.cap(span.detail, MAX_DETAIL);
         RequestScope scope = span.scope;
         if (scope != null && scope.add(span)) {
             return;
         }
-        if (span.durationMs >= spanThresholdMs) {
-            writer.enqueue(new SpanEntry(span));
+        if ((scope != null && scope.keepLate()) || span.durationMs >= spanThresholdMs) {
+            writer.accept(new SpanEntry(span));
         }
     }
 
@@ -90,7 +103,7 @@ final class Telemetry {
         }
         RequestScope scope = RequestScope.current();
         if (scope == null || !scope.add(e)) {
-            writer.enqueue(scope == null ? e : e.withRequest(scope.requestId, null, null, null, null));
+            writer.accept(scope == null ? e : e.withRequest(scope.requestId, null, null, null, null));
         }
     }
 
@@ -104,6 +117,6 @@ final class Telemetry {
     }
 
     void enqueue(ErrorEntry e) {
-        writer.enqueue(e);
+        writer.accept(e);
     }
 }

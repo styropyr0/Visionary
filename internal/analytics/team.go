@@ -19,9 +19,8 @@ import (
 // teamState is the feature's in-memory state. It hangs off the server through
 // a side table so the shared Server struct stays as it is.
 type teamState struct {
-	audits        chan auditEntry
-	keys          keyStore
-	retentionDays int
+	audits chan auditEntry
+	keys   keyStore
 }
 
 var teamStates sync.Map // *Server -> *teamState
@@ -31,9 +30,8 @@ func (s *Server) team() *teamState {
 		return v.(*teamState)
 	}
 	v, _ := teamStates.LoadOrStore(s, &teamState{
-		audits:        make(chan auditEntry, auditQueue),
-		keys:          keyStore{used: map[int64]time.Time{}},
-		retentionDays: getInt("VISIONARY_AUDIT_RETENTION_DAYS", 365),
+		audits: make(chan auditEntry, auditQueue),
+		keys:   keyStore{used: map[int64]time.Time{}},
 	})
 	return v.(*teamState)
 }
@@ -57,7 +55,6 @@ func (s *Server) teamRoutes(mux *http.ServeMux) {
 
 func (s *Server) teamStart(ctx context.Context) {
 	go s.auditWriter(ctx)
-	go s.auditRetention(ctx)
 	go s.flushKeyUse(ctx)
 }
 
@@ -168,7 +165,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		{"Server ingest keys", serverEnv+dbKeys["server"] > 0, n(serverEnv) + " from the environment, " + n(dbKeys["server"]) + " created here"},
 		{"Client ingest keys", clientEnv+dbKeys["client"] > 0, n(clientEnv) + " from the environment, " + n(dbKeys["client"]) + " created here"},
 		{"Read API keys", dbKeys["read"] > 0, n(dbKeys["read"]) + " active"},
-		{"Audit log", true, "Kept for " + n(s.team().retentionDays) + " days"},
+		{"Audit log", true, "Kept for " + n(s.retentionDays("audit")) + " days"},
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":    version,

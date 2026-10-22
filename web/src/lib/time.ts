@@ -39,44 +39,62 @@ export function previousLabel(r: TimeRange): string {
   return "vs previous period";
 }
 
-const dtFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+// How times are shown, from Settings → Preferences: this device's zone or
+// UTC, and the clock. Set once before the first render (see main.tsx); a
+// change reloads the page so every time is drawn again.
+let utc = false;
+let hour12: boolean | undefined;
+
+export function setTimeDisplay(o: { utc?: boolean; clock?: "auto" | "12" | "24" }) {
+  utc = !!o.utc;
+  hour12 = o.clock === "12" ? true : o.clock === "24" ? false : undefined;
+  formats.clear();
+}
+
+/** Times are shown in UTC (charts read this too). */
+export function showsUTC(): boolean {
+  return utc;
+}
+
+/** The zone times are shown in, for the analyst's questions. */
+export function displayZone(): string {
+  return utc ? "UTC" : Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Every date the app shows goes through here, so the zone and clock
+ * preferences apply everywhere. An explicit timeZone or hour12 in opts wins.
+ */
+export function dateFormat(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = JSON.stringify(opts);
+  let f = formats.get(key);
+  if (!f) {
+    const shown: Intl.DateTimeFormatOptions = { ...opts };
+    if (utc && !opts.timeZone) shown.timeZone = "UTC";
+    if (hour12 !== undefined && opts.hour && opts.hour12 === undefined) shown.hour12 = hour12;
+    f = new Intl.DateTimeFormat(undefined, shown);
+    formats.set(key, f);
+  }
+  return f;
+}
 
 export function formatDateTime(d: Date): string {
-  return dtFmt.format(d);
+  return dateFormat({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
 }
-
-const fullFmt = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
 
 export function formatFull(d: Date): string {
-  return fullFmt.format(d);
+  return dateFormat({ year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
 }
-
-const logFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
 
 export function formatLogTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const ms = String(d.getMilliseconds()).padStart(3, "0");
-  return `${logFmt.format(d)}.${ms}`;
+  // Log lines default to a 24-hour clock, which lines up in a column.
+  const f = dateFormat({ month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: hour12 ?? false });
+  return `${f.format(d)}.${ms}`;
 }
 
 export function formatRelative(iso: string): string {
@@ -100,15 +118,6 @@ export function toLocalInput(d: Date): string {
 
 const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)$/;
 
-const zoneFmt = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  timeZoneName: "short",
-});
 
 /**
  * Hover text for a cell: a stored timestamp becomes the viewer's full local
@@ -117,5 +126,5 @@ const zoneFmt = new Intl.DateTimeFormat(undefined, {
 export function cellTitle(v: string): string {
   if (!ISO_TIME.test(v)) return v;
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : zoneFmt.format(d);
+  return Number.isNaN(d.getTime()) ? v : dateFormat({ year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" }).format(d);
 }

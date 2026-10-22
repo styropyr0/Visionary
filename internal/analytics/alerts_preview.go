@@ -81,7 +81,7 @@ FROM api_logs WHERE `+where+scope+` GROUP BY `+t+` ORDER BY t`, append(args, sar
 			return nil, err
 		}
 		out.SLO, out.Threshold = st, ptr(st.Target)
-		out.Note = "Share of requests per hour that succeeded within " + strconv.Itoa(s.cfg.ApdexMs) + " ms, against the target."
+		out.Note = "Share of requests per hour that succeeded within " + strconv.Itoa(s.apdex().DefaultMs) + " ms (or their route's own threshold), against the target."
 
 	case rule.Kind == "anomaly":
 		b, m, err := s.anomalyBaseline(ctx, rule, now)

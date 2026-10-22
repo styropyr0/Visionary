@@ -21,16 +21,17 @@ import (
 
 type planKey struct {
 	d     sdk.Dialect
-	apdex int
+	apdex string // apdexRule.key()
 }
 
 var rollupPlans sync.Map // planKey -> map[string]*rollupPanel
 
 func (s *Server) rollupPlan(sql string) (*rollupPanel, string) {
-	key := planKey{s.q.d, s.cfg.ApdexMs}
+	rule := s.apdex()
+	key := planKey{s.q.d, rule.key()}
 	v, ok := rollupPlans.Load(key)
 	if !ok {
-		v, _ = rollupPlans.LoadOrStore(key, rollupPanels(s.q, s.cfg.ApdexMs))
+		v, _ = rollupPlans.LoadOrStore(key, rollupPanels(s.q, rule))
 	}
 	plans := v.(map[string]*rollupPanel)
 	if p := plans[sql]; p != nil {
@@ -156,7 +157,7 @@ func (s *Server) runRollup(ctx context.Context, sql string, tr timeRange) (res *
 	}
 	q := p.sql
 	if reqSegs != nil {
-		q = strings.ReplaceAll(q, "{{requests}}", unionSQL(requestsTable(s.cfg.ApdexMs, nil), reqSegs, "rr"))
+		q = strings.ReplaceAll(q, "{{requests}}", unionSQL(requestsTable(s.apdex(), nil), reqSegs, "rr"))
 	}
 	if sysSegs != nil {
 		q = strings.ReplaceAll(q, "{{system}}", unionSQL(systemTable(), sysSegs, "rs"))

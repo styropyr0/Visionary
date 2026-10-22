@@ -37,6 +37,7 @@ module Visionary
         @spans_on = cfg.spans ? true : false
         @errors_on = cfg.errors ? true : false
         @threshold = cfg.span_threshold_ms.to_f
+        @span_max = cfg.span_max.to_i
         @limiter = Errors::Limiter.new
       end
 
@@ -56,7 +57,10 @@ module Visionary
           row_count: row_count, request_id: ctx&.request_id
         )
         if ctx
-          ctx.add_span(span)
+          # A late span (its request was already logged) is written on its
+          # own: always up to span_max of them per request, then only slow ones.
+          late = ctx.add_span(span)
+          @writer.enqueue([:span, span_row(span)]) if late && (late <= @span_max || duration_ms >= @threshold)
         elsif duration_ms >= @threshold
           @writer.enqueue([:span, span_row(span)])
         end

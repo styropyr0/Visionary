@@ -42,6 +42,13 @@ module Visionary
         Array(rows).map { |r| r.is_a?(Array) ? r[0].to_s : nil }.compact
       end
 
+      # Every row of a query, as arrays of values.
+      def rows(sql)
+        result = post(@raw_uri, { sql: sql })
+        rows = result.is_a?(Array) && result.dig(0, "results", "rows")
+        Array(rows).select { |r| r.is_a?(Array) }
+      end
+
       def batch(stmts)
         stmts.each_slice(MAX_BATCH) do |chunk|
           post(@query_uri, { batch: chunk.map { |sql, args| { sql: sql, params: args.map { |a| self.class.param(a) } } } })

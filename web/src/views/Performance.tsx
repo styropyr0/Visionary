@@ -18,6 +18,8 @@ import { useTelemetry } from "../lib/telemetry";
 import { CompareVersionsPanel, logIdFor, NPlusOnePanel, SpanGroupsPanel } from "../components/telemetry/PerfPanels";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SlowRequestsPanel } from "./Performance.slow";
+import { BreakdownPanel } from "../components/telemetry/Breakdown";
+import "./Insights.css";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
 
@@ -118,7 +120,7 @@ export function Performance({ meta }: { meta?: Meta }) {
         <div className="grid">
           <StatTile
             label="Apdex"
-            description={`User satisfaction from 0 to 1. A request is satisfied within ${formatMs(apdexMs)}, tolerating within ${formatMs(4 * apdexMs)}, and frustrated when slower or a server error. Set VISIONARY_APDEX_MS to change the threshold.`}
+            description={`User satisfaction from 0 to 1. A request is satisfied within ${formatMs(apdexMs)}, tolerating within ${formatMs(4 * apdexMs)}, and frustrated when slower or a server error. Change the threshold, and give slow-by-design routes their own, in Settings → Thresholds.`}
             value={cur?.apdex != null ? cur.apdex.toFixed(2) : "—"}
             delta={delta("apdex")}
             deltaLabel={prevLbl}
@@ -128,7 +130,7 @@ export function Performance({ meta }: { meta?: Meta }) {
           />
           <StatTile
             label={`Within ${formatMs(apdexMs)}`}
-            description={`Share of requests that succeeded within ${formatMs(apdexMs)}. The SLO target is ${target}% (VISIONARY_SLO_TARGET).`}
+            description={`Share of requests that succeeded within ${formatMs(apdexMs)}. The SLO target is ${target}% (Settings → Thresholds).`}
             value={cur?.good_percent != null ? formatPercent(cur.good_percent) : "—"}
             delta={delta("good_percent")}
             deltaLabel={prevLbl}
@@ -266,6 +268,7 @@ export function Performance({ meta }: { meta?: Meta }) {
             title="Database and outbound calls"
             text="Where requests wait on other systems, from the calls the SDKs record for each request. Statements are grouped by their first keyword and table, outbound calls by method and host."
           />
+          <BreakdownPanel className="span-12" />
           <SpanGroupsPanel
             className="span-12"
             kind="db"

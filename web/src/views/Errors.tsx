@@ -17,6 +17,7 @@ import { LogDetail } from "./Logs";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { InfoTip } from "../components/InfoTip";
 import "./Errors.css";
+import { HelpLink } from "../components/Help";
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["value"], series: "series", stack: true, unit: "count" };
 
@@ -191,7 +192,8 @@ function IssueList({ q }: { q: Q<IssuesResponse> }) {
           table &&
           (data && data.issues.length === 0 ? (
             <div className="panel-state errors-empty">
-              No errors recorded in this time range. The SDKs record unhandled exceptions on their own; report handled ones with the SDK's capture call (visionary.CaptureError in Go, capture_exception in Python).
+              <div>No errors recorded in this time range. Unhandled exceptions are recorded on their own.</div>
+              <HelpLink topic="errors">How to report handled errors</HelpLink>
             </div>
           ) : table.rows.length === 0 ? (
             <div className="panel-state">No issues match these filters.</div>
@@ -380,7 +382,14 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
                 </table>
               </div>
             ) : (
-              <div className="panel-state">{d ? "No version reported. Set VISIONARY_RELEASE (or a platform commit variable) in the service." : ""}</div>
+              <div className="panel-state">{d ? (
+                <>
+                  <div>No version reported.</div>
+                  <HelpLink topic="release">How to tag errors with a version</HelpLink>
+                </>
+              ) : (
+                ""
+              )}</div>
             )}
           </div>
         </section>

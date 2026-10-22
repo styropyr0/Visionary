@@ -79,6 +79,10 @@ export class SqliteStore implements Store {
     return quietly(() => Number(this.stmt(sql).run(...args).changes));
   }
 
+  async rows(sql: string, args: Value[]): Promise<string[][]> {
+    return quietly(() => this.db.prepare(sql).all(...args).map((r) => Object.values(r as object).map((v) => (v === null || v === undefined ? "" : String(v)))));
+  }
+
   async columns(sql: string): Promise<string[]> {
     return quietly(() => this.db.prepare(sql).all().map((r) => String(Object.values(r as object)[0])));
   }

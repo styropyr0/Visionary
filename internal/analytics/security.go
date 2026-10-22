@@ -42,7 +42,6 @@ type securitySettings struct {
 	rateMin          int     // requests per minute before rate abuse is considered
 	rateFactor       float64 // times the key's own baseline
 	forbidden        int     // 403s for one user or role per window
-	retentionDays    int     // 0 keeps findings forever
 	ignore           []netip.Prefix
 }
 
@@ -63,13 +62,9 @@ func securitySettingsFromEnv() securitySettings {
 		rateMin:          getInt("VISIONARY_SECURITY_RATE_MIN", 120),
 		rateFactor:       5,
 		forbidden:        getInt("VISIONARY_SECURITY_FORBIDDEN", 20),
-		retentionDays:    180,
 	}
 	if v, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv("VISIONARY_SECURITY_RATE_FACTOR")), 64); err == nil && v >= 1 {
 		st.rateFactor = v
-	}
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("VISIONARY_SECURITY_RETENTION_DAYS"))); err == nil && v >= 0 {
-		st.retentionDays = v
 	}
 	st.interval = max(st.interval, 10*time.Second)
 	st.window = min(max(st.window, time.Minute), time.Hour)
@@ -163,7 +158,6 @@ func (s *Server) securityRoutes(mux *http.ServeMux) {
 func (s *Server) securityStart(ctx context.Context) {
 	sec := s.security()
 	go s.auditRoleMapping(ctx)
-	go s.securityRetention(ctx)
 	if !sec.st.enabled {
 		s.logger.Info("security detectors disabled (VISIONARY_SECURITY=false); the Security page still shows host events and the audit log")
 		return
@@ -186,30 +180,6 @@ func (s *Server) securityLoop(ctx context.Context) {
 			return
 		case <-tick.C:
 			s.runDetectors(ctx, time.Now().UTC())
-		}
-	}
-}
-
-// securityRetention deletes findings older than VISIONARY_SECURITY_RETENTION_DAYS
-// (all sources), at startup and every six hours.
-func (s *Server) securityRetention(ctx context.Context) {
-	days := s.security().st.retentionDays
-	if days <= 0 {
-		return
-	}
-	tick := time.NewTicker(6 * time.Hour)
-	defer tick.Stop()
-	for {
-		cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(tsLayout)
-		cctx, cancel := context.WithTimeout(ctx, time.Minute)
-		if err := s.db.Exec(cctx, `DELETE FROM security_events WHERE created_at < ?`, cutoff); err != nil && ctx.Err() == nil && !missingTable(err, "security_events") {
-			s.logger.Warn("security retention", "err", err)
-		}
-		cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
 		}
 	}
 }

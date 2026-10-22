@@ -50,6 +50,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         counters.begin();
+        ProfileTally.started();
         if (writer == null || !request.getRequestURI().startsWith(pathPrefix)) {
             countOnly(request, response, chain);
             return;
@@ -105,6 +106,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
 
     private void countOnly(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        long start = System.nanoTime();
         Throwable thrown = null;
         try {
             chain.doFilter(request, response);
@@ -115,14 +117,17 @@ final class VisionaryFilter extends OncePerRequestFilter {
             if (thrown != null) {
                 int status = response.isCommitted() ? response.getStatus() : 500;
                 counters.end(status);
+                tally(request, status, start);
                 recordUnlinked(request, status, thrown);
             } else if (request.isAsyncStarted()) {
                 request.getAsyncContext().addListener(new CompletionListener(() -> {
                     counters.end(response.getStatus());
+                    tally(request, response.getStatus(), start);
                     recordUnlinked(request, response.getStatus(), null);
                 }));
             } else {
                 counters.end(response.getStatus());
+                tally(request, response.getStatus(), start);
                 recordUnlinked(request, response.getStatus(), null);
             }
         }
@@ -137,6 +142,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
             long requestSize = Math.max(request.getContentLengthLong(),
                     c.capturedRequest != null ? c.capturedRequest.cachedSize() : 0);
             String route = route(request, status);
+            ProfileTally.finished(request.getMethod(), route != null ? route : request.getRequestURI(), durationMs);
             VisionaryUser user = user(request);
             RequestScope.Finished collected = c.scope != null ? c.scope.finish() : null;
             if (collected != null) {
@@ -180,6 +186,20 @@ final class VisionaryFilter extends OncePerRequestFilter {
         } catch (RuntimeException e) {
             // Logging must never affect the response.
             logger.debug("visionary: could not capture request", e);
+        }
+    }
+
+    /** Route time for a running CPU profile, for requests that are not logged. */
+    private static void tally(HttpServletRequest request, int status, long start) {
+        if (!ProfileTally.counting()) {
+            return;
+        }
+        try {
+            String route = route(request, status);
+            ProfileTally.finished(request.getMethod(), route != null ? route : request.getRequestURI(),
+                    (System.nanoTime() - start) / 1_000_000.0);
+        } catch (RuntimeException ignored) {
+            // profiling must never affect the response
         }
     }
 

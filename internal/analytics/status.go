@@ -5,12 +5,13 @@ import (
 	"context"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
 // The public status page (/status, and /status.json for widgets and
-// scripts). It is off unless VISIONARY_STATUS_PAGE=true, needs no sign-in,
+// scripts). It is off until it is turned on in Settings → Status page, needs no sign-in,
 // and shows only checks marked for it: their state, daily bars and incidents.
 // URLs appear only for checks that opt in; error texts never do.
 
@@ -66,14 +67,15 @@ var statusCache struct {
 	page map[*Server]*statusPage
 }
 
-func statusEnabled() bool { return getBool("VISIONARY_STATUS_PAGE", false) }
+// statusEnabled and statusTitle come from Settings → Status page.
+func (s *Server) statusEnabled() bool { return s.live().StatusPage }
 
 func (s *Server) statusTitle() string {
-	if t := getEnv("VISIONARY_STATUS_TITLE", ""); t != "" {
+	if t := strings.TrimSpace(s.live().StatusTitle); t != "" {
 		return t
 	}
 	if s.cfg.AppName != "" && s.cfg.AppName != "the application" {
-		return s.cfg.AppName
+		return s.cfg.AppName + " status"
 	}
 	return "Service status"
 }
@@ -184,7 +186,7 @@ func sortIncidents(list []statusIncident) {
 }
 
 func (s *Server) statusFor(w http.ResponseWriter, r *http.Request) (*statusPage, bool) {
-	if !statusEnabled() {
+	if !s.statusEnabled() {
 		http.NotFound(w, r)
 		return nil, false
 	}
@@ -225,7 +227,7 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
 
 // handleStatusScript serves the status page's local-time script.
 func (s *Server) handleStatusScript(w http.ResponseWriter, r *http.Request) {
-	if !statusEnabled() {
+	if !s.statusEnabled() {
 		http.NotFound(w, r)
 		return
 	}

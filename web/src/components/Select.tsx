@@ -19,15 +19,16 @@ interface Props {
   maxWidth?: number;
   /** Which edge the menu lines up with: right in the toolbar, left in filter rows. */
   align?: "left" | "right";
+  disabled?: boolean;
 }
 
 /** A dropdown styled like the toolbar's other menus (the time range picker). */
-export function Select({ value, options, onChange, label, icon, maxWidth, align = "right" }: Props) {
+export function Select({ value, options, onChange, label, icon, maxWidth, align = "right", disabled }: Props) {
   const { open, setOpen, ref, menuRef } = usePopover();
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <div className="popover-anchor" ref={ref}>
-      <button type="button" className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${current?.label ?? ""}`} style={{ maxWidth }}>
+      <button type="button" className="btn" disabled={disabled} onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${current?.label ?? ""}`} style={{ maxWidth }}>
         {icon}
         <span className="btn-label">{current?.label}</span>
         <ChevronDown size={14} />

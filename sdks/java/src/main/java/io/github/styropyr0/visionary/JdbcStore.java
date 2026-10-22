@@ -141,6 +141,42 @@ final class JdbcStore implements Store {
     }
 
     @Override
+    public synchronized List<String[]> select(String sql) throws SQLException {
+        try {
+            return run(conn -> {
+                conn.setAutoCommit(true);
+                try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+                    int n = rs.getMetaData().getColumnCount();
+                    List<String[]> out = new ArrayList<>();
+                    while (rs.next()) {
+                        String[] row = new String[n];
+                        for (int i = 0; i < n; i++) {
+                            row[i] = rs.getString(i + 1);
+                        }
+                        out.add(row);
+                    }
+                    return out;
+                } catch (SQLException e) {
+                    // A failed query (a missing table) is no reason to drop the shared connection.
+                    throw new QueryFailed(e);
+                }
+            });
+        } catch (QueryFailed e) {
+            throw e.sqlError;
+        }
+    }
+
+    /** Carries a query's own error past {@link #run}, which reconnects on SQL errors. */
+    private static final class QueryFailed extends RuntimeException {
+        final SQLException sqlError;
+
+        QueryFailed(SQLException cause) {
+            super(cause.getMessage(), cause, false, false);
+            this.sqlError = cause;
+        }
+    }
+
+    @Override
     public synchronized long purgeChunk(Table table, String cutoff) throws SQLException {
         return run(conn -> {
             conn.setAutoCommit(true);

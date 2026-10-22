@@ -233,3 +233,389 @@
 .feature-detail {
   white-space: normal !important;
 }
+
+/* Profiling and Pages tabs. */
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: transform 120ms, background 120ms;
+}
+
+.switch.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.switch.on .switch-knob {
+  background: #fff;
+  transform: translateX(14px);
+}
+
+.switch:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pset-label {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pset-hint {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.pset-choice {
+  display: flex;
+  gap: 14px;
+  font-size: 12.5px;
+}
+
+.pset-choice label,
+.pset-service {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.pset-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+
+.pset-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+  font-size: 12.5px;
+}
+
+.pset-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+}
+
+.pset-state.on {
+  color: var(--good-text);
+}
+
+.pages-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 6px 24px;
+}
+
+.pages-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pages-group .nav-label {
+  padding: 8px 0 4px;
+}
+
+.pages-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-1);
+  font-size: 13px;
+}
+
+.pages-row > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.pages-row.off > svg,
+.pages-row.off .pages-text > div:first-child {
+  color: var(--text-3);
+}
+
+.pages-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pages-text .dim {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pages-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pages-locked {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .pset-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Data tab. */
+
+.data-del {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.data-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.data-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 6px 18px;
+}
+
+.data-kind {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.data-kind input {
+  margin-top: 2px;
+}
+
+.data-kind > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.data-kind-name {
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.data-kind.off {
+  opacity: 0.5;
+}
+
+.data-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.data-range .input {
+  width: auto;
+}
+
+.data-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  cursor: pointer;
+}
+
+/* Browsers give radios a top margin and no bottom one. Without it the circle
+   centres on the label's line box, whose middle sits a pixel below the
+   letters (the box keeps room for descenders), so it is raised to match. */
+.data-radio input,
+.pset-choice input {
+  position: relative;
+  top: -1px;
+  margin: 0;
+}
+
+.data-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+/* Thresholds, retention, status page. */
+
+.thr-input {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.thr-input .input {
+  width: 110px;
+  text-align: right;
+}
+
+.thr-routes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thr-route {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thr-route-path {
+  flex: 1;
+  min-width: 0;
+}
+
+.ret-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 14px 14px;
+}
+
+.ret-group-title {
+  margin: 12px 0 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ret-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px 150px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+}
+
+.ret-row.changed {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.ret-label {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ret-desc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ret-usage {
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.ret-keep {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .ret-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ret-usage,
+  .ret-keep {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+.sp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-title .input {
+  width: 260px;
+}
+
+@media (max-width: 640px) {
+  .thr-route {
+    flex-wrap: wrap;
+  }
+  .sp-title .input {
+    width: 100%;
+  }
+}

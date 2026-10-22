@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 
 namespace Styropyr0.Visionary;
@@ -50,12 +52,49 @@ public static class Visionary
     /// Times an operation the SDK can't see by itself (a cache or queue call, a database without
     /// diagnostics); dispose the span when it ends.
     /// </summary>
-    /// <param name="kind">db, http, cache, queue or custom.</param>
+    /// <param name="kind">db, http, cache, queue, custom, graphql or background.</param>
     /// <param name="name">Short and low-cardinality, used for grouping, e.g. "GET session".</param>
     /// <param name="target">The system called, e.g. "redis/cache-1".</param>
     /// <param name="detail">More detail, e.g. the command; never parameter values or secrets.</param>
     public static VisionarySpan StartSpan(string kind, string name, string? target = null, string? detail = null) =>
         new(kind, name, target, detail);
+
+    /// <summary>
+    /// Starts work the request does not wait for (sending an email after the response, say) on
+    /// the thread pool and records it as one span of kind <c>background</c>, named
+    /// <paramref name="name"/>, failed with the exception's message if the work throws. The work
+    /// keeps the request's tracking, so its calls carry the request's id and offsets even after
+    /// the response was sent, but not the request's cancellation: <c>RequestAborted</c> does not
+    /// stop it. The token passed in is cancelled when the application stops. The returned task
+    /// completes (or faults) with the work. With collection off the work still runs.
+    /// </summary>
+    /// <param name="name">Short and low-cardinality, e.g. "send welcome email".</param>
+    /// <param name="work">The work; observe the token to stop on shutdown.</param>
+    public static Task Background(string name, Func<CancellationToken, Task> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        var token = VisionaryAgent.Current?.Stopping ?? CancellationToken.None;
+        return Task.Run(async () =>
+        {
+            var startedAt = DateTime.UtcNow;
+            var started = Stopwatch.GetTimestamp();
+            string? error = null;
+            try
+            {
+                await work(token).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                error = string.IsNullOrEmpty(e.Message) ? e.GetType().Name : e.Message;
+                throw;
+            }
+            finally
+            {
+                VisionaryAgent.Current?.RecordSpan("background", name, null, null, startedAt,
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds, error, null);
+            }
+        }, CancellationToken.None);
+    }
 }
 
 /// <summary>A custom span in progress; see <see cref="Visionary.StartSpan"/>.</summary>

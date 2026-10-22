@@ -61,9 +61,9 @@ var p50to99 = map[string]float64{"p50": 0.5, "p90": 0.9, "p95": 0.95, "p99": 0.9
 
 // rollupPanels maps each raw panel query to its rollup variant. Panels that
 // need individual rows (distinct users, single requests) have none.
-func rollupPanels(q sqlDialect, apdexMs int) map[string]*rollupPanel {
+func rollupPanels(q sqlDialect, rule apdexRule) map[string]*rollupPanel {
 	ov := overviewPanels(q)
-	pf := performancePanels(q, apdexMs)
+	pf := performancePanels(q, rule)
 	sy := systemPanels(q)
 
 	rate := func(col string) string {

@@ -92,6 +92,14 @@ final class Table {
             .text("created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime")
             .build();
 
+    /** Created by the Visionary server, never by the SDK; written only while profiling. */
+    static final Table PROFILES = builder("profiles", null)
+            .text("created_at", "service", "instance", "version", "sdk")
+            .real("duration_ms")
+            .integer("samples")
+            .text("routes", "folded")
+            .build();
+
     final String name;
     /** Base name of the schema file, {@code schema/<dialect>/<schemaName>.sql}. */
     final String schemaName;

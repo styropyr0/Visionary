@@ -1,6 +1,7 @@
 import { api, rangeQuery, type Result } from "./api";
 import { useApp } from "./state";
 import { useQuery } from "./useQuery";
+import { dateFormat } from "./time";
 
 export type FindingSeverity = "info" | "warning" | "critical";
 
@@ -114,7 +115,7 @@ export function auditLabel(action: string): string {
 
 /** The analyst question for a finding. IPs never go to the model, so it names the finding by id. */
 export function investigateQuestion(f: Finding): string {
-  const when = new Date(f.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const when = dateFormat({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(f.created_at));
   const who = f.host ? `host ${f.host}` : f.ip ? "the IP in that finding" : f.actor ? `${f.actor}` : "it";
   return `Investigate security finding #${f.id} (${kindLabel(f.kind)}, ${f.severity}) first seen around ${when}. Using security_events id ${f.id} and api_logs joined on its ip, what did ${who} do before and after, which routes and statuses, did any request succeed, and is it still going on?`;
 }

@@ -82,13 +82,17 @@ type httpCounters struct {
 // it always did. Mounted outside the recovery it never sees panics, only the
 // 500 they become.
 func (a *Agent) Middleware(next http.Handler) http.Handler {
-	if a == nil || (a.writer == nil && a.system == nil) {
+	if a == nil || (a.writer == nil && a.system == nil && a.profiler == nil) {
 		return next
 	}
 	counters := a.counters()
+	prof := a.profiler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		counters.inFlight.Add(1)
 		defer counters.inFlight.Add(-1)
+		if prof != nil {
+			prof.requestStarted()
+		}
 
 		start := time.Now()
 		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path}
@@ -134,6 +138,16 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 				ann.mu.Lock()
 				ann.route = route // for errors captured by goroutines still running
 				ann.mu.Unlock()
+			}
+			if prof != nil && prof.collecting.Load() {
+				key := route
+				if key == "" {
+					key = a.route(r, ann)
+				}
+				if key == "" {
+					key = r.URL.Path
+				}
+				prof.requestFinished(r.Method+" "+key, time.Since(start))
 			}
 			if logIt {
 				e := &entry{

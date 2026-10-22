@@ -4,6 +4,7 @@ import { Minimize2 } from "lucide-react";
 import { load, save } from "../../lib/state";
 import { dashboardLink, type Dashboard } from "../../lib/team";
 import { Select } from "../Select";
+import { dateFormat } from "../../lib/time";
 
 interface Prefs {
   refresh: number;
@@ -25,7 +26,7 @@ const CYCLE = [
   { value: "300000", label: "Next dashboard every 5m" },
 ];
 
-const clockFmt = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const clockFmt = () => dateFormat({ hour: "2-digit", minute: "2-digit" });
 
 /**
  * Kiosk view for wall screens: full screen, no chrome, refreshes on its own
@@ -109,7 +110,7 @@ export function TvMode({
         <div className="tv-actions">
           <Select label="Refresh" value={String(prefs.refresh)} options={REFRESH} onChange={(v) => update({ refresh: Number(v) })} />
           <Select label="Cycle" value={String(prefs.cycle)} options={CYCLE} onChange={(v) => update({ cycle: Number(v) })} />
-          <span className="tv-clock">{clockFmt.format(now)}</span>
+          <span className="tv-clock">{clockFmt().format(now)}</span>
           <button type="button" className="btn" onClick={onExit} title="Leave TV mode (Esc)">
             <Minimize2 size={14} />
             Exit

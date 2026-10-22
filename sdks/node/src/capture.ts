@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "./agent.js";
-import { RequestState, runInRequest } from "./context.js";
+import { RequestState, requestTally, runInRequest } from "./context.js";
 
 const TRACKED = Symbol.for("visionary.request");
 
@@ -140,6 +140,7 @@ export function observeRequest(
   state.routeOf = routeOf;
   state.userOf = userOf;
   marked[TRACKED] = state;
+  requestTally.started++;
 
   const reqType = header(req.headers["content-type"]);
   const reqBody = new BodyCapture(cfg.captureBodies && capturable(reqType), cfg.maxBodyBytes);
@@ -179,6 +180,10 @@ export function observeRequest(
     const route = state.resolveRoute();
     state.resolveUser();
     state.done = true;
+    if (requestTally.busy) {
+      const key = `${state.method} ${route || state.path}`;
+      requestTally.busy[key] = (requestTally.busy[key] ?? 0) + durationMs;
+    }
     agent.finishRequest(state, {
       requestId,
       startedAt: state.startedAt,

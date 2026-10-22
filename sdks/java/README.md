@@ -8,6 +8,7 @@ servlet (Spring MVC) application:
 - the database statements and outbound HTTP calls of slow or failed requests in `spans`,
 - unhandled and reported exceptions in `errors`, and a deploy marker per release in `releases`,
 - periodic host, process, JVM, connection-pool and throughput samples in `system_metrics`,
+- CPU profiles in `profiles`, when turned on from the dashboard,
 
 written in batches on background threads to Cloudflare D1, PostgreSQL, MySQL/MariaDB
 or SQLite. The Visionary server reads those tables for its dashboards.
@@ -180,7 +181,7 @@ Captured automatically, with no code changes:
   }
   ```
 
-  Kinds are `db`, `http`, `cache`, `queue` and `custom`.
+  Kinds are `db`, `http`, `cache`, `queue`, `background` and `custom`.
 
 Every logged request gets `db_count`, `db_ms`, `http_count` and `http_ms` (all calls,
 also beyond the cap). Span rows are stored for every request, at most `VISIONARY_SPAN_MAX`
@@ -194,13 +195,45 @@ Spans join the request through a thread-local. Work handed to another thread joi
   registers a `VisionaryTaskDecorator` unless the application declares its own
   `TaskDecorator`; then add `Visionary.wrap(...)` to yours, or combine both with Spring's
   `CompositeTaskDecorator`;
-- it is wrapped by hand: `executor.submit(Visionary.wrap(task))`.
+- it is wrapped by hand: `executor.submit(Visionary.wrap(task))`;
+- it is started with `Visionary.background` or `Visionary.wrap(name, task)` (below).
 
 Not propagated: `CompletableFuture.supplyAsync` on the common pool, raw `new Thread`,
 `parallelStream`, and reactor operators that move work to other schedulers (a `WebClient`
 call joins the request only when it is subscribed on the request thread, as with
-`block()`). Calls made there count as background spans. Spans that end after their
-request has finished are stored on their own if they reach the threshold.
+`block()`). Calls made there are spans outside any request.
+
+### Background work
+
+Work a handler starts and does not wait for stays linked to its request:
+
+```java
+@PostMapping("/signup")
+User signup(@RequestBody SignupForm form) {
+    User user = users.create(form);
+    Visionary.background("send welcome email", () -> mailer.sendWelcome(user));
+    return user;
+}
+```
+
+`Visionary.background(name, runnable)` runs the task on a Visionary daemon thread (a pool
+that grows as needed and drops threads idle for a minute, so tasks never wait for each
+other) and returns a `CompletableFuture<Void>`. For your own executor, wrap the task:
+`executor.submit(Visionary.wrap("rebuild index", () -> index.rebuild(id)))`; a `Callable`
+works too. Daemon threads do not hold up shutdown, so work that must not be lost belongs
+in a job queue.
+
+Each call is recorded as one span of kind `background` with the name you gave, from when
+the task started to when it finished, with status `error` and the message if it threw (the
+exception is rethrown, or fails the future). The calls made inside it are spans of their
+own with the request's `request_id` and their `offset_ms` from the request's start, even
+after the response was sent; `offset_ms + duration_ms` past the request's `duration_ms`
+shows they ran after it. Spans that end after the request was logged are not counted in
+its `db_*`/`http_*` totals, and `background` spans never are. They are stored whatever
+their duration, up to `VISIONARY_SPAN_MAX` per request (on top of the spans stored with
+the request); further ones only when they take at least `VISIONARY_SPAN_THRESHOLD_MS`.
+Outside a request the helpers still record the span, with no `request_id`, stored when it
+reaches the threshold.
 
 The wrapped DataSource keeps every interface of the original and answers
 `unwrap`/`isWrapperFor` with it, so Boot's Hikari metrics and pool code still find the pool.
@@ -227,6 +260,49 @@ newlines. Frames in `java.*`, `javax.*`, `jakarta.*`, `sun.*`, `jdk.*`,
 left, the top five frames of any kind are used, and only an exception without any stack
 frames is hashed by its class name and message (digit runs replaced by `0`). At most 20
 rows per fingerprint per minute are written by each instance.
+
+## CPU profiles
+
+Off until you turn it on in the dashboard (**Settings → Profiling**); turning it off there
+stops it again. No redeploy either way: the starter reads the `profile.*` rows of
+`visionary_settings` at start and every 30 seconds on its own thread. The Visionary server
+creates that table and `profiles`; until it has, profiling stays off and nothing is written.
+
+While it is on for this service (`VISIONARY_SERVICE` in the dashboard's service list, or the
+list is empty), the starter samples the CPU for the configured duration (default 10 s) every
+interval (default 5 minutes), skipping a turn when no request arrived since the last one.
+**Profile now** in the dashboard takes one profile at once, even while scheduled profiling is
+off. Set `VISIONARY_PROFILE=false` in a service that must never be sampled: it then ignores the
+dashboard and does not even read the settings.
+
+Sampling uses JDK Flight Recorder in-process (`jdk.ExecutionSample` every 10 ms). JFR records
+only threads that are running Java code, so idle, sleeping, blocked and I/O-waiting threads are
+left out; the starter's own threads are skipped too. It costs a few percent of one CPU while a
+profile runs and nothing in between, and it is not biased towards safepoints. The first profile
+raises JFR's stack depth to 256 frames when JFR has not been started yet (deeper stacks begin
+with a `(truncated)` frame). On a runtime without the `jdk.jfr` module (some `jlink` images) it
+falls back to `ThreadMXBean`: every 10 ms, the stacks of RUNNABLE threads whose CPU time advanced.
+That fallback is costlier per sample and safepoint-biased (a hot loop is credited to its nearest
+safepoint), but still records the same rows. Native frames are not recorded in either mode.
+
+Each profile is one row: when it started, service, instance, release, `sdk` = `java`, the measured
+duration, the sample count, `routes` (JSON: `"METHOD /route/{id}"` to the milliseconds the
+requests that finished during the profile took; the path when no route matched) and `folded`:
+one `frame;frame;... count` line per distinct stack, outermost caller first, heaviest first up to
+90 000 bytes with the rest summed into one `(other) n` line. A profile during which no request
+finished, or with fewer than 20 samples, is dropped. Frames read `pkg.Class.method file:line`,
+where the file says whose code it is:
+
+- the JDK (`java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`): `std:java/util/HashMap.java`;
+- the application (the packages of its `@SpringBootApplication`, or any class loaded from a
+  directory or a Boot jar's `BOOT-INF/classes`): `com/example/orders/OrderService.java:42`;
+- everything else, this starter included: `lib:` and the jar's name without its version,
+  `lib:spring-webmvc/DispatcherServlet.java:1089` (the top two package segments when the jar is
+  unknown).
+
+JFR does not record source file names, so the file is the outer class's name plus `.java`
+(a Kotlin class shows as `Foo.java`). Profiles follow Settings → Retention, and
+`VISIONARY_LOG_RETENTION_DAYS` when it is set.
 
 ## What is captured
 
@@ -308,20 +384,25 @@ Everything is read from the environment variables in SPEC.md, through Spring's
 | `VISIONARY_LOG_PATH_PREFIX` | empty (log everything) |
 | `VISIONARY_LOG_BODIES` | `true` |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` (0 keeps rows forever) |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off; above 0 the starter also deletes older `api_logs`, `spans`, `errors` and `profiles` rows) |
 | `VISIONARY_LOG_REDACT_HEADERS`, `VISIONARY_LOG_REDACT_FIELDS`, `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | empty (comma lists, added to the defaults) |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `VISIONARY_LOG_ERROR_KEY_FIELD` | `error.code`, `error.key` |
 | `VISIONARY_SYSTEM_METRICS` | `true` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` (plain number = seconds; also `500ms`, `1m`) |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off; above 0 the starter also deletes older `system_metrics` rows) |
 | `VISIONARY_SERVICE` | empty (NULL) |
 | `VISIONARY_RELEASE` | the platform's commit variable, else empty (NULL) |
 | `VISIONARY_SPANS` | `true` (`false` also removes the DataSource wrapper and leaves the totals NULL) |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` |
 | `VISIONARY_SPAN_MAX` | `100` |
 | `VISIONARY_ERRORS` | `true` |
+| `VISIONARY_PROFILE` | `true` (follow the dashboard; `false` never profiles, whatever it says) |
 
 Booleans accept `true/false/1/0/yes/no`.
+
+The Visionary server applies Settings → Retention to every table; the two
+`*_RETENTION_DAYS` variables only matter when the service writes to a database no
+Visionary server reads.
 
 ## Behaviour notes
 
@@ -331,8 +412,9 @@ Booleans accept `true/false/1/0/yes/no`.
   50 entries or 3 seconds, retrying a failed batch twice (after 1 s and 2 s).
 - System samples are written 4 at a time. While the database is unreachable, up to
   an hour of samples is kept and written once it is back.
-- Retention runs a minute after start and then daily, deleting in chunks of 5000.
-  `spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS`; `releases` are kept.
+- Old rows are deleted by the Visionary server (Settings → Retention). With a retention
+  variable above 0 the starter also purges, a minute after start and then daily, in chunks of 5000.
+  `spans`, `errors` and `profiles` follow `VISIONARY_LOG_RETENTION_DAYS`; `releases` are kept.
 - On shutdown, after the web server has stopped accepting requests, queued requests
   and buffered samples are flushed (at most 10 seconds each).
 - The schemas shipped in the jar are copies of `sdks/go/schema/<dialect>/`.

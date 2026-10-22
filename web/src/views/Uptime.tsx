@@ -12,6 +12,7 @@ import { UptimeDetail } from "./Uptime.detail";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
 
 /** The selected check lives in the hash (#/uptime?check=3) so detail views can be linked. */
@@ -76,7 +77,7 @@ function UptimeList() {
         section="Monitor"
         actions={
           <>
-            <a className="btn ghost" href="/status" target="_blank" rel="noreferrer" title="Public status page (needs VISIONARY_STATUS_PAGE=true)">
+            <a className="btn ghost" href="/status" target="_blank" rel="noreferrer" title="Public status page (turned on in Settings → Status page)">
               <ExternalLink size={14} />
               Status page
             </a>
@@ -93,24 +94,28 @@ function UptimeList() {
       <div className="content">
         {list.error && !data && <ErrorNotice title="Could not load checks" error={list.error} />}
         {data && data.checks.length === 0 && (
-          <section className="panel">
-            <div className="empty">
-              <div className="empty-icon">
-                <Activity size={20} />
-              </div>
-              <h3>No uptime checks yet</h3>
-              <p>
-                A check requests a URL on a schedule from this server and records whether it answered as expected, and how fast. Results feed this
-                view, alerts, the analyst and the public status page.
-              </p>
-              {canEdit && (
-                <button type="button" className="btn primary" onClick={() => setEditing("new")}>
+          <SetupCard
+            icon={<Activity size={20} />}
+            title="No uptime checks yet"
+            text="This server calls your URLs on a schedule and records whether they answered as expected, and how fast."
+            topic="checks"
+          >
+            <SetupOption title="Watch an endpoint" text="A health route, your home page, or a third-party API you rely on. Failures open incidents and can alert.">
+              {canEdit ? (
+                <button type="button" className="btn primary sm" onClick={() => setEditing("new")}>
                   <Plus size={14} />
                   Add a check
                 </button>
+              ) : (
+                <span className="dim">Ask an editor or admin to add one.</span>
               )}
-            </div>
-          </section>
+            </SetupOption>
+            <SetupOption title="Share a status page" text="A public page with the checks you choose, their uptime and incidents. Off until an admin turns it on.">
+              <a className="btn sm" href="#/settings?tab=status">
+                Status page settings
+              </a>
+            </SetupOption>
+          </SetupCard>
         )}
         {data && data.checks.length > 0 && (
           <div className="grid">

@@ -28,6 +28,8 @@ type store interface {
 	execChanges(ctx context.Context, query string, args ...any) (int64, error)
 	// columns runs a query returning one name per row.
 	columns(ctx context.Context, query string) ([]string, error)
+	// rows runs a query and returns every value as text ("" for NULL).
+	rows(ctx context.Context, query string, args ...any) ([][]string, error)
 	// close releases a connection the SDK opened itself.
 	close() error
 }
@@ -64,6 +66,24 @@ func (s d1Store) columns(ctx context.Context, query string) ([]string, error) {
 		if len(row) > 0 {
 			out = append(out, fmt.Sprint(row[0]))
 		}
+	}
+	return out, nil
+}
+
+func (s d1Store) rows(ctx context.Context, query string, args ...any) ([][]string, error) {
+	r, err := s.c.Query(ctx, query, stringArgs(args)...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]string, 0, len(r.Rows))
+	for _, row := range r.Rows {
+		vals := make([]string, len(row))
+		for i, v := range row {
+			if v != nil {
+				vals[i] = fmt.Sprint(v)
+			}
+		}
+		out = append(out, vals)
 	}
 	return out, nil
 }
@@ -166,6 +186,35 @@ func (s sqlStore) columns(ctx context.Context, query string) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+func (s sqlStore) rows(ctx context.Context, query string, args ...any) ([][]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	var out [][]string
+	for rows.Next() {
+		vals := make([]sql.NullString, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		row := make([]string, len(cols))
+		for i, v := range vals {
+			row[i] = v.String
+		}
+		out = append(out, row)
 	}
 	return out, rows.Err()
 }

@@ -141,8 +141,11 @@ A single background worker (thread/goroutine):
 - On failure retry the batch up to 3 attempts total, sleeping 1 s then 2 s;
   then log an error and drop the batch.
 - `close()`/shutdown drains the queue and flushes, bounded by a timeout.
-- Retention: 60 s after start and then every 24 h, delete rows older than
-  `VISIONARY_LOG_RETENTION_DAYS` (0 disables) in chunks:
+- Retention is the Visionary server's job: it deletes old rows of every
+  table by Settings → Retention. An SDK deletes rows itself only when
+  `VISIONARY_LOG_RETENTION_DAYS` is set above 0 (default 0, off), for a
+  service writing to a database no Visionary server reads. Then, 60 s after
+  start and every 24 h, it deletes rows older than that in chunks:
   `DELETE FROM api_logs WHERE id IN (SELECT id FROM api_logs WHERE created_at < ? LIMIT 5000)`,
   repeating while 5000 rows were deleted (at most 200 rounds). MySQL rejects
   `LIMIT` inside `IN (subquery)`, so there use
@@ -282,7 +285,9 @@ Partition rule: skip disk devices matching
 `^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,
 so a partition's I/O is not counted again on top of its disk.
 
-Retention: same schedule as requests, `VISIONARY_SYSTEM_RETENTION_DAYS`,
+Retention: the server's (Settings → Retention); with
+`VISIONARY_SYSTEM_RETENTION_DAYS` above 0 (default 0, off) the SDK also
+deletes on the same schedule as requests,
 `DELETE FROM system_metrics WHERE id IN (SELECT id FROM system_metrics WHERE created_at < ? LIMIT 5000)`.
 
 ## Telemetry (`spans`, `errors`, `releases`)
@@ -290,8 +295,9 @@ Retention: same schedule as requests, `VISIONARY_SYSTEM_RETENTION_DAYS`,
 Created at startup from `sdks/go/schema/<dialect>/telemetry.sql` (copy it like
 the other schemas). Written through the same writer as requests: batched, never
 blocking a request, dropped (and counted) when the queue is full. Retention:
-`spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS` with the same chunked
-delete; `releases` are kept.
+the server's (Settings → Retention); with `VISIONARY_LOG_RETENTION_DAYS` set,
+`spans` and `errors` follow it with the same chunked delete; `releases` are
+kept.
 
 ### Service and version
 
@@ -334,10 +340,10 @@ Columns:
 | `created_at` | span start, same format as everywhere |
 | `request_id` | the parent request's `request_id`, NULL outside a request |
 | `service`, `instance` | as above |
-| `kind` | `db`, `http`, `cache`, `queue` or `custom` |
-| `name` | short and low-cardinality, used for grouping: `db`: first keyword + main table, e.g. `SELECT users`, `INSERT bookings`, `UPDATE trips`, `BEGIN`; `http`: `METHOD host`, e.g. `POST api.stripe.com`; others: the operation |
+| `kind` | `db`, `http`, `cache`, `queue`, `custom`, `graphql` or `background` |
+| `name` | short and low-cardinality, used for grouping: `db`: first keyword + main table, e.g. `SELECT users`, `INSERT bookings`, `UPDATE trips`, `BEGIN`; `http`: `METHOD host`, e.g. `POST api.stripe.com`; `graphql`: operation type and name, e.g. `query GetUser`; others: the operation |
 | `target` | `db`: system and database, e.g. `postgresql/voygram`; `http`: host |
-| `detail` | `db`: the statement, sanitized (below); `http`: method and URL without query string; at most 2000 characters |
+| `detail` | `db`: the statement, sanitized (below); `http`: method and URL without query string; `graphql`: the operation document with literal values removed; at most 8000 characters, so a statement can still be planned with EXPLAIN |
 | `offset_ms` | start relative to the request start (NULL outside a request) |
 | `duration_ms` | 3 decimals |
 | `status` | `ok` or `error` (`http`: `error` on a transport error or a 5xx response) |
@@ -357,6 +363,151 @@ Ruby: `ActiveSupport::Notifications` (`sql.active_record`), `Net::HTTP`;
 
 The dashboards flag N+1 patterns (one `name` repeated 10 or more times in a
 request) from these rows; SDKs do not need to detect them.
+
+#### Work a request starts in the background
+
+Work a handler starts and does not wait for (a goroutine, a thread, a task,
+a job queued in-process) keeps belonging to its request:
+
+- Calls made in it carry the request's `request_id` and `offset_ms`, from the
+  request's start, even when they start or end after the response. Those that
+  end after the request was logged are not counted in its totals, and are
+  stored whatever their duration, up to `VISIONARY_SPAN_MAX` of them per
+  request (in addition to the spans stored with the request); further ones are
+  stored only when they take at least `VISIONARY_SPAN_THRESHOLD_MS`. An
+  `offset_ms + duration_ms` past the request's `duration_ms` is how the
+  dashboard tells they ran after the response.
+- Each SDK offers a helper that starts the work and records it as one span of
+  kind `background`, named by the caller ("send welcome email"), from when
+  the work started to when it finished, failed with its error. The calls made
+  inside it are its own spans as usual. The helper passes the request's
+  context on but not its cancellation, so the work is not cut short when the
+  response is sent:
+  - Go: `visionary.Go(ctx, name, func(ctx context.Context) error)`
+  - Node: `visionary.background(name, async () => ...)` (returns the promise)
+  - Python: `visionary.background(name, fn, *args)` (starts a thread) and
+    `with visionary.background_span(name):` for executors, Celery eager tasks
+  - Ruby: `Visionary.background(name) { ... }` (starts a thread)
+  - Java: `Visionary.background(name, runnable)` and
+    `Visionary.wrap(name, runnable)` for an executor
+  - .NET: `Visionary.Background(name, async ct => ...)` (a task)
+
+`background` spans are not counted in `db_*`/`http_*` totals, and the
+dashboard leaves them out of a request's untracked time, since the request
+does not wait for them.
+
+GraphQL operations are spans of kind `graphql`, recorded around execution:
+`detail` is the document with string and number literals replaced by `?`.
+The dashboard measures depth and field count from it, so SDKs need no GraphQL
+library.
+
+### Query plans (`explain_requests`, optional)
+
+The Visionary server creates `explain_requests (id, created_at, target,
+statement, status, claimed_by, plan, error, finished_at)` and inserts a row
+with `status = 'pending'` when someone asks for a statement's plan. An SDK
+given an explainer for a database (matched by `target`, e.g.
+`postgresql/shop`) polls about every 10 seconds:
+
+1. `SELECT id, target, statement FROM explain_requests WHERE status = 'pending' ORDER BY id LIMIT 5`
+   (a missing table means the server has not started yet: skip quietly).
+2. Claim one: `UPDATE ... SET status = 'running', claimed_by = <instance> WHERE id = ? AND status = 'pending'`;
+   go on only when exactly one row changed.
+3. Run `EXPLAIN` on the application's database (never `EXPLAIN ANALYZE`), off
+   the request path and unrecorded as a span. Accept only one statement
+   starting with `SELECT`, `WITH`, `INSERT`, `UPDATE`, `DELETE`, `VALUES` or
+   `TABLE`. PostgreSQL: `EXPLAIN (GENERIC_PLAN)` with each `?` numbered after
+   the highest `$n`; then with the removed values as `NULL`; then plain
+   `EXPLAIN` with every value `NULL`. MySQL: `EXPLAIN` with `NULL`s. SQLite:
+   `EXPLAIN QUERY PLAN`. Typed literals stored as `INTERVAL ?`, `DATE ?`, ...
+   get a constant of their type. A plan made with `NULL`s starts with a `--`
+   note saying so.
+4. Write back `status = 'done'` with `plan` (text, one line per plan line), or
+   `'failed'` with `error` (500 characters), and `finished_at`.
+
+`VISIONARY_EXPLAIN=false` turns it off.
+
+### CPU profiles (`profiles`, every server SDK)
+
+Profiling is **off until someone turns it on in the dashboard** (Settings →
+Profiling), and can be turned off there again at any time; no redeploy is
+needed either way. The Visionary server keeps the switch in
+`visionary_settings (name, value, updated_at)` (it creates the table; values
+are text):
+
+| `name` | `value` | Missing means |
+|---|---|---|
+| `profile.enabled` | `true` or `false` | `false` |
+| `profile.services` | JSON array of service names | every service |
+| `profile.interval_s` | seconds between profiles | `300` |
+| `profile.duration_ms` | how long each profile samples | `10000` |
+| `profile.now` | a timestamp (`created_at` format), set by "Profile now" | no request |
+
+The SDK reads `SELECT name, value FROM visionary_settings WHERE name LIKE
+'profile.%'` at start and then every 30 seconds, off the request path (a
+missing table or a failed read means "off", logged once at most). It takes
+part when its `VISIONARY_SERVICE` is in `profile.services` (or the list is
+empty or missing; a service with no name matches only an empty list).
+`VISIONARY_PROFILE=false` in a service makes it ignore the dashboard and
+never profile: the switch for code that must never be sampled.
+
+When enabled it samples the CPU for `duration_ms` every `interval_s`,
+skipping a turn when no request arrived since the last one, and dropping a
+profile during which no request finished or that has fewer than 20 samples.
+When `profile.now` changes to a value newer than the SDK's start and less
+than 5 minutes old, the SDK takes one profile at once, whether or not
+profiling is enabled (still honouring `profile.services` and
+`VISIONARY_PROFILE=false`), and then goes back to the schedule. Only one
+profile runs at a time per process; if the runtime's profiler is already in
+use (Go's `pprof`), skip the turn quietly.
+
+Sample about every 10 ms (Node: 1 ms) and count only threads that are using
+the CPU: idle, sleeping and blocked threads are left out, and so are the
+SDK's own threads. Sampling must cost little (a few percent of one CPU while
+it runs, nothing in between) and must never fail a request.
+
+One row per profile. Columns: `created_at` (when sampling started),
+`service`, `instance`, `version`, `sdk` (`go`, `node`, `python`, `ruby`,
+`java`, `dotnet`), `duration_ms` (measured), `samples` (counted samples),
+`routes` (JSON: `"METHOD route"` to the milliseconds its requests that
+finished during the profile took, each at least 1) and `folded`:
+
+- one `frame;frame;frame count` line per distinct stack, outermost caller
+  first, the sampled function last, heaviest lines first (ties in text
+  order), at most 90 000 bytes (UTF-8) in all. When they do not fit, keep
+  the time where it was spent rather than lose it:
+  1. keep whole lines, heaviest first, while the text stays within 72 000
+     bytes;
+  2. cut each remaining stack after the deepest frame at which some kept
+     stack has the same frames so far (same first frame, same second, ...),
+     and end it with an `(other)` frame: `a;b;c;d;e 3` becomes `a;b;(other) 3`
+     when a kept line starts `a;b;`; sum the counts of stacks cut the same way;
+  3. add those lines, heaviest first, while the text stays within 90 000
+     bytes;
+  4. sum everything left, and stacks that share no first frame with a kept
+     one, into a last `(other) n` line;
+- each frame reads `function file`, and the last (sampled) frame
+  `function file:line` (`function` alone when there is no source location),
+  with `;` in names replaced by `,`. Callers carry no line: the same function
+  called from two lines is one frame, which keeps stacks few and the flame
+  graph readable. (Node writes the line where each function starts on every
+  frame, which is the same thing.);
+- `file` says whose code it is, which the flame graph colours by:
+  - the application's own code: the path relative to the working directory
+    (or the project root);
+  - third-party code: `lib:<package>/<file>`, e.g.
+    `lib:github.com/jackc/pgx/v5/conn.go`, `lib:django/db/models/query.py`,
+    `lib:rails/actionpack/metal.rb`, `lib:spring-webmvc/DispatcherServlet.java`,
+    `lib:Npgsql/NpgsqlCommand.cs` (Node writes `npm:<package>/<file>`);
+  - the language's standard library and runtime: `std:<path>`, e.g.
+    `std:net/http/server.go`, `std:json/decoder.py`, `std:java/util/HashMap.java`
+    (Node writes `node:...`);
+  - native code, garbage collection and frames without a file: no file.
+
+The SDK creates no table: the server creates `profiles` and
+`visionary_settings`. Before the server has started, reads fail (profiling
+stays off) and nothing is written. Profiles follow Settings → Retention, and
+`VISIONARY_LOG_RETENTION_DAYS` when it is set.
 
 ### Errors
 
@@ -457,18 +608,20 @@ for errors.
 | `VISIONARY_LOG_PATH_PREFIX` | empty (log everything) |
 | `VISIONARY_LOG_BODIES` | `true` |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off: the server applies Settings → Retention) |
 | `VISIONARY_LOG_REDACT_HEADERS`, `_REDACT_FIELDS`, `_REDACT_REQUEST_FIELDS` | empty (comma lists) |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `_ERROR_KEY_FIELD` | `error.code`, `error.key` |
 | `VISIONARY_SYSTEM_METRICS` | `true` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` (plain number = seconds; also `500ms`, `1m`) |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off: the server applies Settings → Retention) |
 | `VISIONARY_SERVICE` | empty (NULL) |
 | `VISIONARY_RELEASE` | from the platform's commit variable (see Telemetry), else NULL |
 | `VISIONARY_SPANS` | `true` |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` |
 | `VISIONARY_SPAN_MAX` | `100` |
 | `VISIONARY_ERRORS` | `true` |
+| `VISIONARY_EXPLAIN` | `true` (only with an explainer given in code) |
+| `VISIONARY_PROFILE` | follow the dashboard; `false` never profiles |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the

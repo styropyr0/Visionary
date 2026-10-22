@@ -58,7 +58,7 @@ function wrapMethod(obj: any, method: string, wrapper: (orig: Function) => Funct
 
 // ---------------------------------------------------------------- pg
 
-function pgTarget(self: any): string {
+export function pgTarget(self: any): string {
   const database =
     self?.database ??
     self?.connectionParameters?.database ??

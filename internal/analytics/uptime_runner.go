@@ -89,17 +89,12 @@ func (u *uptimeRunner) run(ctx context.Context) {
 	schedule := map[int64]*scheduled{}
 	tick := time.NewTicker(uptimeTick)
 	defer tick.Stop()
-	var lastReload, lastPrune time.Time
-	lastPrune = time.Now().Add(-time.Hour + time.Minute) // first prune a minute after start
+	var lastReload time.Time
 	for {
 		now := time.Now()
 		if now.Sub(lastReload) >= uptimeReload {
 			u.reload(ctx, schedule)
 			lastReload = now
-		}
-		if now.Sub(lastPrune) >= time.Hour {
-			u.prune(ctx)
-			lastPrune = now
 		}
 		for _, e := range schedule {
 			if now.Before(e.next) || u.isRunning(e.check.ID) {
@@ -193,16 +188,6 @@ func (u *uptimeRunner) execute(ctx context.Context, c UptimeCheck) {
 	}
 	if err := u.record(ctx, c, res); err != nil && ctx.Err() == nil {
 		u.s.logger.Warn("uptime result not saved", "check_id", c.ID, "err", err)
-	}
-}
-
-func (u *uptimeRunner) prune(ctx context.Context) {
-	if u.set.retentionDays <= 0 {
-		return
-	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -u.set.retentionDays).Format(tsLayout)
-	if err := u.s.db.Exec(ctx, `DELETE FROM uptime_results WHERE created_at < ?`, cutoff); err != nil && ctx.Err() == nil {
-		u.s.logger.Warn("uptime retention failed", "err", err)
 	}
 }
 

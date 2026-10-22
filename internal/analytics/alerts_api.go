@@ -55,8 +55,8 @@ func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
 	tz := digestTZ()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"metrics":         s.allMetrics(),
-		"apdex_ms":        s.cfg.ApdexMs,
-		"slo_target":      s.cfg.SLOTarget,
+		"apdex_ms":        s.apdex().DefaultMs,
+		"slo_target":      s.sloTarget(),
 		"llm":             s.llm != nil,
 		"smtp_configured": ok,
 		"smtp_from":       map[bool]string{true: smtp.From}[ok],
@@ -247,7 +247,7 @@ func (s *Server) checkRule(ctx context.Context, in ruleInput) (alertRule, error)
 		sp.SQL, sp.Op, sp.Threshold, sp.Target = "", "", 0, 0
 	case "slo":
 		if sp.Target == 0 {
-			sp.Target = s.cfg.SLOTarget
+			sp.Target = s.sloTarget()
 		}
 		if sp.Target < 50 || sp.Target >= 100 {
 			return rule, badInput("SLO target must be at least 50% and below 100%")
@@ -524,5 +524,5 @@ func (s *Server) handleListSLOs(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, it)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"slos": out, "apdex_ms": s.cfg.ApdexMs})
+	writeJSON(w, http.StatusOK, map[string]any{"slos": out, "apdex_ms": s.apdex().DefaultMs})
 }

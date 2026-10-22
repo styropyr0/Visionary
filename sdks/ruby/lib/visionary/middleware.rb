@@ -71,6 +71,8 @@ module Visionary
     # Not logged: count it, and still record what escapes.
     def passthrough(agent, env)
       agent.http.started
+      Profiler::Tally.started!
+      t0 = Telemetry.now_ms
       status = 500
       begin
         res = @app.call(env)
@@ -81,6 +83,11 @@ module Visionary
         raise
       ensure
         agent.http.finished(status)
+        if Profiler::Tally.busy?
+          route = agent.route_for(env)
+          route = "#{env['SCRIPT_NAME']}#{env['PATH_INFO']}" if route.empty?
+          Profiler::Tally.finished(env["REQUEST_METHOD"], route, Telemetry.now_ms - t0)
+        end
       end
     end
 
@@ -102,6 +109,7 @@ module Visionary
         started_mono: t0, span_max: cfg.span_max.to_i, db_visible: Telemetry::ActiveRecordHook.installed?
       )
       agent.http.started
+      Profiler::Tally.started!
       outer = RequestContext.current
       RequestContext.current = ctx
       begin
@@ -133,9 +141,11 @@ module Visionary
 
     def finish(agent, env, ctx, headers, req_capture, status, res_headers, resp_capture, t0)
       agent.http.finished(status)
+      ctx.logged!
       duration = (Telemetry.now_ms - t0).round(3)
       route = ctx.route
       route = agent.route_for(env) if route.empty?
+      Profiler::Tally.finished(ctx.method, route.empty? ? ctx.path : route, duration)
       user_id, handle, role = ctx.user
       tel = agent.telemetry
       entry = Entry.new(

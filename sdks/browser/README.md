@@ -48,7 +48,7 @@ On the Visionary server:
   Settings). Client keys can only write events; they are safe to ship in a page.
 - `VISIONARY_CLIENT_ORIGINS`: the origins allowed to send, e.g.
   `https://app.example.com,https://*.example.com`. Empty allows any origin.
-- `VISIONARY_CLIENT_RETENTION_DAYS`: how long events are kept (default 30).
+- How long events are kept: Settings → Data → Retention, Frontend events (default 30 days).
 - `VISIONARY_CLIENT_RATE_PER_IP`, `VISIONARY_CLIENT_RATE_PER_KEY`: requests per
   minute (defaults 120 and 6000; 0 turns a limit off).
 

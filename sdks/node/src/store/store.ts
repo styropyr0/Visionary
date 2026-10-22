@@ -34,6 +34,8 @@ export interface Store {
   execChanges(sql: string, args: Stmt["args"]): Promise<number>;
   /** Runs a query that returns one name per row. */
   columns(sql: string): Promise<string[]>;
+  /** Runs a query; every value comes back as text ("" for NULL). */
+  rows(sql: string, args: Stmt["args"]): Promise<string[][]>;
   close(): Promise<void>;
 }
 

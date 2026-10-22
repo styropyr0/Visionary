@@ -30,8 +30,21 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **API overview and Performance:** traffic, errors and latency per route;
   Apdex and SLOs with error budgets; a latency heatmap; each route's share of
   server time; regressions against the previous period; database and outbound
-  time per request; slowest queries; N+1 detection; deploy markers on every
-  chart and a side-by-side comparison of two versions.
+  time per request; where each route's time goes (database, outbound, its own
+  code); N+1 detection; deploy markers on every chart and a side-by-side
+  comparison of two versions.
+- **Queries:** every statement with its rate, latency spread, total time and
+  the routes that run it; queries and nesting depth per route; what a deploy
+  changed, statement by statement; GraphQL operations with their depth, field
+  count and the queries their resolvers ran; and query plans on demand
+  (EXPLAIN, run by your SDK, with full scans and missing indexes pointed out
+  and an explanation in plain words).
+- **Dependencies:** every third-party API you call (Stripe, S3, OpenAI...)
+  treated like a route of your own: rate, failures, latency and their change.
+- **CPU profiles** (every server SDK): flame graphs sampled while requests
+  are served, filtered to a service or to the routes that were busy. Off until
+  turned on in Settings → Profiling, for all services or chosen ones, and off
+  again without a redeploy; **Profile now** takes one on demand.
 - **System**, at the depth of a node-exporter dashboard: CPU by mode, load per
   core, memory, swap, disk space and I/O (throughput, IOPS, busy, latency),
   network (bytes, packets, errors, TCP), processes, the process itself
@@ -60,7 +73,10 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **Explore:** ask a question, get an answer with charts. **Dashboards**
   arrange any panel on a grid, with variables, share links and a TV mode.
 - **Team:** viewer, editor and admin roles from your own auth, API keys, and an
-  audit log.
+  audit log. Admins choose which pages the sidebar shows (Settings → Pages)
+  and whether services take CPU profiles (Settings → Profiling).
+- **Help on every page:** the Help button explains what the page shows, how
+  to read it and the code or settings that fill it, per language.
 
 ## Integrate in three steps
 
@@ -121,8 +137,11 @@ request:
 - **`.env` comments.** Lines must start with `#`. A line starting with `;`
   makes the whole file unreadable, and the server starts as if no settings
   were given ("choose a sign-in mode").
-- **Calls in goroutines or background jobs** after the response is written
-  are stored on their own, not in the request.
+- **Work a request leaves running** (a goroutine, thread or task that sends
+  an email after the response) stays linked to the request as long as it
+  carries the request's context. Start it with the SDK's background helper
+  (`visionary.Go`, `visionary.background`, ...) and the request's breakdown
+  shows it by name, with its calls and when it finished after the response.
 
 ## Collect
 
@@ -193,7 +212,8 @@ makes is recorded only when the client making it is hooked:
 Two more rules: a call joins its request only when it carries the request's
 context (Go: pass `r.Context()` down, use `http.NewRequestWithContext`; a bare
 `http.Post` has none), and work started in a goroutine or thread that outlives
-the response is stored on its own, not in the request.
+the response is shown under "Left running after the response", named when it
+was started with the SDK's background helper.
 
 **Untracked time.** A request's breakdown lays its calls on a timeline. Any
 stretch that no recorded call covers is shown as *Untracked*: the request was
@@ -202,6 +222,30 @@ untracked = duration − the time covered by at least one call. A large untracke
 share means one of the rows above is missing, and the hatched row's position
 says where: "1.2 s after `SELECT attributed`" points at the code that runs next.
 Hook that client or wrap that code, and the row gets a name.
+
+### Query plans
+
+On the Queries page, open a statement and ask for its plan. Visionary never
+connects to your database: it queues the request, and an SDK that was given an
+explainer for that database runs `EXPLAIN` (never `EXPLAIN ANALYZE`, so the
+statement is planned, not run) and sends the plan back. The dashboard points
+out full scans of large tables and sorts that an index would avoid, and the
+analyst can explain the plan in plain words.
+
+```go
+cfg.Explain = []*visionary.Explainer{visionary.PgxExplainer(pool)}                              // Go, pgx
+cfg.Explain = []*visionary.Explainer{visionary.SQLExplainer(db, visionary.MySQL, "mysql/shop")} // database/sql
+```
+
+```js
+visionary.init({ explain: [visionary.explainWith(pool)] }); // Node, pg or mysql2
+```
+
+Statements are stored with their values replaced by `?`. PostgreSQL 16 and
+later plan them as they are (`GENERIC_PLAN`); MySQL and older PostgreSQL plan
+them with NULLs, and the plan says so. A statement whose values the database
+cannot guess the types of (`GREATEST(?, 0.5)`) cannot be planned, and the
+dashboard says why.
 
 ### SDK settings
 
@@ -218,7 +262,7 @@ Every server SDK reads the same variables.
 | `VISIONARY_LOG_PATH_PREFIX` | all paths | e.g. `/api` |
 | `VISIONARY_LOG_BODIES` | `true` | Store request/response bodies (redacted, capped). |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` | |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` | Requests, spans and errors. `0` keeps them forever. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off) | The server applies Settings → Data. Set it only when no Visionary server reads this database: the SDK then deletes its own requests, spans, errors and profiles older than this. |
 | `VISIONARY_LOG_REDACT_HEADERS` | | Added to Authorization, Cookie, Set-Cookie, X-Api-Key… |
 | `VISIONARY_LOG_REDACT_FIELDS` | | JSON/form keys added to password, token, secret, otp, api_key… |
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | | Keys redacted in requests only. |
@@ -227,9 +271,11 @@ Every server SDK reads the same variables.
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` | Keep calls made outside any request (jobs, startup) at least this slow; every request keeps its calls. |
 | `VISIONARY_SPAN_MAX` | `100` | Calls kept per request. |
 | `VISIONARY_ERRORS` | `true` | Exception and panic capture. |
+| `VISIONARY_EXPLAIN` | `true` | Answer query plan requests; needs an explainer in code (Go, Node), see [Query plans](#query-plans). |
+| `VISIONARY_PROFILE` | follow the dashboard | CPU profiles are turned on and off in Settings → Profiling; `false` makes a service never profile. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | The same, for system metrics. |
 
 ## Database
 
@@ -330,11 +376,8 @@ passed to it (any variable below) go into the env file;
 | `VISIONARY_AGENT_DOCKER` (`-docker`) | auto | The Docker or Podman socket, or `off`. |
 | `VISIONARY_DISK_PATHS` (`-disk-paths`) | all mounts | Mount points to report; the first fills the disk columns. |
 
-On the server, `VISIONARY_HOST_RETENTION_DAYS` (14) keeps process, mount, unit
-and container snapshots, `VISIONARY_SECURITY_RETENTION_DAYS` (180) security
-events, and `VISIONARY_SYSTEM_RETENTION_DAYS` (30) the agents' metric rows and
-the container metrics and events; machines silent for 30 days leave the
-inventory. The ingest endpoint is
+How long snapshots, security events and metrics are kept is set in Settings →
+Data; machines silent for 30 days leave the inventory. The ingest endpoint is
 `POST /api/agent/v1/report` (gzip JSON, [`internal/agentapi`](internal/agentapi)),
 rate limited like OTLP (`VISIONARY_AGENT_RATE`, 50 per second).
 
@@ -520,25 +563,49 @@ Admins create keys in Settings (only a hash is stored; the key is shown once):
 - **client**: browser and mobile apps; public by nature, so combine it with
   `VISIONARY_CLIENT_ORIGINS`. `VISIONARY_CLIENT_KEYS` also works.
 
+### Settings in the dashboard
+
+What you'd tune while running Visionary is set in **Settings**, takes effect
+within 30 seconds on every server sharing the database, and is recorded in the
+audit log. No restart, no environment variable.
+
+| Tab | Who | What |
+|---|---|---|
+| **Preferences** | everyone, for themselves | Start page, the time range and auto-refresh a visit starts with, theme (or follow the device), time zone (this device or UTC) and 12/24-hour clock, the language Help shows code in, routes left out of Slowest requests. Kept on the server, so they follow you to any browser. |
+| **Thresholds** | admins | Apdex threshold T (default 500 ms), the SLO target (99%), and routes with their own T, such as exports and uploads, so they don't drag Apdex and the SLO down. |
+| **Data** | admins | Retention per kind of data, with how many rows each holds and the oldest; and deleting data by kind, time range and service. |
+| **Profiling** | admins | CPU profiles on or off, for all services or chosen ones, and how often. |
+| **Pages** | admins | Which pages the sidebar shows. |
+| **Status page** | admins | The public page at `/status` (and `/status.json`): on or off, and its title. |
+
+Default retention: request logs, spans, errors, system and container metrics,
+CPU profiles, frontend events and query plans 30 days; host snapshots 14;
+uptime results 90; security findings 180; alert history and the audit log
+365 (at least 30); deploys forever; per-minute chart summaries 14 days and
+hourly ones 400. The server deletes older rows every 6 hours.
+
+**Upgrading:** these used to be environment variables (`VISIONARY_APDEX_MS`,
+`VISIONARY_SLO_TARGET`, `VISIONARY_STATUS_PAGE`, `VISIONARY_STATUS_TITLE`,
+`VISIONARY_UPTIME_RETENTION_DAYS`, `VISIONARY_CLIENT_RETENTION_DAYS`,
+`VISIONARY_AUDIT_RETENTION_DAYS`, `VISIONARY_SECURITY_RETENTION_DAYS`,
+`VISIONARY_HOST_RETENTION_DAYS`, `VISIONARY_SYSTEM_RETENTION_DAYS`,
+`VISIONARY_ROLLUP_MINUTE_DAYS`, `VISIONARY_ROLLUP_HOUR_DAYS`). On the first
+start of a new version, a value still set is copied into Settings once, and the
+log says so; from then on the variable is ignored and can be removed.
+
 ### Server settings
 
 The essentials (database, session secret, sign-in, OpenAI key) are in
-`.env.example`. Everything else has a sensible default:
+`.env.example`. The rest of the environment has sensible defaults:
 
 | Variable | Default | |
 |---|---|---|
-| `VISIONARY_APDEX_MS`, `VISIONARY_SLO_TARGET` | `500`, `99` | Apdex threshold and the default SLO. |
 | `VISIONARY_ROLLUPS` | `true` | Pre-aggregation for long ranges. |
-| `VISIONARY_ROLLUP_MINUTE_DAYS`, `_HOUR_DAYS` | `14`, `400` | Rollup retention. |
 | `VISIONARY_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM` | — | Email alerts (STARTTLS). |
 | `VISIONARY_DIGEST_TZ` | server zone | Time zone of weekly digests. |
-| `VISIONARY_UPTIME_RETENTION_DAYS` | `90` | |
 | `VISIONARY_UPTIME_ALLOW_PRIVATE` | `false` | Let checks reach private and loopback addresses. |
-| `VISIONARY_STATUS_PAGE`, `VISIONARY_STATUS_TITLE` | off, the app name | Public status page at `/status` (and `/status.json`). |
 | `VISIONARY_CLIENT_ORIGINS` | any | Browser origins allowed to send (wildcards like `https://*.example.com`). |
 | `VISIONARY_CLIENT_RATE_PER_IP`, `_PER_KEY` | `120`, `6000` per minute | Client ingest limits. |
-| `VISIONARY_CLIENT_RETENTION_DAYS` | `30` | |
-| `VISIONARY_AUDIT_RETENTION_DAYS` | `365` | |
 
 ## Security monitoring
 
@@ -608,7 +675,6 @@ with pending updates and notable audit actions.
 | `VISIONARY_SECURITY_RATE_MIN`, `_RATE_FACTOR` | `120`, `5` | Requests per minute floor, and times the key's usual rate. |
 | `VISIONARY_SECURITY_FORBIDDEN` | `20` | 403s for one user or role per window. |
 | `VISIONARY_SECURITY_IGNORE_IPS` | — | IPs or CIDRs never flagged (health checks, office, internal services). |
-| `VISIONARY_SECURITY_RETENTION_DAYS` | `180` | Findings kept, all sources; `0` keeps them forever. |
 
 Each run reads the window twice through the `created_at` index (once grouped
 per IP, once per account). On D1, which bills by rows read, that is about

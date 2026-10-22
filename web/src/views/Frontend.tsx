@@ -31,6 +31,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { ErrorNotice, linkify } from "../components/ErrorNotice";
 import { InfoTip } from "../components/InfoTip";
 import "./Frontend.css";
+import { SetupCard, SetupCommand, SetupHelpButton, SetupOption } from "../components/SetupCard";
 
 type Q<T = Result> = { data?: T; loading: boolean; error?: Error };
 
@@ -117,7 +118,7 @@ export function Frontend() {
           <ErrorNotice title="Could not load frontend data" error={summary.error} style={{ marginBottom: 12 }} />
         )}
         {empty ? (
-          <SetupCard app={app} />
+          <FrontendSetup app={app} />
         ) : (
           <div className="grid">
             <StatTile
@@ -325,25 +326,27 @@ export function Frontend() {
   );
 }
 
-function SetupCard({ app }: { app: RumApp }) {
+function FrontendSetup({ app }: { app: RumApp }) {
   const name = APPS.find((a) => a.value === app)?.label;
   return (
-    <div className="setup-card">
-      <div className="empty-icon">
-        <MonitorSmartphone size={20} />
-      </div>
-      <h2>{app ? `No ${name} data in this range` : "No frontend data yet"}</h2>
-      <p>
-        This view reads <code className="mono">client_events</code>, which browser and mobile apps fill by posting to{" "}
-        <code className="mono">/api/ingest/client</code> with a public client key from <code className="mono">VISIONARY_CLIENT_KEYS</code>. Add the
-        browser SDK to your web app, or the Android and iOS SDKs to your apps:
-      </p>
-      <pre className="code mono">{`<script src="https://unpkg.com/visionary-browser/dist/visionary.min.js"></script>
+    <SetupCard
+      icon={<MonitorSmartphone size={20} />}
+      title={app ? `No ${name} data in this range` : "No frontend data yet"}
+      text="Web Vitals, page and screen loads, client errors and API latency as your users see them, from your web and mobile apps."
+      topic="client"
+    >
+      <SetupOption title="Web apps" text="Add the browser SDK with a client key (Settings → API keys).">
+        <SetupCommand
+          code={`<script src="https://unpkg.com/visionary-browser/dist/visionary.min.js"></script>
 <script>
-  Visionary.init({ endpoint: "${location.origin}", key: "pk_…", app_version: "1.0.0" });
-</script>`}</pre>
-      <p style={{ color: "var(--text-3)", fontSize: 12.5 }}>Browsers must also be allowed in VISIONARY_CLIENT_ORIGINS when it is set.</p>
-    </div>
+  Visionary.init({ endpoint: "${location.origin}", key: "pk_…" });
+</script>`}
+        />
+      </SetupOption>
+      <SetupOption title="Android and iOS apps" text="Add the mobile SDK with the same kind of client key; screens and errors show up here per device.">
+        <SetupHelpButton topic="client">Mobile setup</SetupHelpButton>
+      </SetupOption>
+    </SetupCard>
   );
 }
 

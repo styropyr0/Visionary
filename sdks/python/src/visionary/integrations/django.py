@@ -25,12 +25,12 @@ from django.core.signals import got_request_exception
 from django.db.backends.signals import connection_created
 from django.http import FileResponse
 
-from .. import _context, _db, _spans
+from .. import _context, _db, _profiler, _spans
 from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import CountingIterator, finish, logger, report_unhandled, resolve_agent
+from ._common import CountingIterator, finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 try:
     from asgiref.sync import iscoroutinefunction, markcoroutinefunction
@@ -103,6 +103,7 @@ class VisionaryMiddleware:
 
     def _begin(self, request: Any) -> Optional[_State]:
         self.agent.http.started()
+        _profiler.request_started()
         try:
             t0 = time.perf_counter()
             e = None
@@ -124,6 +125,11 @@ class VisionaryMiddleware:
             _context.end(state.token)
         if state is None or state.entry is None:
             self.agent.http.finished(status)
+            if state is not None:
+                try:
+                    finish_unlogged(request.method, state.ann.route or _route(request) or request.path, state.t0)
+                except Exception:
+                    pass
             return response
         try:
             streamed = self._fill(request, response, state)

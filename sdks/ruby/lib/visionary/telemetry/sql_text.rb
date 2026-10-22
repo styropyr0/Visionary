@@ -15,7 +15,7 @@ module Visionary
         "REPLACE" => /\bINTO\s+([\w."`\[\]]+)/i,
         "UPDATE" => /\AUPDATE\s+(?:ONLY\s+)?([\w."`\[\]]+)/i
       }.freeze
-      MAX_DETAIL = 2000
+      MAX_DETAIL = 8000
 
       module_function
 

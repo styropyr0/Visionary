@@ -39,6 +39,11 @@ module Visionary
         run { |c| c.column(sql) }
       end
 
+      # Every row of a query, as arrays of values.
+      def rows(sql)
+        run { |c| c.rows(sql) }
+      end
+
       # One transaction for the whole batch.
       def batch(stmts)
         run do |c|
@@ -157,7 +162,7 @@ module Visionary
     end
 
     # Thin driver adapters: execute returns affected rows, column returns the
-    # first column of every row.
+    # first column of every row, rows every row as an array.
     class PgConn
       def initialize(conn)
         @conn = conn
@@ -173,6 +178,13 @@ module Visionary
       def column(sql)
         res = @conn.exec(sql)
         res.column_values(0).map(&:to_s)
+      ensure
+        res&.clear
+      end
+
+      def rows(sql)
+        res = @conn.exec(sql)
+        res.values
       ensure
         res&.clear
       end
@@ -231,6 +243,10 @@ module Visionary
         @client.query(sql, as: :array).map { |r| r[0].to_s }
       end
 
+      def rows(sql)
+        @client.query(sql, as: :array).to_a
+      end
+
       def broken?
         !@client.ping
       rescue StandardError
@@ -261,6 +277,8 @@ module Visionary
       def column(sql)
         @db.execute(sql).map { |r| r[0].to_s }
       end
+
+      def rows(sql) = @db.execute(sql)
 
       def broken? = @db.closed?
 

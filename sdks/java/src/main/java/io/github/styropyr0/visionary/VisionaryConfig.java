@@ -41,7 +41,8 @@ record VisionaryConfig(
         boolean spans,
         double spanThresholdMs,
         int spanMax,
-        boolean errors) {
+        boolean errors,
+        boolean profile) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -59,7 +60,8 @@ record VisionaryConfig(
                 r.string("VISIONARY_LOG_PATH_PREFIX", ""),
                 r.bool("VISIONARY_LOG_BODIES", true),
                 r.positiveInt("VISIONARY_LOG_MAX_BODY_BYTES", 8192),
-                r.nonNegativeInt("VISIONARY_LOG_RETENTION_DAYS", 30),
+                // 0: off, the Visionary server applies Settings → Retention.
+                r.nonNegativeInt("VISIONARY_LOG_RETENTION_DAYS", 0),
                 r.list("VISIONARY_LOG_REDACT_HEADERS"),
                 r.list("VISIONARY_LOG_REDACT_FIELDS"),
                 r.list("VISIONARY_LOG_REDACT_REQUEST_FIELDS"),
@@ -67,13 +69,15 @@ record VisionaryConfig(
                 r.string("VISIONARY_LOG_ERROR_KEY_FIELD", "error.key"),
                 r.bool("VISIONARY_SYSTEM_METRICS", true),
                 r.duration("VISIONARY_SYSTEM_INTERVAL", Duration.ofSeconds(15)),
-                r.nonNegativeInt("VISIONARY_SYSTEM_RETENTION_DAYS", 30),
+                r.nonNegativeInt("VISIONARY_SYSTEM_RETENTION_DAYS", 0),
                 r.string("VISIONARY_SERVICE", ""),
                 release(r),
                 r.bool("VISIONARY_SPANS", true),
                 r.nonNegativeDouble("VISIONARY_SPAN_THRESHOLD_MS", 100),
                 r.nonNegativeInt("VISIONARY_SPAN_MAX", 100),
-                r.bool("VISIONARY_ERRORS", true));
+                r.bool("VISIONARY_ERRORS", true),
+                // false: never profile, whatever the dashboard says.
+                r.bool("VISIONARY_PROFILE", true));
     }
 
     /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */

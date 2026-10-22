@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextvars
 import sys
-from typing import Any, Optional
+import threading
+from typing import Any, Callable, Optional
 
 from . import _agent, _spans
 
@@ -15,9 +17,10 @@ class span:
             value = redis.get(key)
             s.set_row_count(1)
 
-    ``kind`` is ``db``, ``http``, ``cache``, ``queue`` or ``custom`` (anything
-    else becomes ``custom``). An exception leaving the block marks the span as
-    failed and propagates unchanged. Does nothing when spans are off.
+    ``kind`` is ``db``, ``http``, ``cache``, ``queue``, ``custom`` or
+    ``background`` (anything else becomes ``custom``). An exception leaving
+    the block marks the span as failed and propagates unchanged. Does nothing
+    when spans are off.
     """
 
     __slots__ = ("_args", "_span")
@@ -48,6 +51,50 @@ class span:
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.__exit__(exc_type, exc, tb)
+
+
+class background_span(span):
+    """Record work a request starts and does not wait for as one span of kind
+    ``background``, for work you schedule yourself (an executor,
+    ``asyncio.create_task``)::
+
+        ctx = contextvars.copy_context()
+        def send():
+            with visionary.background_span("send welcome email"):
+                mailer.send(user)
+        executor.submit(ctx.run, send)
+
+    Run it in a copy of the request's context so the span, and the calls made
+    inside it, keep the request's ``request_id`` and ``offset_ms`` even after
+    the response was sent. An exception leaving the block marks the span as
+    failed and propagates. Background spans never count in the request's
+    ``db_*``/``http_*`` totals. Outside a request the span is stored when it
+    takes at least ``VISIONARY_SPAN_THRESHOLD_MS``, with ``request_id`` NULL.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, name: str) -> None:
+        super().__init__("background", name)
+
+
+def background(name: str, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> threading.Thread:
+    """Run ``fn(*args, **kwargs)`` on a new (non-daemon) thread, inside a
+    ``background`` span called ``name``, with a copy of the current context,
+    so it stays linked to the request that started it. Returns the started
+    thread. The response does not wait for it, and the process waits for it
+    at exit. If ``fn`` raises, the span is marked failed and the exception
+    goes to ``threading.excepthook`` as usual."""
+    ctx = contextvars.copy_context()
+
+    def run() -> None:
+        with background_span(name):
+            fn(*args, **kwargs)
+
+    thread = threading.Thread(target=ctx.run, args=(run,), name="visionary-background: " + str(name)[:64],
+                              daemon=False)
+    thread.start()
+    return thread
 
 
 def capture_exception(exc: Optional[BaseException] = None) -> None:

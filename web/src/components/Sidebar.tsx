@@ -5,7 +5,10 @@ import {
   Bell,
   Bookmark,
   Bug,
+  Database,
+  Flame,
   Gauge,
+  Network,
   Boxes,
   LayoutDashboard,
   LayoutGrid,
@@ -28,10 +31,16 @@ import { getProject, versionLabel } from "../lib/project";
 import { useQuery } from "../lib/useQuery";
 import { useApp } from "../lib/state";
 import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
+import { useHoverTip } from "./InfoTip";
+import { HELP } from "../lib/help";
+import { useSettings } from "../lib/settings";
 
 export type Route =
   | "overview"
   | "performance"
+  | "queries"
+  | "dependencies"
+  | "profiles"
   | "system"
   | "containers"
   | "errors"
@@ -45,14 +54,17 @@ export type Route =
   | "alerts"
   | "settings";
 
-export const ROUTES: Route[] = ["overview", "performance", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
 
-const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
+export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
     group: "Monitor",
     items: [
       { route: "overview", label: "API overview", icon: LayoutDashboard },
       { route: "performance", label: "Performance", icon: Gauge },
+      { route: "queries", label: "Queries", icon: Database },
+      { route: "dependencies", label: "Dependencies", icon: Network },
+      { route: "profiles", label: "CPU profiles", icon: Flame },
       { route: "system", label: "System", icon: Server },
       { route: "containers", label: "Containers", icon: Boxes },
       { route: "errors", label: "Errors", icon: Bug },
@@ -97,6 +109,26 @@ export function BrandMark() {
   );
 }
 
+/** A page link whose tip says what the page is for. */
+function NavItem({ route, label, icon: Icon, active }: { route: Route; label: string; icon: typeof LayoutDashboard; active: boolean }) {
+  const { props, bubble } = useHoverTip<HTMLAnchorElement>(
+    <>
+      <span className="tip-title">{label}</span>
+      {HELP[route].tip}
+    </>,
+    "right",
+  );
+  return (
+    <>
+      <a {...props} href={`#/${route}`} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+        <Icon size={16} />
+        <span className="nav-text">{label}</span>
+      </a>
+      {bubble}
+    </>
+  );
+}
+
 /** The Visionary role (admin, editor, viewer) from the session. */
 function roleLabel(user: SessionUser & { role?: string }): string {
   const r = user.role ?? "";
@@ -117,6 +149,9 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
   const [projectRun, setProjectRun] = useState(0);
   const project = useQuery(`project#${projectRun}`, getProject);
   const version = versionLabel(project.data);
+  // Pages the team hid in Settings → Pages; the open page always shows.
+  const hidden = new Set(useSettings().settings?.hidden_pages ?? []);
+  const shownNav = NAV.map(({ group, items }) => ({ group, items: items.filter((i) => i.route === route || !hidden.has(i.route)) })).filter((g) => g.items.length > 0);
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -139,20 +174,11 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
       </div>
       {aboutOpen && <AboutDrawer info={project.data} error={project.error} onRefresh={() => setProjectRun((n) => n + 1)} onClose={() => setAboutOpen(false)} />}
       <nav className="nav" aria-label="Main">
-        {NAV.map(({ group, items }) => (
+        {shownNav.map(({ group, items }) => (
           <div className="nav-group" key={group}>
             <div className="nav-label">{group}</div>
-            {items.map(({ route: r, label, icon: Icon }) => (
-              <a
-                key={r}
-                href={`#/${r}`}
-                className={`nav-item ${route === r ? "active" : ""}`}
-                aria-current={route === r ? "page" : undefined}
-                title={collapsed ? label : undefined}
-              >
-                <Icon size={16} />
-                <span className="nav-text">{label}</span>
-              </a>
+            {items.map(({ route: r, label, icon }) => (
+              <NavItem key={r} route={r} label={label} icon={icon} active={route === r} />
             ))}
           </div>
         ))}

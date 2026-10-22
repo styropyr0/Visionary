@@ -14,7 +14,9 @@ import type { Schema, Store } from "./store/store.js";
 import { createSchema } from "./store/store.js";
 import { HttpCounters, Recorder } from "./system/recorder.js";
 import { ErrorLimiter, RUNTIME, describe, errorStatus, fingerprint } from "./telemetry/errors.js";
+import { ExplainWorker } from "./telemetry/explain.js";
 import { instrumentHttp } from "./telemetry/http.js";
+import { Profiler } from "./telemetry/profiler.js";
 import type { SpanRow } from "./telemetry/spans.js";
 import { setSpanSink, spanValues, visibility } from "./telemetry/spans.js";
 import { formatTs } from "./util.js";
@@ -36,6 +38,8 @@ export class Agent {
   private writer?: Writer;
   private recorder?: Recorder;
   private retention?: Retention;
+  private profiler?: Profiler;
+  private explainer?: ExplainWorker;
   private readonly schemas = new Map<Schema, Promise<boolean> | true>();
   private readonly schemaReported = new Set<Schema>();
   private readonly limiter = new ErrorLimiter();
@@ -82,6 +86,7 @@ export class Agent {
     }
     const tables: [Table, number][] = [];
     if (this.writer) tables.push(["api_logs", cfg.retentionDays], ["spans", cfg.retentionDays], ["errors", cfg.retentionDays]);
+    if (this.writer && cfg.profile) tables.push(["profiles", cfg.retentionDays]);
     if (this.recorder) tables.push(["system_metrics", cfg.systemRetentionDays]);
     this.retention = new Retention(this.store, tables, this.logger);
   }
@@ -115,6 +120,7 @@ export class Agent {
           thresholdMs: cfg.spanThresholdMs,
           max: cfg.spanMax,
           standalone: (row) => this.pushSpan(row, null),
+          late: (row, requestId) => this.pushSpan(row, requestId),
         });
         if (cfg.instrumentHttp) instrumentHttp();
       }
@@ -126,6 +132,20 @@ export class Agent {
         if (process.listenerCount("unhandledRejection") > 0) process.on("unhandledRejection", this.onRejection);
       }
       if (cfg.version) this.writeRelease();
+      if (cfg.profile && this.store) {
+        const store = this.store;
+        this.profiler = new Profiler(
+          { service: cfg.service, instance: this.instance, version: cfg.version },
+          () => store.rows(`SELECT name, value FROM visionary_settings WHERE name LIKE 'profile.%'`, []),
+          (args) => this.writer?.push({ table: "profiles", args }),
+          this.logger,
+        );
+        this.profiler.start();
+      }
+    }
+    if (this.store && cfg.explain.length > 0) {
+      this.explainer = new ExplainWorker(cfg.explain, this.store, this.instance, this.logger);
+      this.explainer.start();
     }
     if (this.recorder) {
       void this.ready("system");
@@ -144,6 +164,8 @@ export class Agent {
       process.off("unhandledRejection", this.onRejection);
       setSpanSink(undefined);
       this.retention?.stop();
+      this.profiler?.stop();
+      this.explainer?.stop();
       if (this.started) {
         const deadline = Date.now() + timeoutMs;
         await Promise.all([this.writer?.close(timeoutMs), this.recorder?.close()]);

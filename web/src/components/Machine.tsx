@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, HardDrive, KeyRound, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { formatPercent, toNumber } from "../lib/format";
 import "./Machine.css";
 
@@ -92,33 +92,3 @@ export function HeadCard({ icon, title, subtitle, badge, meta, facts }: { icon: 
   );
 }
 
-/** How to install the host agent, with this server's URL filled in. */
-export function InstallAgent({ title, children }: { title: string; children: ReactNode }) {
-  const url = window.location.origin;
-  const systemd = `curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \\
-  | sudo VISIONARY_URL=${url} VISIONARY_KEY=<server key> sh`;
-  return (
-    <section className="panel span-12">
-      <div className="empty host-install">
-        <div className="empty-icon">
-          <HardDrive size={20} />
-        </div>
-        <h3>{title}</h3>
-        <p>{children}</p>
-        <ol className="host-steps">
-          <li>
-            <a href="#/settings?tab=keys">
-              <KeyRound size={13} /> Create an API key
-            </a>{" "}
-            with the <b>server</b> scope in Settings (or use one from <code className="mono">VISIONARY_INGEST_KEYS</code>).
-          </li>
-          <li>
-            Install the agent on the machine as a systemd service:
-            <pre className="code mono">{systemd}</pre>
-          </li>
-        </ol>
-        <p className="dim">Its first report arrives within a minute.</p>
-      </div>
-    </section>
-  );
-}

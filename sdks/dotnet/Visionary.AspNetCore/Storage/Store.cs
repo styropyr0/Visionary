@@ -29,6 +29,9 @@ internal interface IStore
 
     /// <summary>Runs a query returning one name per row.</summary>
     Task<List<string>> ColumnsAsync(string query, CancellationToken ct);
+
+    /// <summary>Runs a query without parameters; every value comes back as text (null for NULL).</summary>
+    Task<List<string?[]>> RowsAsync(string query, CancellationToken ct);
 }
 
 internal static class StoreExtensions

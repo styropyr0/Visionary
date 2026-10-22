@@ -40,10 +40,13 @@ internal sealed class VisionaryMiddleware
     {
         var o = _agent.Options;
         var counters = _agent.Http;
+        var tally = _agent.Tally;
         Interlocked.Increment(ref counters.InFlight);
+        tally.Start();
+        var started = Stopwatch.GetTimestamp();
+        var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
         try
         {
-            var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
             if (!o.LogRequests || !path.StartsWith(o.PathPrefix, StringComparison.Ordinal))
             {
                 await PassThrough(ctx).ConfigureAwait(false);
@@ -54,6 +57,18 @@ internal sealed class VisionaryMiddleware
         finally
         {
             Interlocked.Decrement(ref counters.InFlight);
+            if (tally.Collecting)
+            {
+                // Only while a CPU profile runs: the time each route's requests took.
+                try
+                {
+                    tally.Finish(ctx.Request.Method, RouteOf(ctx, o), path, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                }
+                catch (Exception e)
+                {
+                    _agent.Logger.LogDebug(e, "visionary: request tally failed");
+                }
+            }
         }
     }
 

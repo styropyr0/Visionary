@@ -13,6 +13,7 @@ from . import _errors, _spans
 from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
+from ._profiler import Profiler
 from ._storage import Backend, open_backend
 from ._system import HttpCounters, Recorder
 from ._writer import Release, RequestWriter, Retention
@@ -37,6 +38,7 @@ class Agent:
         self._requests: Optional[RequestWriter] = None
         self._system: Optional[Recorder] = None
         self._retention: Optional[Retention] = None
+        self._profiler: Optional[Profiler] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False
         self.errors_on = False
@@ -60,6 +62,9 @@ class Agent:
             self._requests = RequestWriter(cfg, self._backend, logger, instance, _errors.runtime())
             self.spans_on = cfg.spans
             self.errors_on = cfg.errors
+        if self._requests is not None and cfg.profile:
+            self._profiler = Profiler(self._backend, self._requests.log, logger, cfg.service,
+                                      cfg.log_retention_days)
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
@@ -110,7 +115,8 @@ class Agent:
             entry.http_count, entry.http_ms = trace.http_count, trace.http_ms
 
     def record_span(self, span: _spans.Span) -> None:
-        """Queue a span recorded outside a request. Never blocks."""
+        """Queue a span recorded outside a request, or one that ended after
+        its request was logged. Never blocks."""
         if self.spans_on and not self._closed:
             self._requests.log(span)
 
@@ -152,6 +158,8 @@ class Agent:
                 from ._http import instrument_http
 
                 instrument_http()
+        if self._profiler is not None:
+            self._profiler.start()
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -172,6 +180,8 @@ class Agent:
         idle = True
         if started:
             deadline = _Deadline(timeout)
+            if self._profiler is not None:
+                self._profiler.close()
             if self._retention is not None:
                 self._retention.close()
             if self._requests is not None:
@@ -202,6 +212,8 @@ class Agent:
             self._requests.restart_after_fork()
         if self._retention is not None and self._retention.needed:
             self._retention.restart_after_fork()
+        if self._profiler is not None:
+            self._profiler.restart_after_fork()
 
     def __enter__(self) -> "Agent":
         return self.start()

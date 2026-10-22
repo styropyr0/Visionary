@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
@@ -30,9 +31,12 @@ internal sealed class TelemetryWriter : BackgroundService
 
     private bool TelemetryTables => _agent.Options.Spans || _agent.Options.Errors || _agent.Version is not null;
 
+    /// <summary>AddVisionaryProfiling was called and VISIONARY_PROFILE isn't false.</summary>
+    private bool Profiles => _agent.Options.ProfilingAdded && _agent.Options.Profile;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_agent.Enabled || !(_agent.Options.LogRequests || TelemetryTables))
+        if (!_agent.Enabled || !(_agent.Options.LogRequests || TelemetryTables || Profiles))
         {
             return;
         }
@@ -49,7 +53,12 @@ internal sealed class TelemetryWriter : BackgroundService
         {
             _agent.Enqueue(new ReleaseRecord(DateTime.UtcNow));
         }
-        var retention = Retention.RunAsync(_agent, Retention.LogTables(o), stoppingToken);
+        var tables = Retention.LogTables(o);
+        if (Profiles && o.LogRetentionDays > 0)
+        {
+            tables.Add(("profiles", o.LogRetentionDays));
+        }
+        var retention = Retention.RunAsync(_agent, tables, stoppingToken);
 
         var reader = _agent.Queue.Reader;
         var batch = new List<WriteItem>(BatchSize);
@@ -138,6 +147,20 @@ internal sealed class TelemetryWriter : BackgroundService
     }
 
     private async Task WriteAsync(List<WriteItem> batch, CancellationToken ct)
+    {
+        // Profiles go in their own transaction: the server creates their table, and a failure
+        // there must not cost the request logs written alongside.
+        var profiles = batch.Where(i => i is ProfileRecord).ToList();
+        if (profiles.Count > 0)
+        {
+            await WriteOnceAsync(batch.Where(i => i is not ProfileRecord).ToList(), ct).ConfigureAwait(false);
+            await WriteOnceAsync(profiles, ct).ConfigureAwait(false);
+            return;
+        }
+        await WriteOnceAsync(batch, ct).ConfigureAwait(false);
+    }
+
+    private async Task WriteOnceAsync(List<WriteItem> batch, CancellationToken ct)
     {
         if (batch.Count == 0)
         {

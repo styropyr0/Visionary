@@ -15,6 +15,7 @@ require_relative "visionary/system/cgroup"
 require_relative "visionary/system/recorder"
 require_relative "visionary/telemetry"
 require_relative "visionary/telemetry/hooks"
+require_relative "visionary/profiler"
 require_relative "visionary/body"
 require_relative "visionary/middleware"
 require_relative "visionary/agent"
@@ -96,7 +97,7 @@ module Visionary
     end
 
     # Measures the block as a span and returns its value. kind is "custom",
-    # "cache", "queue", "db" or "http"; name should be low-cardinality (the
+    # "cache", "queue", "db", "http", "graphql" or "background"; name should be low-cardinality (the
     # operation, not its arguments).
     #
     #   Visionary.span("charge card", kind: "http", target: "api.stripe.com") { stripe.charge(...) }
@@ -116,6 +117,30 @@ module Visionary
       ensure
         rec.span(kind: kind, name: name, target: target, detail: detail, start_mono: t0,
                  duration_ms: Telemetry.now_ms - t0, status: status, error: error)
+      end
+    end
+
+    # Runs the block in a new Thread that keeps belonging to the current
+    # request, and records it as one span of kind "background" named name,
+    # from start to finish. Calls made inside it carry the request's
+    # request_id and offset_ms even after the response was sent; those ending
+    # after the request was logged are written on their own and never change
+    # its totals. Outside a request the span is a lone span (kept when it
+    # takes at least VISIONARY_SPAN_THRESHOLD_MS).
+    #
+    # If the block raises, the span gets status "error" and the message, and
+    # the exception is re-raised in the thread as Ruby normally does: printed
+    # when Thread.report_on_exception is on, raised again by join/value.
+    # Returns the Thread.
+    #
+    #   Visionary.background("send welcome email") { Mailer.welcome(user).deliver_now }
+    def background(name, &block)
+      raise ArgumentError, "Visionary.background needs a block" unless block
+
+      ctx = RequestContext.current # thread locals don't carry over on Ruby 3.1
+      Thread.new do
+        RequestContext.current = ctx
+        span(name, kind: "background", &block)
       end
     end
 

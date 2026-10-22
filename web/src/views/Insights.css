@@ -1,0 +1,302 @@
+/* Queries, Dependencies, CPU profiles and the endpoint breakdown. */
+
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.linkish:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.linkish:disabled {
+  color: var(--text-1);
+  cursor: default;
+}
+
+/* ---------- Queries ---------- */
+
+.q-new {
+  margin-left: 6px;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+}
+
+.q-flag {
+  color: var(--warning-text);
+  font-size: 10.5px;
+}
+
+.q-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* A number that moved: up is worse for latency, queries and failures. */
+.q-change {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.q-change.up {
+  color: var(--critical-text);
+}
+
+.q-change.down {
+  color: var(--good-text, var(--text-3));
+}
+
+.q-good {
+  color: var(--good-text, var(--text-2));
+}
+
+.q-status {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.q-status.slower {
+  border-color: transparent;
+  background: var(--critical-wash, rgba(229, 72, 77, 0.14));
+  color: var(--critical-text);
+}
+
+.q-status.new {
+  color: var(--accent);
+}
+
+.q-status.faster {
+  color: var(--good-text, var(--text-2));
+}
+
+.q-status.steady,
+.q-status.gone {
+  color: var(--text-3);
+}
+
+.q-windows {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.q-gql-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 4px 4px;
+}
+
+.q-gql-body .rt-title {
+  margin-bottom: 6px;
+}
+
+.q-gql-stmts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.q-gql-stmts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- Endpoint breakdown ---------- */
+
+.bd-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 4px 2px 10px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- CPU profiles ---------- */
+
+.prof-flame {
+  padding: 10px 12px 12px;
+}
+
+.prof-note {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.flame {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.flame-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flame-trail {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flame-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.flame-search .input {
+  width: 240px;
+}
+
+.flame-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.flame-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flame-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.flame-canvas {
+  position: relative;
+  overflow: hidden;
+}
+
+.flame-frame {
+  position: absolute;
+  height: 17px;
+  padding: 0 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px;
+  color: #fff;
+  font: 11px/17px var(--font-mono);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.flame-frame:hover {
+  filter: brightness(1.15);
+}
+
+.flame-frame.dimmed {
+  opacity: 0.25;
+}
+
+.flame-frame.hit {
+  outline: 2px solid var(--text-1);
+  outline-offset: -2px;
+}
+
+.flame-swatch.app,
+.flame-frame.app {
+  background: var(--series-1);
+}
+
+.flame-swatch.lib,
+.flame-frame.lib {
+  background: var(--series-4);
+}
+
+.flame-swatch.std,
+.flame-frame.std {
+  background: var(--series-3);
+}
+
+.flame-swatch.vm,
+.flame-frame.vm {
+  background: var(--text-3);
+}
+
+.flame-top {
+  margin-top: 6px;
+}
+
+.flame-top .rt-title {
+  margin-bottom: 6px;
+}
+
+.flame-top td.mono {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flame-top table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+@media (max-width: 760px) {
+  .q-gql-body {
+    grid-template-columns: 1fr;
+  }
+
+  .flame-search .input {
+    width: 100%;
+  }
+}
+
+.prof-status {
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+}
+
+.prof-status svg {
+  color: var(--text-3);
+}
+
+.prof-status.on svg {
+  color: var(--good-text);
+}
+
+.prof-status > span {
+  flex: 1;
+}

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_RANGE, resolveRange, type Resolved, type TimeRange } from "./time";
+import { prefs, setPrefs } from "./prefs";
 
 export type Theme = "dark" | "light";
 
@@ -45,17 +46,31 @@ function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t;
 }
 
+const deviceTheme = (): Theme => (window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark");
+
 function initialTheme(): Theme {
+  const mode = prefs().theme;
   const stored = load<Theme | null>("va.theme", null);
-  const t = stored === "dark" || stored === "light" ? stored : window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  const t = mode === "dark" || mode === "light" ? mode : mode === "system" ? deviceTheme() : stored === "dark" || stored === "light" ? stored : deviceTheme();
   applyTheme(t);
   return t;
 }
 
+// A visit starts with the preferred range and auto-refresh, or the last used.
+function initialRange(): TimeRange {
+  const p = prefs().range;
+  return p && p !== "last" ? { kind: "relative", key: p } : load("va.range", DEFAULT_RANGE);
+}
+
+function initialAutoRefresh(): number {
+  const p = prefs().autoRefresh;
+  return typeof p === "number" ? p : load("va.auto", 0);
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [range, setRangeState] = useState<TimeRange>(() => load("va.range", DEFAULT_RANGE));
+  const [range, setRangeState] = useState<TimeRange>(initialRange);
   const [tick, setTick] = useState(0);
-  const [autoRefresh, setAutoState] = useState<number>(() => load("va.auto", 0));
+  const [autoRefresh, setAutoState] = useState<number>(initialAutoRefresh);
   const [theme, setThemeState] = useState<Theme>(initialTheme);
 
   const resolved = useMemo(() => resolveRange(range), [range, tick]);
@@ -76,6 +91,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     applyTheme(t);
     setThemeState(t);
     save("va.theme", t);
+    // Picking a theme by hand ends "follow the device".
+    if (prefs().theme === "system") setPrefs({ theme: t });
+  }, []);
+
+  // "Follow the device": change with the system's light or dark mode.
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: light)");
+    if (!mq) return;
+    const on = () => {
+      if (prefs().theme !== "system") return;
+      const t = deviceTheme();
+      applyTheme(t);
+      setThemeState(t);
+    };
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
   }, []);
 
   // Auto-refresh only makes sense for ranges that end at "now".

@@ -91,7 +91,9 @@ export const ERROR_COLUMNS = [
 
 export const RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"];
 
-export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases";
+export const PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"];
+
+export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles";
 
 export const TABLE_COLUMNS: Record<Table, string[]> = {
   api_logs: REQUEST_COLUMNS,
@@ -99,6 +101,7 @@ export const TABLE_COLUMNS: Record<Table, string[]> = {
   spans: SPAN_COLUMNS,
   errors: ERROR_COLUMNS,
   releases: RELEASE_COLUMNS,
+  profiles: PROFILE_COLUMNS,
 };
 
 /** A typed value: string, number or null. */

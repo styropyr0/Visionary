@@ -23,6 +23,8 @@
   --surface-3: #2b2b29;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
+  --scroll-thumb: rgba(255, 255, 255, 0.16);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.32);
   --grid: #2c2c2a;
   --axis: #383835;
   --text-1: #f0efec;
@@ -64,6 +66,8 @@
   --surface-3: #e9e8e3;
   --border: rgba(11, 11, 11, 0.1);
   --border-strong: rgba(11, 11, 11, 0.18);
+  --scroll-thumb: rgba(11, 11, 11, 0.18);
+  --scroll-thumb-hover: rgba(11, 11, 11, 0.36);
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --text-1: #0b0b0b;
@@ -95,6 +99,43 @@
   /* The logo's original oxblood and navy inks. */
   --logo-sun: #d9770b;
   --logo-eye: #1f5fae;
+}
+
+/* Scrollbars: a thumb and no track. The thumb is drawn 6px wide inside a
+   10px hit area (a transparent border), so it stays easy to grab and drag. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scroll-thumb) padding-box;
+  min-height: 32px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: var(--scroll-thumb-hover) padding-box;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Firefox has no scrollbar pseudo-elements: a thin thumb on a clear track. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb-hover) transparent;
+  }
 }
 
 * {
@@ -1021,6 +1062,105 @@ pre,
   box-shadow: 1px 1px 0 0 var(--border-strong);
 }
 
+.info-tip.right::after {
+  top: calc(var(--arrow-y, 50%) - 4px);
+  left: -4px;
+  box-shadow: -1px 1px 0 0 var(--border-strong);
+}
+
+.info-tip.rich {
+  max-width: 280px;
+  white-space: normal;
+}
+
+.info-tip .tip-title {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+/* Help: the top bar's button, the drawer and empty states' links to it. */
+.help-btn {
+  color: var(--text-2);
+}
+
+.help-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.help-link:hover {
+  text-decoration: underline;
+}
+
+.help .about-section > p,
+.help-list,
+.help-topic p {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.help-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.help-langs {
+  position: sticky;
+  top: -16px;
+  z-index: 1;
+  margin: 0 -18px 4px;
+  padding: 8px 18px;
+  background: var(--surface-1);
+}
+
+.help-topic {
+  scroll-margin-top: 48px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--border);
+}
+
+.help-topic h4 {
+  margin: 0 0 4px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.help-topic p {
+  margin: 0 0 10px;
+}
+
+.help-topic.focus h4 {
+  color: var(--accent-strong);
+}
+
+.help-topic.focus {
+  animation: help-focus 1.6s ease-out;
+}
+
+@keyframes help-focus {
+  from { background: var(--accent-wash); }
+}
+
+.help-missing {
+  font-style: italic;
+}
+
 @keyframes info-tip-in {
   from { opacity: 0; }
 }
@@ -1430,7 +1570,12 @@ tr:hover .slow-row-exclude,
 
 /* ---------- Chart tooltip (ECharts renders it into the chart's DOM) ---------- */
 
+/* One grid for every row, so the key, value and name columns line up across
+   rows and a long value widens its column instead of running into the name. */
 .tt {
+  display: grid;
+  grid-template-columns: 12px max-content minmax(0, 1fr);
+  column-gap: 8px;
   min-width: 160px;
   font-family: var(--font-sans);
   font-size: 12.5px;
@@ -1444,11 +1589,18 @@ tr:hover .slow-row-exclude,
 }
 
 .tt-row {
-  display: grid;
-  grid-template-columns: 12px auto 1fr;
-  align-items: center;
-  gap: 8px;
+  display: contents;
   line-height: 20px;
+}
+
+.tt-row > * {
+  align-self: center;
+  line-height: 20px;
+}
+
+.tt-head,
+.tt-deploy {
+  grid-column: 1 / -1;
 }
 
 .tt-key {
@@ -1463,6 +1615,7 @@ tr:hover .slow-row-exclude,
 }
 
 .tt-val {
+  white-space: nowrap;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1476,6 +1629,9 @@ tr:hover .slow-row-exclude,
 }
 
 .tt-total {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
@@ -2416,4 +2572,147 @@ pre.code {
 /* Menus drawn in a portal over drawers and modals (Floating.tsx). */
 .popover.floating {
   z-index: 70;
+}
+
+/* ---------- Setup card (what an empty page needs) ---------- */
+
+.sc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 980px;
+  margin: 24px auto;
+  padding: 22px 24px 18px;
+}
+
+.sc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.sc-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.sc-title {
+  margin: 2px 0 4px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sc-text {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.sc-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.sc-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.sc-option-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sc-option-text {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.sc-option-action {
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.sc-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.sc-steps li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.sc-code {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.sc-code pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  color: var(--text-1);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.sc-code .btn {
+  flex: none;
+  margin: 3px;
+}
+
+.sc-foot {
+  padding-top: 2px;
+}
+
+.sc-foot .help-link {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .sc {
+    margin: 0;
+    padding: 16px;
+  }
+}
+
+/* Inside a page's grid, among other panels. */
+.sc.sc-inline {
+  max-width: none;
+  margin: 0;
 }

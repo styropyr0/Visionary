@@ -50,3 +50,17 @@ CREATE TABLE IF NOT EXISTS releases (
 );
 CREATE INDEX IF NOT EXISTS idx_releases_created_at ON releases (created_at);
 CREATE INDEX IF NOT EXISTS idx_releases_version_created_at ON releases (version, created_at);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id          BIGSERIAL PRIMARY KEY,
+    created_at  TEXT NOT NULL,
+    service     TEXT,
+    instance    TEXT NOT NULL,
+    version     TEXT,
+    sdk         TEXT,
+    duration_ms DOUBLE PRECISION NOT NULL,
+    samples     INTEGER NOT NULL,
+    routes      TEXT,
+    folded      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_created_at ON profiles (created_at);

@@ -15,6 +15,7 @@ go get github.com/styropyr0/visionary/sdks/go@latest
 | `errors` | panics that reach the middleware and errors passed to `CaptureError` |
 | `releases` | one deploy marker per start when the release is known |
 | `system_metrics` | host, process, Go runtime, pool and throughput samples |
+| `profiles` | CPU profiles (folded stacks), only while turned on in the dashboard |
 
 Rows go to Cloudflare D1, SQLite, PostgreSQL or MySQL in batches on
 background goroutines. Nothing on a request path waits for the database, and
@@ -38,6 +39,11 @@ http.ListenAndServe(":8080", agent.Middleware(mux))
 the SPEC's Environment table). Pass `Config.Database` + `Config.Dialect` to
 write through a `*sql.DB` the app already has; otherwise set
 `VISIONARY_DATABASE_URL` (and import its driver) or the `D1_*` variables.
+
+Old rows are deleted by the Visionary server, following Settings → Retention
+in the dashboard. `VISIONARY_LOG_RETENTION_DAYS` and
+`VISIONARY_SYSTEM_RETENTION_DAYS` default to 0 (off) and only matter when the
+service writes to a database no Visionary server reads.
 
 Name the service and release so several services can share a database and
 deploys show up on the charts:
@@ -184,9 +190,43 @@ hash, err := bcrypt.GenerateFromPassword(code, bcrypt.DefaultCost)
 end(err)
 ```
 
-**Work that outlives the response** (`go sendEmail(ctx, …)` after writing
-it) is stored on its own once the request is logged, when it takes the span
-threshold, rather than in the request.
+**Work that outlives the response**: start it with `visionary.Go` and the
+request's breakdown shows it as one `background` span, with the calls it made
+and when it finished after the response. It gets the request's values but not
+its cancellation, so the response being sent doesn't cut it short:
+
+```go
+visionary.Go(r.Context(), "send welcome email", func(ctx context.Context) error {
+	return mailer.Send(ctx, user.Email)
+})
+```
+
+Calls made after the response stay linked to their request either way (up to
+`VISIONARY_SPAN_MAX` of them, then those over the span threshold), and are
+not counted in its totals.
+
+### GraphQL
+
+Record each operation, for the Queries page (depth, field count, the queries
+its resolvers ran). With gqlgen, from an `AroundOperations` extension:
+
+```go
+oc := graphql.GetOperationContext(ctx)
+end := visionary.GraphQLOperation(ctx, string(oc.Operation.Operation), oc.OperationName, oc.RawQuery)
+defer end(nil)
+```
+
+### Query plans
+
+Give the Agent an explainer and the dashboard can ask for a statement's plan;
+it runs `EXPLAIN` (never `EXPLAIN ANALYZE`) on your database and sends it back:
+
+```go
+cfg.Explain = []*visionary.Explainer{visionary.PgxExplainer(pool)}
+// database/sql: visionary.SQLExplainer(db, visionary.Postgres, "postgresql/shop")
+```
+
+`VISIONARY_EXPLAIN=false` turns it off without a code change.
 
 ### What is stored
 
@@ -216,6 +256,48 @@ Errors with the same type and the same top five application frames
 stored at most 20 times a minute per process. Errors captured during a request
 are written when it ends, with its final route and user.
 `VISIONARY_ERRORS=false` turns error capture off.
+
+## CPU profiles
+
+Profiling is **off until you turn it on in the dashboard** (Settings →
+Profiling), and you can turn it off there again at any time, with no redeploy
+either way. The Agent reads the switch from `visionary_settings` at start and
+every 30 seconds on its own goroutine, and logs one line when profiling turns
+on or off for this service. Settings → Profiling also picks which services take
+part (by `VISIONARY_SERVICE`), how often a profile is taken (default every 300
+s) and how long each one samples (default 10 s), and has a "Profile now" button
+for a one-off.
+
+While it is on, the Agent runs `runtime/pprof`'s CPU profiler (about one
+sample every 10 ms, counting only goroutines running on a CPU) for the chosen
+duration, then decodes the profile itself; no extra dependency. It skips a turn
+when no request arrived since the last one, and keeps a profile only when a
+request finished during it and it has at least 20 samples. If the process
+already runs its own CPU profile (`pprof.StartCPUProfile`, `net/http/pprof`),
+the turn is skipped quietly.
+
+Each profile is one `profiles` row:
+
+- `folded`: one `frame;frame;frame count` line per distinct stack, outermost
+  caller first, heaviest first, capped at 90 000 bytes (the rest summed into an
+  `(other) n` line). A frame reads `pkg.Func file:line`: your code with its path
+  relative to the module root (`handlers/trips.go`), modules as
+  `lib:github.com/jackc/pgx/v5/conn.go`, the standard library and runtime as
+  `std:net/http/server.go`. The SDK's own background goroutines are left out.
+- `routes`: JSON of `"METHOD route"` to the milliseconds the requests that
+  finished during the profile took, so the dashboard can tell which endpoints
+  the CPU went to.
+- `samples`, `duration_ms`, and the usual `service`, `instance`, `version`.
+
+Cost: nothing between profiles beyond an atomic counter per request; while a
+profile runs, the usual `pprof` overhead (a few percent of one CPU) and a map
+update per finished request. Rows follow Settings → Retention (and
+`VISIONARY_LOG_RETENTION_DAYS` when it is set).
+The SDK creates neither table: the Visionary server does, so before it has
+started nothing is profiled.
+
+`VISIONARY_PROFILE=false` (or `Config.ProfileOff`) makes the service ignore
+the dashboard and never profile, for code that must never be sampled.
 
 ## A complete service (Voygram-style)
 

@@ -2,7 +2,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, EyeOff, Plus, X } from "lucide-react";
 import { api, rangeQuery, type Result } from "../lib/api";
 import { formatBytes, formatCount, formatMs, toNumber } from "../lib/format";
-import { load, save, useApp } from "../lib/state";
+import { usePref } from "../lib/prefs";
+import { load, useApp } from "../lib/state";
 import { formatLogTime } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { Combobox } from "../components/Combobox";
@@ -10,8 +11,10 @@ import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
 import { FloatingMenu } from "../components/Floating";
 
+// Where these lived before preferences; read once as the starting value.
 const EXCLUDE_KEY = "va.perf.slowExclude";
 const GROUP_KEY = "va.perf.slowGroup";
+const legacy = <T,>(key: string, fallback: T): T => load<T>(key, fallback);
 
 /** The slow-requests endpoint with the panel's filters. */
 function slowURL(qs: string, excludes: string[], extra: Record<string, string> = {}): string {
@@ -31,19 +34,11 @@ function useSlow(excludes: string[], extra: Record<string, string> = {}, enabled
  * The slowest requests in the range. Routes that are slow by design (an
  * export, a report) can be left out so they don't crowd out the rest, and
  * grouping by route shows whether a route is always slow or had one outlier.
- * Both choices are remembered per browser.
+ * Both choices are kept in your preferences, so they follow you to other browsers.
  */
 export function SlowRequestsPanel({ routes, openLog, onOpenLog }: { routes: string[]; openLog: number | null; onOpenLog: (id: number | null) => void }) {
-  const [excludes, setExcludesState] = useState<string[]>(() => load<string[]>(EXCLUDE_KEY, []));
-  const [grouped, setGroupedState] = useState<boolean>(() => load<boolean>(GROUP_KEY, false));
-  const setExcludes = (v: string[]) => {
-    setExcludesState(v);
-    save(EXCLUDE_KEY, v);
-  };
-  const setGrouped = (v: boolean) => {
-    setGroupedState(v);
-    save(GROUP_KEY, v);
-  };
+  const [excludes, setExcludes] = usePref("slowExclude", legacy<string[]>(EXCLUDE_KEY, []));
+  const [grouped, setGrouped] = usePref("slowGroup", legacy<boolean>(GROUP_KEY, false));
   const exclude = (pattern: string) => !excludes.includes(pattern) && setExcludes([...excludes, pattern]);
 
   // One query per view: useQuery keeps the last result while the next loads,

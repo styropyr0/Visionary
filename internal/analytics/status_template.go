@@ -100,7 +100,7 @@ var statusTemplate = template.Must(template.New("status").Funcs(statusFuncs).Par
 <meta http-equiv="refresh" content="60">
 <meta name="robots" content="noindex">
 <script src="/status.js" defer></script>
-<title>{{.Title}} status</title>
+<title>{{.Title}}</title>
 <style>
 :root {
   color-scheme: dark;

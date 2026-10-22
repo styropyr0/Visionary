@@ -3,9 +3,6 @@ package analytics
 import (
 	"context"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
@@ -171,17 +168,12 @@ func (s *Server) uptimePrompt() string {
 
 // uptimeSettings are the runner's environment knobs.
 type uptimeSettings struct {
-	retentionDays int // 0 keeps results forever
-	allowPrivate  bool
-	workers       int
+	allowPrivate bool
+	workers      int
 }
 
 func uptimeSettingsFromEnv() uptimeSettings {
-	st := uptimeSettings{retentionDays: 90, allowPrivate: getBool("VISIONARY_UPTIME_ALLOW_PRIVATE", false), workers: 8}
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("VISIONARY_UPTIME_RETENTION_DAYS"))); err == nil && v >= 0 {
-		st.retentionDays = v
-	}
-	return st
+	return uptimeSettings{allowPrivate: getBool("VISIONARY_UPTIME_ALLOW_PRIVATE", false), workers: 8}
 }
 
 func uptimeNow() string { return time.Now().UTC().Format(tsLayout) }

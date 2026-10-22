@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -41,8 +42,9 @@ internal sealed class VisionaryAgent : IDisposable
     private readonly ErrorLimiter _limiter = new();
     private long _dropped;
 
-    public VisionaryAgent(IOptions<VisionaryOptions> options, ILoggerFactory loggers)
+    public VisionaryAgent(IOptions<VisionaryOptions> options, ILoggerFactory loggers, IHostApplicationLifetime? lifetime = null)
     {
+        Stopping = lifetime?.ApplicationStopping ?? CancellationToken.None;
         Options = options.Value;
         Logger = loggers.CreateLogger("Visionary");
         Instance = string.IsNullOrWhiteSpace(Options.Instance) ? HostName() : Options.Instance.Trim();
@@ -78,6 +80,9 @@ internal sealed class VisionaryAgent : IDisposable
     /// <summary>The running agent, for the static API; null when collection is off.</summary>
     public static VisionaryAgent? Current => Volatile.Read(ref _current);
 
+    /// <summary>Cancelled when the application stops; handed to <see cref="Visionary.Background"/> work.</summary>
+    public CancellationToken Stopping { get; }
+
     public VisionaryOptions Options { get; }
     public ILogger Logger { get; }
     public IStore? Store { get; }
@@ -89,6 +94,7 @@ internal sealed class VisionaryAgent : IDisposable
     public string SdkVersion { get; }
     public Redactor Redactor { get; }
     public HttpCounters Http { get; } = new();
+    public RequestTally Tally { get; } = new();
     public Channel<WriteItem> Queue { get; }
 
     public bool SpansOn => Enabled && Options.Spans;
@@ -107,7 +113,9 @@ internal sealed class VisionaryAgent : IDisposable
 
     /// <summary>
     /// Records a finished call. Inside a request it counts toward the request's totals (and its
-    /// rows, while under the cap); outside one it is stored only when it is slow itself.
+    /// rows, while under the cap); after its request was logged (work the request started in the
+    /// background) it keeps the request's id and offset and is stored up to the cap of such late
+    /// calls, then only when slow; outside any request it is stored only when it is slow itself.
     /// </summary>
     public void RecordSpan(string kind, string name, string? target, string? detail, DateTime startedAt,
         double durationMs, string? error, long? rowCount)
@@ -127,13 +135,24 @@ internal sealed class VisionaryAgent : IDisposable
             Error = Cap(error, 500),
             RowCount = rowCount,
         };
-        var state = RequestState.Current;
-        if (state is not null && state.Add(span with
+        var state = RequestState.Tracked;
+        if (state is not null)
+        {
+            span = span with
             {
                 RequestId = state.RequestId,
                 OffsetMs = Math.Round(Math.Max(0, (startedAt - state.StartedAt).TotalMilliseconds), 3),
-            }))
-        {
+            };
+            if (state.Add(span))
+            {
+                return;
+            }
+            // Work the request started and did not wait for: it keeps the request's id and
+            // offsets but stays out of the totals, which were already written.
+            if (state.KeepLate(span.DurationMs, Options.SpanThresholdMs))
+            {
+                Enqueue(span);
+            }
             return;
         }
         if (span.DurationMs >= Options.SpanThresholdMs)

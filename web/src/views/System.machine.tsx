@@ -4,10 +4,11 @@ import { useApp } from "../lib/state";
 import { formatDateTime, formatFull, formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { DataTable } from "../components/DataTable";
-import { Server } from "lucide-react";
-import { dim, formatUptime, HeadCard, InstallAgent, Meter, pct, StatusBadge, type HostStatus } from "../components/Machine";
+import { HardDrive, Server } from "lucide-react";
+import { dim, formatUptime, HeadCard, Meter, pct, StatusBadge, type HostStatus } from "../components/Machine";
 import { Panel } from "../components/Panel";
 import { Section } from "../components/Section";
+import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
 /**
  * What the host agent adds to System: the machine's details, every mount,
@@ -68,10 +69,11 @@ export function MachineHead({ host, machines, onPick }: { host: string; machines
       return (
         <details className="span-12 machine-hint">
           <summary>Add the host agent to see this machine's drives, processes, services and containers, and its SSH and sudo activity in Security.</summary>
-          <InstallAgent title="Watch the machine with the host agent">
-            The agent reports the whole machine every minute: every drive, the top processes, failed systemd services, Docker or Podman
-            containers, and SSH logins, sudo, open ports and pending updates. It never needs database credentials.
-          </InstallAgent>
+          <SetupCard icon={<HardDrive size={20} />} title="Watch the whole machine" text="Every drive, the top processes, failed systemd services, containers, and SSH logins, sudo, open ports and pending updates, every minute." topic="agent" className="sc-inline">
+            <SetupOption title="Install the host agent" text="A small service on each Linux machine. It posts here with a server key and never needs database credentials.">
+              <AgentSteps />
+            </SetupOption>
+          </SetupCard>
         </details>
       );
     }

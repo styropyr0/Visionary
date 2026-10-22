@@ -69,6 +69,9 @@ ERROR_COLUMNS = [
     "type", "message", "stack", "fingerprint", "handled", "runtime",
 ]
 RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"]
+# CPU profiles; the Visionary server creates the table, never the SDK.
+PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"]
+SETTINGS_SQL = "SELECT name, value FROM visionary_settings WHERE name LIKE 'profile.%'"
 
 TABLES = {
     "requests": ("api_logs", REQUEST_COLUMNS),
@@ -76,6 +79,7 @@ TABLES = {
     "spans": ("spans", SPAN_COLUMNS),
     "errors": ("errors", ERROR_COLUMNS),
     "releases": ("releases", RELEASE_COLUMNS),
+    "profiles": ("profiles", PROFILE_COLUMNS),
 }
 
 # Schema file per group, and the columns older tables of that group may lack.
@@ -196,6 +200,11 @@ class Backend:
         """Delete one chunk of rows older than cutoff; returns rows deleted."""
         raise NotImplementedError
 
+    def read_settings(self) -> List[Tuple[str, str]]:
+        """The dashboard's profile.* settings as (name, value) rows. Raises
+        when visionary_settings doesn't exist yet."""
+        raise NotImplementedError
+
     def close(self) -> None:
         pass
 
@@ -241,6 +250,9 @@ class D1Backend(Backend):
 
     def purge(self, table: str, cutoff: str) -> int:
         return self._client.changes(_purge_sql("d1", table, "?"), [cutoff])
+
+    def read_settings(self) -> List[Tuple[str, str]]:
+        return [(str(r[0]), "" if r[1] is None else str(r[1])) for r in self._client.rows(SETTINGS_SQL) if len(r) >= 2]
 
 
 class SQLBackend(Backend):
@@ -371,6 +383,17 @@ class SQLBackend(Backend):
                 cur.close()
 
         return self._run(delete)
+
+    def read_settings(self) -> List[Tuple[str, str]]:
+        def read(conn: Any) -> List[Tuple[str, str]]:
+            cur = conn.cursor()
+            try:
+                cur.execute(SETTINGS_SQL)  # no parameters: "%" stays literal for every driver
+                return [(str(r[0]), "" if r[1] is None else str(r[1])) for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+        return self._run(read)
 
     def _fit(self, cols: Sequence[str], row: Tuple[Any, ...]) -> Tuple[Any, ...]:
         if self.dialect == "postgres":

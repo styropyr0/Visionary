@@ -201,6 +201,53 @@ Anything else (cache, queue, your own steps):
 const user = await visionary.span("cache", "GET user", () => redis.get(key));
 ```
 
+### Background work
+
+Work a request starts and doesn't wait for stays linked to it: calls made
+after the response appear in the request's breakdown, marked as after the
+response and left out of its totals. Name the work with `background`, and it
+shows as one span with when it finished:
+
+```js
+visionary.background("send welcome email", () => mailer.send(user.email));
+```
+
+### GraphQL
+
+Each operation becomes a span named after it ("query GetUser") with its
+document, so the Queries page can show its depth, field count and the queries
+its resolvers ran:
+
+```js
+new ApolloServer({ typeDefs, resolvers, plugins: [visionary.apolloPlugin()] });
+
+// any other server
+const result = await visionary.graphqlOperation("query", operationName, source, () => execute(args));
+```
+
+### Query plans
+
+Give the SDK your pool and the dashboard can ask for a statement's plan; the
+SDK runs `EXPLAIN` (never `EXPLAIN ANALYZE`) and sends it back:
+
+```js
+visionary.init({ explain: [visionary.explainWith(pool)] }); // pg Pool/Client or mysql2 pool
+```
+
+## CPU profiles
+
+Off until someone turns them on in the dashboard (Settings → Profiling), for
+every service or only the ones chosen there; turning them off again takes
+effect within 30 seconds, with no redeploy. While on, the SDK samples the CPU
+every 5 minutes for 10 seconds (both set in the dashboard) with Node's
+built-in inspector, only while requests are being served, and records how
+long each route's requests took meanwhile. **Profile now** on the CPU
+profiles page takes one at once. Sampling costs a few percent of CPU while it
+runs and nothing in between.
+
+`VISIONARY_PROFILE=false` (or `profile: false` in `init`) makes a service
+ignore the dashboard and never profile.
+
 ## Errors
 
 Exceptions that reach the integrations are recorded with `handled = 0` and
@@ -287,16 +334,23 @@ visionary.init({ dbStats: visionary.pgPoolStats(pool) }); // or mysqlPoolStats(p
 | `VISIONARY_LOG_PATH_PREFIX` | empty (log everything) |
 | `VISIONARY_LOG_BODIES` | `true` |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` (also spans and errors; 0 keeps forever) |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off; above 0 the SDK also deletes older api_logs, spans, errors and profiles) |
 | `VISIONARY_LOG_REDACT_HEADERS`, `_REDACT_FIELDS`, `_REDACT_REQUEST_FIELDS` | empty (comma lists, added to the defaults) |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `_ERROR_KEY_FIELD` | `error.code`, `error.key` |
 | `VISIONARY_SYSTEM_METRICS` | `true` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off; above 0 the SDK also deletes older system_metrics) |
 | `VISIONARY_SPANS` | `true` |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` |
 | `VISIONARY_SPAN_MAX` | `100` |
 | `VISIONARY_ERRORS` | `true` |
+| `VISIONARY_EXPLAIN` | `true` (with `explain` given to `init`) |
+| `VISIONARY_PROFILE` | follow the dashboard; `false` never profiles |
+
+Old rows are deleted by the Visionary server, following Settings → Retention in
+the dashboard. The two retention variables (options `retentionDays` and
+`systemRetentionDays`) only matter when the service writes to a database no
+Visionary server reads.
 
 Options only: `instrumentHttp: false` (no outbound HTTP spans),
 `captureUncaught: false`, `logger` (anything with `info`/`warn`/`error`),

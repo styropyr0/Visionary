@@ -12,10 +12,10 @@ module Visionary
   )
 
   # The single background thread that batches api_logs, spans, errors and
-  # releases rows. Queue items are [:request, Entry], [:span, row],
-  # [:error, row] or [:release, row].
+  # releases rows, and CPU profiles. Queue items are [:request, Entry],
+  # [:span, row], [:error, row], [:release, row] or [:profile, row].
   class Writer
-    INSERTS = { request: "api_logs", span: "spans", error: "errors", release: "releases" }.freeze
+    INSERTS = { request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles" }.freeze
 
     def initialize(cfg, store, schemas, logger)
       @cfg = cfg
@@ -93,7 +93,15 @@ module Visionary
       @logger.warn("visionary: queue full; #{n} entries dropped") if n.positive?
     end
 
+    # A profile goes in its own transaction: the server creates its table, so
+    # if that is missing only the profile is lost.
     def write(batch)
+      profiles, rest = batch.partition { |kind, _| kind == :profile }
+      commit(rest) unless rest.empty?
+      profiles.each { |item| commit([item]) }
+    end
+
+    def commit(batch)
       stmts = begin
         users = lookup_users(batch)
         batch.flat_map { |kind, item| statements(kind, item, users) }

@@ -69,8 +69,11 @@ func countCol(name, cond string) rollupCol {
 	return rollupCol{name, colInt, countIf(cond), "CASE WHEN " + cond + " THEN 1 ELSE 0 END", "SUM(" + name + ")"}
 }
 
-func requestCols(apdexMs int) []rollupCol {
-	t, t4 := strconv.Itoa(apdexMs), strconv.Itoa(4*apdexMs)
+// requestCols are the measures of rollup_requests. Apdex counts use the
+// threshold in force when a bucket was built (apdex_ms keeps it, the highest
+// of a bucket's routes when some have their own).
+func requestCols(rule apdexRule) []rollupCol {
+	t, t4 := rule.sql(), rule.sql4()
 	cols := []rollupCol{
 		{"requests", colInt, "COUNT(*)", "1", "SUM(requests)"},
 		countCol("errors_5xx", "status >= 500"),
@@ -81,7 +84,7 @@ func requestCols(apdexMs int) []rollupCol {
 		countCol("apdex_satisfied", "status < 500 AND duration_ms <= "+t),
 		countCol("apdex_tolerating", "status < 500 AND duration_ms > "+t+" AND duration_ms <= "+t4),
 		countCol("slow_requests", "duration_ms > "+t4),
-		{"apdex_ms", colInt, t, t, "MAX(apdex_ms)"},
+		{"apdex_ms", colInt, "MAX(" + t + ")", t, "MAX(apdex_ms)"},
 		{"sum_response_bytes", colInt, "SUM(response_size)", "response_size", "SUM(sum_response_bytes)"},
 		{"db_requests", colInt, "COUNT(db_ms)", "CASE WHEN db_ms IS NOT NULL THEN 1 ELSE 0 END", "SUM(db_requests)"},
 		{"sum_db_ms", colFloat, "COALESCE(SUM(db_ms), 0)", "COALESCE(db_ms, 0)", "SUM(sum_db_ms)"},
@@ -215,7 +218,7 @@ type rollupTable struct {
 	cols   []rollupCol
 }
 
-func requestsTable(apdexMs int, routes []string) rollupTable {
+func requestsTable(rule apdexRule, routes []string) rollupTable {
 	return rollupTable{
 		name:   "rollup_requests",
 		source: "api_logs",
@@ -226,7 +229,7 @@ func requestsTable(apdexMs int, routes []string) rollupTable {
 			{"status", colInt, 0, "status"},
 			{"error_key", colText, 64, errorKeyExpr},
 		},
-		cols: requestCols(apdexMs),
+		cols: requestCols(rule),
 	}
 }
 

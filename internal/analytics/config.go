@@ -30,8 +30,6 @@ type Config struct {
 	ModelReasoning string
 	MaxRows        int
 	MaxRangeDays   int
-	ApdexMs        int
-	SLOTarget      float64
 	// AppName is the product whose API is being analysed ("Acme"); the
 	// analyst uses it in answers. DataNotes is free text about the data the
 	// analyst should know, such as what user_role values mean.
@@ -63,8 +61,6 @@ func LoadConfig() (Config, error) {
 		ModelReasoning:  strings.ToLower(os.Getenv("VISIONARY_REASONING")),
 		MaxRows:         getInt("VISIONARY_MAX_ROWS", 5000),
 		MaxRangeDays:    getInt("VISIONARY_MAX_RANGE_DAYS", 90),
-		ApdexMs:         getInt("VISIONARY_APDEX_MS", 500),
-		SLOTarget:       getFloat("VISIONARY_SLO_TARGET", 99),
 		AppName:         getEnv("VISIONARY_APP_NAME", "the application"),
 		DataNotes:       strings.TrimSpace(os.Getenv("VISIONARY_DATA_NOTES")),
 		SessionSecret:   os.Getenv("VISIONARY_SESSION_SECRET"),

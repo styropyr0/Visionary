@@ -240,7 +240,7 @@ func (s *Server) builtinExists(ref string) bool {
 	case "overview":
 		m = s.overview
 	case "performance":
-		m = s.performance
+		m = s.performance()
 	case "system":
 		m = s.system
 	}

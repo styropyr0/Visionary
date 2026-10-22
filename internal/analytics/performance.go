@@ -34,9 +34,26 @@ const percentiles = `
   MIN(CASE WHEN rn >= 0.99 * n THEN duration_ms END) AS p99,
   MAX(duration_ms) AS max_ms`
 
-func performancePanels(q sqlDialect, apdexMs int) map[string]string {
-	t := strconv.Itoa(apdexMs)
-	t4 := strconv.Itoa(4 * apdexMs)
+type perfPanels struct {
+	key    string
+	panels map[string]string
+}
+
+// performance returns the Performance panels for the Apdex rule in force.
+func (s *Server) performance() map[string]string {
+	rule := s.apdex()
+	key := rule.key()
+	if p := s.perf.Load(); p != nil && p.key == key {
+		return p.panels
+	}
+	p := &perfPanels{key: key, panels: performancePanels(s.q, rule)}
+	s.perf.Store(p)
+	return p.panels
+}
+
+func performancePanels(q sqlDialect, rule apdexRule) map[string]string {
+	t := rule.sql()
+	t4 := rule.sql4()
 	apdex := q.round("SUM(CASE WHEN status < 500 AND duration_ms <= "+t+" THEN 1.0 WHEN status < 500 AND duration_ms <= "+t4+" THEN 0.5 ELSE 0 END) / NULLIF(COUNT(*), 0)", 3)
 	good := q.round("100.0 * "+countIf("status < 500 AND duration_ms <= "+t)+" / NULLIF(COUNT(*), 0)", 2)
 	errRate := q.round("100.0 * "+countIf("status >= 500")+" / NULLIF(COUNT(*), 0)", 2)
@@ -45,7 +62,8 @@ func performancePanels(q sqlDialect, apdexMs int) map[string]string {
 		// One pass: totals, Apdex, SLO and percentiles for the whole window.
 		"summary": `
 WITH o AS (
-  SELECT status, duration_ms,
+  -- method, route and path for routes with their own Apdex threshold.
+  SELECT status, duration_ms, method, route, path,
     ROW_NUMBER() OVER (ORDER BY duration_ms) AS rn,
     COUNT(*) OVER () AS n
   FROM api_logs WHERE ` + window + `
@@ -94,11 +112,11 @@ GROUP BY 1 ORDER BY 1`,
 		// routes worth optimizing first.
 		"routes": `
 WITH r AS (
-  SELECT COALESCE(route, path) AS route, method, status, duration_ms, response_size
+  SELECT COALESCE(route, path) AS route, path, method, status, duration_ms, response_size
   FROM api_logs WHERE ` + window + `
 ),
 ranked AS (
-  SELECT route, method, status, duration_ms, response_size,
+  SELECT route, path, method, status, duration_ms, response_size,
     ROW_NUMBER() OVER (PARTITION BY route, method ORDER BY duration_ms) AS rn,
     COUNT(*) OVER (PARTITION BY route, method) AS n
   FROM r
@@ -198,7 +216,7 @@ ORDER BY a.t`,
 // with the previous period of the same length, for deltas and regressions.
 func (s *Server) handlePerformance(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("panel")
-	sql, ok := s.performance[name]
+	sql, ok := s.performance()[name]
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return

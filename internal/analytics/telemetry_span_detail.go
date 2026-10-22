@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 
 	"golang.org/x/sync/errgroup"
@@ -32,16 +33,22 @@ func (s *Server) handleSpanDetail(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	kind, name := q.Get("kind"), q.Get("name")
 	switch kind {
-	case "db", "http", "cache", "queue", "custom":
+	case "db", "http", "cache", "queue", "custom", "graphql", "background":
 	default:
-		writeError(w, http.StatusBadRequest, "kind must be db, http, cache, queue or custom")
+		writeError(w, http.StatusBadRequest, "kind must be db, http, cache, queue, custom, graphql or background")
 		return
 	}
 	if name == "" || len(name) > 300 {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	const where = `created_at >= {{from}} AND created_at < {{to}} AND kind = ? AND name = ?`
+	where := `created_at >= {{from}} AND created_at < {{to}} AND kind = ? AND name = ?`
+	args := []any{kind, name}
+	// One statement (or URL) of the name, as the query catalogue lists them.
+	if detail := q.Get("detail"); detail != "" {
+		where += ` AND COALESCE(detail, '') = ?`
+		args = append(args, detail)
+	}
 	pct := func(p string) string { return "MIN(CASE WHEN rn >= " + p + " * n THEN duration_ms END)" }
 	summary := `
 WITH sp AS (
@@ -67,8 +74,8 @@ FROM sp`
 
 	var cur, prev, timeline, bands, variants, routes, slowest, errs *Result
 	g, ctx := errgroup.WithContext(r.Context())
-	g.Go(func() (err error) { cur, err = s.telemetryQuery(ctx, summary, tr, kind, name); return })
-	g.Go(func() (err error) { prev, err = s.telemetryQuery(ctx, summary, tr.previous(), kind, name); return })
+	g.Go(func() (err error) { cur, err = s.telemetryQuery(ctx, summary, tr, args...); return })
+	g.Go(func() (err error) { prev, err = s.telemetryQuery(ctx, summary, tr.previous(), args...); return })
 	g.Go(func() (err error) {
 		timeline, err = s.telemetryQuery(ctx, `
 WITH b AS (
@@ -82,14 +89,14 @@ r AS (
 )
 SELECT t, COUNT(*) AS calls, `+s.q.round("AVG(duration_ms)", 2)+` AS avg_ms, `+pct("0.95")+` AS p95,
   `+countIf("status = 'error'")+` AS errors
-FROM r GROUP BY t ORDER BY t`, tr, kind, name)
+FROM r GROUP BY t ORDER BY t`, tr, args...)
 		return
 	})
 	g.Go(func() (err error) {
 		bands, err = s.telemetryQuery(ctx, `
 SELECT `+spanBand()+` AS band, COUNT(*) AS calls
 FROM spans WHERE `+where+`
-GROUP BY 1 ORDER BY 1`, tr, kind, name)
+GROUP BY 1 ORDER BY 1`, tr, args...)
 		return
 	})
 	// Statements (db) or URLs (http) under the name: "SELECT users" covers
@@ -109,7 +116,7 @@ SELECT detail, MAX(target) AS target, COUNT(*) AS calls,
   MAX(duration_ms) AS max_ms,
   `+countIf("status = 'error'")+` AS errors,
   `+s.q.round("AVG(row_count)", 1)+` AS avg_rows
-FROM sp GROUP BY detail ORDER BY total_ms DESC LIMIT 20`, tr, kind, name)
+FROM sp GROUP BY detail ORDER BY total_ms DESC LIMIT 20`, tr, args...)
 		return
 	})
 	// Routes making the call, and how many times per request: one call per
@@ -131,21 +138,21 @@ SELECT a.method, COALESCE(a.route, a.path) AS route,
 FROM per JOIN api_logs a ON a.request_id = per.request_id
 WHERE a.created_at >= ? AND a.created_at < {{to}}
 GROUP BY a.method, COALESCE(a.route, a.path)
-ORDER BY total_ms DESC LIMIT 20`, tr, kind, name, tr.requestsFrom())
+ORDER BY total_ms DESC LIMIT 20`, tr, append(slices.Clone(args), tr.requestsFrom())...)
 		return
 	})
 	g.Go(func() (err error) {
 		slowest, err = s.telemetryQuery(ctx, `
 SELECT created_at, duration_ms, status, error, row_count, offset_ms, request_id, detail
 FROM spans WHERE `+where+`
-ORDER BY duration_ms DESC LIMIT 20`, tr, kind, name)
+ORDER BY duration_ms DESC LIMIT 20`, tr, args...)
 		return
 	})
 	g.Go(func() (err error) {
 		errs, err = s.telemetryQuery(ctx, `
 SELECT COALESCE(error, '') AS error, COUNT(*) AS calls, MAX(created_at) AS last_seen
 FROM spans WHERE `+where+` AND status = 'error'
-GROUP BY COALESCE(error, '') ORDER BY calls DESC LIMIT 10`, tr, kind, name)
+GROUP BY COALESCE(error, '') ORDER BY calls DESC LIMIT 10`, tr, args...)
 		return
 	})
 	if err := g.Wait(); err != nil {

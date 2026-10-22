@@ -5,7 +5,7 @@ import type { Logger } from "./log.js";
 import { errMessage } from "./log.js";
 import { Redactor } from "./redact.js";
 import type { Stmt, Table, Value } from "./store/sql.js";
-import { PURGE_CHUNK, insertSQL, purgeSQL } from "./store/sql.js";
+import { PURGE_CHUNK, TABLE_COLUMNS, insertSQL, purgeSQL } from "./store/sql.js";
 import type { Store } from "./store/store.js";
 import { formatTs, sleep } from "./util.js";
 
@@ -36,7 +36,7 @@ export class Writer {
     private readonly logger: Logger,
   ) {
     this.redact = new Redactor(cfg.redactHeaders, cfg.redactFields, cfg.redactRequestFields);
-    const tables: Table[] = ["api_logs", "system_metrics", "spans", "errors", "releases"];
+    const tables = Object.keys(TABLE_COLUMNS) as Table[];
     this.inserts = Object.fromEntries(tables.map((t) => [t, insertSQL(t, store.stringParams)])) as Record<Table, string>;
   }
 

@@ -15,12 +15,12 @@ from __future__ import annotations
 import time
 from typing import Any, Awaitable, Callable, Dict, List, MutableMapping, Optional, Tuple
 
-from .. import _context
+from .. import _context, _profiler
 from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import finish, logger, report_unhandled, resolve_agent
+from ._common import finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
@@ -50,6 +50,7 @@ class VisionaryASGIMiddleware:
             await self.app(scope, receive, send)
             return
         agent.http.started()
+        _profiler.request_started()
         status = [500]
         try:
             if agent.should_log(scope.get("path", "")):
@@ -60,7 +61,8 @@ class VisionaryASGIMiddleware:
                         status[0] = message["status"]
                     await send(message)
 
-                _, token = _context.begin(None, _info(scope, None))
+                t0 = time.perf_counter()
+                ann, token = _context.begin(None, _info(scope, None))
                 try:
                     await self.app(scope, receive, send_status)
                 except BaseException as e:
@@ -68,6 +70,7 @@ class VisionaryASGIMiddleware:
                     raise
                 finally:
                     _context.end(token)
+                    finish_unlogged(scope.get("method", ""), ann.route or _route(scope) or scope.get("path", ""), t0)
         finally:
             agent.http.finished(status[0])
 

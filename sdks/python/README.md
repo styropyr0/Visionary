@@ -161,12 +161,12 @@ same settings as attributes. The full list and semantics are in
 | `VISIONARY_LOG_PATH_PREFIX` | empty | only log paths starting with this |
 | `VISIONARY_LOG_BODIES` | `true` | capture request/response bodies |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` | per body |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` | `0` keeps forever |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` | off; above 0 the SDK also deletes older `api_logs`, `spans`, `errors` and `profiles` rows |
 | `VISIONARY_LOG_REDACT_HEADERS`, `_REDACT_FIELDS`, `_REDACT_REQUEST_FIELDS` | empty | comma lists added to the defaults |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `_ERROR_KEY_FIELD` | `error.code`, `error.key` | dotted JSON paths |
 | `VISIONARY_SYSTEM_METRICS` | `true` | sampler on/off |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | `15`, `500ms`, `1m` |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` | off; above 0 the SDK also deletes older `system_metrics` rows |
 | `VISIONARY_SERVICE` | empty | service name on every row |
 | `VISIONARY_RELEASE` | platform commit variable | release on every row; see [Telemetry](#telemetry-spans-errors-releases) |
 | `VISIONARY_SPANS` | `true` | spans and call totals on/off |
@@ -174,8 +174,13 @@ same settings as attributes. The full list and semantics are in
 | `VISIONARY_SPAN_MAX` | `100` | span rows per request; later calls still count in the totals |
 | `VISIONARY_ERRORS` | `true` | error capture on/off |
 | `VISIONARY_INSTRUMENT_HTTP` | `false` | Python only: call `instrument_http()` at start |
+| `VISIONARY_PROFILE` | `true` | `false` ignores the dashboard and never takes CPU profiles; see [CPU profiles](#cpu-profiles) |
 
 Booleans accept `true/false/1/0/yes/no`.
+
+Old rows are deleted by the Visionary server, following Settings → Retention in
+the dashboard. The two `*_RETENTION_DAYS` variables only matter when the
+service writes to a database no Visionary server reads.
 
 ## Telemetry (spans, errors, releases)
 
@@ -238,6 +243,40 @@ A call through `requests` makes one span, not a second one for urllib3.
 
 The SDK's own writes are never recorded as spans.
 
+### Background work
+
+Work a handler starts and does not wait for (sending an email, resizing an
+image) stays linked to its request. Start it with one of two helpers:
+
+```python
+# a new thread (not a daemon, so the process waits for it at exit)
+visionary.background("send welcome email", send_welcome, user.id)
+
+# work you schedule yourself: an executor, asyncio.create_task, ...
+ctx = contextvars.copy_context()
+def resize():
+    with visionary.background_span("resize avatar"):   # also `async with`
+        make_thumbnails(path)
+executor.submit(ctx.run, resize)
+```
+
+Each records one span of kind `background`, named as you call it, covering
+the whole job; it is marked `error` with the message if the job raises (the
+exception still propagates). The database and HTTP calls inside are their own
+spans as usual. All of them keep the request's `request_id` and an
+`offset_ms` from the request's start, even when they run after the response
+was sent.
+
+Calls that end after the request was logged are not added to its
+`db_*`/`http_*` totals, and `background` spans never are. They are stored
+whatever their duration, up to `VISIONARY_SPAN_MAX` per request on top of the
+spans stored with the request; beyond that, only those taking at least
+`VISIONARY_SPAN_THRESHOLD_MS`. In the dashboard they appear in the request's
+breakdown past the end of the request (`offset_ms + duration_ms` greater than
+its `duration_ms`), and are left out of its untracked time, since the
+response did not wait for them. Outside any request the helpers still record
+the span, with `request_id` NULL, when it takes at least the threshold.
+
 ### Errors
 
 The Django, ASGI and Flask integrations record every exception the
@@ -265,8 +304,57 @@ written `function@path` with the path relative to its `sys.path` entry
 innermost frames are used; with no frames at all, the message with digit
 runs replaced by `0`. At most 20 rows per fingerprint per minute are kept.
 
-Retention: `spans` and `errors` follow `VISIONARY_LOG_RETENTION_DAYS`;
+Retention: Settings → Retention on the Visionary server (and
+`VISIONARY_LOG_RETENTION_DAYS` for `spans` and `errors` when it is set);
 `releases` are kept.
+
+## CPU profiles
+
+CPU profiling is **off until someone turns it on in the dashboard**
+(Settings → Profiling), and can be turned off there again; no redeploy either
+way. The SDK reads the switch from the `visionary_settings` table at start and
+every 30 seconds on a background thread, and logs one line when profiling
+turns on or off. The dashboard can limit profiling to some services (matched
+against `VISIONARY_SERVICE`) and set how often a profile is taken (default
+every 300 s) and how long it samples (default 10 s). **Profile now** takes one
+profile within about 30 seconds, even while profiling is off.
+
+`VISIONARY_PROFILE=false` makes a service ignore the dashboard and never
+profile: use it for code that must never be sampled.
+
+While a profile runs, a daemon thread reads every thread's Python stack
+(`sys._current_frames()`) about every 10 ms. It costs a few percent of one CPU
+while it samples and nothing in between, never touches the request path, and
+is skipped when no request arrived since the last profile. A profile during
+which no request finished, or with fewer than 20 samples, is dropped. Each
+profile is one `profiles` row:
+
+- `folded`: one `frame;frame;frame count` line per distinct stack, outermost
+  first, heaviest first up to 90 000 bytes (the rest summed into `(other) n`).
+  Frames read `function file:line`, the file showing whose code it is: your
+  code relative to the working directory (`shop/views.py`), installed
+  packages as `lib:django/db/models/query.py`, the standard library as
+  `std:json/decoder.py`, and frames with no file as the function alone.
+- `routes`: JSON of `"METHOD route"` to the milliseconds the requests that
+  finished during the profile took, so the flame graph can be read per route.
+
+Only threads that are using the CPU are counted; idle server threads, the
+SDK's own threads and threads blocked on I/O or locks are left out. On Linux
+this uses per-thread CPU clocks (a thread counts when its CPU time advanced
+since the previous sample and it is not parked in a blocking call). **On
+Windows and macOS there are no such clocks, so the filter is a heuristic**:
+a thread whose innermost Python frame is calling a known blocking function
+(`time.sleep`, lock/condition waits, `queue.get`, `select`/`poll`, socket
+`accept`/`recv`, asyncio's idle `select`) is left out. It is approximate: a
+thread waiting for the GIL, or blocked in a call it does not know, still
+counts.
+
+Profiles are pure Python stack samples: time inside C extensions shows on the
+Python frame that called them (`hash_password app.py:12` for
+`hashlib.pbkdf2_hmac`), and native frames are not seen. The SDK never creates
+the `profiles` or `visionary_settings` tables (the Visionary server does);
+until they exist profiling stays off. Profiles follow Settings → Retention, and
+`VISIONARY_LOG_RETENTION_DAYS` when it is set.
 
 ## Users
 
@@ -408,7 +496,8 @@ matching is case-insensitive.
   error log.
 - **System writes:** samples are written 4 at a time. On failure they are kept
   (at most an hour's worth) and retried with the next write.
-- **Retention:** runs 60 s after start, then daily, deleting in chunks of 5000.
+- **Retention:** only with a retention variable above 0; runs 60 s after start,
+  then daily, deleting in chunks of 5000.
 - **Telemetry writes:** spans, errors and the release row share the request
   queue and batches (one transaction, or one D1 `batch` call, per flush).
 - **Logging:** all messages go to the `visionary` logger.

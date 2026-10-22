@@ -9,7 +9,9 @@ Pages, anything on endpoint routing):
   the request made;
 - periodic host, process, GC and throughput samples in `system_metrics`;
 - database and `HttpClient` spans in `spans`, exceptions in `errors`, and a deploy
-  marker in `releases`,
+  marker in `releases`;
+- CPU profiles in `profiles` when the dashboard asks for them, with the optional
+  `Visionary.AspNetCore.Profiling` package ([CPU profiles](#cpu-profiles)),
 
 written in batches on background services to Cloudflare D1, PostgreSQL,
 MySQL/MariaDB or SQLite. The Visionary server reads those tables for its dashboards.
@@ -189,6 +191,40 @@ using (var span = Visionary.StartSpan("cache", "GET session", "redis/sessions"))
 
 The package's own writes are never recorded as spans.
 
+## Background work
+
+Work a handler starts and does not wait for stays part of its request. Start it
+with `Visionary.Background`:
+
+```csharp
+app.MapPost("/signup", (IDbContextFactory<AppDb> dbs) =>
+{
+    _ = Visionary.Background("send welcome email", async ct =>
+    {
+        await using var db = await dbs.CreateDbContextAsync(ct);
+        // ... queries, HttpClient calls
+    });
+    return Results.Ok();
+});
+```
+
+It runs the work with `Task.Run` and records one span of kind `background`
+named after it, with status `error` and the message if the work throws; the
+returned `Task` completes or faults with the work. The work is not cancelled with
+the request (`RequestAborted`); the token it gets is cancelled when the
+application stops (`IHostApplicationLifetime.ApplicationStopping`). Don't touch
+`HttpContext` in it: the request is over by then.
+
+Calls made in the work (and in any `Task.Run` or un-awaited task a request
+starts) carry the request's `request_id`, with `offset_ms` from the request's
+start, even after the response went out; `offset_ms + duration_ms` past the
+request's duration shows they ran after it. Calls that end after the request was
+logged are left out of its `db_*`/`http_*` totals and are kept whatever their
+duration, up to `VISIONARY_SPAN_MAX` of them per request, then only when they
+take at least `VISIONARY_SPAN_THRESHOLD_MS`. `background` spans never count in the
+totals. Outside a request the span has no `request_id` and is kept like other
+lone spans, when it takes at least the threshold.
+
 ## Errors
 
 Exceptions that escape the pipeline are recorded (`handled = 0`) and rethrown, so
@@ -198,6 +234,73 @@ records a handled one (`handled = 1`). Each row has the type, message, stack
 (`Exception.ToString()`), and a fingerprint over the top five frames of your own
 code (namespaces other than `System.*`, `Microsoft.*` and the SDK's), so the same
 bug groups together across releases and machines.
+
+## CPU profiles
+
+Profiling is a separate package, so apps that don't use it don't carry its
+dependencies (Microsoft's TraceEvent reader, about 3.5 MB of assemblies):
+
+```sh
+dotnet add package Visionary.AspNetCore.Profiling
+```
+
+```csharp
+builder.Services.AddVisionary();
+builder.Services.AddVisionaryProfiling();
+```
+
+Nothing is sampled until someone turns profiling on in the dashboard
+(**Settings → Profiling**), and it can be turned off there again; no redeploy is
+needed either way. The package reads the `profile.*` rows of
+`visionary_settings` at start and every 30 seconds on a background service,
+off the request path. While profiling is on, and only while requests are being
+served, it samples the process for the chosen duration (10 s by default) every
+chosen interval (5 minutes by default). **Profile now** in the dashboard takes
+one profile at once, even while scheduled profiling is off. The dashboard's
+service list limits profiling to the services named there (`VISIONARY_SERVICE`).
+`VISIONARY_PROFILE=false` (or `o.Profile = false`) makes a service ignore the
+dashboard and never profile, for code that must never be sampled.
+
+**How it samples:** through EventPipe, the runtime's own tracing channel, on
+the process's diagnostics port (the same thing `dotnet-trace` uses from
+outside). The runtime's sample profiler walks every managed thread's stack
+about once a millisecond; the session goes to a temporary `.nettrace` file,
+which is read back and deleted when the profile ends. Only threads running
+managed code count: threads that are waiting, sleeping or blocked in native
+calls are left out, and so is the SDK's own background work (writer, system
+sampler, the profiler itself). Your requests going through Visionary's
+middleware do count.
+
+**Cost:** nothing between profiles. While a profile runs, a few percent of one
+CPU (measured at 3 to 7 % of one core with about 40 threads), plus a short
+burst when the trace is read back (0.1 to 2 s of one core for a 10 s profile,
+on a thread-pool thread). Requests are never blocked or failed by it.
+
+**What is stored:** one row in `profiles` per profile, with `samples`, the
+measured `duration_ms`, `routes` (each `"METHOD route"` and the milliseconds
+its requests that finished during the profile took) and `folded`: one
+`frame;frame;...;frame count` line per distinct stack, heaviest first, cut at
+90 000 bytes with the rest summed into one `(other) n` line. Profiles with
+fewer than 20 samples or no finished request are dropped. Frames read:
+
+| Code | Frame |
+|---|---|
+| Your code, with its PDB next to it | `MyApp.Orders.Total Services/Orders.cs:42` (only the sampled frame has a line; callers read `MyApp.Orders.Total Services/Orders.cs`) |
+| Your code, no PDB | `MyApp.Orders.Total MyApp/Orders` |
+| NuGet packages (from the app's `deps.json`) | `Npgsql.NpgsqlCommand.ExecuteReader lib:Npgsql/NpgsqlCommand` |
+| The runtime and shared frameworks | `System.Text.Json.JsonSerializer.Serialize std:System.Text.Json/JsonSerializer` |
+| Code generated at run time, native frames | `dynamicClass.lambda_method1`, `(native)` |
+
+Parameter lists and generic arguments are left out, and an async method's
+state machine reads as the method (`Orders+<TotalAsync>d__3.MoveNext` is
+`Orders.TotalAsync`). Methods the JIT inlined show as part of their caller.
+Profiles follow Settings → Retention, and `VISIONARY_LOG_RETENTION_DAYS` when it
+is set. The Visionary server creates
+`profiles` and `visionary_settings`; until it has, profiling stays off.
+
+Sampling needs the diagnostics port: it is off when the app runs with
+`DOTNET_EnableDiagnostics=0`, and on Linux it needs a writable temp directory
+(`/tmp`). If a profile can't start, one warning is logged and the app carries on.
 
 ## Configuration
 
@@ -214,18 +317,23 @@ the same name (so `appsettings.json` works too), and can then be overridden in
 | `VISIONARY_LOG_PATH_PREFIX` | empty (everything) | `PathPrefix` |
 | `VISIONARY_LOG_BODIES` | `true` | `LogBodies` |
 | `VISIONARY_LOG_MAX_BODY_BYTES` | `8192` | `MaxBodyBytes` |
-| `VISIONARY_LOG_RETENTION_DAYS` | `30` (0 keeps forever) | `LogRetentionDays` |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off; above 0 the SDK also deletes older `api_logs`, `spans`, `errors` and `profiles` rows) | `LogRetentionDays` |
 | `VISIONARY_LOG_REDACT_HEADERS`, `_REDACT_FIELDS`, `_REDACT_REQUEST_FIELDS` | empty (comma lists, added to the defaults) | `RedactHeaders`, ... |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `_ERROR_KEY_FIELD` | `error.code`, `error.key` | `ErrorCodeField`, `ErrorKeyField` |
 | `VISIONARY_SYSTEM_METRICS` | `true` | `SystemMetrics` |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | `SystemInterval` |
-| `VISIONARY_SYSTEM_RETENTION_DAYS` | `30` | `SystemRetentionDays` |
+| `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off; above 0 the SDK also deletes older `system_metrics` rows) | `SystemRetentionDays` |
 | `VISIONARY_SERVICE` | empty | `Service` |
 | `VISIONARY_RELEASE` | the platform's commit variable (`GITHUB_SHA`, `RAILWAY_GIT_COMMIT_SHA`, ...) | `Release` |
 | `VISIONARY_SPANS` | `true` | `Spans` |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` | `SpanThresholdMs` |
 | `VISIONARY_SPAN_MAX` | `100` | `SpanMax` |
 | `VISIONARY_ERRORS` | `true` | `Errors` |
+| `VISIONARY_PROFILE` | `true` (profiles when the dashboard asks; needs `AddVisionaryProfiling()`) | `Profile` |
+
+Old rows are deleted by the Visionary server, following Settings → Retention in the
+dashboard. The two `*_RETENTION_DAYS` settings only matter when the service writes to
+a database no Visionary server reads.
 
 `DbStats` reports connection pool numbers for the `db_*` columns; `Route` names
 requests endpoint routing doesn't see (or call `Visionary.SetRoute`).

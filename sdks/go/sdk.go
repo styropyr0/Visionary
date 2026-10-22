@@ -92,8 +92,17 @@ type Config struct {
 	// InstrumentHTTP makes http.DefaultClient (http.Get, http.Post, ...)
 	// record its calls; other clients need Transport.
 	InstrumentHTTP bool
+	// Explain lets the dashboard ask for query plans on these databases
+	// (see Explainer). Off with VISIONARY_EXPLAIN=false.
+	Explain []*Explainer
+	// ExplainOff is VISIONARY_EXPLAIN=false.
+	ExplainOff bool
 	// Errors records panics that reach Middleware and CaptureError calls.
 	Errors bool
+	// ProfileOff is VISIONARY_PROFILE=false: never take CPU profiles, whatever
+	// the dashboard's Settings -> Profiling says. Otherwise profiling follows
+	// the dashboard (off until it is turned on there).
+	ProfileOff bool
 
 	Requests RequestsConfig
 	System   SystemConfig
@@ -116,6 +125,9 @@ type RequestsConfig struct {
 	QueueSize     int
 	BatchSize     int
 	FlushInterval time.Duration
+	// RetentionDays, above 0, makes the SDK delete api_logs, spans, errors
+	// and profiles rows older than that many days. 0 (the default) leaves
+	// retention to the Visionary server's Settings → Retention.
 	RetentionDays int
 
 	// RedactHeaders and RedactFields are matched case-insensitively; values
@@ -142,6 +154,8 @@ type RequestsConfig struct {
 type SystemConfig struct {
 	Enabled       bool
 	Interval      time.Duration
+	// RetentionDays, above 0, makes the SDK delete system_metrics rows older
+	// than that many days. 0 (the default) leaves it to the server.
 	RetentionDays int
 	// DB reports database pool stats; optional. See PgxPool-style adapters in
 	// the README, or SQLDB for database/sql.
@@ -161,7 +175,7 @@ type SystemConfig struct {
 //	VISIONARY_LOG_PATH_PREFIX            (e.g. /api; default: everything)
 //	VISIONARY_LOG_BODIES=true|false      (default true)
 //	VISIONARY_LOG_MAX_BODY_BYTES         (default 8192)
-//	VISIONARY_LOG_RETENTION_DAYS         (default 30, 0 keeps forever)
+//	VISIONARY_LOG_RETENTION_DAYS         (default 0, off: the server applies Settings → Retention)
 //	VISIONARY_LOG_REDACT_HEADERS         (comma list, added to the defaults)
 //	VISIONARY_LOG_REDACT_FIELDS          (comma list, added to the defaults)
 //	VISIONARY_LOG_REDACT_REQUEST_FIELDS  (comma list, request bodies only)
@@ -169,7 +183,7 @@ type SystemConfig struct {
 //	VISIONARY_LOG_ERROR_KEY_FIELD        (default error.key)
 //	VISIONARY_SYSTEM_METRICS=true|false  (default true)
 //	VISIONARY_SYSTEM_INTERVAL            (default 15s)
-//	VISIONARY_SYSTEM_RETENTION_DAYS      (default 30)
+//	VISIONARY_SYSTEM_RETENTION_DAYS      (default 0, off: the server applies Settings → Retention)
 //	VISIONARY_SERVICE                    (default: none)
 //	VISIONARY_RELEASE                    (default: RAILWAY_GIT_COMMIT_SHA, RENDER_GIT_COMMIT,
 //	                                      VERCEL_GIT_COMMIT_SHA, HEROKU_SLUG_COMMIT, SOURCE_VERSION,
@@ -178,7 +192,9 @@ type SystemConfig struct {
 //	VISIONARY_SPAN_THRESHOLD_MS          (default 100)
 //	VISIONARY_SPAN_MAX                   (default 100)
 //	VISIONARY_INSTRUMENT_HTTP=true|false (default true)
+//	VISIONARY_EXPLAIN=true|false         (default true; needs Config.Explain)
 //	VISIONARY_ERRORS=true|false          (default true)
+//	VISIONARY_PROFILE=false              (never profile; default: follow the dashboard)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -195,13 +211,15 @@ func FromEnv() Config {
 		SpanThreshold:  time.Duration(envInt("VISIONARY_SPAN_THRESHOLD_MS", 100)) * time.Millisecond,
 		SpanMax:        envInt("VISIONARY_SPAN_MAX", 100),
 		InstrumentHTTP: envBool("VISIONARY_INSTRUMENT_HTTP", true),
+		ExplainOff:     !envBool("VISIONARY_EXPLAIN", true),
 		Errors:         envBool("VISIONARY_ERRORS", true),
+		ProfileOff:     !envBool("VISIONARY_PROFILE", true),
 		Requests: RequestsConfig{
 			Enabled:             envBool("VISIONARY_LOG_REQUESTS", true),
 			PathPrefix:          env("VISIONARY_LOG_PATH_PREFIX", ""),
 			CaptureBodies:       envBool("VISIONARY_LOG_BODIES", true),
 			MaxBodyBytes:        envInt("VISIONARY_LOG_MAX_BODY_BYTES", 8<<10),
-			RetentionDays:       envInt("VISIONARY_LOG_RETENTION_DAYS", 30),
+			RetentionDays:       envInt("VISIONARY_LOG_RETENTION_DAYS", 0),
 			RedactHeaders:       envList("VISIONARY_LOG_REDACT_HEADERS"),
 			RedactFields:        envList("VISIONARY_LOG_REDACT_FIELDS"),
 			RedactRequestFields: envList("VISIONARY_LOG_REDACT_REQUEST_FIELDS"),
@@ -211,7 +229,7 @@ func FromEnv() Config {
 		System: SystemConfig{
 			Enabled:       envBool("VISIONARY_SYSTEM_METRICS", true),
 			Interval:      envDuration("VISIONARY_SYSTEM_INTERVAL", 15*time.Second),
-			RetentionDays: envInt("VISIONARY_SYSTEM_RETENTION_DAYS", 30),
+			RetentionDays: envInt("VISIONARY_SYSTEM_RETENTION_DAYS", 0),
 		},
 	}
 }
@@ -220,12 +238,15 @@ func FromEnv() Config {
 // nil *Agent is a valid no-op, so callers need no checks when Visionary is not
 // configured.
 type Agent struct {
-	cfg     Config
-	db      store
-	ident   identity
-	writer  *writer
-	system  *recorder
-	limiter errLimiter
+	cfg    Config
+	db     store
+	ident  identity
+	writer *writer
+	system *recorder
+	// profiler takes the CPU profiles the dashboard asks for; nil with
+	// VISIONARY_PROFILE=false.
+	profiler *profiler
+	limiter  errLimiter
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -275,6 +296,9 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.System.Enabled && cfg.System.Interval > 0 {
 		a.system = newRecorder(cfg.System, a.ident, db, cfg.Logger)
 	}
+	if !cfg.ProfileOff {
+		a.profiler = newProfiler(a.ident, db, cfg.Logger, cfg.Requests.RetentionDays)
+	}
 	return a, nil
 }
 
@@ -309,6 +333,9 @@ func (a *Agent) Start(ctx context.Context) {
 		if a.cfg.Spans && a.cfg.InstrumentHTTP {
 			instrumentDefaultClient()
 		}
+		if len(a.cfg.Explain) > 0 && !a.cfg.ExplainOff {
+			go a.explainLoop(ctx)
+		}
 	}
 	if a.system != nil {
 		if err := a.db.execScript(schemaCtx, d.SystemSchema()); err != nil {
@@ -319,6 +346,9 @@ func (a *Agent) Start(ctx context.Context) {
 		}
 		a.system.start(ctx)
 	}
+	if a.profiler != nil {
+		a.profiler.start(ctx)
+	}
 }
 
 // Close flushes queued rows and buffered samples, waiting until ctx ends at
@@ -328,6 +358,9 @@ func (a *Agent) Close(ctx context.Context) {
 		return
 	}
 	active.CompareAndSwap(a, nil)
+	if a.profiler != nil {
+		a.profiler.close(ctx)
+	}
 	if a.writer != nil {
 		a.writer.close(ctx)
 	}

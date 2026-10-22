@@ -10,9 +10,14 @@ import { KIND_COLOR } from "./Waterfall";
 import { SpanDetailDrawer } from "./SpanDetail";
 import "./telemetry.css";
 import "./perf.css";
+import { HelpLink } from "../Help";
 
-const NO_SPANS =
-  "No spans in this range. SDKs with telemetry record each database and outbound call of every request; older SDK versions kept them only for slow and failed requests.";
+const NO_SPANS = (
+  <>
+    <div>No calls recorded in this range.</div>
+    <HelpLink topic="db">How to record queries and outbound calls</HelpLink>
+  </>
+);
 
 /** Opens the log entry of a request found by its request_id. */
 export async function logIdFor(requestId: string): Promise<number | null> {
@@ -341,9 +346,14 @@ export function CompareVersionsPanel({ className }: { className: string }) {
         versions.data &&
         (list.length < 2 ? (
           <div className="panel-state empty-why">
-            {list.length === 0
-              ? "No request in this range carries a version. Set VISIONARY_RELEASE (or deploy from a platform that sets a commit variable) and the SDKs tag every request with it."
-              : "Only one version served requests in this range. Widen the range to include an earlier version."}
+            {list.length === 0 ? (
+              <>
+                <div>No request in this range carries a version.</div>
+                <HelpLink topic="release">How to tag requests with a version</HelpLink>
+              </>
+            ) : (
+              "Only one version served requests in this range. Widen the range to include an earlier version."
+            )}
           </div>
         ) : a === b ? (
           <div className="cmp">

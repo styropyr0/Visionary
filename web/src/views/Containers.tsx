@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Box, ExternalLink, Search, Server } from "lucide-react";
+import { ArrowLeft, Box, Boxes, ExternalLink, Search, Server } from "lucide-react";
 import { api, rangeQuery, type Result, type Viz } from "../lib/api";
 import { formatBytes, formatCount, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -7,7 +7,7 @@ import { formatDateTime, formatFull, formatLogTime, formatRelative } from "../li
 import { useQuery } from "../lib/useQuery";
 import { DataTable, type Column } from "../components/DataTable";
 import { ErrorNotice } from "../components/ErrorNotice";
-import { dim, formatUptime, HeadCard, InstallAgent, Meter, type Fact } from "../components/Machine";
+import { dim, formatUptime, HeadCard, Meter, type Fact } from "../components/Machine";
 import { Panel } from "../components/Panel";
 import { Section } from "../components/Section";
 import { Select } from "../components/Select";
@@ -15,6 +15,7 @@ import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import "./Containers.css";
+import { AgentSteps, SetupCard, SetupHelpButton, SetupOption } from "../components/SetupCard";
 
 /**
  * The container lives in the hash (#/containers/db-1/postgres) so it can be linked.
@@ -214,15 +215,14 @@ function ContainerList() {
       <div className="content">
         {list.error && !list.data && <ErrorNotice title="Could not load containers" error={list.error} />}
         {list.data && list.data.rows.length === 0 && (
-          <div className="grid">
-            <InstallAgent title="No containers yet">
-              A service on a container platform (Railway, Render, Kubernetes, Cloud Run, ECS, Azure Container Apps) shows up here on its
-              own: its Visionary SDK reports the container's CPU and memory against its limits, throttling and OOM kills. On your own
-              machines the host agent reports every Docker or Podman container: state, health, restarts, CPU and memory against each
-              container's limits, network and disk, plus OOM kills, crashes and failed health checks. It finds the engine's socket on its
-              own (<code className="mono">/var/run/docker.sock</code> or Podman's), or set <code className="mono">VISIONARY_AGENT_DOCKER</code>.
-            </InstallAgent>
-          </div>
+          <SetupCard icon={<Boxes size={20} />} title="No containers yet" text="Containers show up here from either source: CPU and memory against their limits, restarts, out-of-memory kills and health checks." topic="agent">
+            <SetupOption title="On a container platform" text="Railway, Render, Kubernetes, Cloud Run, ECS. Nothing to install: the service's Visionary SDK reports its own container.">
+              <SetupHelpButton topic="sdk">Add the SDK</SetupHelpButton>
+            </SetupOption>
+            <SetupOption title="On your own machines" text="The host agent reports every Docker or Podman container on the machine.">
+              <AgentSteps />
+            </SetupOption>
+          </SetupCard>
         )}
         {list.data && list.data.rows.length > 0 && shown && (
           <div className="grid">

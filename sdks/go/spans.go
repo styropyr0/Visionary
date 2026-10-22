@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// maxDetail caps a span's detail (a statement, a URL, a GraphQL document):
+// long enough that the statement can still be planned with EXPLAIN.
+const maxDetail = 8000
+
 // Span kinds, for StartSpan.
 const (
 	KindDB     = "db"
@@ -15,6 +19,10 @@ const (
 	KindCache  = "cache"
 	KindQueue  = "queue"
 	KindCustom = "custom"
+	// KindGraphQL is one GraphQL operation; see GraphQLOperation.
+	KindGraphQL = "graphql"
+	// KindBackground is work a request started and did not wait for; see Go.
+	KindBackground = "background"
 )
 
 var spanColumns = []string{
@@ -88,6 +96,7 @@ type trace struct {
 	start     time.Time
 	max       int
 	closed    bool
+	late      int // spans that ended after the request was logged
 	totals    spanTotals
 	spans     []*spanRecord
 }
@@ -112,6 +121,18 @@ func (t *trace) add(s *spanRecord) bool {
 	if len(t.spans) < t.max {
 		t.spans = append(t.spans, s)
 	}
+	return true
+}
+
+// addLate counts a span that ended after the request was logged; false
+// once VISIONARY_SPAN_MAX of them were kept.
+func (t *trace) addLate() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.late >= t.max {
+		return false
+	}
+	t.late++
 	return true
 }
 
@@ -166,8 +187,16 @@ func (s *activeSpan) end(err error) {
 	if err != nil {
 		s.fail(err.Error())
 	}
-	if s.trace != nil && s.trace.add(&s.rec) {
-		return
+	if s.trace != nil {
+		if s.trace.add(&s.rec) {
+			return
+		}
+		// Background work the request started: still its call, whatever it
+		// took, up to the cap; past it only slow calls, like lone spans.
+		if s.trace.addLate() {
+			s.agent.writer.enqueue(&s.rec)
+			return
+		}
 	}
 	s.agent.storeLoneSpan(&s.rec)
 }
@@ -201,7 +230,7 @@ func (a *Agent) spansOn() bool { return a != nil && a.cfg.Spans && a.writer != n
 // it takes at least the span threshold. Safe from any goroutine.
 func StartSpan(ctx context.Context, kind, name string) (end func(err error)) {
 	switch kind {
-	case KindDB, KindHTTP, KindCache, KindQueue, KindCustom:
+	case KindDB, KindHTTP, KindCache, KindQueue, KindCustom, KindGraphQL, KindBackground:
 	default:
 		kind = KindCustom
 	}
@@ -248,7 +277,7 @@ func (w *writer) spanParams(s *spanRecord) []any {
 		s.kind,
 		name,
 		nullable(s.target),
-		nullable(truncateRunes(detail, 2000)),
+		nullable(truncateRunes(detail, maxDetail)),
 		offset,
 		millis(s.duration),
 		status,

@@ -91,6 +91,20 @@ final class D1Store implements Store {
     }
 
     @Override
+    public List<String[]> select(String sql) throws IOException, InterruptedException {
+        JsonNode res = post(rawUri, Map.of("sql", sql, "params", List.of()));
+        List<String[]> out = new ArrayList<>();
+        for (JsonNode row : res.path("result").path(0).path("results").path("rows")) {
+            String[] values = new String[row.size()];
+            for (int i = 0; i < row.size(); i++) {
+                values[i] = row.path(i).isNull() ? null : row.path(i).asText();
+            }
+            out.add(values);
+        }
+        return out;
+    }
+
+    @Override
     public long purgeChunk(Table table, String cutoff) throws IOException, InterruptedException {
         JsonNode res = post(queryUri, Map.of("sql", Dialect.D1.purgeSql(table.name), "params", List.of(cutoff)));
         return res.path("result").path(0).path("meta").path("changes").asLong(0);

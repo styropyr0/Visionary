@@ -64,12 +64,16 @@ module Visionary
 
     RELEASE_COLUMNS = %w[created_at service instance version sdk sdk_version runtime].freeze
 
+    # Created by the Visionary server, never by the SDK.
+    PROFILE_COLUMNS = %w[created_at service instance version sdk duration_ms samples routes folded].freeze
+
     TABLES = {
       "api_logs" => REQUEST_COLUMNS + ADDED_REQUEST_COLUMNS.map(&:first),
       "system_metrics" => SYSTEM_BASE_COLUMNS + ADDED_SYSTEM_COLUMNS.map(&:first),
       "spans" => SPAN_COLUMNS,
       "errors" => ERROR_COLUMNS,
-      "releases" => RELEASE_COLUMNS
+      "releases" => RELEASE_COLUMNS,
+      "profiles" => PROFILE_COLUMNS
     }.freeze
 
     # Which script creates a table, and the columns older copies may lack.

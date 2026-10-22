@@ -7,7 +7,7 @@ require_relative "store/active_record"
 module Visionary
   # Where rows go: D1 over REST, a connection opened from a database URL, or
   # the app's ActiveRecord pool. Every store answers the same calls:
-  # exec_script, exec, column_names, batch([[sql, args], ...]), changes,
+  # exec_script, exec, column_names, rows, batch([[sql, args], ...]), changes,
   # after_fork and close.
   module Store
     # Picks the store from the config, or nil when none is configured.

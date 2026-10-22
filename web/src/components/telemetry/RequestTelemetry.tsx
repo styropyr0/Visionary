@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import { AlertTriangle, Bug } from "lucide-react";
+import { AlertTriangle, Bug, Hourglass } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
 import { records, type RequestTelemetry as Telemetry } from "../../lib/telemetry";
 import { useQuery } from "../../lib/useQuery";
 import { InfoTip } from "../InfoTip";
-import { repeatedNames, toSpans, untracked, Waterfall } from "./Waterfall";
+import { afterResponse, repeatedNames, toSpans, untracked, Waterfall } from "./Waterfall";
 import "./telemetry.css";
 
 function Totals({ label, count, ms, requestMs }: { label: string; count: number | null; ms: number | null; requestMs: number }) {
@@ -39,6 +39,7 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
   const repeated = useMemo(() => repeatedNames(spans), [spans]);
   const requestMs = toNumber(rec.duration_ms) ?? 0;
   const untrackedMs = useMemo(() => untracked(spans, requestMs).ms, [spans, requestMs]);
+  const after = useMemo(() => afterResponse(spans, requestMs), [spans, requestMs]);
 
   const dbCount = toNumber(rec.db_count);
   const httpCount = toNumber(rec.http_count);
@@ -106,6 +107,44 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
               </span>
             </div>
           ))}
+        </section>
+      )}
+
+      {(after.background.length > 0 || after.late > 0) && (
+        <section className="rt-section">
+          <h3 className="rt-title">
+            Left running after the response{" "}
+            <InfoTip
+              text="Work this request started and did not wait for: goroutines, threads or tasks started with the SDK's background helper, and calls that ended after the response was sent. It doesn't slow the response, but it uses the same CPU and database."
+              size={12}
+            />
+          </h3>
+          <ul className="rt-bg">
+            {after.background.map((b) => {
+              const end = b.offset + b.duration;
+              const failed = b.status === "error";
+              return (
+                <li key={String(b.id)} className="rt-bg-item">
+                  <Hourglass size={13} aria-hidden />
+                  <span className="mono">{b.name}</span>
+                  <span className="dim">
+                    started at {formatMs(b.offset)}, ran {formatMs(b.duration)},{" "}
+                    {end > requestMs + 0.5 ? `finished ${formatMs(end - requestMs)} after the response` : "finished before the response"}
+                  </span>
+                  {failed && (
+                    <span className="flag bad" title={b.error}>
+                      <AlertTriangle size={12} /> failed{b.error ? `: ${b.error}` : ""}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+            {after.late > 0 && (
+              <li className="rt-bg-item dim">
+                {formatCount(after.late)} {after.late === 1 ? "call" : "calls"} ended after the response; they are marked in the timeline below and not counted in the totals above.
+              </li>
+            )}
+          </ul>
         </section>
       )}
 

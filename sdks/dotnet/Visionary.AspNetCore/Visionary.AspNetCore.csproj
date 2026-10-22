@@ -37,6 +37,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The optional CPU profiler package (its own package so this one stays free of
+         TraceEvent) and the tests use the agent, store and writer directly. -->
+    <InternalsVisibleTo Include="Visionary.AspNetCore.Profiling" />
+    <InternalsVisibleTo Include="Visionary.AspNetCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Copies of sdks/go/schema, byte for byte; see SPEC.md "Tables". -->
     <EmbeddedResource Include="Schema\**\*.sql" LogicalName="Visionary.Schema.%(RecursiveDir)%(Filename)%(Extension)" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />

@@ -93,6 +93,32 @@ internal sealed class D1Store : IStore, IDisposable
         return names;
     }
 
+    public async Task<List<string?[]>> RowsAsync(string query, CancellationToken ct)
+    {
+        using var doc = await PostAsync(_rawUrl, Statement(query, Array.Empty<object?>()), ct).ConfigureAwait(false);
+        var rows = new List<string?[]>();
+        var result = doc.RootElement.GetProperty("result");
+        if (result.ValueKind == JsonValueKind.Array && result.GetArrayLength() > 0 &&
+            result[0].TryGetProperty("results", out var results) &&
+            results.TryGetProperty("rows", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var row in list.EnumerateArray())
+            {
+                if (row.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+                rows.Add(row.EnumerateArray().Select(v => v.ValueKind switch
+                {
+                    JsonValueKind.Null or JsonValueKind.Undefined => null,
+                    JsonValueKind.String => v.GetString(),
+                    _ => v.GetRawText(),
+                }).ToArray());
+            }
+        }
+        return rows;
+    }
+
     public void Dispose() => _http.Dispose();
 
     private static Dictionary<string, object> Statement(string sql, object?[] args)

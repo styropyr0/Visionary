@@ -3,11 +3,16 @@ import { api, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser 
 import { load, save } from "./lib/state";
 import { useQuery } from "./lib/useQuery";
 import { ROUTES, Sidebar, type Route } from "./components/Sidebar";
+import { HelpHost } from "./components/Help";
+import { loadPrefs, prefs } from "./lib/prefs";
 import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
 import { Overview } from "./views/Overview";
 import { Performance } from "./views/Performance";
+import { Queries } from "./views/Queries";
+import { Dependencies } from "./views/Dependencies";
+import { Profiles } from "./views/Profiles";
 import { Saved } from "./views/Saved";
 import { System } from "./views/System";
 import { Alerts } from "./views/Alerts";
@@ -31,6 +36,9 @@ type Auth = "checking" | "in" | "out";
 // The plain "not signed in" answer needs no explanation on the sign-in screen;
 // anything else (role removed, session ended) is shown there.
 const SIGN_IN_REQUIRED = "sign in required";
+
+// Opened at the root: the start page from Settings → Preferences applies.
+const openedAtRoot = !window.location.hash || window.location.hash === "#/" || window.location.hash === "#";
 
 export function App() {
   const [auth, setAuth] = useState<Auth>("checking");
@@ -60,6 +68,17 @@ export function App() {
       window.removeEventListener("hashchange", onHash);
     };
   }, []);
+
+  // The server's copy of the preferences, once signed in. A different time
+  // zone or clock than this browser's copy needs every time drawn again.
+  useEffect(() => {
+    if (auth !== "in") return;
+    void loadPrefs().then((redraw) => {
+      if (redraw) window.location.reload();
+      const start = prefs().startPage;
+      if (openedAtRoot && start && ROUTES.includes(start as Route) && readRoute() === "overview") window.location.hash = `#/${start}`;
+    });
+  }, [auth]);
 
   const signOut = useCallback(async () => {
     await api("/api/logout", { method: "POST", json: {} }).catch(() => undefined);
@@ -99,6 +118,9 @@ export function App() {
       <main className="main">
         {route === "overview" && <Overview />}
         {route === "performance" && <Performance meta={meta.data} />}
+        {route === "queries" && <Queries />}
+        {route === "dependencies" && <Dependencies />}
+        {route === "profiles" && <Profiles />}
         {route === "system" && <System />}
         {route === "containers" && <Containers />}
         {route === "errors" && <Errors />}
@@ -112,6 +134,7 @@ export function App() {
         {route === "saved" && <Saved />}
         {route === "logs" && <Logs meta={meta.data} />}
       </main>
+      <HelpHost route={route} />
     </div>
   );
 }

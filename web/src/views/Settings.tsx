@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleSlash, KeyRound, Plus, ShieldCheck }
 import { api, rangeQuery, type SessionUser } from "../lib/api";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatFull, formatRelative } from "../lib/time";
+import { dateFormat, formatFull, formatRelative } from "../lib/time";
 import {
   ROLE_INFO,
   ROLE_LABEL,
@@ -22,20 +22,29 @@ import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { TimeRangePicker, TopBar } from "../components/Toolbar";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { PagesTab, ProfilingTab } from "./Settings.profiling";
+import { DataTab } from "./Settings.data";
+import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
 import "./Settings.css";
 
-type Tab = "members" | "keys" | "audit" | "about";
+type Tab = "preferences" | "members" | "keys" | "thresholds" | "data" | "profiling" | "pages" | "status" | "audit" | "about";
 
 const TABS: { key: Tab; label: string; admin: boolean }[] = [
+  { key: "preferences", label: "Preferences", admin: false },
   { key: "members", label: "Members & roles", admin: false },
   { key: "keys", label: "API keys", admin: true },
+  { key: "thresholds", label: "Thresholds", admin: false },
+  { key: "data", label: "Data", admin: false },
+  { key: "profiling", label: "Profiling", admin: false },
+  { key: "pages", label: "Pages", admin: false },
+  { key: "status", label: "Status page", admin: false },
   { key: "audit", label: "Audit log", admin: true },
   { key: "about", label: "About", admin: false },
 ];
 
 function readTab(): Tab {
   const t = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab");
-  return TABS.some((x) => x.key === t) ? (t as Tab) : "members";
+  return TABS.some((x) => x.key === t) ? (t as Tab) : "preferences";
 }
 
 export function Settings({ user }: { user: SessionUser | null }) {
@@ -56,7 +65,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
   };
 
   const visible = TABS.filter((t) => !t.admin || admin);
-  const current = visible.some((t) => t.key === tab) ? tab : "members";
+  const current = visible.some((t) => t.key === tab) ? tab : "preferences";
 
   return (
     <>
@@ -72,11 +81,22 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {session && !admin && (
           <div className="notice settings-note">
             <ShieldCheck size={16} />
-            <span>API keys and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
+            <span>API keys, data deletion and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
           </div>
         )}
         {current === "members" && <MembersTab />}
         {current === "keys" && <KeysTab />}
+        {current === "profiling" && <ProfilingTab />}
+        {current === "pages" && <PagesTab />}
+        {current === "data" && (
+          <div className="settings-stack">
+            <RetentionCard />
+            <DataTab />
+          </div>
+        )}
+        {current === "preferences" && <PreferencesTab />}
+        {current === "thresholds" && <ThresholdsTab />}
+        {current === "status" && <StatusPageTab />}
         {current === "audit" && <AuditTab />}
         {current === "about" && <AboutTab />}
       </div>
@@ -376,7 +396,7 @@ function KeysTab() {
                       <td>
                         <When iso={k.created_at} /> <span className="dim">by {k.created_by}</span>
                       </td>
-                      <td>{k.expires_at ? <span title={formatFull(new Date(k.expires_at))}>{new Date(k.expires_at).toLocaleDateString()}</span> : <span className="dim">Never</span>}</td>
+                      <td>{k.expires_at ? <span title={formatFull(new Date(k.expires_at))}>{dateFormat({ year: "numeric", month: "short", day: "numeric" }).format(new Date(k.expires_at))}</span> : <span className="dim">Never</span>}</td>
                       <td>
                         <When iso={k.last_used_at} />
                       </td>
@@ -592,7 +612,7 @@ function AuditTab() {
     <div className="settings-stack">
       <Card
         title="Audit log"
-        description={`Who changed what, newest first. Entries are kept for ${first.data?.retention_days ?? 365} days (VISIONARY_AUDIT_RETENTION_DAYS).`}
+        description={`Who changed what, newest first. Entries are kept for ${first.data?.retention_days ?? 365} days (Settings → Data).`}
       >
         <div className="filter-row settings-filters">
           <Select label="Action" align="left" value={category} options={CATEGORIES} onChange={setCategory} />

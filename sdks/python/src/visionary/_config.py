@@ -37,7 +37,7 @@ class Config:
     queue_size: int = 5000
     batch_size: int = 50
     flush_interval: float = 3.0
-    log_retention_days: int = 30
+    log_retention_days: int = 0  # 0: off, the Visionary server applies Settings → Retention
     redact_headers: List[str] = field(default_factory=list)
     redact_fields: List[str] = field(default_factory=list)
     redact_request_fields: List[str] = field(default_factory=list)
@@ -49,7 +49,7 @@ class Config:
 
     system_metrics: bool = True
     system_interval: float = 15.0
-    system_retention_days: int = 30
+    system_retention_days: int = 0  # 0: off, as above
     # Returns pool stats: total, idle, in_use, max, acquires, empty_acquires,
     # acquire_wait_ms (the last three cumulative).
     db_stats: Optional[DBStatsFunc] = None
@@ -66,6 +66,9 @@ class Config:
     errors: bool = True
     # Patch requests, httpx and urllib3 at start (same as instrument_http()).
     instrument_http: bool = False
+    # CPU profiles follow the dashboard (Settings -> Profiling); False ignores
+    # it and never profiles (VISIONARY_PROFILE=false).
+    profile: bool = True
 
 
 def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
@@ -87,7 +90,7 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         path_prefix=s("VISIONARY_LOG_PATH_PREFIX"),
         capture_bodies=parse_bool(s("VISIONARY_LOG_BODIES"), True),
         max_body_bytes=parse_int(s("VISIONARY_LOG_MAX_BODY_BYTES"), 8192),
-        log_retention_days=parse_int(s("VISIONARY_LOG_RETENTION_DAYS"), 30),
+        log_retention_days=parse_int(s("VISIONARY_LOG_RETENTION_DAYS"), 0),
         redact_headers=parse_list(s("VISIONARY_LOG_REDACT_HEADERS")),
         redact_fields=parse_list(s("VISIONARY_LOG_REDACT_FIELDS")),
         redact_request_fields=parse_list(s("VISIONARY_LOG_REDACT_REQUEST_FIELDS")),
@@ -95,7 +98,7 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         error_key_field=s("VISIONARY_LOG_ERROR_KEY_FIELD", "error.key"),
         system_metrics=parse_bool(s("VISIONARY_SYSTEM_METRICS"), True),
         system_interval=parse_duration(s("VISIONARY_SYSTEM_INTERVAL"), 15.0),
-        system_retention_days=parse_int(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 30),
+        system_retention_days=parse_int(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 0),
         service=s("VISIONARY_SERVICE"),
         version=release_from_env(env),
         spans=parse_bool(s("VISIONARY_SPANS"), True),
@@ -103,6 +106,7 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         span_max=parse_int(s("VISIONARY_SPAN_MAX"), 100),
         errors=parse_bool(s("VISIONARY_ERRORS"), True),
         instrument_http=parse_bool(s("VISIONARY_INSTRUMENT_HTTP"), False),
+        profile=parse_bool(s("VISIONARY_PROFILE"), True),
     )
 
 

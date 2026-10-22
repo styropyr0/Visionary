@@ -2,6 +2,7 @@ import type { EChartsOption } from "echarts";
 import type { Result, Unit, Viz } from "../lib/api";
 import { escapeHtml, formatAxis, formatValue, humanize, toNumber } from "../lib/format";
 import { statusColor, type ChartTokens } from "./palette";
+import { dateFormat } from "../lib/time";
 
 const MAX_SERIES = 8;
 const MAX_PIE_SLICES = 6;
@@ -185,7 +186,7 @@ const timeLabels = {
   second: "{HH}:{mm}:{ss}",
 };
 
-const tooltipTime = new Intl.DateTimeFormat(undefined, {
+const tooltipTime = () => dateFormat({
   weekday: "short",
   month: "short",
   day: "numeric",
@@ -248,7 +249,7 @@ function buildTimeseries(res: Result, viz: Viz, t: ChartTokens): BuiltChart | nu
             .map((p) => ({ p, v: Array.isArray(p.value) ? p.value[1] : (p.value as number | null) }))
             .filter((x) => x.v !== null && x.v !== undefined)
             .sort((a, b) => (b.v as number) - (a.v as number));
-          let html = `<div class="tt"><div class="tt-head">${escapeHtml(tooltipTime.format(new Date(ts)))}</div>`;
+          let html = `<div class="tt"><div class="tt-head">${escapeHtml(tooltipTime().format(new Date(ts)))}</div>`;
           for (const { p, v } of items) html += row(p.color, formatValue(v, unit), p.seriesName, stacked);
           if (stacked && items.length > 1) {
             const total = items.reduce((a, x) => a + (x.v as number), 0);
@@ -498,7 +499,7 @@ export interface DeployMarker {
   deployed_at: string;
 }
 
-const deployTime = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const deployTime = () => dateFormat({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 function shortVersion(v: string): string {
   return /^[0-9a-f]{12,40}$/i.test(v) ? v.slice(0, 7) : v;
@@ -570,7 +571,7 @@ export function withDeployMarkers(option: EChartsOption, deploys: DeployMarker[]
           const extra = hits
             .map(
               ({ d, ts }) =>
-                `<div class="tt-deploy"><span class="tt-deploy-key"></span><span>Deployed <b>${escapeHtml(d.version)}</b>${d.service ? ` · ${escapeHtml(d.service)}` : ""}</span><span class="tt-deploy-time">${escapeHtml(deployTime.format(new Date(ts)))}</span></div>`,
+                `<div class="tt-deploy"><span class="tt-deploy-key"></span><span>Deployed <b>${escapeHtml(d.version)}</b>${d.service ? ` · ${escapeHtml(d.service)}` : ""}</span><span class="tt-deploy-time">${escapeHtml(deployTime().format(new Date(ts)))}</span></div>`,
             )
             .join("");
           return html.replace(/<\/div>$/, `${extra}</div>`);

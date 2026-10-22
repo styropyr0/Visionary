@@ -115,6 +115,12 @@ internal static class Schema
         "type", "message", "stack", "fingerprint", "handled", "runtime",
     };
 
+    /// <summary>The profiles table of SPEC.md "CPU profiles"; the Visionary server creates it.</summary>
+    public static readonly string[] ProfileColumns =
+    {
+        "created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded",
+    };
+
     public static readonly string[] ReleaseColumns =
     {
         "created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime",

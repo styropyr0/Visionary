@@ -485,7 +485,7 @@ func otlpClassify(sp *otlpSpan) (kind, name, target, detail string, rowCount any
 	if name == "" {
 		name = kind
 	}
-	return kind, otlpClip(name, 255), otlpClip(target, 255), otlpClip(detail, 2000), rowCount
+	return kind, otlpClip(name, 255), otlpClip(target, 255), otlpClip(detail, 8000), rowCount
 }
 
 func otlpSpanRow(sp *otlpSpan, r *otlpReqInfo) []any {

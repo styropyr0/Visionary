@@ -19,6 +19,9 @@ interface Store {
         insert(Map.of(table, rows));
     }
 
+    /** Runs a read-only query without parameters and returns its rows as text (null stays null). */
+    List<String[]> select(String sql) throws Exception;
+
     /** Runs one chunk of the retention delete and returns the number of rows removed. */
     long purgeChunk(Table table, String cutoff) throws Exception;
 

@@ -54,6 +54,11 @@ final class Retention {
         days.forEach(this::purge);
     }
 
+    private static boolean missingTable(Exception e) {
+        String m = String.valueOf(e.getMessage()).toLowerCase(java.util.Locale.ROOT);
+        return m.contains("no such table") || m.contains("does not exist") || m.contains("doesn't exist");
+    }
+
     private void purge(Table table, int retentionDays) {
         String cutoff = Values.timestamp(Instant.now().atOffset(ZoneOffset.UTC).minusDays(retentionDays).toInstant());
         long total = 0;
@@ -66,6 +71,10 @@ final class Retention {
                 }
             }
         } catch (Exception e) {
+            // The Visionary server creates profiles; until it has, there is nothing to purge.
+            if (table == Table.PROFILES && missingTable(e)) {
+                return;
+            }
             log.error("visionary: retention purge of " + table.name + " failed after " + total + " rows: " + e);
             return;
         }

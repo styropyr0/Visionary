@@ -14,12 +14,12 @@ from typing import Any, Optional
 
 from flask import Flask, request
 
-from .. import _context
+from .. import _context, _profiler
 from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import CountingIterator, finish, logger, report_unhandled, resolve_agent
+from ._common import CountingIterator, finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 _KEY = "visionary.state"
 
@@ -117,6 +117,8 @@ class Visionary:
         environ = request.environ
         environ[_KEY] = st
         agent.http.started()
+        _profiler.request_started()
+        st.t0 = time.perf_counter()
         try:
             req = request._get_current_object()
             if not agent.should_log(request.path):
@@ -148,6 +150,7 @@ class Visionary:
         status = response.status_code
         if st.entry is None:
             self.agent.http.finished(status)
+            self._finish_unlogged(st)
             return response
         try:
             if self._fill(st, response):
@@ -174,12 +177,22 @@ class Visionary:
         # or PROPAGATE_EXCEPTIONS), so the client gets a 500.
         st.done = True
         self.agent.http.finished(500)
-        if st.entry is not None:
+        if st.entry is None:
+            self._finish_unlogged(st)
+        else:
             try:
                 self._fill(st, None)
             except Exception:
                 logger.exception("visionary: request capture failed")
             finish(self.agent, st.entry, st.t0, 500, st.ann.trace if st.ann is not None else None)
+
+    def _finish_unlogged(self, st: _State) -> None:
+        try:
+            rule = request.url_rule
+            route = (st.ann.route if st.ann is not None else "") or (rule.rule if rule is not None else "")
+            finish_unlogged(request.method, route or request.path, st.t0)
+        except Exception:
+            pass
 
     def _fill(self, st: _State, response: Any) -> bool:
         """Fill the entry; returns True when a streaming body will finish it."""

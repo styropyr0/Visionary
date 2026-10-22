@@ -70,9 +70,9 @@ func (s *Server) handleSpanGroups(w http.ResponseWriter, r *http.Request) {
 	switch kind {
 	case "":
 		kind = "db"
-	case "db", "http", "cache", "queue", "custom":
+	case "db", "http", "cache", "queue", "custom", "graphql", "background":
 	default:
-		writeError(w, http.StatusBadRequest, "kind must be db, http, cache, queue or custom")
+		writeError(w, http.StatusBadRequest, "kind must be db, http, cache, queue, custom, graphql or background")
 		return
 	}
 	var groups, routes *Result

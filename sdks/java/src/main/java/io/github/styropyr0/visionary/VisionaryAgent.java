@@ -19,6 +19,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
 
     private final VisionaryConfig config;
     private final Store store;
+    private final Origin origin;
     private final HttpCounters counters = new HttpCounters();
     private final RequestWriter writer;
     private final boolean logRequests;
@@ -33,6 +34,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     VisionaryAgent(VisionaryConfig config) {
         this.config = config;
         this.store = null;
+        this.origin = null;
         this.writer = null;
         this.logRequests = false;
         this.telemetry = null;
@@ -45,6 +47,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
             VisionaryConfig cfg) {
         this.config = cfg;
         this.store = store;
+        this.origin = origin;
         this.writer = writer;
         this.logRequests = cfg.logRequests();
         this.telemetry = cfg.spans() || cfg.errors() ? new Telemetry(cfg, writer) : null;
@@ -61,6 +64,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         if (cfg.errors()) {
             retention.add(Table.ERRORS, cfg.logRetentionDays());
         }
+        if (cfg.profile()) {
+            retention.add(Table.PROFILES, cfg.logRetentionDays());
+        }
         if (system != null) {
             retention.add(Table.SYSTEM_METRICS, cfg.systemRetentionDays());
         }
@@ -68,7 +74,8 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 + "; service " + (origin.service() == null ? "(none)" : origin.service())
                 + ", version " + (origin.version() == null ? "(none)" : origin.version())
                 + "; requests " + (logRequests ? "on (prefix '" + cfg.pathPrefix() + "', bodies "
-                        + cfg.logBodies() + ", retention " + cfg.logRetentionDays() + "d)" : "off")
+                        + cfg.logBodies() + (cfg.logRetentionDays() > 0 ? ", retention " + cfg.logRetentionDays() + "d" : "")
+                        + ")" : "off")
                 + "; spans " + (cfg.spans() ? "on (threshold " + cfg.spanThresholdMs() + "ms, max "
                         + cfg.spanMax() + ")" : "off")
                 + "; errors " + (cfg.errors() ? "on" : "off")
@@ -85,6 +92,21 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
 
     HttpCounters counters() {
         return counters;
+    }
+
+    /** Null when Visionary is disabled. */
+    Store store() {
+        return store;
+    }
+
+    /** Null when Visionary is disabled. */
+    Origin origin() {
+        return origin;
+    }
+
+    /** The background writer for every table but system_metrics; null when Visionary is disabled. */
+    RequestWriter writer() {
+        return writer;
     }
 
     /** The writer when request logging is on, else null. */

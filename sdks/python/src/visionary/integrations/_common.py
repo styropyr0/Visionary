@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any, Callable, Iterable, Iterator, Optional
 
-from .. import _agent, _errors
+from .. import _agent, _errors, _profiler
 from .._agent import Agent
 from .._entry import BodyCapture, Entry
 
@@ -24,11 +24,18 @@ def finish(agent: Agent, entry: Entry, t0: float, status: int, trace: Any = None
     then queue it."""
     entry.status = status
     entry.duration = time.perf_counter() - t0
+    _profiler.request_finished(entry.method, entry.route or entry.path, entry.duration)
     try:
         agent.finish_trace(entry, trace)
         agent.record(entry)
     except Exception:
         logger.exception("visionary: dropping request log entry")
+
+
+def finish_unlogged(method: str, route: str, t0: float) -> None:
+    """Close out a request that gets no api_logs row: only the CPU profile's
+    per-route time needs it."""
+    _profiler.request_finished(method, route, time.perf_counter() - t0)
 
 
 def report_unhandled(agent: Agent, exc: BaseException, info: Any = None) -> None:

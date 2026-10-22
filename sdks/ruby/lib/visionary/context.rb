@@ -28,6 +28,8 @@ module Visionary
       @errors = []
       @db_count = @http_count = 0
       @db_ms = @http_ms = 0.0
+      @logged = false
+      @late = 0
     end
 
     def set_user(id, handle, role)
@@ -47,8 +49,14 @@ module Visionary
     end
 
     # Database and HTTP calls always count; rows are kept up to the cap.
+    # Returns nil when the span joined the request, or, once the request has
+    # been logged (work it started in the background), how many such late
+    # spans the request has had, this one included: the caller writes it on
+    # its own and it never touches the request's totals.
     def add_span(span)
       @mutex.synchronize do
+        return @late += 1 if @logged
+
         case span.kind
         when "db"
           @db_count += 1
@@ -59,7 +67,14 @@ module Visionary
           @http_ms += span.duration_ms
         end
         @spans << span if @spans.size < @span_max
+        nil
       end
+    end
+
+    # Called when the request's row is being built: spans that end from now
+    # on are late and no longer change totals or spans.
+    def logged!
+      @mutex.synchronize { @logged = true }
     end
 
     def add_error(row)
@@ -91,7 +106,7 @@ module Visionary
     end
   end
 
-  # One database, HTTP, cache, queue or custom call.
+  # One database, HTTP, cache, queue, custom, graphql or background call.
   Span = Struct.new(:kind, :name, :target, :detail, :started_at, :offset_ms, :duration_ms,
                     :status, :error, :row_count, :request_id, keyword_init: true)
 end

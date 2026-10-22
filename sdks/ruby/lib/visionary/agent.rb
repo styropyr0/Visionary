@@ -41,9 +41,10 @@ module Visionary
 
       @instance = cfg.instance.to_s.empty? ? Socket.gethostname : cfg.instance
       @schemas = Schemas.new(@store, @logger)
-      if cfg.log_requests || cfg.spans || cfg.errors || cfg.version
+      if cfg.log_requests || cfg.spans || cfg.errors || cfg.version || cfg.profile
         @writer = Writer.new(cfg, @store, @schemas, @logger)
       end
+      @profiler = Profiler.new(cfg, @instance, @store, @writer, @logger) if cfg.profile && @writer
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)
@@ -55,6 +56,7 @@ module Visionary
         tables["errors"] = cfg.log_retention_days
       end
       tables["system_metrics"] = cfg.system_retention_days if @system
+      tables["profiles"] = cfg.log_retention_days if @profiler
       @retention = Retention.new(@store, @logger, tables)
     end
 
@@ -93,6 +95,7 @@ module Visionary
         @logger.info("visionary: recording system metrics every #{@config.system_interval}s as #{@instance}")
       end
       @retention.start
+      @profiler&.start
       install_hooks
       release
       self
@@ -107,6 +110,7 @@ module Visionary
       end
       deadline = mono + timeout
       @retention&.close
+      @profiler&.close
       idle = @writer ? @writer.close(timeout) : true
       idle = @system.close([deadline - mono, 0].max) && idle if @system
       @store.close if idle && @store
@@ -127,6 +131,7 @@ module Visionary
       @system&.after_fork
       @writer&.after_fork
       @retention&.after_fork if @retention&.needed?
+      @profiler&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")
     end
 

@@ -1,4 +1,5 @@
 import type { DbStats } from "./system/recorder.js";
+import type { Explainer } from "./telemetry/explain.js";
 import type { Logger } from "./log.js";
 
 /** Who made a request. Only `id` is required. */
@@ -38,6 +39,8 @@ export interface Options {
   pathPrefix?: string;
   captureBodies?: boolean;
   maxBodyBytes?: number;
+  /** Days of api_logs, spans, errors and profiles the SDK keeps (VISIONARY_LOG_RETENTION_DAYS).
+   * 0, the default, deletes nothing: the Visionary server applies Settings → Retention. */
   retentionDays?: number;
   redactHeaders?: string[];
   redactFields?: string[];
@@ -51,6 +54,7 @@ export interface Options {
   systemMetrics?: boolean;
   /** Seconds between samples (default 15). */
   systemInterval?: number;
+  /** Days of system_metrics the SDK keeps (VISIONARY_SYSTEM_RETENTION_DAYS); 0, the default, deletes nothing. */
   systemRetentionDays?: number;
   /** Pool stats for the db_* columns; see `pgPoolStats`. */
   dbStats?: () => DbStats | undefined;
@@ -65,6 +69,13 @@ export interface Options {
   errors?: boolean;
   /** Record uncaught exceptions with `uncaughtExceptionMonitor` (default true). */
   captureUncaught?: boolean;
+  /** Databases the dashboard may ask query plans of (see explainWith). */
+  explain?: Explainer[];
+  /**
+   * Take CPU profiles when the dashboard turns them on (Settings →
+   * Profiling). Default true; false never profiles, whatever the dashboard says.
+   */
+  profile?: boolean;
 }
 
 export type LookupResult = { handle?: string; role?: string } | null | undefined;
@@ -99,6 +110,8 @@ export interface Config {
   instrumentHttp: boolean;
   errors: boolean;
   captureUncaught: boolean;
+  explain: Explainer[];
+  profile: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -123,7 +136,7 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     pathPrefix: opts.pathPrefix ?? s("VISIONARY_LOG_PATH_PREFIX"),
     captureBodies: opts.captureBodies ?? parseBool(s("VISIONARY_LOG_BODIES"), true),
     maxBodyBytes: positive(opts.maxBodyBytes ?? parseInt0(s("VISIONARY_LOG_MAX_BODY_BYTES"), 8192), 8192),
-    retentionDays: opts.retentionDays ?? parseInt0(s("VISIONARY_LOG_RETENTION_DAYS"), 30),
+    retentionDays: opts.retentionDays ?? parseInt0(s("VISIONARY_LOG_RETENTION_DAYS"), 0),
     redactHeaders: opts.redactHeaders ?? parseList(s("VISIONARY_LOG_REDACT_HEADERS")),
     redactFields: opts.redactFields ?? parseList(s("VISIONARY_LOG_REDACT_FIELDS")),
     redactRequestFields: opts.redactRequestFields ?? parseList(s("VISIONARY_LOG_REDACT_REQUEST_FIELDS")),
@@ -132,7 +145,7 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     lookupUser: opts.lookupUser,
     systemMetrics: opts.systemMetrics ?? parseBool(s("VISIONARY_SYSTEM_METRICS"), true),
     systemInterval: opts.systemInterval ?? parseDuration(s("VISIONARY_SYSTEM_INTERVAL"), 15),
-    systemRetentionDays: opts.systemRetentionDays ?? parseInt0(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 30),
+    systemRetentionDays: opts.systemRetentionDays ?? parseInt0(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 0),
     dbStats: opts.dbStats,
     diskPath: opts.diskPath ?? "",
     spans: opts.spans ?? parseBool(s("VISIONARY_SPANS"), true),
@@ -141,6 +154,8 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     instrumentHttp: opts.instrumentHttp ?? true,
     errors: opts.errors ?? parseBool(s("VISIONARY_ERRORS"), true),
     captureUncaught: opts.captureUncaught ?? true,
+    explain: parseBool(s("VISIONARY_EXPLAIN"), true) ? (opts.explain ?? []) : [],
+    profile: opts.profile ?? parseBool(s("VISIONARY_PROFILE"), true),
   };
 }
 

@@ -539,26 +539,5 @@ tr:hover .spike-investigate,
   opacity: 1;
 }
 
-.setup-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 640px;
-  margin: 8vh auto;
-  padding: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface-1);
-}
 
-.setup-card h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-}
 
-.setup-card p {
-  margin: 0;
-  color: var(--text-2);
-  line-height: 1.55;
-}

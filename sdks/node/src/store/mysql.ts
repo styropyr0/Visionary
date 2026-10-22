@@ -76,6 +76,10 @@ export class MysqlStore implements Store {
     return quietly(async () => Number((await this.db.query(sql, args))[0]?.affectedRows) || 0);
   }
 
+  rows(sql: string, args: Value[]): Promise<string[][]> {
+    return quietly(async () => ((await this.db.query(sql, args))[0] as any[]).map((r) => Object.values(r).map((v) => (v === null || v === undefined ? "" : String(v)))));
+  }
+
   columns(sql: string): Promise<string[]> {
     return quietly(async () => ((await this.db.query(sql))[0] as any[]).map((r) => String(Object.values(r)[0])));
   }

@@ -53,7 +53,9 @@ func sanitizeSQL(q string) string {
 			}
 			put(q[i : i+j+2])
 			i += j + 2
-		case isDigit(c) && !isWordByte(prev):
+		// A space still to be written separates the number from the word
+		// before it ("LIMIT 20", "THEN 0.95"): it is a literal, not a name.
+		case isDigit(c) && (space || !isWordByte(prev)):
 			j := i + 1
 			for j < len(q) && (isDigit(q[j]) || q[j] == '.' || q[j] == 'x' || q[j] == 'X' ||
 				isHexLetter(q[j]) || ((q[j] == '+' || q[j] == '-') && (q[j-1] == 'e' || q[j-1] == 'E'))) {

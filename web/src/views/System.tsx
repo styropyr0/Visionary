@@ -5,7 +5,7 @@ import { api, ApiError, rangeQuery, type Result, type Viz } from "../lib/api";
 import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatLogTime } from "../lib/time";
+import { dateFormat, formatLogTime } from "../lib/time";
 import { langOf, relabel, wordsFor, type RuntimeWords } from "../lib/runtime";
 import { sparkPoints } from "../charts/option";
 import { DataTable, type Column } from "../components/DataTable";
@@ -15,6 +15,7 @@ import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { MachineHead, MachineSnapshots, machineFor, useMachines } from "./System.machine";
+import { AgentSteps, SetupCard, SetupHelpButton, SetupOption } from "../components/SetupCard";
 
 export interface PanelDef {
   name: string;
@@ -226,18 +227,14 @@ export function System() {
       />
       <div className="content">
         {missing ? (
-          <div className="setup-card">
-            <div className="empty-icon">
-              <Server size={20} />
-            </div>
-            <h2>No system metrics yet</h2>
-            <p>
-              System stats come from the <code className="mono">system_metrics</code> table, which a Visionary SDK in your service
-              fills every few seconds with host, disk, network, process, runtime and database-pool samples. Add the SDK and this view
-              fills in on its own.
-            </p>
-            <p style={{ color: "var(--text-3)", fontSize: 12.5 }}>{instances.error?.message}</p>
-          </div>
+          <SetupCard icon={<Server size={20} />} title="No system metrics yet" text="CPU, memory, disks, network and the database pool come from either source, every 15 seconds." topic="sdk">
+            <SetupOption title="From your services" text="The Visionary SDK samples the machine and process it runs in, along with its runtime and database pool.">
+              <SetupHelpButton topic="sdk">Add the SDK</SetupHelpButton>
+            </SetupOption>
+            <SetupOption title="From any Linux machine" text="The host agent adds every drive, the top processes, systemd services and containers, with or without an app on it.">
+              <AgentSteps />
+            </SetupOption>
+          </SetupCard>
         ) : (
           <div className="grid">
             <StatTile
@@ -442,12 +439,7 @@ function SpikesPanel({ instance }: { instance: string }) {
     const t = toNumber(row[0]);
     if (t === null) return;
     const when = new Date(t * 1000);
-    const q = `What caused the CPU spike around ${when.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })}? Compare that window with normal traffic and server health, including disk, network and the database pool.`;
+    const q = `What caused the CPU spike around ${dateFormat({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(when)}? Compare that window with normal traffic and server health, including disk, network and the database pool.`;
     window.location.hash = `#/explore?q=${encodeURIComponent(q)}`;
   };
   const columns: Column[] = [

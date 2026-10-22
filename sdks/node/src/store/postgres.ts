@@ -71,6 +71,10 @@ export class PostgresStore implements Store {
     return quietly(async () => (await this.db.query(rebind(sql), args)).rowCount ?? 0);
   }
 
+  rows(sql: string, args: Value[]): Promise<string[][]> {
+    return quietly(async () => (await this.db.query({ text: rebind(sql), values: args, rowMode: "array" } as any)).rows.map((r: unknown[]) => r.map((v) => (v === null || v === undefined ? "" : String(v)))));
+  }
+
   columns(sql: string): Promise<string[]> {
     return quietly(async () => (await this.db.query(sql)).rows.map((r) => String(Object.values(r)[0])));
   }

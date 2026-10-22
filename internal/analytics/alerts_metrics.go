@@ -41,9 +41,17 @@ type metricDef struct {
 var requestScopes = []string{"route", "method", "service"}
 var systemScopes = []string{"instance", "service"}
 
-func alertMetrics(apdexMs int) []metricDef {
-	t := strconv.Itoa(apdexMs)
-	t4 := strconv.Itoa(4 * apdexMs)
+// routeNote mentions the routes with their own Apdex threshold.
+func routeNote(rule apdexRule) string {
+	if len(rule.Routes) == 0 {
+		return ""
+	}
+	return " (" + strconv.Itoa(len(rule.Routes)) + " routes have their own T)"
+}
+
+func alertMetrics(rule apdexRule) []metricDef {
+	t := rule.sql()
+	t4 := rule.sql4()
 	sys := func(id, label, unit, desc, agg string, op string, th float64) metricDef {
 		return metricDef{ID: id, Label: label, Group: "system", Unit: unit, Description: desc, Scopes: systemScopes,
 			Op: op, Threshold: th, UpIsBad: true, table: "system_metrics", perInstance: true,
@@ -69,7 +77,7 @@ func alertMetrics(apdexMs int) []metricDef {
 	rpm := req("requests_per_min", "Requests per minute", "rpm", "Requests per minute over the window. Use < to catch traffic drops.",
 		func(w int64) string { return "COUNT(*) * 60.0 / " + strconv.FormatInt(w, 10) }, "<", 1)
 	rpm.Anomaly, rpm.UpIsBad, rpm.minRequests = true, false, 0
-	apdex := req("apdex", "Apdex", "score", "Apdex with T = "+t+" ms: satisfied within T, tolerating within 4T. 1 is perfect.",
+	apdex := req("apdex", "Apdex", "score", "Apdex with T = "+strconv.Itoa(rule.DefaultMs)+" ms"+routeNote(rule)+": satisfied within T, tolerating within 4T. 1 is perfect.",
 		func(int64) string {
 			return "SUM(CASE WHEN status < 500 AND duration_ms <= " + t + " THEN 1.0 WHEN status < 500 AND duration_ms <= " + t4 + " THEN 0.5 ELSE 0 END) / NULLIF(COUNT(*), 0)"
 		}, "<", 0.85)

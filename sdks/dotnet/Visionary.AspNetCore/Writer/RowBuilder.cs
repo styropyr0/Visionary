@@ -17,6 +17,7 @@ internal sealed class RowBuilder
     private readonly string _spanInsert;
     private readonly string _errorInsert;
     private readonly string _releaseInsert;
+    private readonly string _profileInsert;
 
     public RowBuilder(VisionaryAgent agent)
     {
@@ -26,6 +27,7 @@ internal sealed class RowBuilder
         _spanInsert = Schema.InsertSql("spans", Schema.SpanColumns, strings);
         _errorInsert = Schema.InsertSql("errors", Schema.ErrorColumns, strings);
         _releaseInsert = Schema.InsertSql("releases", Schema.ReleaseColumns, strings);
+        _profileInsert = Schema.InsertSql("profiles", Schema.ProfileColumns, strings);
     }
 
     public static string Timestamp(DateTime t) => t.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
@@ -56,6 +58,13 @@ internal sealed class RowBuilder
                     {
                         Timestamp(r.CreatedAt), _agent.Service, _agent.Instance, _agent.Version,
                         VisionaryAgent.Sdk, _agent.SdkVersion, _agent.Runtime,
+                    }));
+                    break;
+                case ProfileRecord r:
+                    stmts.Add(new Stmt(_profileInsert, new object?[]
+                    {
+                        Timestamp(r.CreatedAt), _agent.Service, _agent.Instance, _agent.Version,
+                        VisionaryAgent.Sdk, Math.Round(r.DurationMs, 3), r.Samples, r.Routes, r.Folded,
                     }));
                     break;
             }

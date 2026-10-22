@@ -3,13 +3,14 @@ import type { Result } from "../lib/api";
 import { escapeHtml, formatCount, toNumber } from "../lib/format";
 import type { ChartTokens } from "./palette";
 import { tooltipBox } from "./option";
+import { dateFormat, showsUTC } from "../lib/time";
 
 /** Latency bands, matching the server's latencyBuckets (upper bounds in ms). */
 export const LATENCY_BANDS = ["< 25 ms", "25–50 ms", "50–100 ms", "100–250 ms", "250–500 ms", "0.5–1 s", "1–2.5 s", "2.5–5 s", "5–10 s", "≥ 10 s"];
 
-const timeFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-const axisFmt = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const timeFmt = () => dateFormat({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const axisFmt = () => dateFormat({ hour: "2-digit", minute: "2-digit" });
+const dayFmt = () => dateFormat({ month: "short", day: "numeric" });
 
 /**
  * Requests per time bucket and latency band. Color is the count on a
@@ -52,12 +53,12 @@ export function buildLatencyHeatmap(res: Result, t: ChartTokens): EChartsOption 
       ...tooltipBox(t),
       trigger: "item",
       formatter: (raw: unknown) => {
-        const p = raw as { value: [number, number, number, number] };
+        const p = raw as { value: [number, number, number, number]; color?: string };
         const [xi, yi, , n] = p.value;
         const ts = times[xi];
         const total = perBucket.get(ts) ?? 0;
         const share = total > 0 ? ` · ${((100 * n) / total).toFixed(1)}% of the interval` : "";
-        return `<div class="tt"><div class="tt-head">${escapeHtml(timeFmt.format(new Date(ts * 1000)))}</div><div class="tt-row"><span class="tt-val">${escapeHtml(formatCount(n, false))}</span><span class="tt-name">${escapeHtml(LATENCY_BANDS[yi])}${escapeHtml(share)}</span></div></div>`;
+        return `<div class="tt"><div class="tt-head">${escapeHtml(timeFmt().format(new Date(ts * 1000)))}</div><div class="tt-row"><span class="tt-key block" style="background:${p.color ?? "transparent"}"></span><span class="tt-val">${escapeHtml(formatCount(n, false))}</span><span class="tt-name">${escapeHtml(LATENCY_BANDS[yi])}${escapeHtml(share)}</span></div></div>`;
       },
     },
     xAxis: {
@@ -72,7 +73,7 @@ export function buildLatencyHeatmap(res: Result, t: ChartTokens): EChartsOption 
         hideOverlap: true,
         formatter: (v: string) => {
           const d = new Date(Number(v) * 1000);
-          return multiDay && d.getHours() === 0 && d.getMinutes() === 0 ? dayFmt.format(d) : axisFmt.format(d);
+          return multiDay && (showsUTC() ? d.getUTCHours() === 0 && d.getUTCMinutes() === 0 : d.getHours() === 0 && d.getMinutes() === 0) ? dayFmt().format(d) : axisFmt().format(d);
         },
       },
     },

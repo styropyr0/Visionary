@@ -6,7 +6,7 @@ namespace Styropyr0.Visionary;
 /// <summary>Statement sanitizing and the low-cardinality span names the dashboards group by.</summary>
 internal static class SqlText
 {
-    public const int MaxDetail = 2000;
+    public const int MaxDetail = 8000;
 
     private const RegexOptions Options = RegexOptions.Compiled | RegexOptions.CultureInvariant;
 

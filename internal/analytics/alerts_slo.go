@@ -3,7 +3,6 @@ package analytics
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 )
 
@@ -51,13 +50,13 @@ func sloTarget(sp ruleSpec, def float64) float64 {
 
 // sloBad is a request that spends error budget.
 func (s *Server) sloBad() string {
-	return "(status >= 500 OR duration_ms > " + strconv.Itoa(s.cfg.ApdexMs) + ")"
+	return "(status >= 500 OR duration_ms > " + s.apdex().sql() + ")"
 }
 
 var sloMetric = metricDef{Scopes: []string{"route", "method", "service"}}
 
 func (s *Server) sloStatus(ctx context.Context, r alertRule, now time.Time) (*sloStatus, error) {
-	st := &sloStatus{Target: sloTarget(r.Spec, s.cfg.SLOTarget), Burn: map[string]float64{}, Requests: map[string]int64{}}
+	st := &sloStatus{Target: sloTarget(r.Spec, s.sloTarget()), Burn: map[string]float64{}, Requests: map[string]int64{}}
 	budget := 1 - st.Target/100
 	scope, sargs := scopeClause(sloMetric, r.Spec.Scope)
 	bad := s.sloBad()

@@ -8,9 +8,11 @@ import jakarta.servlet.DispatcherType;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -73,6 +75,24 @@ public class VisionaryAutoConfiguration {
             log.warn("visionary: disabled: " + e.getMessage());
             return new VisionaryAgent(cfg);
         }
+    }
+
+    /**
+     * CPU profiles, controlled from the dashboard. Frames in the packages of the
+     * application's {@code @SpringBootApplication} count as the application's own code.
+     */
+    @Bean
+    VisionaryProfiler visionaryProfiler(VisionaryAgent agent, BeanFactory beanFactory) {
+        java.util.List<String> packages = java.util.List.of();
+        try {
+            if (AutoConfigurationPackages.has(beanFactory)) {
+                packages = AutoConfigurationPackages.get(beanFactory);
+            }
+        } catch (RuntimeException e) {
+            // no packages: classes loaded from directories still count as the application's
+        }
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        return new VisionaryProfiler(agent, packages, loader != null ? loader : getClass().getClassLoader());
     }
 
     @Bean

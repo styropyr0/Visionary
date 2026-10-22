@@ -67,26 +67,6 @@
   padding-left: 30px;
 }
 
-.host-install .host-steps {
-  max-width: 720px;
-  margin: 4px 0 0;
-  padding-left: 20px;
-  text-align: left;
-}
-.host-install .host-steps li { margin-bottom: 12px; }
-.host-install .host-steps a {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.host-install pre.code {
-  margin-top: 6px;
-  font-size: 12px;
-  white-space: pre;
-  overflow-x: auto;
-  word-break: normal;
-}
-
 .host-back {
   display: inline-flex;
   align-items: center;

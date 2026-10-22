@@ -5,6 +5,12 @@ it. Inside a request the span lands on the request's ``Trace`` (found through
 the contextvar in ``_context``); the totals always count and up to
 ``span_max`` spans are kept for the writer. Outside a request a span is
 queued on its own when it took at least the threshold.
+
+A span that ends after its request was logged (work the handler started and
+did not wait for) keeps the request's id and offset but is not counted in its
+totals. The first ``span_max`` such late spans of a request are queued
+whatever their duration, later ones only when they took at least the
+threshold. ``background`` spans (the work itself) are never counted.
 """
 
 from __future__ import annotations
@@ -16,8 +22,8 @@ from typing import Any, List, Optional
 
 from . import _context
 
-KINDS = ("db", "http", "cache", "queue", "custom")
-DETAIL_MAX = 2000
+KINDS = ("db", "http", "cache", "queue", "custom", "graphql", "background")
+DETAIL_MAX = 8000
 ERROR_MAX = 500
 
 # The agent spans and errors go to: the last one started. Set by Agent.start().
@@ -57,7 +63,7 @@ def active() -> Any:
 class Trace:
     """The spans and call totals of one logged request."""
 
-    __slots__ = ("request_id", "t0", "limit", "lock", "spans", "claimed", "closed",
+    __slots__ = ("request_id", "t0", "limit", "lock", "spans", "claimed", "closed", "late",
                  "db_count", "db_ms", "http_count", "http_ms")
 
     def __init__(self, request_id: str, t0: float, limit: int) -> None:
@@ -68,6 +74,7 @@ class Trace:
         self.spans: List["Span"] = []
         self.claimed = 0
         self.closed = False
+        self.late = 0  # spans that ended after the request was logged
         self.db_count = 0
         self.db_ms = 0.0
         self.http_count = 0
@@ -94,6 +101,13 @@ class Trace:
             if span.keep:
                 self.spans.append(span)
             return True
+
+    def claim_late(self) -> bool:
+        """Whether a span ending after the request was logged is among the
+        first ``limit`` such spans, which are stored whatever their duration."""
+        with self.lock:
+            self.late += 1
+            return self.late <= self.limit
 
     def close(self) -> List["Span"]:
         with self.lock:
@@ -149,8 +163,15 @@ class Span:
         if row_count is not None and row_count >= 0:
             self.row_count = int(row_count)
         try:
-            if self._trace is not None and self._trace.add(self):
-                return
+            trace = self._trace
+            if trace is not None:
+                if trace.add(self):
+                    return
+                # Ended after its request was logged: keep the request's id
+                # and offset, stored like a lone span past the late cap.
+                if trace.claim_late():
+                    self._agent.record_span(self)
+                    return
             if self.duration_ms >= self._agent.config.span_threshold_ms:
                 self._agent.record_span(self)
         except Exception:

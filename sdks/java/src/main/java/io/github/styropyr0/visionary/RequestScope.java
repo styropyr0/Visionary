@@ -8,7 +8,9 @@ import java.util.List;
  * The logged request a thread is working for. Spans and captured errors made
  * while it is current attach to it; the filter collects them when the request
  * finishes. Threads other than the request thread see it only when the work was
- * handed over with {@link Visionary#wrap(Runnable)} or {@link VisionaryTaskDecorator}.
+ * handed over with {@link Visionary#wrap(Runnable)}, {@link Visionary#background}
+ * or {@link VisionaryTaskDecorator}. Spans that end after the request was logged
+ * still carry its id and offset, and are stored on their own.
  */
 final class RequestScope {
 
@@ -25,6 +27,8 @@ final class RequestScope {
     private long httpCount;
     private double httpMs;
     private boolean finished;
+    /** Spans that ended after the request was logged, counted against {@code maxSpans}. */
+    private int lateKept;
 
     RequestScope(String requestId, long startNanos, int maxSpans) {
         this.requestId = requestId;
@@ -51,7 +55,11 @@ final class RequestScope {
         }
     }
 
-    /** Counts the span and keeps it while under the cap; false once the request has finished. */
+    /**
+     * Counts the span and keeps it while under the cap; false once the request has
+     * finished. {@code background} spans are kept but never counted: the request
+     * does not wait for them.
+     */
     synchronized boolean add(VisionarySpan span) {
         if (finished) {
             return false;
@@ -66,6 +74,18 @@ final class RequestScope {
         if (spans.size() < maxSpans) {
             spans.add(span);
         }
+        return true;
+    }
+
+    /**
+     * Whether a span that ended after the request was logged is stored whatever
+     * its duration: true for the first {@code VISIONARY_SPAN_MAX} of them.
+     */
+    synchronized boolean keepLate() {
+        if (lateKept >= maxSpans) {
+            return false;
+        }
+        lateKept++;
         return true;
     }
 

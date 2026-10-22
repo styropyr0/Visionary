@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Clock, RefreshCw } from "lucide-react";
 import { useApp } from "../lib/state";
+import { HelpButton } from "./Help";
 import { PRESETS, rangeLabel, toLocalInput } from "../lib/time";
 
 export function usePopover() {
@@ -170,7 +171,10 @@ export function TopBar({ title, section, actions }: { title: string; section?: s
         )}
         <h1>{title}</h1>
       </div>
-      <div className="topbar-actions">{actions}</div>
+      <div className="topbar-actions">
+        {actions}
+        <HelpButton />
+      </div>
     </header>
   );
 }

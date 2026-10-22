@@ -27,6 +27,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
 import "./Security.css";
+import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
 /** Re-renders on hash changes, so #/security/report opens without a route change. */
 function useHash(): string {
@@ -598,15 +599,11 @@ function HostSecurity({ hosts }: { hosts: number }) {
     <>
       <Section title="Host security" text="What the Visionary host agent reports from your VMs: SSH logins, sudo use, listening ports and pending updates." />
       {noAgent ? (
-        <div className="span-12 setup-card sec-noagent">
-          <div className="empty-icon">
-            <ShieldAlert size={20} />
-          </div>
-          <p>{NO_AGENT}.</p>
-          <a className="btn" href="#/system">
-            Set up the host agent
-          </a>
-        </div>
+        <SetupCard icon={<ShieldAlert size={20} />} title="No machines report here yet" text={`${NO_AGENT}.`} topic="agent" className="span-12 sc-inline">
+          <SetupOption title="Install the host agent" text="It reads the auth log or journald for SSH and sudo, watches listening ports, and checks for updates every 6 hours.">
+            <AgentSteps />
+          </SetupOption>
+        </SetupCard>
       ) : (
         <>
           <Panel

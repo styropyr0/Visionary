@@ -40,6 +40,12 @@ export class D1Store implements Store {
     return Number(result?.[0]?.meta?.changes) || 0;
   }
 
+  async rows(sql: string, args: Value[]): Promise<string[][]> {
+    const result = (await this.post(this.rawUrl, { sql, params: args.map(d1Param) })) as any;
+    const rows: unknown[][] = result?.[0]?.results?.rows ?? [];
+    return rows.map((r) => r.map((v) => (v === null || v === undefined ? "" : String(v))));
+  }
+
   async columns(sql: string): Promise<string[]> {
     const result = (await this.post(this.rawUrl, { sql })) as any;
     const rows: unknown[][] = result?.[0]?.results?.rows ?? [];

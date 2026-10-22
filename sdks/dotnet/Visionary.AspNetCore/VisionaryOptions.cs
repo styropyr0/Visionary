@@ -60,8 +60,9 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_LOG_MAX_BODY_BYTES (default 8192): the capture cap per body.</summary>
     public int MaxBodyBytes { get; set; } = 8192;
 
-    /// <summary>VISIONARY_LOG_RETENTION_DAYS (default 30, 0 keeps forever): api_logs, spans and errors.</summary>
-    public int LogRetentionDays { get; set; } = 30;
+    /// <summary>VISIONARY_LOG_RETENTION_DAYS (default 0, off: the Visionary server applies Settings → Retention).
+    /// Above 0 the SDK also deletes older api_logs, spans, errors and profiles rows.</summary>
+    public int LogRetentionDays { get; set; }
 
     /// <summary>VISIONARY_LOG_REDACT_HEADERS: added to the default redacted headers.</summary>
     public List<string> RedactHeaders { get; set; } = new();
@@ -84,8 +85,8 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_SYSTEM_INTERVAL (default 15s; a plain number is seconds, also 500ms, 1m).</summary>
     public TimeSpan SystemInterval { get; set; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>VISIONARY_SYSTEM_RETENTION_DAYS (default 30).</summary>
-    public int SystemRetentionDays { get; set; } = 30;
+    /// <summary>VISIONARY_SYSTEM_RETENTION_DAYS (default 0, off). Above 0 the SDK also deletes older system_metrics rows.</summary>
+    public int SystemRetentionDays { get; set; }
 
     /// <summary>VISIONARY_SERVICE: lets several services share a database.</summary>
     public string? Service { get; set; }
@@ -104,6 +105,16 @@ public sealed class VisionaryOptions
 
     /// <summary>VISIONARY_ERRORS (default true): unhandled and captured exceptions.</summary>
     public bool Errors { get; set; } = true;
+
+    /// <summary>
+    /// VISIONARY_PROFILE (default true): take CPU profiles when the dashboard turns them on
+    /// (Settings, Profiling). False never profiles, whatever the dashboard says. Needs the
+    /// Visionary.AspNetCore.Profiling package and <c>AddVisionaryProfiling()</c>.
+    /// </summary>
+    public bool Profile { get; set; } = true;
+
+    /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
+    internal bool ProfilingAdded { get; set; }
 
     /// <summary>
     /// Returns the route pattern for a request when endpoint routing has none, e.g. for
@@ -164,7 +175,7 @@ public sealed class VisionaryOptions
         PathPrefix = Get("VISIONARY_LOG_PATH_PREFIX") ?? "";
         LogBodies = Bool("VISIONARY_LOG_BODIES", true);
         MaxBodyBytes = Int("VISIONARY_LOG_MAX_BODY_BYTES", 8192);
-        LogRetentionDays = Int("VISIONARY_LOG_RETENTION_DAYS", 30);
+        LogRetentionDays = Int("VISIONARY_LOG_RETENTION_DAYS", 0);
         RedactHeaders = List("VISIONARY_LOG_REDACT_HEADERS");
         RedactFields = List("VISIONARY_LOG_REDACT_FIELDS");
         RedactRequestFields = List("VISIONARY_LOG_REDACT_REQUEST_FIELDS");
@@ -172,13 +183,14 @@ public sealed class VisionaryOptions
         ErrorKeyField = Get("VISIONARY_LOG_ERROR_KEY_FIELD") ?? "error.key";
         SystemMetrics = Bool("VISIONARY_SYSTEM_METRICS", true);
         SystemInterval = Duration(Get("VISIONARY_SYSTEM_INTERVAL"), TimeSpan.FromSeconds(15));
-        SystemRetentionDays = Int("VISIONARY_SYSTEM_RETENTION_DAYS", 30);
+        SystemRetentionDays = Int("VISIONARY_SYSTEM_RETENTION_DAYS", 0);
         Service = Get("VISIONARY_SERVICE");
         Release = Get("VISIONARY_RELEASE") ?? CommitVariables.Select(Get).FirstOrDefault(v => v is not null);
         Spans = Bool("VISIONARY_SPANS", true);
         SpanThresholdMs = Double("VISIONARY_SPAN_THRESHOLD_MS", 100);
         SpanMax = Int("VISIONARY_SPAN_MAX", 100);
         Errors = Bool("VISIONARY_ERRORS", true);
+        Profile = Bool("VISIONARY_PROFILE", true);
     }
 
     /// <summary>A plain number is seconds; otherwise a Go-style duration such as 500ms, 15s, 1m or 1h30m.</summary>

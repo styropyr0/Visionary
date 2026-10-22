@@ -50,3 +50,17 @@ CREATE TABLE IF NOT EXISTS releases (
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_releases_created_at ON releases (created_at);
 CREATE INDEX idx_releases_version_created_at ON releases (version, created_at);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    created_at  VARCHAR(32) NOT NULL,
+    service     VARCHAR(255),
+    instance    TEXT NOT NULL,
+    version     TEXT,
+    sdk         TEXT,
+    duration_ms DOUBLE NOT NULL,
+    samples     INTEGER NOT NULL,
+    routes      TEXT,
+    folded      MEDIUMTEXT NOT NULL
+) CHARACTER SET utf8mb4;
+CREATE INDEX idx_profiles_created_at ON profiles (created_at);

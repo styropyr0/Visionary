@@ -21,12 +21,15 @@ import (
 //	team.go      roles, API keys, audit log, dashboards
 //	hosts.go     the host agent's reports and the Hosts view
 //	security.go  security detectors, findings, the Security page and report
+//	insights.go  queries, dependencies, endpoint breakdown, EXPLAIN, GraphQL, CPU profiles
+//	settings.go  team-wide settings: profiling, which pages show
+//	data_delete.go deleting collected data by kind, range and service
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -42,6 +45,9 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.teamRoutes(mux)
 	s.hostsRoutes(mux)
 	s.securityRoutes(mux)
+	s.insightsRoutes(mux)
+	s.settingsRoutes(mux)
+	s.dataRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -50,6 +56,7 @@ func (s *Server) Start(ctx context.Context) {
 	if s.schemaPending.Load() {
 		go s.retrySchema(ctx)
 	}
+	s.liveStart(ctx)
 	s.releasesStart()
 	s.alertsStart(ctx)
 	s.uptimeStart(ctx)

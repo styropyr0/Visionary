@@ -9,7 +9,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import type { Result, Viz } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
-import { formatLogTime, formatRelative } from "../lib/time";
+import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
 import { formatDuration, formatInterval, formatUptime, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
@@ -281,7 +281,7 @@ function CertTile({ expires, https }: { expires?: string; https: boolean }) {
         <div className={`stat-delta ${warn ? "up-cert-warn" : ""}`}>
           {warn && <AlertTriangle size={13} aria-hidden />}
           <span className="vs" style={{ marginLeft: 0, color: warn ? "inherit" : undefined }}>
-            {expires ? `${warn ? "Renew soon · " : ""}expires ${new Date(expires).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}` : https ? "Not seen yet" : "Plain HTTP, no certificate"}
+            {expires ? `${warn ? "Renew soon · " : ""}expires ${dateFormat({ year: "numeric", month: "short", day: "numeric" }).format(new Date(expires))}` : https ? "Not seen yet" : "Plain HTTP, no certificate"}
           </span>
         </div>
       </div>

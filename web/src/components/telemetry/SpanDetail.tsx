@@ -8,6 +8,7 @@ import { DataTable, type Column } from "../DataTable";
 import { InfoTip } from "../InfoTip";
 import { CopyButton, Drawer } from "../Modal";
 import { VizView } from "../VizView";
+import { QueryPlan } from "./QueryPlan";
 import { KIND_COLOR } from "./Waterfall";
 import "./telemetry.css";
 
@@ -39,8 +40,21 @@ function ms(v: unknown) {
  * covers, which routes make it and how often per request, and its slowest
  * calls, each opening the request it belongs to.
  */
-export function SpanDetailDrawer({ kind, name, onClose, onOpenRequest }: { kind: string; name: string; onClose: () => void; onOpenRequest: (requestId: string) => void }) {
-  const q = useTelemetry<SpanDetailResponse>("spans/detail", { kind, name });
+export function SpanDetailDrawer({
+  kind,
+  name,
+  detail,
+  onClose,
+  onOpenRequest,
+}: {
+  kind: string;
+  name: string;
+  /** One statement (or URL) of the name only, as the query catalogue lists them. */
+  detail?: string;
+  onClose: () => void;
+  onOpenRequest: (requestId: string) => void;
+}) {
+  const q = useTelemetry<SpanDetailResponse>("spans/detail", detail === undefined ? { kind, name } : { kind, name, detail });
   const d = q.data;
   const cur = records(d?.summary)[0];
   const prev = records(d?.previous)[0];
@@ -89,8 +103,8 @@ export function SpanDetailDrawer({ kind, name, onClose, onOpenRequest }: { kind:
           </section>
 
           <section className="sd-section">
-            <h3 className="rt-title">{isDB ? "Statements" : "URLs"}</h3>
-            <Variants result={d.variants} isDB={isDB} />
+            <h3 className="rt-title">{isDB ? (detail === undefined ? "Statements" : "Statement") : detail === undefined ? "URLs" : "URL"}</h3>
+            <Variants result={d.variants} isDB={isDB} openFirst={detail !== undefined} />
           </section>
 
           <section className="sd-section">
@@ -178,8 +192,8 @@ function Stats({ cur, prev, isDB }: { cur: Record<string, unknown>; prev?: Recor
 }
 
 /** The statements (or URLs) under the name, each expandable to its full text. */
-function Variants({ result, isDB }: { result: Result; isDB: boolean }) {
-  const [open, setOpen] = useState<Set<number>>(new Set());
+function Variants({ result, isDB, openFirst }: { result: Result; isDB: boolean; openFirst: boolean }) {
+  const [open, setOpen] = useState<Set<number>>(() => new Set(openFirst ? [0] : []));
   const rows = useMemo(() => records(result), [result]);
   const max = Math.max(1, ...rows.map((r) => toNumber(r.total_ms) ?? 0));
   return (
@@ -228,6 +242,7 @@ function Variants({ result, isDB }: { result: Result; isDB: boolean }) {
                   </span>
                 </div>
                 <pre className="code mono wf-sql">{String(r.detail)}</pre>
+                {isDB && r.detail && r.target ? <QueryPlan target={String(r.target)} statement={String(r.detail)} /> : null}
               </div>
             )}
           </div>

@@ -21,7 +21,8 @@ module Visionary
                   :redact_headers, :redact_fields, :redact_request_fields,
                   :error_code_field, :error_key_field,
                   :system_metrics, :system_interval, :system_retention_days, :disk_path,
-                  :service, :version, :spans, :span_threshold_ms, :span_max, :errors
+                  :service, :version, :spans, :span_threshold_ms, :span_max, :errors,
+                  :profile
 
     # Runs on the writer thread, once per distinct user per batch, for users
     # missing a handle or role: ->(id) { [handle, role] } or nil.
@@ -47,7 +48,7 @@ module Visionary
       @queue_size = 5000
       @batch_size = 50
       @flush_interval = 3.0
-      @log_retention_days = 30
+      @log_retention_days = 0 # 0: off, the Visionary server applies Settings → Retention
       @redact_headers = []
       @redact_fields = []
       @redact_request_fields = []
@@ -55,7 +56,7 @@ module Visionary
       @error_key_field = "error.key"
       @system_metrics = true
       @system_interval = 15.0
-      @system_retention_days = 30
+      @system_retention_days = 0 # 0: off, as above
       @disk_path = ""
       @service = nil
       @version = nil
@@ -63,6 +64,8 @@ module Visionary
       @span_threshold_ms = 100.0
       @span_max = 100
       @errors = true
+      # false: never profile, whatever the dashboard says.
+      @profile = true
     end
 
     def self.from_env(env = ENV)
@@ -78,7 +81,7 @@ module Visionary
       c.path_prefix = s.("VISIONARY_LOG_PATH_PREFIX")
       c.capture_bodies = parse_bool(s.("VISIONARY_LOG_BODIES"), true)
       c.max_body_bytes = parse_int(s.("VISIONARY_LOG_MAX_BODY_BYTES"), 8192)
-      c.log_retention_days = parse_int(s.("VISIONARY_LOG_RETENTION_DAYS"), 30)
+      c.log_retention_days = parse_int(s.("VISIONARY_LOG_RETENTION_DAYS"), 0)
       c.redact_headers = parse_list(s.("VISIONARY_LOG_REDACT_HEADERS"))
       c.redact_fields = parse_list(s.("VISIONARY_LOG_REDACT_FIELDS"))
       c.redact_request_fields = parse_list(s.("VISIONARY_LOG_REDACT_REQUEST_FIELDS"))
@@ -86,13 +89,14 @@ module Visionary
       c.error_key_field = s.("VISIONARY_LOG_ERROR_KEY_FIELD").then { |v| v.empty? ? "error.key" : v }
       c.system_metrics = parse_bool(s.("VISIONARY_SYSTEM_METRICS"), true)
       c.system_interval = parse_duration(s.("VISIONARY_SYSTEM_INTERVAL"), 15.0)
-      c.system_retention_days = parse_int(s.("VISIONARY_SYSTEM_RETENTION_DAYS"), 30)
+      c.system_retention_days = parse_int(s.("VISIONARY_SYSTEM_RETENTION_DAYS"), 0)
       c.service = s.("VISIONARY_SERVICE").then { |v| v.empty? ? nil : v }
       c.version = release_from(env)
       c.spans = parse_bool(s.("VISIONARY_SPANS"), true)
       c.span_threshold_ms = parse_float(s.("VISIONARY_SPAN_THRESHOLD_MS"), 100.0)
       c.span_max = parse_int(s.("VISIONARY_SPAN_MAX"), 100)
       c.errors = parse_bool(s.("VISIONARY_ERRORS"), true)
+      c.profile = parse_bool(s.("VISIONARY_PROFILE"), true)
       c
     end
 

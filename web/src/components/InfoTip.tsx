@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 
@@ -13,28 +13,38 @@ const DELAY = 200;
  * with overflow: hidden never clip it, and flips above the anchor when there
  * is no room below.
  */
-function TipBubble({ anchor, id, children }: { anchor: HTMLElement; id: string; children: ReactNode }) {
+function TipBubble({ anchor, id, side, className = "", children }: { anchor: HTMLElement; id: string; side?: "right"; className?: string; children: ReactNode }) {
   const tip = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; below: boolean; arrow: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; place: "below" | "above" | "right"; arrow: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!tip.current) return;
     const a = anchor.getBoundingClientRect();
     const t = tip.current.getBoundingClientRect();
+    if (side === "right") {
+      const middle = a.top + a.height / 2;
+      const top = Math.min(Math.max(middle - t.height / 2, EDGE), window.innerHeight - t.height - EDGE);
+      setPos({ top, left: a.right + GAP, place: "right", arrow: Math.min(Math.max(middle - top, 10), t.height - 10) });
+      return;
+    }
     const center = a.left + a.width / 2;
     const left = Math.min(Math.max(center - t.width / 2, EDGE), window.innerWidth - t.width - EDGE);
     const below = a.bottom + GAP + t.height <= window.innerHeight - EDGE || a.top - GAP - t.height < EDGE;
     const top = below ? a.bottom + GAP : a.top - GAP - t.height;
-    setPos({ top, left, below, arrow: Math.min(Math.max(center - left, 10), t.width - 10) });
-  }, [anchor, children]);
+    setPos({ top, left, place: below ? "below" : "above", arrow: Math.min(Math.max(center - left, 10), t.width - 10) });
+  }, [anchor, side, children]);
 
   return createPortal(
     <div
       ref={tip}
       id={id}
       role="tooltip"
-      className={`info-tip ${pos ? (pos.below ? "below" : "above") : ""}`}
-      style={pos ? ({ top: pos.top, left: pos.left, "--arrow-x": `${pos.arrow}px` } as CSSProperties) : { top: 0, left: 0, visibility: "hidden" }}
+      className={`info-tip ${pos?.place ?? ""} ${className}`}
+      style={
+        pos
+          ? ({ top: pos.top, left: pos.left, [pos.place === "right" ? "--arrow-y" : "--arrow-x"]: `${pos.arrow}px` } as CSSProperties)
+          : { top: 0, left: 0, visibility: "hidden" }
+      }
     >
       {children}
     </div>,
@@ -114,30 +124,128 @@ export function InfoTip({
 }
 
 /**
- * Shows every title attribute in the app's tooltip instead of the browser's.
- * Mounted once: while the pointer (or keyboard focus) is on an element with a
- * title, the title moves aside so the browser's tip never appears, and comes
- * back when it leaves, so screen readers and React still see it.
+ * A richer tip than a title, for an element that is not an info icon: the
+ * sidebar's items, which show it to their right.
+ */
+export function useHoverTip<T extends HTMLElement>(content: ReactNode, side?: "right") {
+  const id = useId();
+  const anchor = useRef<T>(null);
+  const timer = useRef<number>();
+  const [open, setOpen] = useState(false);
+  const hide = useRef(() => {
+    window.clearTimeout(timer.current);
+    setOpen(false);
+  }).current;
+  const show = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setOpen(true), DELAY);
+  };
+  useDismiss(open, hide);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return {
+    props: {
+      ref: anchor,
+      "aria-describedby": open ? id : undefined,
+      onMouseEnter: show,
+      onMouseLeave: hide,
+      onFocus: (e: ReactFocusEvent<T>) => e.currentTarget.matches(":focus-visible") && show(),
+      onBlur: hide,
+      onClick: hide,
+    },
+    bubble:
+      open && anchor.current ? (
+        <TipBubble anchor={anchor.current} id={id} side={side} className="rich">
+          {content}
+        </TipBubble>
+      ) : null,
+  };
+}
+
+/** Where a title's text lives once it is taken off the element. */
+const TIP_ATTR = "data-tip";
+/** Marks an aria-description this file added, so it goes with the title. */
+const DESC_MARK = "data-tip-desc";
+
+/**
+ * Keeps the browser from ever showing its own tooltip: every title the app
+ * sets (React props, later updates, injected HTML) moves to data-tip, which
+ * TitleTips shows in the app's bubble. Moving it on hover is not enough: a
+ * disabled button gets no pointer events in some browsers, so its title would
+ * still show natively. The text stays available to screen readers as an
+ * aria-description. Call once, before the first render.
+ */
+export function captureTitles() {
+  const proto = Element.prototype as Element & { __tipsCaptured?: boolean };
+  if (proto.__tipsCaptured) return;
+  proto.__tipsCaptured = true;
+  const set = proto.setAttribute;
+  const remove = proto.removeAttribute;
+  // An iframe's title names the frame for screen readers and never shows.
+  const isTitle = (el: Element, name: string) => name.toLowerCase() === "title" && !(el instanceof HTMLIFrameElement);
+
+  const stash = (el: Element, value: string) => {
+    if (value === "") return unstash(el);
+    set.call(el, TIP_ATTR, value);
+    if (!el.hasAttribute("aria-description") || el.hasAttribute(DESC_MARK)) {
+      set.call(el, "aria-description", value);
+      set.call(el, DESC_MARK, "");
+    }
+  };
+  const unstash = (el: Element) => {
+    remove.call(el, TIP_ATTR);
+    if (el.hasAttribute(DESC_MARK)) {
+      remove.call(el, "aria-description");
+      remove.call(el, DESC_MARK);
+    }
+  };
+  const take = (el: Element) => {
+    const v = el.getAttribute("title");
+    if (v === null || el instanceof HTMLIFrameElement) return;
+    remove.call(el, "title");
+    stash(el, v);
+  };
+
+  proto.setAttribute = function (this: Element, name: string, value: string) {
+    if (isTitle(this, name)) return stash(this, String(value));
+    return set.call(this, name, value);
+  };
+  proto.removeAttribute = function (this: Element, name: string) {
+    if (isTitle(this, name)) unstash(this);
+    return remove.call(this, name);
+  };
+
+  // Anything that bypasses setAttribute: el.title = "…", innerHTML.
+  const sweep = (root: Element) => {
+    if (root.hasAttribute("title")) take(root);
+    root.querySelectorAll("[title]").forEach(take);
+  };
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === "attributes" && r.target instanceof Element) take(r.target);
+      r.addedNodes.forEach((n) => n instanceof Element && sweep(n));
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["title"] });
+  sweep(document.documentElement);
+}
+
+/**
+ * Shows every title in the app's tooltip; captureTitles has already moved
+ * each one to data-tip. Mounted once, for hover and keyboard focus.
  */
 export function TitleTips() {
   const id = useId();
   const timer = useRef<number>();
-  const active = useRef<{ el: HTMLElement; text: string; observer: MutationObserver } | null>(null);
+  const active = useRef<HTMLElement | null>(null);
   const [tip, setTip] = useState<{ el: HTMLElement; text: string } | null>(null);
 
   const hide = useRef(() => {
     window.clearTimeout(timer.current);
-    const a = active.current;
-    if (a) {
-      a.observer.disconnect();
-      if (!a.el.hasAttribute("title")) a.el.setAttribute("title", a.text);
-      if (a.el.getAttribute("aria-describedby") === id) a.el.removeAttribute("aria-describedby");
-      active.current = null;
-    }
+    const el = active.current;
+    if (el?.getAttribute("aria-describedby") === id) el.removeAttribute("aria-describedby");
+    active.current = null;
     setTip(null);
   }).current;
-  // A click, scroll or Escape closes the tip but keeps the title aside until
-  // the pointer leaves, so the browser's tip does not show up in its place.
+  // A click, scroll or Escape closes the tip until the pointer moves on.
   const dismiss = useRef(() => {
     window.clearTimeout(timer.current);
     setTip(null);
@@ -145,42 +253,33 @@ export function TitleTips() {
 
   useEffect(() => {
     const take = (el: HTMLElement, focus: boolean) => {
-      if (active.current?.el === el) return;
+      if (active.current === el) return;
       hide();
-      const text = el.getAttribute("title") ?? "";
-      el.removeAttribute("title");
-      // React may set a new title while it is aside; pick it up instead.
-      const observer = new MutationObserver(() => {
-        const next = el.getAttribute("title");
-        if (next === null || !active.current) return;
-        el.removeAttribute("title");
-        active.current.text = next;
-        setTip((t) => (t && t.el === el ? { el, text: next } : t));
-      });
-      observer.observe(el, { attributes: true, attributeFilter: ["title"] });
-      active.current = { el, text, observer };
+      active.current = el;
       if (focus && !el.hasAttribute("aria-describedby")) el.setAttribute("aria-describedby", id);
-      timer.current = window.setTimeout(() => active.current && setTip({ el, text: active.current.text }), DELAY);
+      timer.current = window.setTimeout(() => {
+        // Read at show time, so a title changed meanwhile is the one shown.
+        const text = el.getAttribute(TIP_ATTR);
+        if (active.current === el && text) setTip({ el, text });
+      }, DELAY);
     };
-    const titled = (target: EventTarget | null) =>
-      target instanceof Element ? (target.closest("[title]:not(iframe):not([title=''])") as HTMLElement | null) : null;
+    const tipped = (target: EventTarget | null) => (target instanceof Element ? (target.closest(`[${TIP_ATTR}]`) as HTMLElement | null) : null);
 
     const onOver = (e: PointerEvent) => {
       if (e.pointerType === "touch") return;
-      if (active.current && e.target instanceof Node && active.current.el.contains(e.target)) return;
-      const el = titled(e.target);
+      const el = tipped(e.target);
       if (el) take(el, false);
       else hide();
     };
     const onOut = (e: PointerEvent) => {
-      const a = active.current;
-      if (a && !(e.relatedTarget instanceof Node && a.el.contains(e.relatedTarget))) hide();
+      const el = active.current;
+      if (el && !(e.relatedTarget instanceof Node && el.contains(e.relatedTarget))) hide();
     };
     const onFocusIn = (e: FocusEvent) => {
-      const el = e.target instanceof HTMLElement && e.target.matches(":focus-visible") ? titled(e.target) : null;
+      const el = e.target instanceof HTMLElement && e.target.matches(":focus-visible") ? tipped(e.target) : null;
       if (el && el === e.target) take(el, true);
     };
-    const onFocusOut = (e: FocusEvent) => active.current?.el === e.target && hide();
+    const onFocusOut = (e: FocusEvent) => active.current === e.target && hide();
 
     document.addEventListener("pointerover", onOver);
     document.addEventListener("pointerout", onOut);

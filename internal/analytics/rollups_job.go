@@ -48,10 +48,22 @@ type rollupKind struct {
 	table func(rt *rollupRuntime) rollupTable
 }
 
+// minute and hour are how long 1m and 1h rows are kept (Settings →
+// Retention); 0 there keeps them, for practical purposes, forever.
+func (rt *rollupRuntime) minute() time.Duration {
+	return rollupKeep(rt.s.retentionDays("rollup_minute"))
+}
+func (rt *rollupRuntime) hour() time.Duration { return rollupKeep(rt.s.retentionDays("rollup_hour")) }
+
+func rollupKeep(days int) time.Duration {
+	if days <= 0 {
+		days = 100 * 365
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
 type rollupRuntime struct {
 	s       *Server
-	minute  time.Duration // retention of 1m rows
-	hour    time.Duration // retention of 1h rows
 	minRows time.Duration // shortest range read from rollups, per kind
 	d1      bool
 
@@ -74,7 +86,7 @@ func (s *Server) rollupRuntime() *rollupRuntime {
 
 func (rt *rollupRuntime) kinds() []rollupKind {
 	return []rollupKind{
-		{"requests", func(rt *rollupRuntime) rollupTable { return requestsTable(rt.s.cfg.ApdexMs, rt.knownRoutes()) }},
+		{"requests", func(rt *rollupRuntime) rollupTable { return requestsTable(rt.s.apdex(), rt.knownRoutes()) }},
 		{"system", func(*rollupRuntime) rollupTable { return systemTable() }},
 	}
 }
@@ -131,11 +143,9 @@ func (s *Server) rollupsStart(ctx context.Context) {
 		return
 	}
 	rt := &rollupRuntime{
-		s:      s,
-		minute: time.Duration(getInt("VISIONARY_ROLLUP_MINUTE_DAYS", 14)) * 24 * time.Hour,
-		hour:   time.Duration(getInt("VISIONARY_ROLLUP_HOUR_DAYS", 400)) * 24 * time.Hour,
-		d1:     strings.Contains(s.db.Name(), "D1"),
-		spans:  map[string]rollupSpan{},
+		s:     s,
+		d1:    strings.Contains(s.db.Name(), "D1"),
+		spans: map[string]rollupSpan{},
 	}
 	rollupRuntimes.Store(s, rt)
 	go func() {
@@ -293,7 +303,7 @@ func (rt *rollupRuntime) forward(ctx context.Context, k rollupKind, now time.Tim
 	t := k.table(rt)
 	end := now.Truncate(time.Minute)
 	final := end.Add(-lateWindow)
-	cutoff := now.Add(-rt.minute).Truncate(time.Minute)
+	cutoff := now.Add(-rt.minute()).Truncate(time.Minute)
 
 	sp := rt.span(k.name, 60)
 	old := parseTS(sp.high)
@@ -377,9 +387,9 @@ func (rt *rollupRuntime) backfill(ctx context.Context, k rollupKind, now, deadli
 	}
 	t := k.table(rt)
 	for _, grain := range []int64{60, 3600} {
-		unit, keep := time.Minute, rt.minute
+		unit, keep := time.Minute, rt.minute()
 		if grain == 3600 {
-			unit, keep = time.Hour, rt.hour
+			unit, keep = time.Hour, rt.hour()
 		}
 		sp := rt.span(k.name, grain)
 		if sp.empty() || sp.low == spanDone {
@@ -475,7 +485,7 @@ func (rt *rollupRuntime) retention(ctx context.Context, now time.Time) {
 			grain int64
 			keep  time.Duration
 			unit  time.Duration
-		}{{60, rt.minute, time.Minute}, {3600, rt.hour, time.Hour}} {
+		}{{60, rt.minute(), time.Minute}, {3600, rt.hour(), time.Hour}} {
 			cutoff := now.Add(-g.keep).Truncate(g.unit).Format(tsLayout)
 			sp := rt.span(k.name, g.grain)
 			if !sp.empty() && sp.low < cutoff {

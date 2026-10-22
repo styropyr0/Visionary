@@ -20,6 +20,7 @@ internal sealed class RequestState
     private double _dbMs;
     private long _httpCount;
     private double _httpMs;
+    private int _late;
     private bool _closed;
 
     public RequestState(HttpContext context, string requestId, DateTime startedAt, int maxSpans)
@@ -39,6 +40,12 @@ internal sealed class RequestState
             return s is null || s._closed ? null : s;
         }
     }
+
+    /// <summary>
+    /// The request this async flow belongs to, even after it was logged: work the request
+    /// started and did not wait for keeps its request_id and offsets.
+    /// </summary>
+    public static RequestState? Tracked => CurrentState.Value;
 
     public HttpContext Context { get; }
 
@@ -76,6 +83,23 @@ internal sealed class RequestState
                 _spans.Add(span);
             }
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Whether to store a call that ended after the request was logged: the first
+    /// <c>SpanMax</c> of them whatever their duration, later ones only when slow.
+    /// </summary>
+    public bool KeepLate(double durationMs, double thresholdMs)
+    {
+        lock (_lock)
+        {
+            if (_late < _maxSpans)
+            {
+                _late++;
+                return true;
+            }
+            return durationMs >= thresholdMs;
         }
     }
 

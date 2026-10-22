@@ -69,5 +69,15 @@ internal sealed record ErrorRecord : WriteItem
     public bool Handled { get; init; }
 }
 
+/// <summary>One CPU profile (SPEC.md "CPU profiles"): folded stacks plus the busy time per route.</summary>
+internal sealed record ProfileRecord : WriteItem
+{
+    public required DateTime CreatedAt { get; init; }
+    public double DurationMs { get; init; }
+    public long Samples { get; init; }
+    public required string Routes { get; init; }
+    public required string Folded { get; init; }
+}
+
 /// <summary>The deploy marker written once at start when the version is known.</summary>
 internal sealed record ReleaseRecord(DateTime CreatedAt) : WriteItem;

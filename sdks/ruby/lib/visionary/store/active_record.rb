@@ -40,6 +40,11 @@ module Visionary
         with { |c| c.select_values(sql).map(&:to_s) }
       end
 
+      # Every row of a query, as arrays of values.
+      def rows(sql)
+        with { |c| c.select_rows(sql) }
+      end
+
       def batch(stmts)
         with do |c|
           c.transaction(requires_new: true) do

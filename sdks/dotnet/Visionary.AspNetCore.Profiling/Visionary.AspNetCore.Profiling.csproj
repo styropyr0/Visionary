@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Styropyr0.Visionary.Profiling</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>Visionary.AspNetCore.Profiling</PackageId>
+    <!-- Released together with Visionary.AspNetCore, at the same version. -->
+    <Version>0.1.0</Version>
+    <Authors>styropyr0</Authors>
+    <Company>styropyr0</Company>
+    <Copyright>Copyright styropyr0</Copyright>
+    <Description>CPU profiles for Visionary.AspNetCore: samples the process with EventPipe when the Visionary dashboard turns profiling on, and stores folded stacks in the profiles table.</Description>
+    <PackageTags>visionary;aspnetcore;profiling;cpu;flamegraph;apm</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/styropyr0/Visionary/tree/main/sdks/dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/styropyr0/Visionary.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Visionary.AspNetCore\Visionary.AspNetCore.csproj" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.750501" />
+    <!-- Only the managed nettrace reader is used. Its build assets copy about 10 MB of
+         Windows-only native DLLs (ETW and DIA) into every app's output; leave them out. -->
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" ExcludeAssets="build;buildTransitive" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Visionary.AspNetCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

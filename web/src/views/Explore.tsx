@@ -21,7 +21,7 @@ import { api, ApiError, type Meta, type Result, type Viz } from "../lib/api";
 import { formatCount } from "../lib/format";
 import { load, useApp } from "../lib/state";
 import { postStream } from "../lib/stream";
-import { formatRelative, rangeLabel } from "../lib/time";
+import { displayZone, formatRelative, rangeLabel } from "../lib/time";
 import { DataTable } from "../components/DataTable";
 import { Modal } from "../components/Modal";
 import { Panel } from "../components/Panel";
@@ -182,7 +182,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
           question,
           from: resolved.from.toISOString(),
           to: resolved.to.toISOString(),
-          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          time_zone: displayZone(),
           history,
         },
         ({ event, data }) => {

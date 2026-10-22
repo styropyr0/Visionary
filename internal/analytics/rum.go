@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
@@ -21,10 +20,9 @@ import (
 // rumState is the feature's runtime state. The Server struct is shared by
 // every feature, so the state hangs off it through rumStates instead.
 type rumState struct {
-	origins   []string // allowed browser origins; empty allows any
-	limits    *rumLimiter
-	writer    *rumWriter
-	retention int // days; 0 keeps rows forever
+	origins []string // allowed browser origins; empty allows any
+	limits  *rumLimiter
+	writer  *rumWriter
 }
 
 var rumStates sync.Map // *Server -> *rumState
@@ -34,10 +32,9 @@ func (s *Server) rum() *rumState {
 		return st.(*rumState)
 	}
 	st := &rumState{
-		origins:   parseOrigins(os.Getenv("VISIONARY_CLIENT_ORIGINS")),
-		limits:    newRUMLimiter(rumEnvInt("VISIONARY_CLIENT_RATE_PER_IP", 120), rumEnvInt("VISIONARY_CLIENT_RATE_PER_KEY", 6000)),
-		writer:    newRUMWriter(s),
-		retention: rumEnvInt("VISIONARY_CLIENT_RETENTION_DAYS", 30),
+		origins: parseOrigins(os.Getenv("VISIONARY_CLIENT_ORIGINS")),
+		limits:  newRUMLimiter(rumEnvInt("VISIONARY_CLIENT_RATE_PER_IP", 120), rumEnvInt("VISIONARY_CLIENT_RATE_PER_KEY", 6000)),
+		writer:  newRUMWriter(s),
 	}
 	actual, _ := rumStates.LoadOrStore(s, st)
 	return actual.(*rumState)
@@ -146,9 +143,6 @@ func (s *Server) rumStart(ctx context.Context) {
 	st := s.rum()
 	go st.writer.run(ctx)
 	go st.limits.sweep(ctx)
-	if st.retention > 0 {
-		go s.rumRetention(ctx, st.retention)
-	}
 }
 
 func (s *Server) rumPrompt() string {
@@ -164,63 +158,6 @@ func (s *Server) rumPrompt() string {
   - 'custom': name, value, duration_ms, attrs.
 - attrs: JSON object text with extra flat values.
 Count sessions with COUNT(DISTINCT session_id) and users with COUNT(DISTINCT user_id). Always filter on kind.`
-}
-
-// rumRetention deletes old client events 60 s after start and then daily.
-func (s *Server) rumRetention(ctx context.Context, days int) {
-	timer := time.NewTimer(time.Minute)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		s.deleteOldClientEvents(ctx, days)
-		timer.Reset(24 * time.Hour)
-	}
-}
-
-func (s *Server) deleteOldClientEvents(ctx context.Context, days int) {
-	defer func() {
-		if r := recover(); r != nil {
-			s.logger.Error("client_events retention panicked", "panic", r)
-		}
-	}()
-	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(tsLayout)
-	stmt := `DELETE FROM client_events WHERE id IN (SELECT id FROM client_events WHERE created_at < ? LIMIT 5000)`
-	if s.q.d == sdk.MySQL {
-		stmt = `DELETE FROM client_events WHERE created_at < ? ORDER BY id LIMIT 5000`
-	}
-	deleted := int64(0)
-	for round := 0; round < 200; round++ {
-		// The shared database layer does not report affected rows, so count
-		// first (stopping at 5001) to know whether another round is needed.
-		res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM (SELECT id FROM client_events WHERE created_at < ? LIMIT 5001) AS old`, cutoff)
-		if err == nil {
-			var n int64
-			if len(res.Rows) > 0 && len(res.Rows[0]) > 0 {
-				n = toInt(res.Rows[0][0])
-			}
-			if n == 0 {
-				break
-			}
-			if err = s.db.Exec(ctx, stmt, cutoff); err == nil {
-				deleted += min(n, 5000)
-				if n <= 5000 {
-					break
-				}
-				continue
-			}
-		}
-		if ctx.Err() == nil {
-			s.logger.Warn("client_events retention", "err", err)
-		}
-		return
-	}
-	if deleted > 0 {
-		s.logger.Info("client_events retention", "deleted", deleted, "older_than_days", days)
-	}
 }
 
 func parseOrigins(raw string) []string {

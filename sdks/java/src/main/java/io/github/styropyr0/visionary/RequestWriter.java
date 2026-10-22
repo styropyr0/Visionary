@@ -166,6 +166,7 @@ final class RequestWriter {
         for (Table t : List.of(Table.API_LOGS, Table.SPANS, Table.ERRORS, Table.RELEASES)) {
             rows.put(t, new ArrayList<>());
         }
+        List<Object[]> profiles = new ArrayList<>();
         try {
             Map<String, VisionaryUser> users = lookupUsers(batch);
             for (Queued q : batch) {
@@ -185,6 +186,8 @@ final class RequestWriter {
                     rows.get(Table.ERRORS).add(errorRow(e));
                 } else if (q instanceof ReleaseEntry e) {
                     rows.get(Table.RELEASES).add(releaseRow(e));
+                } else if (q instanceof ProfileEntry e) {
+                    profiles.add(e.row());
                 }
             }
         } catch (RuntimeException e) {
@@ -192,6 +195,12 @@ final class RequestWriter {
             return;
         }
         rows.values().removeIf(List::isEmpty);
+        if (!profiles.isEmpty()) {
+            writeProfiles(profiles);
+        }
+        if (rows.isEmpty()) {
+            return;
+        }
         Exception last = null;
         for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
             try {
@@ -206,6 +215,19 @@ final class RequestWriter {
             }
         }
         log.error("visionary: batch write failed; " + batch.size() + " entries dropped: " + last);
+    }
+
+    /**
+     * Profiles go in their own write: the server creates {@code profiles}, and a
+     * missing table must not cost the batch's requests. One attempt; a profile is
+     * cheap to lose.
+     */
+    private void writeProfiles(List<Object[]> profiles) {
+        try {
+            store.insert(Table.PROFILES, profiles);
+        } catch (Exception e) {
+            log.warn("visionary: CPU profile write failed; " + profiles.size() + " dropped: " + e);
+        }
     }
 
     private void ensureSchema() throws Exception {
@@ -310,7 +332,7 @@ final class RequestWriter {
         String name = s.name;
         String detail = s.detail;
         if (s.sql != null) {
-            detail = Values.cap(SqlText.sanitize(s.sql), 2000);
+            detail = Values.cap(SqlText.sanitize(s.sql), Telemetry.MAX_DETAIL);
             if (name == null) {
                 name = SqlText.name(detail == null ? "" : detail);
             }

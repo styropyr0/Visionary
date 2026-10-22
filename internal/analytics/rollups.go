@@ -12,7 +12,7 @@ import (
 
 func (s *Server) rollupsSchema() []string {
 	return []string{
-		s.q.rollupDDL(requestsTable(s.cfg.ApdexMs, nil)),
+		s.q.rollupDDL(requestsTable(s.apdex(), nil)),
 		s.q.rollupDDL(systemTable()),
 		s.q.rollupStateDDL(),
 	}
@@ -44,7 +44,7 @@ func (s *Server) rollupsPrompt() string {
 		metrics = append(metrics, name+" "+strings.Join(aggs, " "))
 	}
 	last := strconv.Itoa(len(rollupEdges))
-	return `Rollups: pre-aggregated copies of api_logs and system_metrics, much cheaper for ranges longer than a day or two. created_at is the bucket start (same text format as the raw tables, so {{from}}, {{to}} and {{t}} work when the bucket is a multiple of bucket_s); bucket_s is 60 (1-minute rows, kept ` + strconv.Itoa(getInt("VISIONARY_ROLLUP_MINUTE_DAYS", 14)) + ` days) or 3600 (1-hour rows, kept ` + strconv.Itoa(getInt("VISIONARY_ROLLUP_HOUR_DAYS", 400)) + ` days). ALWAYS filter on one bucket_s, or rows are counted twice. The newest minute or two (and, for 1-hour rows, the current hour) are only in the raw tables.
+	return `Rollups: pre-aggregated copies of api_logs and system_metrics, much cheaper for ranges longer than a day or two. created_at is the bucket start (same text format as the raw tables, so {{from}}, {{to}} and {{t}} work when the bucket is a multiple of bucket_s); bucket_s is 60 (1-minute rows, kept ` + strconv.Itoa(s.retentionDays("rollup_minute")) + ` days) or 3600 (1-hour rows, kept ` + strconv.Itoa(s.retentionDays("rollup_hour")) + ` days). ALWAYS filter on one bucket_s, or rows are counted twice. The newest minute or two (and, for 1-hour rows, the current hour) are only in the raw tables.
 
 rollup_requests: one row per bucket_s, created_at, service ('' when unset), route (COALESCE(route, path) for the ~200 busiest, else 'other'), method, status, error_key (COALESCE(error_key, error_code, '—') when status >= 400, '' otherwise). Measures: requests, errors_5xx, errors_4xx, sum_ms, min_ms, max_ms (duration_ms), apdex_satisfied (status < 500 and duration_ms <= apdex_ms), apdex_tolerating (status < 500 and apdex_ms < duration_ms <= 4 * apdex_ms), slow_requests (duration_ms > 4 * apdex_ms), apdex_ms, sum_response_bytes, db_requests (requests that reported db_ms), sum_db_ms, sum_db_count, last_at (latest raw created_at), and a latency histogram h00..h` + last + `: h00 counts duration_ms < ` + edges[0] + `, hNN counts edge[NN-1] <= duration_ms < edge[NN], h` + last + ` is open-ended; the edges in ms are ` + strings.Join(edges, ", ") + `.
 - Totals and rates: SUM(requests); 100.0 * SUM(errors_5xx) / SUM(requests); mean latency SUM(sum_ms) / SUM(requests). Apdex: (SUM(apdex_satisfied) + 0.5 * SUM(apdex_tolerating)) / SUM(requests).

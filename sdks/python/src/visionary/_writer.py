@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import _spans
 from ._entry import Entry, format_ts
 from ._errors import ErrorEvent
+from ._profiler import Profile
 from ._redact import Redactor, error_fields
 from ._spans import Span
 from ._storage import PURGE_CHUNK, Backend
@@ -91,7 +92,7 @@ class RequestWriter:
         self.start()
 
     def log(self, e: Any) -> None:
-        """Enqueue an Entry, Span, ErrorEvent or Release without blocking; a
+        """Enqueue an Entry, Span, ErrorEvent, Release or Profile without blocking; a
         full queue drops and counts it."""
         try:
             self._queue.put_nowait(e)
@@ -165,6 +166,14 @@ class RequestWriter:
             self._logger.warning("visionary: request queue full; %d entries dropped", n)
 
     def _write(self, batch: List[Any]) -> None:
+        profiles = [p for p in batch if isinstance(p, Profile)]
+        if profiles:
+            # On their own: the server creates profiles, and a write that fails
+            # there must not take request rows down with it.
+            batch = [e for e in batch if not isinstance(e, Profile)]
+            self._write_profiles(profiles)
+            if not batch:
+                return
         try:
             groups = self._rows(batch)
         except Exception:
@@ -181,6 +190,16 @@ class RequestWriter:
             if attempt < 3:
                 time.sleep(attempt)
         self._logger.error("visionary: request batch write failed; %d entries dropped: %s", len(batch), err)
+
+    def _write_profiles(self, profiles: List[Profile]) -> None:
+        try:
+            self._backend.insert("profiles", [self._profile_row(p) for p in profiles])
+        except Exception as e:
+            self._logger.warning("visionary: writing %d CPU profile(s) failed: %s", len(profiles), e)
+
+    def _profile_row(self, p: Profile) -> Tuple[Any, ...]:
+        return (format_ts(p.created_at), self._service, self._instance, self._version, "python",
+                p.duration_ms, p.samples, p.routes, p.folded)
 
     def _rows(self, batch: List[Any]) -> List[Tuple[str, List[Tuple[Any, ...]]]]:
         entries = [e for e in batch if isinstance(e, Entry)]

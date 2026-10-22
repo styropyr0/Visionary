@@ -6,7 +6,7 @@ import { useQuery } from "../../lib/useQuery";
 import { alertsApi, WEEKDAYS, type AlertsMeta, type Channel, type DigestChange, type DigestPreview } from "../../lib/alerts";
 import type { Result } from "../../lib/api";
 import { formatCount, formatMs, formatPercent } from "../../lib/format";
-import { formatDateTime, formatLogTime } from "../../lib/time";
+import { formatDateTime, formatLogTime, dateFormat } from "../../lib/time";
 import { KIND_ICON, KIND_LABEL } from "./ChannelsTab";
 import { DataTable } from "../DataTable";
 import { ErrorNotice } from "../ErrorNotice";
@@ -490,7 +490,7 @@ function DigestRow({ channel, canEdit, offsetMin, onChange }: { channel: Channel
   );
 }
 
-const slotFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" });
+const slotFmt = () => dateFormat({ weekday: "long", hour: "2-digit", minute: "2-digit" });
 
 /**
  * The next send slot (weekday and hour in the digest zone, offsetMin from UTC)
@@ -501,6 +501,6 @@ function localSlot(weekday: number, hour: number, offsetMin: number): string {
   // Any week works for weekday and time; start from this week's Sunday, UTC.
   const sunday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - now.getUTCDay());
   const at = sunday + ((weekday * 24 + hour) * 60 - offsetMin) * 60_000;
-  return slotFmt.format(new Date(at));
+  return slotFmt().format(new Date(at));
 }
 

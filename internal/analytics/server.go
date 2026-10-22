@@ -30,9 +30,12 @@ type Server struct {
 	db  db.DB
 	q   sqlDialect
 
-	overview    map[string]string
-	performance map[string]string
-	system      map[string]string
+	overview map[string]string
+	system   map[string]string
+	// perf holds the Performance panels for the Apdex rule they were built
+	// with; performance() rebuilds them when the rule changes.
+	perf    atomic.Pointer[perfPanels]
+	liveSet liveHolder
 	bridge      *authbridge.Bridge
 	llm         *llm
 	auth        *auth
@@ -70,7 +73,7 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 		logger.Warn("VISIONARY_SESSION_SECRET not set; sessions reset on every restart")
 	}
 	q := sqlDialect{conn.Dialect()}
-	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), performance: performancePanels(q, cfg.ApdexMs), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
+	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
 	if s.llm == nil {
 		logger.Warn("OPENAI_API_KEY not set; the analyst is disabled")
 	}
@@ -421,8 +424,8 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		"routes":         s.knownRoutes(r.Context()),
 		"max_rows":       s.cfg.MaxRows,
 		"max_range_days": s.cfg.MaxRangeDays,
-		"apdex_ms":       s.cfg.ApdexMs,
-		"slo_target":     s.cfg.SLOTarget,
+		"apdex_ms":       s.apdex().DefaultMs,
+		"slo_target":     s.sloTarget(),
 	})
 }
 
