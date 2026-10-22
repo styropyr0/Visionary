@@ -56,6 +56,43 @@ export function repeatedNames(spans: SpanRow[]): { name: string; kind: string; c
   return [...by.values()].filter((e) => e.count >= N_PLUS_ONE).sort((a, b) => b.count - a.count);
 }
 
+export interface Gap {
+  offset: number;
+  duration: number;
+  /** The call that ended just before the gap, if any. */
+  after: string;
+}
+
+/** Shorter stretches are noise (scheduling, serialization between calls). */
+const GAP_MIN_MS = 5;
+const GAP_MIN_SHARE = 0.02;
+
+/**
+ * Stretches of the request that no recorded call covers: the app's own code
+ * (CPU work, rendering) or calls the SDK cannot see. Overlapping and nested
+ * calls (a query and its prepare) count once.
+ */
+export function untracked(spans: SpanRow[], requestMs: number): { gaps: Gap[]; ms: number } {
+  const sorted = [...spans].sort((a, b) => a.offset - b.offset);
+  const raw: Gap[] = [];
+  let at = 0;
+  let after = "";
+  for (const s of sorted) {
+    if (s.offset > at) raw.push({ offset: at, duration: s.offset - at, after });
+    if (s.offset + s.duration > at) {
+      at = s.offset + s.duration;
+      after = s.name;
+    }
+  }
+  if (requestMs > at) raw.push({ offset: at, duration: requestMs - at, after });
+  const ms = raw.reduce((a, g) => a + g.duration, 0);
+  const min = Math.max(GAP_MIN_MS, GAP_MIN_SHARE * requestMs);
+  return { gaps: raw.filter((g) => g.duration >= min), ms };
+}
+
+const GAP_HELP =
+  "No recorded call covers this time. It is the app's own code (CPU work such as hashing, parsing or rendering, waiting on a lock) or a call the SDK cannot see: an HTTP client without the Visionary transport, a request made without the handler's context, or a library with no hook. Wrap it in a custom span to name it.";
+
 function ticks(total: number): number[] {
   return [0, 0.25, 0.5, 0.75, 1].map((f) => f * total);
 }
@@ -69,6 +106,13 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
   const total = useMemo(() => Math.max(requestMs, ...spans.map((s) => s.offset + s.duration), 1), [spans, requestMs]);
   const kinds = useMemo(() => [...new Set(spans.map((s) => s.kind))].sort((a, b) => Object.keys(KIND_COLOR).indexOf(a) - Object.keys(KIND_COLOR).indexOf(b)), [spans]);
   const repeated = useMemo(() => new Set(repeatedNames(spans).map((r) => r.name)), [spans]);
+  // Calls and untracked stretches on one timeline, in start order.
+  const rows = useMemo(() => {
+    const items: ({ span: SpanRow; gap?: undefined } | { gap: Gap; span?: undefined })[] = spans.map((span) => ({ span }));
+    for (const gap of untracked(spans, requestMs).gaps) items.push({ gap });
+    return items.sort((a, b) => (a.span ?? a.gap!).offset - (b.span ?? b.gap!).offset || (a.gap ? -1 : 1));
+  }, [spans, requestMs]);
+  const hasGaps = rows.some((r) => r.gap);
 
   const toggle = (i: number) =>
     setOpen((o) => {
@@ -87,6 +131,12 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
             {KIND_LABEL[k] ?? k}
           </span>
         ))}
+        {hasGaps && (
+          <span className="wf-legend-item">
+            <span className="wf-swatch wf-gap-fill" />
+            Untracked
+          </span>
+        )}
         <span className="dim" style={{ marginLeft: "auto" }}>
           {formatCount(spans.length)} {spans.length === 1 ? "call" : "calls"} · request {formatMs(requestMs)}
         </span>
@@ -103,7 +153,9 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
         <span />
       </div>
       <div className="wf-rows" role="list">
-        {spans.map((s, i) => {
+        {rows.map((r, i) => {
+          if (r.gap) return <GapRow key={`gap-${r.gap.offset}`} gap={r.gap} total={total} open={open.has(i)} onToggle={() => toggle(i)} />;
+          const s = r.span;
           const left = (100 * s.offset) / total;
           const width = Math.max((100 * s.duration) / total, 0.25);
           const isOpen = open.has(i);
@@ -172,5 +224,40 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
         })}
       </div>
     </div>
+  );
+}
+
+function GapRow({ gap, total, open, onToggle }: { gap: Gap; total: number; open: boolean; onToggle: () => void }) {
+  const left = (100 * gap.offset) / total;
+  const width = Math.max((100 * gap.duration) / total, 0.25);
+  return (
+    <>
+      <button type="button" className={`wf-grid wf-row wf-gap ${open ? "open" : ""}`} role="listitem" onClick={onToggle} aria-expanded={open}>
+        <span className="wf-name">
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <span className="wf-swatch wf-gap-fill" />
+          <span className="wf-label">Untracked</span>
+        </span>
+        <span className="wf-track">
+          {[25, 50, 75].map((g) => (
+            <span key={g} className="wf-gridline" style={{ left: `${g}%` }} />
+          ))}
+          <span className="wf-bar wf-gap-fill" style={{ left: `${Math.min(left, 100 - width)}%`, width: `${width}%` }} />
+        </span>
+        <span className="wf-dur">{formatMs(gap.duration)}</span>
+      </button>
+      {open && (
+        <div className="wf-detail">
+          <dl className="kv wf-kv">
+            <dt>Started</dt>
+            <dd>
+              +{formatMs(gap.offset)}
+              {gap.after && <span className="dim"> · after {gap.after}</span>}
+            </dd>
+          </dl>
+          <p className="dim wf-gap-help">{GAP_HELP}</p>
+        </div>
+      )}
+    </>
   );
 }
