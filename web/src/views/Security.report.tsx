@@ -5,7 +5,7 @@ import { formatCount, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { formatFull, formatLogTime } from "../lib/time";
-import { auditLabel, kindLabel, rowObjects, securityApi, useSecurityPanel } from "../lib/security";
+import { auditLabel, kindLabel, rowObjects, sourceLabel, securityApi, useSecurityPanel } from "../lib/security";
 import { linkify } from "../components/ErrorNotice";
 
 /** The range in the link (#/security/report?from=&to=), else the picker's. */
@@ -111,7 +111,7 @@ export function SecurityReport() {
             empty="No findings."
             cols={[
               ["kind", "Kind", (v) => kindLabel(String(v))],
-              ["source", "Source"],
+              ["source", "Source", (v) => (v ? sourceLabel(String(v)) : "—")],
               ["findings", "Findings", num],
               ["occurrences", "Occurrences", num],
               ["critical", "Critical", num],

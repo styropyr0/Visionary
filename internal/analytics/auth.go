@@ -13,9 +13,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -42,6 +42,9 @@ type session struct {
 	Role    string `json:"o,omitempty"`
 	Token   string `json:"t"`
 	Expires int64  `json:"e"`
+	// Issued is when the session started; an account's password changed
+	// after it ends the session.
+	Issued int64 `json:"i,omitempty"`
 	// Checked is when the API last confirmed the token and role.
 	Checked int64 `json:"c"`
 }
@@ -50,15 +53,11 @@ func (s *session) expiresAt() time.Time { return time.Unix(s.Expires, 0) }
 func (s *session) checkedAt() time.Time { return time.Unix(s.Checked, 0) }
 
 type auth struct {
-	aead       cipher.AEAD
-	ttl        time.Duration
-	checkEvery time.Duration
-	secureMode string
-	trustProxy bool
-	bridge     *authbridge.Bridge
-	roles      *roleMapping
-	// viewerPassword is a second shared password that signs in read-only.
-	viewerPassword string
+	// aead seals cookies. It starts with a random key and takes the stored
+	// session secret once the settings are read (loadSessionSecret).
+	aead atomic.Pointer[cipher.AEAD]
+	// srv supplies Settings → Server → Sessions, read at each use.
+	srv *Server
 
 	checks singleflight.Group
 
@@ -79,77 +78,66 @@ type loginLimiter struct {
 	seen time.Time
 }
 
-// newAuth derives the cookie key from VISIONARY_SESSION_SECRET, or a random
-// key when it is unset (everyone is signed out on restart).
-func newAuth(cfg Config, bridge *authbridge.Bridge) (*auth, bool, error) {
-	secret := []byte(cfg.SessionSecret)
-	ephemeral := false
-	if len(secret) == 0 {
-		secret = make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return nil, false, err
-		}
-		ephemeral = true
-	} else if len(secret) < 32 {
-		return nil, false, errors.New("VISIONARY_SESSION_SECRET must be at least 32 characters")
+// newAuth starts with a random cookie key; setSecret replaces it with the
+// stored one before the server takes requests.
+func newAuth(srv *Server) (*auth, error) {
+	a := &auth{
+		srv:       srv,
+		limiters:  make(map[string]*loginLimiter),
+		signedOut: make(map[string]time.Time),
+		retryAt:   make(map[string]time.Time),
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
+	return a, a.setSecret(secret)
+}
+
+// setSecret derives the cookie key from the session secret.
+func (a *auth) setSecret(secret []byte) error {
+	if len(secret) < 32 {
+		return errors.New("the session secret must be at least 32 characters")
 	}
 	key := sha256.Sum256(append([]byte("visionary/session/v1:"), secret...))
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	aead, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
-	roles, err := newRoleMapping(os.Getenv("VISIONARY_ROLE_MAP"), cfg.Auth.AllowedRoles)
-	if err != nil {
-		return nil, false, err
-	}
-	viewerPassword := os.Getenv("VISIONARY_VIEWER_PASSWORD")
-	if viewerPassword != "" && cfg.Auth.Type == authbridge.TypeShared {
-		if len(viewerPassword) < 12 {
-			return nil, false, errors.New("VISIONARY_VIEWER_PASSWORD must be at least 12 characters")
-		}
-		if viewerPassword == cfg.Auth.SharedPassword {
-			return nil, false, errors.New("VISIONARY_VIEWER_PASSWORD must differ from VISIONARY_SHARED_PASSWORD")
-		}
-	}
-	return &auth{
-		roles:          roles,
-		viewerPassword: viewerPassword,
-		aead:           aead,
-		ttl:            cfg.SessionTTL,
-		checkEvery:     cfg.RoleCheckEvery,
-		secureMode:     cfg.SecureCookieEnv,
-		trustProxy:     cfg.TrustProxy,
-		bridge:         bridge,
-		limiters:       make(map[string]*loginLimiter),
-		signedOut:      make(map[string]time.Time),
-		retryAt:        make(map[string]time.Time),
-	}, ephemeral, nil
+	a.aead.Store(&aead)
+	return nil
 }
+
+func (a *auth) ttl() time.Duration        { return a.srv.confDuration("VISIONARY_SESSION_TTL") }
+func (a *auth) checkEvery() time.Duration { return a.srv.confDuration("VISIONARY_ROLE_CHECK_INTERVAL") }
+func (a *auth) trustProxy() bool          { return a.srv.confBool("VISIONARY_TRUST_PROXY") }
 
 func (a *auth) seal(s *session) (string, error) {
 	plain, err := json.Marshal(s)
 	if err != nil {
 		return "", err
 	}
-	nonce := make([]byte, a.aead.NonceSize())
+	aead := *a.aead.Load()
+	nonce := make([]byte, aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	out := a.aead.Seal(nonce, nonce, plain, []byte(sessionCookie))
+	out := aead.Seal(nonce, nonce, plain, []byte(sessionCookie))
 	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
 func (a *auth) open(value string) (*session, bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(value)
-	ns := a.aead.NonceSize()
+	aead := *a.aead.Load()
+	ns := aead.NonceSize()
 	if err != nil || len(raw) < ns {
 		return nil, false
 	}
-	plain, err := a.aead.Open(nil, raw[:ns], raw[ns:], []byte(sessionCookie))
+	plain, err := aead.Open(nil, raw[:ns], raw[ns:], []byte(sessionCookie))
 	if err != nil {
 		return nil, false
 	}
@@ -206,7 +194,7 @@ func (a *auth) clear(w http.ResponseWriter, r *http.Request) {
 // or the session TTL, whichever comes first.
 func (a *auth) newSession(res *authbridge.Result) *session {
 	now := time.Now()
-	exp := now.Add(a.ttl)
+	exp := now.Add(a.ttl())
 	if !res.ExpiresAt.IsZero() && res.ExpiresAt.Before(exp) {
 		exp = res.ExpiresAt
 	}
@@ -217,19 +205,20 @@ func (a *auth) newSession(res *authbridge.Result) *session {
 		Roles:   res.User.Roles,
 		Token:   res.Token,
 		Expires: exp.Unix(),
+		Issued:  now.Unix(),
 		Checked: now.Unix(),
 	}
 }
 
 // checkShared compares the team password, then the viewer password when one
 // is set, in constant time. It returns the role the password grants.
-func (a *auth) checkShared(pw string) role {
+func (a *auth) checkShared(sg *signin, pw string) role {
 	got := sha256.Sum256([]byte(pw))
-	want := sha256.Sum256([]byte(a.bridge.Config().SharedPassword))
+	want := sha256.Sum256([]byte(sg.cfg.SharedPassword))
 	admin := subtle.ConstantTimeCompare(want[:], got[:]) == 1
 	viewer := false
-	if a.viewerPassword != "" {
-		want = sha256.Sum256([]byte(a.viewerPassword))
+	if sg.viewerPassword != "" {
+		want = sha256.Sum256([]byte(sg.viewerPassword))
 		viewer = subtle.ConstantTimeCompare(want[:], got[:]) == 1
 	}
 	switch {
@@ -281,7 +270,7 @@ func (a *auth) retryLater(key string, expires time.Time) {
 			delete(a.retryAt, k)
 		}
 	}
-	at := now.Add(a.checkEvery)
+	at := now.Add(a.checkEvery())
 	if !expires.IsZero() && expires.Before(at) {
 		at = expires
 	}
@@ -311,8 +300,8 @@ var (
 // signed-in users keep working until their session expires, and the check is
 // retried every checkEvery instead of on every request. Only an answer from
 // the API (token revoked, role removed) ends a session early.
-func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) {
-	if !a.bridge.CanRecheck() || time.Since(s.checkedAt()) < a.checkEvery {
+func (a *auth) confirm(ctx context.Context, sg *signin, s *session) (*session, bool, error) {
+	if sg.bridge == nil || !sg.bridge.CanRecheck() || time.Since(s.checkedAt()) < a.checkEvery() {
 		return s, false, nil
 	}
 	key := tokenKey(s.Token)
@@ -322,7 +311,7 @@ func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) 
 	v, err, _ := a.checks.Do(key, func() (any, error) {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recheckTimeout)
 		defer cancel()
-		return a.bridge.Recheck(cctx, s.Token)
+		return sg.bridge.Recheck(cctx, s.Token)
 	})
 	if err != nil {
 		if authbridge.IsUnavailable(err) {
@@ -332,7 +321,7 @@ func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) 
 		return nil, false, errSessionEnded
 	}
 	u := v.(*authbridge.User)
-	if !a.roles.allowed(u) {
+	if !sg.roles.allowed(u) {
 		return nil, false, errNotAllowed
 	}
 	next := *s
@@ -343,7 +332,7 @@ func (a *auth) confirm(ctx context.Context, s *session) (*session, bool, error) 
 // secure decides the cookie's Secure flag. "auto" follows the request scheme,
 // including X-Forwarded-Proto when the proxy is trusted.
 func (a *auth) secure(r *http.Request) bool {
-	switch a.secureMode {
+	switch a.srv.conf("VISIONARY_SECURE_COOKIE") {
 	case "true":
 		return true
 	case "false":
@@ -352,7 +341,7 @@ func (a *auth) secure(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	return a.trustProxy && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	return a.trustProxy() && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // allowLogin rate-limits sign-in calls per client: 5 at once, then one every
@@ -377,7 +366,7 @@ func (a *auth) allowLogin(r *http.Request) bool {
 }
 
 func (a *auth) clientIP(r *http.Request) string {
-	if a.trustProxy {
+	if a.trustProxy() {
 		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 			first, _, _ := strings.Cut(fwd, ",")
 			return strings.TrimSpace(first)

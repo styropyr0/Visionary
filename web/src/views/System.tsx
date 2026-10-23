@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConnected } from "../lib/meta";
 import { Server, Sparkles } from "lucide-react";
 import { Select } from "../components/Select";
 import { api, ApiError, rangeQuery, type Result, type Viz } from "../lib/api";
@@ -165,7 +166,8 @@ export function System() {
   const machines = useMachines();
   const machine = machineFor(instance, machines.data);
 
-  const missing = instances.error instanceof ApiError && instances.error.status === 404;
+  const connected = useConnected("system");
+  const missing = !connected || (instances.error instanceof ApiError && instances.error.status === 404);
   const rows = useMemo(() => instances.data?.rows ?? [], [instances.data]);
   const names = rows.map((r) => String(r[0]));
   // The language of the shown instances: one instance's, or the one they all

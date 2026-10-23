@@ -87,8 +87,8 @@ func (s sse) send(event string, data any) {
 }
 
 func (s *Server) handleAnalyst(w http.ResponseWriter, r *http.Request) {
-	if s.llm == nil {
-		writeError(w, http.StatusServiceUnavailable, "the analyst needs OPENAI_API_KEY")
+	if s.llm() == nil {
+		writeError(w, http.StatusServiceUnavailable, "the analyst needs an OpenAI API key in Settings → Server")
 		return
 	}
 	var req analystRequest
@@ -101,7 +101,7 @@ func (s *Server) handleAnalyst(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "question must be 1–2000 characters")
 		return
 	}
-	tr, err := parseRange(rangeValues(req.From, req.To), s.cfg.MaxRangeDays)
+	tr, err := parseRange(rangeValues(req.From, req.To), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -121,7 +121,7 @@ func (s *Server) handleAnalyst(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("analyst failed", "err", err)
 		out.send("error", map[string]string{"message": userMessage(err)})
 	}
-	out.send("done", map[string]any{"model": s.llm.model})
+	out.send("done", map[string]any{"model": s.llm().modelName()})
 }
 
 func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRange, out sse) error {
@@ -136,7 +136,7 @@ func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRan
 
 	queries := 0
 	for turn := 0; turn < maxModelTurns; turn++ {
-		content, err := s.llm.chatJSON(ctx, messages)
+		content, err := s.llm().chatJSON(ctx, messages)
 		if err != nil {
 			return err
 		}
@@ -364,8 +364,8 @@ func (s *Server) analystPrompt(req analystRequest, tr timeRange) string {
 		tz = "UTC"
 	}
 	notes := "none"
-	if s.cfg.DataNotes != "" {
-		notes = s.cfg.DataNotes
+	if s.conf("VISIONARY_DATA_NOTES") != "" {
+		notes = s.conf("VISIONARY_DATA_NOTES")
 	}
 	routes := s.knownRoutes(context.Background())
 	knownRoutes := "unknown"
@@ -373,7 +373,7 @@ func (s *Server) analystPrompt(req analystRequest, tr timeRange) string {
 		knownRoutes = strings.Join(head(routes, 60), ", ")
 	}
 
-	return `You are Visionary, an analyst for ` + s.cfg.AppName + `'s production API. You answer questions about traffic, errors, latency and server health by querying a ` + s.db.Name() + ` database, then explaining what you found in plain language.
+	return `You are Visionary, an analyst for ` + s.conf("VISIONARY_APP_NAME") + `'s production API. You answer questions about traffic, errors, latency and server health by querying a ` + s.db.Name() + ` database, then explaining what you found in plain language.
 
 Context
 - Now: ` + time.Now().UTC().Format(tsLayout) + ` UTC. The viewer is in ` + tz + ` (` + offset + `). Data is stored in UTC; in your answer, convert every time to the viewer's zone and say so once (e.g. "all times ` + tz + `").` + example + `

@@ -17,7 +17,9 @@
 .host-name {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
+  /* Name over image or address: room above and below, so rows don't touch. */
+  padding: 7px 0;
   min-width: 0;
 }
 .host-name a { font-weight: 500; }

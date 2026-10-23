@@ -145,7 +145,7 @@ FROM security_events WHERE `+where+scope+` GROUP BY `+t+`, kind ORDER BY t`, app
 		return nil, err
 	}
 	tr.Bucket = 3600
-	return newResult(res, s.cfg.MaxRows, "", tr), nil
+	return newResult(res, s.maxRows(), "", tr), nil
 }
 
 // checkSecurityScope validates the security_events scope fields.

@@ -80,7 +80,7 @@ var digestEmailTmpl = template.Must(template.New("digest").Funcs(template.FuncMa
 
 // digestHTML renders the digest email. summary is the analyst's text, if any.
 func (s *Server) digestHTML(d *digestData, summary string) string {
-	v := digestEmailData(s.cfg.AppName, d, summary)
+	v := digestEmailData(s.conf("VISIONARY_APP_NAME"), d, summary)
 	var b bytes.Buffer
 	if err := digestEmailTmpl.Execute(&b, v); err != nil {
 		s.logger.Warn("digest: html render failed", "err", err)

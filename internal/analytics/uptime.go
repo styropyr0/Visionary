@@ -151,7 +151,7 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) uptimeStart(ctx context.Context) {
-	r := newUptimeRunner(s, uptimeSettingsFromEnv())
+	r := newUptimeRunner(s, s.uptimeSettings())
 	uptimeRunners.Store(s, r)
 	go r.run(ctx)
 }
@@ -172,8 +172,8 @@ type uptimeSettings struct {
 	workers      int
 }
 
-func uptimeSettingsFromEnv() uptimeSettings {
-	return uptimeSettings{allowPrivate: getBool("VISIONARY_UPTIME_ALLOW_PRIVATE", false), workers: 8}
+func (s *Server) uptimeSettings() uptimeSettings {
+	return uptimeSettings{allowPrivate: s.confBool("VISIONARY_UPTIME_ALLOW_PRIVATE"), workers: 8}
 }
 
 func uptimeNow() string { return time.Now().UTC().Format(tsLayout) }

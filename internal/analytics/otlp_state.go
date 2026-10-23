@@ -3,8 +3,6 @@ package analytics
 import (
 	"context"
 	"database/sql"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -86,11 +84,11 @@ func (s *Server) newOTLPState() *otlpState {
 	o := &otlpState{
 		s:           s,
 		inflight:    make(chan struct{}, otlpMaxInFlight),
-		limiter:     rate.NewLimiter(rate.Limit(otlpEnvInt("VISIONARY_OTLP_RATE", 50)), 100),
-		spansOn:     otlpEnvBool("VISIONARY_SPANS", true),
-		errorsOn:    otlpEnvBool("VISIONARY_ERRORS", true),
-		thresholdMs: float64(otlpEnvInt("VISIONARY_SPAN_THRESHOLD_MS", 100)),
-		spanMax:     otlpEnvInt("VISIONARY_SPAN_MAX", 100),
+		limiter:     rate.NewLimiter(rate.Limit(s.confInt("VISIONARY_OTLP_RATE")), 100),
+		spansOn:     s.confBool("VISIONARY_SPANS"),
+		errorsOn:    s.confBool("VISIONARY_ERRORS"),
+		thresholdMs: float64(s.confInt("VISIONARY_SPAN_THRESHOLD_MS")),
+		spanMax:     s.confInt("VISIONARY_SPAN_MAX"),
 		pending:     map[string]*otlpPendingTrace{},
 		recent:      map[string]*otlpRecent{},
 		series:      map[string]otlpPoint{},
@@ -246,19 +244,3 @@ func (o *otlpState) releaseStored(ctx context.Context, service any, version stri
 	return len(res.Rows) > 0, nil
 }
 
-func otlpEnvInt(key string, def int) int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && v >= 0 {
-		return v
-	}
-	return def
-}
-
-func otlpEnvBool(key string, def bool) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
-	case "true", "1", "yes":
-		return true
-	case "false", "0", "no":
-		return false
-	}
-	return def
-}

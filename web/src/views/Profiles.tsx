@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { Flame, Play } from "lucide-react";
 import type { Result } from "../lib/api";
 import { formatCount, formatMs, toNumber } from "../lib/format";
@@ -33,6 +35,7 @@ function busiest(v: unknown): [string, number][] {
  * them, the ones taken while a route was busy, or a single one.
  */
 export function Profiles() {
+  const connected = useConnected("requests");
   const toast = useToast();
   const [route, setRoute] = useState("");
   const [id, setId] = useState<number | null>(null);
@@ -95,6 +98,8 @@ export function Profiles() {
         }
       />
       <div className="content">
+        {connected ? (
+          <>
         {list.error && !list.data && <ErrorNotice title="Could not load profiles" error={list.error} style={{ marginBottom: 12 }} />}
         {settings && <ProfilingStatus p={settings.profile} />}
         <div className="grid">
@@ -165,6 +170,10 @@ export function Profiles() {
             </>
           )}
         </div>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API to profile it" text="Flame graphs of where your services spend CPU, taken by the Visionary SDK once profiling is on. Connect a service first." />
+        )}
       </div>
     </>
   );

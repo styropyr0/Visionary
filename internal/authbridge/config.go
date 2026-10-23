@@ -20,11 +20,13 @@ import (
 )
 
 // Modes. otp and password delegate to an existing API; shared is one team
-// password checked by Visionary itself; none skips sign-in (local use only).
+// password and accounts a username and password per person, both checked by
+// Visionary itself; none skips sign-in.
 const (
 	TypeOTP      = "otp"
 	TypePassword = "password"
 	TypeShared   = "shared"
+	TypeAccounts = "accounts"
 	TypeNone     = "none"
 
 	// AnyRole in AllowedRoles or VISIONARY_ROLE_MAP matches every user of the
@@ -72,8 +74,8 @@ type Config struct {
 	Fields       Fields            `json:"fields"`
 	AllowedRoles []string          `json:"allowed_roles"`
 
-	// SharedPassword is the team password in shared mode. It is only read
-	// from VISIONARY_SHARED_PASSWORD, never from a config file.
+	// SharedPassword is the team password in shared mode. It is kept apart
+	// from the rest (a secret), never in a config file.
 	SharedPassword string `json:"-"`
 }
 
@@ -159,25 +161,32 @@ func Load(src Source) (Config, error) {
 			return cfg, err
 		}
 	}
-	return cfg, cfg.validate()
+	return cfg, cfg.Validate(os.Getenv("VISIONARY_ROLE_MAP"))
 }
 
 // Delegated reports whether sign-in goes through an external API.
 func (c *Config) Delegated() bool { return c.Type == TypeOTP || c.Type == TypePassword }
 
-func (c *Config) validate() error {
+// Validate checks the config and fills in defaults. roleMap is the role
+// mapping ("ADMIN=admin,*=viewer"), which also says who may sign in.
+func (c *Config) Validate(roleMap string) error {
 	c.Type = strings.ToLower(strings.TrimSpace(c.Type))
 	switch c.Type {
 	case "":
-		return errors.New("choose a sign-in mode: set VISIONARY_AUTH_MODE to otp, password, shared or none (see the README)")
+		return errors.New("choose a sign-in mode: otp, password, shared or accounts")
 	case TypeShared:
 		if len(c.SharedPassword) < 12 {
-			return errors.New("shared mode needs VISIONARY_SHARED_PASSWORD of at least 12 characters")
+			return errors.New("the team password must be at least 12 characters")
 		}
 		if c.Provider == "" {
 			c.Provider = "Visionary"
 		}
 		c.Location = LocationNone
+		return nil
+	case TypeAccounts:
+		c.Provider = "Visionary"
+		c.Location = LocationNone
+		c.Identifier = Identifier{Label: "Username", Input: "text", Normalize: "lowercase"}
 		return nil
 	case TypeNone:
 		c.Provider = "Visionary"
@@ -185,13 +194,13 @@ func (c *Config) validate() error {
 		return nil
 	case TypeOTP, TypePassword:
 	default:
-		return fmt.Errorf("unknown sign-in mode %q: use otp, password, shared or none", c.Type)
+		return fmt.Errorf("unknown sign-in mode %q: use otp, password, shared or accounts", c.Type)
 	}
 
 	c.BaseURL = strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return errors.New("VISIONARY_AUTH_BASE_URL must be an http(s) URL")
+		return errors.New("the API base URL must be an http(s) URL")
 	}
 	if c.Type == TypePassword {
 		// One call signs in; a code endpoint left over from otp is unused.
@@ -200,40 +209,40 @@ func (c *Config) validate() error {
 		}
 		c.RequestCode = nil
 		if c.Verify.Path == "" {
-			return errors.New("password mode needs VISIONARY_AUTH_LOGIN, your API's login endpoint (e.g. POST /auth/login)")
+			return errors.New("password mode needs your API's login endpoint (e.g. POST /auth/login)")
 		}
 	}
 	if c.Type == TypeOTP {
 		if c.Login != nil {
-			return errors.New("VISIONARY_AUTH_LOGIN is for password mode; otp mode uses VISIONARY_AUTH_START and VISIONARY_AUTH_VERIFY")
+			return errors.New("a login endpoint is for password mode; otp mode uses the send-code and verify endpoints")
 		}
 		if c.RequestCode == nil {
-			return errors.New("otp mode needs VISIONARY_AUTH_START (the endpoint that sends the code)")
+			return errors.New("otp mode needs the endpoint that sends the code")
 		}
 		if c.CodeLength == 0 {
 			c.CodeLength = 6
 		}
 		if c.CodeLength < 4 || c.CodeLength > 10 {
-			return errors.New("VISIONARY_AUTH_CODE_LENGTH must be between 4 and 10")
+			return errors.New("the code length must be between 4 and 10")
 		}
 		if c.ResendSeconds == 0 {
 			c.ResendSeconds = 30
 		}
 	}
 	if c.Verify.Path == "" {
-		return errors.New("set VISIONARY_AUTH_VERIFY, the endpoint that signs a user in")
+		return errors.New("set the endpoint that signs a user in")
 	}
 	if c.Fields.Token == "" {
-		return errors.New("set VISIONARY_AUTH_FIELD_TOKEN, where the token is in the sign-in response (e.g. data.token)")
+		return errors.New("set where the token is in the sign-in response (e.g. data.token)")
 	}
-	// VISIONARY_ROLE_MAP also names who may sign in (every role it maps).
-	roleMap := strings.TrimSpace(os.Getenv("VISIONARY_ROLE_MAP"))
+	// The role mapping also names who may sign in (every role it maps).
+	roleMap = strings.TrimSpace(roleMap)
 	if len(c.AllowedRoles) == 0 && roleMap == "" {
-		return errors.New(`set VISIONARY_ALLOWED_ROLES or VISIONARY_ROLE_MAP to say who may sign in ("*" lets every user of the API in)`)
+		return errors.New(`map at least one of your API's roles to a Visionary role to say who may sign in ("*" lets every user of the API in)`)
 	}
 	// Only "*" works without reading a role from the API.
 	if c.Fields.Role == "" && !onlyAnyRole(c.AllowedRoles, roleMap) {
-		return errors.New(`set VISIONARY_AUTH_FIELD_ROLE, where the user's role is in the API's response (e.g. data.role), or allow every user with VISIONARY_ALLOWED_ROLES=*`)
+		return errors.New(`set where the user's role is in the API's response (e.g. data.role), or let every user in with the role "*"`)
 	}
 	if c.Identifier.Label == "" {
 		c.Identifier.Label = "Username"

@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import type { Result } from "../../lib/api";
-import { formatCount, formatMs, toNumber } from "../../lib/format";
+import { formatCount, formatMs, titleCase, toNumber } from "../../lib/format";
 import { N_PLUS_ONE, records } from "../../lib/telemetry";
 import "./telemetry.css";
 
@@ -151,7 +151,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
         {kinds.map((k) => (
           <span key={k} className="wf-legend-item">
             <span className="wf-swatch" style={{ background: KIND_COLOR[k] ?? KIND_COLOR.custom }} />
-            {KIND_LABEL[k] ?? k}
+            {KIND_LABEL[k] ?? titleCase(k)}
           </span>
         ))}
         {hasGaps && (
@@ -215,7 +215,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
                 </span>
                 <span className="wf-dur">
                   {failed && (
-                    <span className="wf-err" title={s.error || "error"}>
+                    <span className="wf-err" title={s.error || "Error"}>
                       <AlertTriangle size={12} aria-label="Failed" />
                     </span>
                   )}

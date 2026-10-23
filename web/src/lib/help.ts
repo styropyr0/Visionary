@@ -259,7 +259,7 @@ await visionary.graphqlOperation("query", operationName, source, () => execute(a
     title: "Add an uptime check",
     intro:
       "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and can alert.",
-    any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless the server allows it:", code: `VISIONARY_UPTIME_ALLOW_PRIVATE=true`, label: "Server environment" },
+    any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless an admin turns on Settings → Server → Other → Uptime checks may reach private addresses." },
   },
   statuspage: {
     id: "statuspage",
@@ -279,7 +279,7 @@ await visionary.graphqlOperation("query", operationName, source, () => execute(a
     id: "client",
     title: "Add the browser or mobile SDK",
     intro:
-      "Web and mobile apps post to this server with a public client key (Settings → API keys, or `VISIONARY_CLIENT_KEYS`). Browsers must also be allowed in `VISIONARY_CLIENT_ORIGINS` when it is set. The Android and iOS SDKs are in the repository's `sdks` folder.",
+      "Web and mobile apps post to this server with a public client key (Settings → API keys, or the client keys in Settings → Server → Ingest). Browsers must also be allowed in Allowed web origins there, when it is set. The Android and iOS SDKs are in the repository's `sdks` folder.",
     any: { code: `<script src="https://unpkg.com/visionary-browser/dist/visionary.min.js"></script>
 <script>
   Visionary.init({ endpoint: "${typeof location === "undefined" ? "https://visionary.example.com" : location.origin}", key: "pk_…", app_version: "1.0.0" });
@@ -402,7 +402,7 @@ export const HELP: Record<Route, PageHelp> = {
     what: "Findings from the API detectors (brute force and credential stuffing on login routes, accounts targeted from many addresses, scanners probing paths like `/.env`, request floods, bursts of 403s) and, with the host agent, SSH logins, sudo, opened ports and pending updates. The audit log records who changed what in Visionary.",
     read: [
       "Each finding links to the requests behind it, so you can see what was sent and by whom.",
-      "`VISIONARY_SECURITY=false` turns the API detectors off; host events still show.",
+      "Settings → Server → Security detectors turns the API detectors off and tunes them; host events still show.",
     ],
     setup: ["sdk", "user", "agent"],
   },
@@ -446,14 +446,14 @@ export const HELP: Record<Route, PageHelp> = {
     what: "Alert rules, the channels they notify, their history and the weekly digest. A rule watches a metric or a query and fires when it crosses its threshold for long enough.",
     read: [
       "Each firing is kept in history with the value that triggered it.",
-      "Email needs `VISIONARY_SMTP_HOST` and `VISIONARY_SMTP_FROM` on the server.",
+      "Email needs an SMTP server in Settings → Server → Email.",
     ],
     setup: [],
   },
   settings: {
     title: "Settings",
     tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, CPU profiling, which pages show, the status page and the audit log.",
-    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role, API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
+    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
     read: [
       "Changes reach every server sharing the database within 30 seconds; no restart or environment variable is needed.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",

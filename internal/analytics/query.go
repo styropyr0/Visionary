@@ -130,7 +130,7 @@ func (s *Server) execTemplate(ctx context.Context, sql string, r timeRange, trus
 	}
 	rendered := r.render(sql, s.q)
 	// One extra row tells us the result was cut.
-	capped := fmt.Sprintf("SELECT * FROM (\n%s\n) AS q LIMIT %d", rendered, s.cfg.MaxRows+1)
+	capped := fmt.Sprintf("SELECT * FROM (\n%s\n) AS q LIMIT %d", rendered, s.maxRows()+1)
 
 	var rows *db.Rows
 	var err error
@@ -142,7 +142,7 @@ func (s *Server) execTemplate(ctx context.Context, sql string, r timeRange, trus
 	if err != nil {
 		return nil, dbErr(err)
 	}
-	return newResult(rows, s.cfg.MaxRows, rendered, r), nil
+	return newResult(rows, s.maxRows(), rendered, r), nil
 }
 
 func newResult(rows *db.Rows, maxRows int, sql string, r timeRange) *Result {

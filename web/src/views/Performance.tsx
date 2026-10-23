@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { api, rangeQuery, type Meta, type Result, type StatsResponse, type Viz } from "../lib/api";
 import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -41,6 +43,7 @@ const VIZ = {
 } satisfies Record<string, Viz>;
 
 export function Performance({ meta }: { meta?: Meta }) {
+  const connected = useConnected("requests");
   const { range } = useApp();
   const apdexMs = meta?.apdex_ms ?? 500;
   const target = meta?.slo_target ?? 99;
@@ -114,6 +117,8 @@ export function Performance({ meta }: { meta?: Meta }) {
         }
       />
       <div className="content">
+        {connected ? (
+          <>
         {summary.error && !summary.data && (
           <ErrorNotice title="Could not load performance data" error={summary.error} style={{ marginBottom: 12 }} />
         )}
@@ -288,6 +293,10 @@ export function Performance({ meta }: { meta?: Meta }) {
           <Section title="Releases" text="Dashed lines on the charts mark deploys. Compare two versions to see what a release changed, route by route." />
           <CompareVersionsPanel className="span-12" />
         </div>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API to see its performance" text="Latency percentiles, Apdex, the slowest requests and what each one spent its time on, once a service with the Visionary SDK serves requests." />
+        )}
       </div>
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}
     </>
@@ -453,7 +462,7 @@ function RateCell({ value }: { value: unknown }) {
 /** Change as a signed percent; slower is flagged, faster is dimmed. */
 function ChangeCell({ value }: { value: unknown }) {
   const n = toNumber(value);
-  if (n === null) return <span className="dim">new</span>;
+  if (n === null) return <span className="dim">New</span>;
   const pct = n * 100;
   const text = `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct).toFixed(Math.abs(pct) >= 10 ? 0 : 1)}%`;
   const cls = pct >= 50 ? "bad" : pct >= 20 ? "warn" : "";

@@ -85,7 +85,7 @@ export function ChannelsTab({ meta, channels, onChange }: { meta: AlertsMeta; ch
                   <dt>Weekly digest</dt>
                   <dd>{c.digest_enabled ? `On, ${["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"][c.digest_weekday]} at ${String(c.digest_hour).padStart(2, "0")}:00` : "Off"}</dd>
                 </dl>
-                {c.kind === "email" && !meta.smtp_configured && <p className="form-error">Set VISIONARY_SMTP_HOST and VISIONARY_SMTP_FROM on the server to send email.</p>}
+                {c.kind === "email" && !meta.smtp_configured && <p className="form-error">Add an SMTP server in Settings → Server → Email to send email.</p>}
                 <div className="al-card-actions">
                   <button type="button" className="btn sm" onClick={() => test(c)} disabled={busy === c.id || !meta.can_edit}>
                     <Send size={13} />

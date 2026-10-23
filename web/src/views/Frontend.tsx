@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, MonitorSmartphone, XCircle } from "lucide-react";
 import type { Result, StatsResponse, Viz } from "../lib/api";
-import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
+import { formatCount, formatMs, formatPercent, relabelColumn, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatFull, formatLogTime, formatRelative, previousLabel } from "../lib/time";
 import {
@@ -52,6 +52,9 @@ const APPS = [
   { value: "ios", label: "iOS" },
 ];
 
+/** An app id ("web", "ios") as its label. */
+const appLabel = (v: unknown) => APPS.find((a) => a.value === v)?.label ?? String(v);
+
 const BREAKDOWNS = [
   { value: "app", label: "By app", column: "App" },
   { value: "app_version", label: "By app version", column: "App version" },
@@ -96,6 +99,7 @@ export function Frontend() {
   const screenRows = useMemo(() => withScreenLabel(screens.data, app === ""), [screens.data, app]);
   const apiChart = useMemo(() => apiChartRows(apiLatency.data), [apiLatency.data]);
   const breakdownRows = useMemo(() => withKey(breakdown.data, by), [breakdown.data, by]);
+  const errorsByApp = useMemo(() => errorSeries.data && relabelColumn(errorSeries.data, "series", appLabel), [errorSeries.data]);
 
   const empty =
     !summary.loading && cur !== null && !cur.sessions && !cur.views && !cur.errors && !cur.api_calls;
@@ -297,7 +301,7 @@ export function Frontend() {
                 ))
               }
             />
-            <ChartPanel className="span-4" title="Errors by app" q={errorSeries} viz={VIZ.errors} height={200} empty="No client errors in this range." />
+            <ChartPanel className="span-4" title="Errors by app" q={{ ...errorSeries, data: errorsByApp }} viz={VIZ.errors} height={200} empty="No client errors in this range." />
 
             <Section title="Sessions and users" />
             <ChartPanel
@@ -507,7 +511,7 @@ function ErrorDrawer({ fingerprint, onClose }: { fingerprint: string; onClose: (
             <dd>{formatFull(new Date(String(latest.created_at)))}</dd>
             <dt>App</dt>
             <dd>
-              {s(latest.app)} {latest.app_version ? s(latest.app_version) : ""}
+              {latest.app ? appLabel(latest.app) : "—"} {latest.app_version ? s(latest.app_version) : ""}
               {latest.version ? <span className="dim mono"> · build {s(latest.version)}</span> : null}
             </dd>
             <dt>Device</dt>
@@ -531,7 +535,7 @@ function ErrorDrawer({ fingerprint, onClose }: { fingerprint: string; onClose: (
           )}
           <h3 className="rum-drawer-h">Latest {rows.length} occurrences</h3>
           <DataTable
-            result={{ ...q.data, columns: ["created_at", "app", "app_version", "device", "url"], rows: rows.map((r) => [r.created_at, r.app, r.app_version, r.device, r.url]) }}
+            result={{ ...q.data, columns: ["created_at", "app", "app_version", "device", "url"], rows: rows.map((r) => [r.created_at, r.app ? appLabel(r.app) : r.app, r.app_version, r.device, r.url]) }}
             maxHeight={260}
           />
         </>
@@ -564,7 +568,7 @@ function apiChartRows(res: Result | undefined): Result | undefined {
 function withKey(res: Result | undefined, by: string): Result | undefined {
   if (!res) return undefined;
   const ki = res.columns.indexOf(by);
-  return { ...res, columns: ["key", ...res.columns], rows: res.rows.map((r) => [r[ki], ...r]) };
+  return { ...res, columns: ["key", ...res.columns], rows: res.rows.map((r) => [by === "app" ? appLabel(r[ki]) : r[ki], ...r]) };
 }
 
 /* ---------- table columns ---------- */
@@ -604,7 +608,7 @@ const pageColumns: Column[] = [
 ];
 
 const screenColumns: Column[] = [
-  { key: "app", render: (v) => <span className="pill">{String(v)}</span>, width: 90 },
+  { key: "app", render: (v) => <span className="pill">{appLabel(v)}</span>, width: 90 },
   { key: "screen", render: (v) => <span className="mono">{String(v)}</span> },
   { key: "views", align: "right", unit: "count" },
   { key: "p50", align: "right", render: msCell },
@@ -694,7 +698,7 @@ const errorColumns: Column[] = [
     key: "app",
     render: (v, row) => {
       const apps = toNumber(row[7]) ?? 1;
-      return <span className="pill">{apps > 1 ? `${String(v)} +${apps - 1}` : String(v)}</span>;
+      return <span className="pill">{apps > 1 ? `${appLabel(v)} +${apps - 1}` : appLabel(v)}</span>;
     },
     width: 90,
   },
@@ -717,7 +721,7 @@ const errorColumns: Column[] = [
 
 function breakdownColumns(by: string): Column[] {
   return [
-    { key: by, label: BREAKDOWNS.find((b) => b.value === by)?.column, render: (v) => <span>{String(v)}</span> },
+    { key: by, label: BREAKDOWNS.find((b) => b.value === by)?.column, render: (v) => <span>{by === "app" ? appLabel(v) : String(v)}</span> },
     { key: "sessions", align: "right", unit: "count" },
     { key: "users", align: "right", unit: "count" },
     { key: "views", align: "right", unit: "count" },

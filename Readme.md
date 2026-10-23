@@ -86,7 +86,8 @@ a typical API in one service.
 **1. Requests, errors and the server (about 15 minutes).** Add your
 language's SDK, wrap the router in its middleware and set
 `VISIONARY_DATABASE_URL` (or the [D1 variables](#sdk-settings)). Then
-[run the server](#run-the-server) and point its sign-in at your API.
+[run the server](#run-the-server) with the same database and set up sign-in
+in Settings → Sign-in.
 
 - You get every request with route, status, duration, user and redacted
   bodies; panics and handled errors grouped into issues; CPU, memory, GC and
@@ -136,7 +137,7 @@ request:
   use PostgreSQL or MySQL.
 - **`.env` comments.** Lines must start with `#`. A line starting with `;`
   makes the whole file unreadable, and the server starts as if no settings
-  were given ("choose a sign-in mode").
+  were given ("set VISIONARY_DATABASE_URL ...").
 - **Work a request leaves running** (a goroutine, thread or task that sends
   an email after the response) stays linked to the request as long as it
   carries the request's context. Start it with the SDK's background helper
@@ -321,7 +322,7 @@ to report it to your server ([`cmd/visionary-agent`](cmd/visionary-agent)).
 The SDKs see the host an app runs on. The agent watches the whole machine,
 with or without an app on it (a database box, a worker, a bastion, the VM your
 containers run on). It posts to the server over HTTPS with a **server** ingest
-key (Settings → API keys, or `VISIONARY_INGEST_KEYS`) and never needs database
+key (Settings → API keys, or Settings → Server → Ingest) and never needs database
 credentials. What it reports shows up in three places:
 
 - **System:** every 15 s it samples CPU, memory, swap, disks, network and load
@@ -379,7 +380,7 @@ passed to it (any variable below) go into the env file;
 How long snapshots, security events and metrics are kept is set in Settings →
 Data; machines silent for 30 days leave the inventory. The ingest endpoint is
 `POST /api/agent/v1/report` (gzip JSON, [`internal/agentapi`](internal/agentapi)),
-rate limited like OTLP (`VISIONARY_AGENT_RATE`, 50 per second).
+rate limited like OTLP (Settings → Server → Ingest, 50 per second).
 
 ## Run the server
 
@@ -388,38 +389,95 @@ docker run -d -p 8090:8090 --env-file .env ghcr.io/<owner>/visionary:latest
 ```
 
 Or locally: `cd web && npm ci && npm run build && cd .. && go run ./cmd/visionary`.
-Every setting is in [`.env.example`](.env.example).
+
+The environment only says where the server listens and which database it
+uses. Everything else (sign-in, the analyst, email, ingest keys, limits,
+detectors) is set in the dashboard under **Settings** and kept in the
+database, so every instance shares it and a change needs no redeploy:
+
+| Variable | Default | |
+|---|---|---|
+| `VISIONARY_DATABASE_URL` | | The database; see [Database](#database). For D1, `D1_ACCOUNT_ID`, `D1_DATABASE_ID` and `D1_API_TOKEN` instead. |
+| `VISIONARY_ADDR` | `:8090` | Where the server listens. |
+| `VISIONARY_ENABLE_AUTH` | `true` | `false` turns sign-in off: everyone who reaches the server is an admin. For getting back in when sign-in is broken; see below. |
+
+[`.env.example`](.env.example) has these and nothing else.
+
+**First start.** With nothing saved yet, sign-in isn't set up, and the
+dashboard opens straight in as an admin, with a banner on every page saying
+so. Open **Settings → Sign-in**, choose how people sign in and save; from then
+on everyone signs in. Set it up before the URL is public: until you do,
+anyone who finds it is an admin.
+
+The session secret that seals cookies is created on first start and stored in
+the database too, so sessions survive restarts and work across instances.
 
 ### Sign-in and roles
 
-Set `VISIONARY_AUTH_MODE` to one of four modes:
+Choose one of four ways in under **Settings → Sign-in** (admins only):
 
-| Mode | Use when | Steps at sign-in |
+| Way in | Use when | Steps at sign-in |
 |---|---|---|
-| `shared` | You just want a team password. | One: the password. |
-| `password` | Your API already has an email/username + password login. | One: identifier and password, sent to your login endpoint. |
-| `otp` | Your API signs users in with a one-time code (SMS or email). | Two: request a code, then enter it. |
-| `none` | Local development only. | None. Never expose it. |
+| Accounts | Each person should have their own login, kept by Visionary. | One: username and password. |
+| Team password | You just want one shared password. | One: the password. |
+| Your API: username and password | Your API already has an email/username + password login. | One: identifier and password, sent to your login endpoint. |
+| Your API: one-time code | Your API signs users in with a one-time code (SMS or email). | Two: request a code, then enter it. |
 
-With `password` and `otp`, Visionary calls your API's own endpoints, so nobody
-needs a new account and your API decides who someone is. Visionary decides who
-may come in, from the role your API returns:
+**Accounts.** Admins add people under Settings → Sign-in → Accounts: a
+username (an email address works), an optional name, a role (viewer, editor
+or admin) and a password of 12+ characters to hand over privately. Admins can
+change someone's role, disable or delete them, or set a new password; it
+applies within a minute, and a new password signs that person out everywhere.
+People change their own password under Settings → Members & roles. Passwords
+are stored as bcrypt hashes in `visionary_users`; a wrong username and a wrong
+password get the same answer. Switching to accounts needs at least one admin
+account, and the last admin account can't be demoted, disabled or deleted.
+
+**Team password.** One password of 12+ characters signs in as admin.
+Optionally, a second read-only password signs in as a viewer.
+
+**Your API.** Visionary calls your API's own endpoints, so nobody needs a new
+account and your API decides who someone is. You fill in:
+
+- **API base URL** and a **provider name** for the sign-in screen ("Use your
+  Acme account").
+- **Identifier:** the first field's label, input type (email, phone, text) and
+  how it is normalized (lowercase, digits only).
+- **Endpoints**, each a method and a path relative to the base URL, with a
+  JSON body where `{{identifier}}`, `{{password}}` and `{{code}}` are replaced
+  with what the user typed:
+  - password mode: **Log in**, e.g. `POST /auth/login` with
+    `{"email": "{{identifier}}", "password": "{{password}}"}`;
+  - code mode: **Send the code** (`POST /auth/otp/request`,
+    `{"phone": "{{identifier}}"}`) and **Verify the code**
+    (`POST /auth/otp/verify`, `{"phone": "{{identifier}}", "code": "{{code}}"}`);
+  - optional **Profile** (`GET /me`), which returns the signed-in user and lets
+    Visionary re-check roles while someone is signed in, and **Log out**.
+- **Where things are in the responses**, as dotted paths: `data.token` reads
+  `{"data": {"token": "..."}}` and `user.roles.0` reads the first item of an
+  array. The token is required; the role, name, handle, user ID, expiry,
+  where the code was sent and the error message are optional.
+- **Token header** (default `Authorization: Bearer <token>`), headers sent on
+  every call (e.g. an API key your API wants), code length and resend delay,
+  and whether to ask for the device's location (`{{latitude}}`,
+  `{{longitude}}` in bodies).
+
+Saving checks the whole setup first and refuses one that can't work. Then
+Visionary decides who may come in, from the role your API returns:
 
 | Role | Can |
 |---|---|
 | viewer | Read every dashboard, use Explore, run read-only queries. |
 | editor | Also edit saved panels, dashboards, alert rules and uptime checks. |
-| admin | Also manage API keys, notification channels and role mapping, and read the audit log. |
+| admin | Also manage sign-in, server settings, API keys, notification channels and data, and read the audit log. |
 
-- `VISIONARY_ALLOWED_ROLES=ADMIN,OPS`: users with those roles come in as admins.
-- `VISIONARY_ROLE_MAP=ADMIN=admin,ENGINEER=editor,SUPPORT=viewer`: map each of
-  your roles to a Visionary role. Anyone whose role isn't listed is turned away.
-- `*` matches every user of your API: `VISIONARY_ALLOWED_ROLES=*` lets everyone
-  in as admin, and `VISIONARY_ROLE_MAP=ADMIN=admin,*=viewer` makes your admins
-  admins and everyone else a viewer. With only `*`, `VISIONARY_AUTH_FIELD_ROLE`
-  is optional.
+The **role mapping** maps each of your roles to a Visionary role:
+`ADMIN=admin,ENGINEER=editor,SUPPORT=viewer`. Anyone whose role isn't listed
+is turned away. `*` matches every user of your API: `ADMIN=admin,*=viewer`
+makes your admins admins and everyone else a viewer, and with only `*` the
+role field is optional.
 
-Roles are re-checked every few minutes (`VISIONARY_ROLE_CHECK_INTERVAL`, 5m)
+Roles are re-checked every few minutes (Settings → Server → Sessions, 5m)
 through the profile endpoint, so someone who loses a role is signed out. The
 session cookie itself is the proof of sign-in, so Visionary does not depend on
 your API for each request: while the API is down, slow, rate limiting or
@@ -428,150 +486,58 @@ check is retried at the same interval instead of on every page. Only an answer
 from the API (the token revoked, the role removed) ends a session early.
 Signing *in* still needs the API.
 
-Copy the preset for your mode into `.env` and change the values for your API.
-Each line says what it does. Field paths are dotted paths into your API's JSON
-responses: `data.token` reads `{"data": {"token": "..."}}`, and `user.roles.0`
-reads the first item of an array.
+A change applies at once on the server you saved it on, within 30 seconds on
+the others, and is written to the audit log. People whose way in changed sign
+in again.
 
-#### `shared`: one team password
+**Locked out?** If sign-in stops working (your API moved, the role mapping
+leaves nobody in, a saved setup no longer loads, every admin forgot their
+password), set
+`VISIONARY_ENABLE_AUTH=false` on the server and restart it. Sign-in is then
+off, the dashboard opens as an admin with a warning banner, and the saved
+setup is kept. Fix it in Settings → Sign-in, remove the variable and restart.
+A saved setup that can't be used never opens the dashboard on its own: the
+sign-in screen says what is wrong and nobody gets in until it is fixed or the
+variable is set.
 
-```sh
-VISIONARY_AUTH_MODE=shared
-# The password everyone types, 12+ characters. Signs in as admin.
-VISIONARY_SHARED_PASSWORD=change-me-to-something-long
-# Optional: a second password that signs in as a read-only viewer.
-# VISIONARY_VIEWER_PASSWORD=another-long-password
-```
+### Upgrading from environment variables
 
-#### `password`: your API's email + password login (one step)
-
-```sh
-VISIONARY_AUTH_MODE=password
-# Shown on the sign-in screen: "Use your Acme account".
-VISIONARY_AUTH_PROVIDER=Acme
-# Your API's base URL; endpoint paths below are relative to it.
-VISIONARY_AUTH_BASE_URL=https://api.example.com
-
-# The sign-in form's first field.
-VISIONARY_AUTH_IDENTIFIER_LABEL=Email
-# HTML input type: email, tel or text.
-VISIONARY_AUTH_IDENTIFIER_INPUT=email
-# Applied before sending: lowercase, digits or trim.
-VISIONARY_AUTH_IDENTIFIER_NORMALIZE=lowercase
-
-# Your login endpoint, called once with what the user typed.
-# {{identifier}} and {{password}} are replaced with the form values.
-VISIONARY_AUTH_LOGIN=POST /auth/login
-VISIONARY_AUTH_LOGIN_BODY={"email":"{{identifier}}","password":"{{password}}"}
-
-# Where the login response keeps the token (required).
-VISIONARY_AUTH_FIELD_TOKEN=token
-# Where it keeps the user's role: a string or an array of strings.
-VISIONARY_AUTH_FIELD_ROLE=role
-# Optional user details, read from the profile response (or the login
-# response when there is no profile endpoint).
-VISIONARY_AUTH_FIELD_NAME=name
-VISIONARY_AUTH_FIELD_HANDLE=email
-# VISIONARY_AUTH_FIELD_USER_ID=id
-# Token expiry, if the response has one.
-# VISIONARY_AUTH_FIELD_EXPIRES_AT=expires_at
-# Where error responses keep a message to show the user.
-# VISIONARY_AUTH_FIELD_ERROR=message
-
-# Optional: returns the signed-in user, called with the token. Lets Visionary
-# re-check roles while someone is signed in.
-VISIONARY_AUTH_PROFILE=GET /me
-# Optional: called with the token when someone signs out.
-VISIONARY_AUTH_LOGOUT=POST /auth/logout
-
-# Who may sign in (see roles above). * lets every user in.
-VISIONARY_ALLOWED_ROLES=admin
-# VISIONARY_ROLE_MAP=admin=admin,engineer=editor,*=viewer
-```
-
-#### `otp`: your API's one-time code login (two steps)
-
-```sh
-VISIONARY_AUTH_MODE=otp
-VISIONARY_AUTH_PROVIDER=Acme
-VISIONARY_AUTH_BASE_URL=https://api.example.com
-
-# The sign-in form's first field, checked against the pattern before any call.
-VISIONARY_AUTH_IDENTIFIER_LABEL=Phone number
-VISIONARY_AUTH_IDENTIFIER_INPUT=tel
-VISIONARY_AUTH_IDENTIFIER_NORMALIZE=digits
-VISIONARY_AUTH_IDENTIFIER_PATTERN=^[0-9]{8,15}$
-VISIONARY_AUTH_IDENTIFIER_HINT=Enter your phone number as digits.
-# Digits in the code (4-10, default 6), and seconds before "resend" (default 30).
-VISIONARY_AUTH_CODE_LENGTH=6
-# VISIONARY_AUTH_RESEND_SECONDS=30
-
-# Step 1: your endpoint that sends the code.
-VISIONARY_AUTH_START=POST /auth/otp/request
-VISIONARY_AUTH_START_BODY={"phone":"{{identifier}}"}
-# Optional: where its response says the code went ("+91 ****1234").
-# VISIONARY_AUTH_FIELD_SENT_TO=masked_phone
-
-# Step 2: your endpoint that checks the code and returns a token.
-VISIONARY_AUTH_VERIFY=POST /auth/otp/verify
-VISIONARY_AUTH_VERIFY_BODY={"phone":"{{identifier}}","code":"{{code}}"}
-
-# Response fields and optional endpoints, as in password mode.
-VISIONARY_AUTH_FIELD_TOKEN=data.token
-VISIONARY_AUTH_FIELD_ROLE=data.role
-VISIONARY_AUTH_FIELD_NAME=data.name
-VISIONARY_AUTH_PROFILE=GET /me
-VISIONARY_AUTH_LOGOUT=POST /auth/logout
-
-VISIONARY_ROLE_MAP=ADMIN=admin,ENGINEER=editor,SUPPORT=viewer
-```
-
-#### `none`: no sign-in
-
-```sh
-# Everyone is an admin. Local development only; never expose it.
-VISIONARY_AUTH_MODE=none
-```
-
-#### Settings for either API mode
-
-```sh
-# Headers sent on every call to your API, e.g. an API key it requires.
-# VISIONARY_AUTH_HEADERS={"X-Api-Key":"..."}
-# Headers for one endpoint only: VISIONARY_AUTH_LOGIN_HEADERS, VISIONARY_AUTH_PROFILE_HEADERS, ...
-# How later calls send the token (default: Authorization: Bearer <token>).
-# VISIONARY_AUTH_TOKEN_HEADER=Authorization
-# VISIONARY_AUTH_TOKEN_PREFIX="Bearer "
-# Timeout per call to your API (default 15s).
-# VISIONARY_AUTH_TIMEOUT=15s
-# If your API wants the device's position at sign-in: none, optional or required.
-# The browser asks for it, and bodies can use "latitude":"{{latitude}}","longitude":"{{longitude}}".
-# VISIONARY_AUTH_LOCATION=none
-# Turn off an optional endpoint a config file set: VISIONARY_AUTH_PROFILE=off
-```
-
-The same settings can live in a JSON file (`VISIONARY_AUTH_CONFIG`, see
-`examples/auth/`); env vars override the file. Older password configs that set
-the login endpoint as `VISIONARY_AUTH_VERIFY` keep working.
+Older versions took sign-in and the rest from the environment
+(`VISIONARY_AUTH_*`, `VISIONARY_SHARED_PASSWORD`, `VISIONARY_VIEWER_PASSWORD`,
+`VISIONARY_ALLOWED_ROLES`, `VISIONARY_ROLE_MAP`, `VISIONARY_AUTH_CONFIG`,
+`VISIONARY_SESSION_SECRET`, `OPENAI_API_KEY` and every variable listed under
+[Settings → Server](#settings--server)). On the first start of this version,
+each one still set is copied into Settings once, and the log says so for each;
+from then on it is ignored and can be removed. Nothing to do by hand: sign-in
+works as before, and sessions sealed with `VISIONARY_SESSION_SECRET` stay
+valid. `VISIONARY_AUTH_MODE=none` is not copied: use
+`VISIONARY_ENABLE_AUTH=false` instead.
 
 ### Keys
 
-Admins create keys in Settings (only a hash is stored; the key is shown once):
+Admins create keys in Settings → API keys (only a hash is stored; the key is
+shown once):
 
 - **read**: use Visionary's HTTP API as a viewer, with `Authorization: Bearer vis_…`.
-- **server**: OpenTelemetry ingestion. `VISIONARY_INGEST_KEYS` also works.
+- **server**: SDKs over HTTP, OpenTelemetry and the host agent.
 - **client**: browser and mobile apps; public by nature, so combine it with
-  `VISIONARY_CLIENT_ORIGINS`. `VISIONARY_CLIENT_KEYS` also works.
+  the allowed web origins in Settings → Server → Ingest.
+
+Settings → Server → Ingest also takes comma-separated server and client keys,
+for keys you already hand out and want to keep.
 
 ### Settings in the dashboard
 
-What you'd tune while running Visionary is set in **Settings**, takes effect
-within 30 seconds on every server sharing the database, and is recorded in the
-audit log. No restart, no environment variable.
+Everything you'd change while running Visionary is in **Settings**, takes
+effect within 30 seconds on every server sharing the database (a few, marked
+*After restart*, when the server next starts), and is recorded in the audit
+log.
 
 | Tab | Who | What |
 |---|---|---|
 | **Preferences** | everyone, for themselves | Start page, the time range and auto-refresh a visit starts with, theme (or follow the device), time zone (this device or UTC) and 12/24-hour clock, the language Help shows code in, routes left out of Slowest requests. Kept on the server, so they follow you to any browser. |
+| **Sign-in** | admins | How people sign in and the role mapping; see [Sign-in and roles](#sign-in-and-roles). |
+| **Server** | admins | The analyst, sessions, email, alerts, ingest and the security detectors; see below. |
 | **Thresholds** | admins | Apdex threshold T (default 500 ms), the SLO target (99%), and routes with their own T, such as exports and uploads, so they don't drag Apdex and the SLO down. |
 | **Data** | admins | Retention per kind of data, with how many rows each holds and the oldest; and deleting data by kind, time range and service. |
 | **Profiling** | admins | CPU profiles on or off, for all services or chosen ones, and how often. |
@@ -584,28 +550,29 @@ uptime results 90; security findings 180; alert history and the audit log
 365 (at least 30); deploys forever; per-minute chart summaries 14 days and
 hourly ones 400. The server deletes older rows every 6 hours.
 
-**Upgrading:** these used to be environment variables (`VISIONARY_APDEX_MS`,
-`VISIONARY_SLO_TARGET`, `VISIONARY_STATUS_PAGE`, `VISIONARY_STATUS_TITLE`,
-`VISIONARY_UPTIME_RETENTION_DAYS`, `VISIONARY_CLIENT_RETENTION_DAYS`,
-`VISIONARY_AUDIT_RETENTION_DAYS`, `VISIONARY_SECURITY_RETENTION_DAYS`,
-`VISIONARY_HOST_RETENTION_DAYS`, `VISIONARY_SYSTEM_RETENTION_DAYS`,
-`VISIONARY_ROLLUP_MINUTE_DAYS`, `VISIONARY_ROLLUP_HOUR_DAYS`). On the first
-start of a new version, a value still set is copied into Settings once, and the
-log says so; from then on the variable is ignored and can be removed.
+#### Settings → Server
 
-### Server settings
+Each setting kept its old variable's name in the API
+(`GET /api/settings/config` lists both), so existing docs and deployments map
+one to one. Secrets (the OpenAI key, the SMTP password, ingest keys) are never sent
+back to the browser: the page only shows whether one is set.
 
-The essentials (database, session secret, sign-in, OpenAI key) are in
-`.env.example`. The rest of the environment has sensible defaults:
-
-| Variable | Default | |
+| Group | Settings (old variable) | Defaults |
 |---|---|---|
-| `VISIONARY_ROLLUPS` | `true` | Pre-aggregation for long ranges. |
-| `VISIONARY_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM` | — | Email alerts (STARTTLS). |
-| `VISIONARY_DIGEST_TZ` | server zone | Time zone of weekly digests. |
-| `VISIONARY_UPTIME_ALLOW_PRIVATE` | `false` | Let checks reach private and loopback addresses. |
-| `VISIONARY_CLIENT_ORIGINS` | any | Browser origins allowed to send (wildcards like `https://*.example.com`). |
-| `VISIONARY_CLIENT_RATE_PER_IP`, `_PER_KEY` | `120`, `6000` per minute | Client ingest limits. |
+| AI analyst | OpenAI API key (`OPENAI_API_KEY`), API base URL (`OPENAI_API_BASE`), model (`VISIONARY_MODEL`), reasoning effort (`VISIONARY_REASONING`), product name (`VISIONARY_APP_NAME`), notes about your data (`VISIONARY_DATA_NOTES`), rows per query (`VISIONARY_MAX_ROWS`), longest time range (`VISIONARY_MAX_RANGE_DAYS`) | off until a key is set; `https://api.openai.com/v1`; `gpt-4.1`; 5000 rows; 90 days |
+| Sessions | session length (`VISIONARY_SESSION_TTL`), re-check roles every (`VISIONARY_ROLE_CHECK_INTERVAL`), behind a trusted proxy (`VISIONARY_TRUST_PROXY`), secure cookie (`VISIONARY_SECURE_COOKIE`) | 12h; 5m; off; auto |
+| Email | SMTP host, port, user, password, from address (`VISIONARY_SMTP_*`) | port 587 (STARTTLS); from defaults to the user |
+| Alerts | check rules every (`VISIONARY_ALERTS_INTERVAL`), digest time zone (`VISIONARY_DIGEST_TZ`) | 1m; the server's zone |
+| Ingest | server and client keys (`VISIONARY_INGEST_KEYS`, `VISIONARY_CLIENT_KEYS`), allowed web origins (`VISIONARY_CLIENT_ORIGINS`, wildcards like `https://*.example.com`), frontend events per IP and per key (`VISIONARY_CLIENT_RATE_PER_IP`, `_PER_KEY`), OpenTelemetry and host agent rates (`VISIONARY_OTLP_RATE`, `VISIONARY_AGENT_RATE`), OpenTelemetry spans and errors kept (`VISIONARY_SPANS`, `VISIONARY_ERRORS`, `VISIONARY_SPAN_THRESHOLD_MS`, `VISIONARY_SPAN_MAX`) | any origin; 120 and 6000 per minute; 50 per second; on; 100 ms; 100 |
+| Security detectors | see [Security monitoring](#security-monitoring) | |
+| Other | chart summaries (`VISIONARY_ROLLUPS`), uptime checks may reach private addresses (`VISIONARY_UPTIME_ALLOW_PRIVATE`), check for new versions (`VISIONARY_UPDATE_CHECK`) | on; off; on |
+
+**Upgrading:** Thresholds, Data and Status page used to be environment
+variables too (`VISIONARY_APDEX_MS`, `VISIONARY_SLO_TARGET`,
+`VISIONARY_STATUS_PAGE`, `VISIONARY_STATUS_TITLE` and the
+`VISIONARY_*_RETENTION_DAYS` and `VISIONARY_ROLLUP_*_DAYS` variables). Like
+everything above, a value still set is copied into Settings once on the first
+start, and ignored from then on.
 
 ## Security monitoring
 
@@ -637,13 +604,13 @@ Everything else is a warning. A failed login is a 401 or 403 on a login
 route, or a 4xx whose `error_key` says the credentials or code were wrong.
 Login routes are those whose route or path contains login, signin, sign-in,
 auth, token, otp, password or session, or match your own globs in
-`VISIONARY_SECURITY_LOGIN_ROUTES`. Accounts come from `user_handle`/`user_id`,
+Settings → Server → Security detectors → Login routes. Accounts come from `user_handle`/`user_id`,
 so `account_targeted` needs your API to set the user on failed logins; request
 bodies are never read and findings never store bodies, query strings or
 secrets (token-like path segments are masked).
 
 **One row per finding, not per minute.** A finding is written once per kind
-and IP (or account) per `VISIONARY_SECURITY_DEDUPE` (10m). While the activity
+and IP (or account) per *Repeat a finding after* (10m). While the activity
 goes on, later runs add the new requests to its `count` and can raise its
 severity; after the period a new row starts with only the new requests, so
 `SUM(count)` is the number of occurrences. `rate_abuse` and `forbidden_spike`
@@ -652,8 +619,11 @@ server does.
 
 Visionary's audit log is read in place: sign-ins and failed sign-ins
 (`auth.sign_in_failed`, with the identifier masked), API keys, notification
-channels, and `team.role_mapping`, written at startup when the sign-in mode or
-role mapping changed since the last start.
+channels, accounts (`team.account_created`, `_updated`, `_deleted`,
+`auth.password_changed`), sign-in and server settings changes (`settings.sign_in`,
+`settings.server`, which record the names of the settings changed, never their
+values), and `team.role_mapping`, written whenever the sign-in mode or role
+mapping in force changes.
 
 **Alerts:** pick **Security findings** (filter by kind, minimum severity,
 source and host; fires per host, IP or account) or **Failed logins** as the
@@ -663,18 +633,21 @@ security updates. The **weekly digest** gets a security section: new findings
 by severity, top offending IPs, failed logins against the week before, hosts
 with pending updates and notable audit actions.
 
-| Variable | Default | |
+Tune them in **Settings → Server → Security detectors** (they apply after a
+restart; the old variable is in brackets):
+
+| Setting | Default | |
 |---|---|---|
-| `VISIONARY_SECURITY` | `true` | `false` turns the API detectors off; host events and the audit log still show. |
-| `VISIONARY_SECURITY_LOGIN_ROUTES` | login-like words | Comma list of route or path globs, e.g. `/auth/*,/api/v1/sessions`. |
-| `VISIONARY_SECURITY_INTERVAL`, `_WINDOW`, `_DEDUPE` | `1m`, `5m`, `10m` | How often detectors run, the window they read, one row per key per. |
-| `VISIONARY_SECURITY_BRUTEFORCE` | `10` | Failed logins from one IP per window. |
-| `VISIONARY_SECURITY_STUFFING_ACCOUNTS` | `5` | Accounts one IP failed against. |
-| `VISIONARY_SECURITY_TARGETED_IPS` | `5` | IPs failing against one account. |
-| `VISIONARY_SECURITY_SCANNER_HITS` | `3` | Probe-path requests from one IP. |
-| `VISIONARY_SECURITY_RATE_MIN`, `_RATE_FACTOR` | `120`, `5` | Requests per minute floor, and times the key's usual rate. |
-| `VISIONARY_SECURITY_FORBIDDEN` | `20` | 403s for one user or role per window. |
-| `VISIONARY_SECURITY_IGNORE_IPS` | — | IPs or CIDRs never flagged (health checks, office, internal services). |
+| Detectors on (`VISIONARY_SECURITY`) | on | Off turns the API detectors off; host events and the audit log still show. |
+| Login routes (`VISIONARY_SECURITY_LOGIN_ROUTES`) | login-like words | Comma list of route or path globs, e.g. `/auth/*,/api/v1/sessions`. |
+| Scan every, Look back, Repeat a finding after (`_INTERVAL`, `_WINDOW`, `_DEDUPE`) | `1m`, `5m`, `10m` | How often detectors run, the window they read, one row per key per. |
+| Failed logins from one IP (`_BRUTEFORCE`) | `10` | Per window. |
+| Accounts tried from one IP (`_STUFFING_ACCOUNTS`) | `5` | Accounts one IP failed against. |
+| IPs failing on one account (`_TARGETED_IPS`) | `5` | |
+| Scanner paths from one IP (`_SCANNER_HITS`) | `3` | Probe-path requests. |
+| Requests per minute, Times the usual rate (`_RATE_MIN`, `_RATE_FACTOR`) | `120`, `5` | Requests per minute floor, and times the key's usual rate. |
+| 403s from one IP (`_FORBIDDEN`) | `20` | 403s for one user or role per window. |
+| Ignore IPs (`_IGNORE_IPS`) | — | IPs or CIDRs never flagged (health checks, office, internal services). |
 
 Each run reads the window twice through the `created_at` index (once grouped
 per IP, once per account). On D1, which bills by rows read, that is about
@@ -687,8 +660,9 @@ window lowers it.
 `ghcr.io/<owner>/visionary` for `linux/amd64` and `linux/arm64`: `latest` from
 the default branch, `sha-<short>`, and semver tags from `v*` git tags.
 
-Run it behind HTTPS and set `VISIONARY_TRUST_PROXY=true`. The image is
-distroless and runs as non-root. `GET /api/healthz` is the health check.
+Run it behind HTTPS and turn on *Behind a trusted proxy* in Settings →
+Server → Sessions. The image is distroless and runs as non-root.
+`GET /api/healthz` is the health check.
 
 Run one Visionary server per database for now: alert rules, uptime checks and
 rollups run inside the server, and a second replica would repeat them.
@@ -705,14 +679,20 @@ rollups run inside the server, and a second replica would repeat them.
 - **Sessions** are AES-GCM encrypted, HttpOnly, SameSite=Strict cookies. The
   API token inside never reaches the page. Sign-in is rate-limited per client.
   Every change is checked against the user's role and written to the audit log.
+- **Settings live in the database** (`visionary_settings`), including the
+  session secret, the team passwords, the OpenAI key, the SMTP password and
+  ingest keys. Account passwords are bcrypt hashes in `visionary_users`. The dashboard never sends a secret back, and queries from
+  Explore, the analyst and saved panels can't read that table. Anyone with the
+  database credentials can, so treat those credentials (which your services'
+  SDKs also hold) as admin access to Visionary.
 - **Logs are redacted** before they are stored; SQL is stored with its values
   replaced by `?`. Add your own redactions with `VISIONARY_LOG_REDACT_*`.
 - **Ingest endpoints** need a key, cap body sizes (compressed and
   decompressed) and rate-limit per IP and per key.
 - **Uptime checks** cannot reach private, loopback or cloud metadata addresses,
   including through DNS or redirects, unless you allow it.
-- **Secrets** (webhook URLs, SMTP passwords, check headers) are masked in the
-  API and never logged.
+- **Secrets** (webhook URLs, SMTP passwords, check headers, API keys in
+  Settings → Server) are masked in the API and never logged.
 
 ## Cost
 

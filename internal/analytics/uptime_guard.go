@@ -55,7 +55,7 @@ func dialGuard(_, address string, _ syscall.RawConn) error {
 		return fmt.Errorf("%w: %s", errBlockedAddress, host)
 	}
 	if blockedAddr(a) {
-		return fmt.Errorf("%w: %s is a private, loopback or link-local address (set VISIONARY_UPTIME_ALLOW_PRIVATE=true to allow)", errBlockedAddress, a)
+		return fmt.Errorf("%w: %s is a private, loopback or link-local address (an admin can allow it in Settings → Server → Other)", errBlockedAddress, a)
 	}
 	return nil
 }
@@ -69,10 +69,10 @@ func precheckURL(u *url.URL) error {
 	}
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return fmt.Errorf("%w: %s is a loopback name (set VISIONARY_UPTIME_ALLOW_PRIVATE=true to allow)", errBlockedAddress, host)
+		return fmt.Errorf("%w: %s is a loopback name (an admin can allow it in Settings → Server → Other)", errBlockedAddress, host)
 	}
 	if a, err := netip.ParseAddr(host); err == nil && blockedAddr(a) {
-		return fmt.Errorf("%w: %s is a private, loopback or link-local address (set VISIONARY_UPTIME_ALLOW_PRIVATE=true to allow)", errBlockedAddress, a)
+		return fmt.Errorf("%w: %s is a private, loopback or link-local address (an admin can allow it in Settings → Server → Other)", errBlockedAddress, a)
 	}
 	return nil
 }

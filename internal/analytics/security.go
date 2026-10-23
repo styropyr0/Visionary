@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,28 +47,26 @@ type securitySettings struct {
 // is not set.
 var defaultLoginWords = []string{"login", "signin", "sign-in", "auth", "token", "otp", "password", "session"}
 
-func securitySettingsFromEnv() securitySettings {
+// securitySettings reads Settings → Server → Security detectors.
+func (s *Server) securitySettings() securitySettings {
 	st := securitySettings{
-		enabled:          getBool("VISIONARY_SECURITY", true),
-		interval:         getDuration("VISIONARY_SECURITY_INTERVAL", time.Minute),
-		window:           getDuration("VISIONARY_SECURITY_WINDOW", 5*time.Minute),
-		dedupe:           getDuration("VISIONARY_SECURITY_DEDUPE", 10*time.Minute),
-		bruteforce:       getInt("VISIONARY_SECURITY_BRUTEFORCE", 10),
-		stuffingAccounts: getInt("VISIONARY_SECURITY_STUFFING_ACCOUNTS", 5),
-		targetedIPs:      getInt("VISIONARY_SECURITY_TARGETED_IPS", 5),
-		scannerHits:      getInt("VISIONARY_SECURITY_SCANNER_HITS", 3),
-		rateMin:          getInt("VISIONARY_SECURITY_RATE_MIN", 120),
-		rateFactor:       5,
-		forbidden:        getInt("VISIONARY_SECURITY_FORBIDDEN", 20),
-	}
-	if v, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv("VISIONARY_SECURITY_RATE_FACTOR")), 64); err == nil && v >= 1 {
-		st.rateFactor = v
+		enabled:          s.confBool("VISIONARY_SECURITY"),
+		interval:         s.confDuration("VISIONARY_SECURITY_INTERVAL"),
+		window:           s.confDuration("VISIONARY_SECURITY_WINDOW"),
+		dedupe:           s.confDuration("VISIONARY_SECURITY_DEDUPE"),
+		bruteforce:       max(s.confInt("VISIONARY_SECURITY_BRUTEFORCE"), 1),
+		stuffingAccounts: max(s.confInt("VISIONARY_SECURITY_STUFFING_ACCOUNTS"), 1),
+		targetedIPs:      max(s.confInt("VISIONARY_SECURITY_TARGETED_IPS"), 1),
+		scannerHits:      max(s.confInt("VISIONARY_SECURITY_SCANNER_HITS"), 1),
+		rateMin:          max(s.confInt("VISIONARY_SECURITY_RATE_MIN"), 1),
+		rateFactor:       max(s.confFloat("VISIONARY_SECURITY_RATE_FACTOR"), 1),
+		forbidden:        max(s.confInt("VISIONARY_SECURITY_FORBIDDEN"), 1),
 	}
 	st.interval = max(st.interval, 10*time.Second)
 	st.window = min(max(st.window, time.Minute), time.Hour)
 	st.dedupe = max(st.dedupe, st.interval)
-	st.loginLikes = loginLikes(os.Getenv("VISIONARY_SECURITY_LOGIN_ROUTES"))
-	for _, v := range strings.Split(os.Getenv("VISIONARY_SECURITY_IGNORE_IPS"), ",") {
+	st.loginLikes = loginLikes(s.conf("VISIONARY_SECURITY_LOGIN_ROUTES"))
+	for _, v := range strings.Split(s.conf("VISIONARY_SECURITY_IGNORE_IPS"), ",") {
 		if v = strings.TrimSpace(v); v == "" {
 			continue
 		}
@@ -139,7 +135,7 @@ func (s *Server) security() *securityState {
 	if v, ok := securityStates.Load(s); ok {
 		return v.(*securityState)
 	}
-	st := securitySettingsFromEnv()
+	st := s.securitySettings()
 	v, _ := securityStates.LoadOrStore(s, &securityState{
 		st: st, panels: securityPanels(s.q, &st),
 		active: map[string]bool{}, baseline: map[string][]float64{},
@@ -159,7 +155,7 @@ func (s *Server) securityStart(ctx context.Context) {
 	sec := s.security()
 	go s.auditRoleMapping(ctx)
 	if !sec.st.enabled {
-		s.logger.Info("security detectors disabled (VISIONARY_SECURITY=false); the Security page still shows host events and the audit log")
+		s.logger.Info("security detectors disabled in Settings → Server; the Security page still shows host events and the audit log")
 		return
 	}
 	go s.securityLoop(ctx)

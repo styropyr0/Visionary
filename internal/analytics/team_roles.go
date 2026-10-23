@@ -73,11 +73,11 @@ func newRoleMapping(raw string, allowed []string) (*roleMapping, error) {
 		name = strings.TrimSpace(name)
 		r := parseRole(value)
 		if !ok || name == "" || r == roleNone {
-			return nil, fmt.Errorf("VISIONARY_ROLE_MAP entry %q must look like ROLE=viewer|editor|admin", part)
+			return nil, fmt.Errorf("role mapping entry %q must look like ROLE=viewer|editor|admin", part)
 		}
 		key := strings.ToUpper(name)
 		if seen[key] {
-			return nil, fmt.Errorf("VISIONARY_ROLE_MAP names %q twice", name)
+			return nil, fmt.Errorf("the role mapping names %q twice", name)
 		}
 		seen[key] = true
 		m.entries = append(m.entries, roleEntry{Provider: name, Role: r.String(), Source: "map"})
@@ -121,11 +121,12 @@ func (s *Server) roleOf(sess *session) role {
 	if sess.Role != "" {
 		return parseRole(sess.Role)
 	}
-	if s.cfg.Auth.Type == authbridge.TypeShared {
+	sg := s.signin()
+	if sg.cfg.Type == authbridge.TypeShared {
 		// Cookies issued before roles existed.
 		return roleAdmin
 	}
-	return s.auth.roles.resolve(sess.Roles)
+	return sg.roles.resolve(sess.Roles)
 }
 
 func sessionFrom(r *http.Request) *session {

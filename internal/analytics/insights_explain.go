@@ -117,8 +117,8 @@ func (s *Server) handleExplainCreate(w http.ResponseWriter, r *http.Request) {
 // handleExplainSummary asks the model to explain a finished plan in plain
 // words and say what would make the statement faster.
 func (s *Server) handleExplainSummary(w http.ResponseWriter, r *http.Request) {
-	if s.llm == nil {
-		writeError(w, http.StatusBadRequest, "the AI analyst is not configured (OPENAI_API_KEY)")
+	if s.llm() == nil {
+		writeError(w, http.StatusBadRequest, "the AI analyst is off: add an OpenAI API key in Settings → Server")
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -143,7 +143,7 @@ The text: one sentence on how the database runs this statement, then 2 to 4 shor
 	user := "Database: " + target + "\n\nStatement:\n" + statement + "\n\nPlan:\n" + plan + "\n\nAutomatic findings: " + string(findings)
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	content, err := s.llm.chatJSON(ctx, []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: user}})
+	content, err := s.llm().chatJSON(ctx, []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: user}})
 	if err != nil {
 		s.fail(w, err)
 		return

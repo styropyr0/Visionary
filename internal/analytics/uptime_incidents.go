@@ -65,7 +65,7 @@ func (s *Server) handleUptimeIncidents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { sentence } from "../lib/format";
 
 interface Toast {
   id: number;
@@ -13,7 +14,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const push = useCallback((kind: Toast["kind"], text: string) => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, kind, text }]);
+    setToasts((t) => [...t, { id, kind, text: sentence(text) }]);
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
   }, []);
   return (

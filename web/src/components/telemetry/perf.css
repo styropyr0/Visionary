@@ -7,11 +7,18 @@
   line-height: 1.5;
 }
 
+.empty-why .help-link {
+  margin-top: 2px;
+}
+
 .span-name {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  /* A statement or host over its detail: room above and below, so rows
+     don't touch. */
+  padding: 7px 0;
 }
 
 .span-name-main {

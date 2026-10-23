@@ -1,5 +1,6 @@
 import { AlertOctagon, BellOff, CheckCircle2, CircleDashed, Clock3, Info, PauseCircle, TriangleAlert } from "lucide-react";
 import type { Severity, SeriesStateName } from "../../lib/alerts";
+import { titleCase } from "../../lib/format";
 
 const STATE: Record<string, { label: string; cls: string; Icon: typeof CheckCircle2 }> = {
   firing: { label: "Firing", cls: "firing", Icon: AlertOctagon },
@@ -27,7 +28,7 @@ export function SeverityTag({ severity }: { severity: Severity }) {
   return (
     <span className={`al-sev ${severity}`}>
       <Icon size={12} aria-hidden />
-      {severity}
+      {titleCase(severity)}
     </span>
   );
 }

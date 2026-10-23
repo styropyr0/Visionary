@@ -227,7 +227,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		"repo":    "https://github.com/" + upstreamRepo,
 	}
 
-	if os.Getenv("VISIONARY_UPDATE_CHECK") != "false" {
+	if s.confBool("VISIONARY_UPDATE_CHECK") {
 		releases, err, checked := upstream.get()
 		switch {
 		case !checked:
@@ -267,10 +267,10 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 }
 
 // releasesStart checks GitHub for releases once at startup, so the About panel
-// usually has them before anyone opens it. VISIONARY_UPDATE_CHECK=false turns
-// the check off.
+// usually has them before anyone opens it. Settings → Server can turn the
+// check off.
 func (s *Server) releasesStart() {
-	if os.Getenv("VISIONARY_UPDATE_CHECK") == "false" {
+	if !s.confBool("VISIONARY_UPDATE_CHECK") {
 		return
 	}
 	upstream.mu.Lock()

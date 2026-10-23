@@ -62,12 +62,12 @@ func (s *Server) telemetryQuery(ctx context.Context, sql string, tr timeRange, a
 	if err != nil {
 		return nil, dbErr(err)
 	}
-	return newResult(rows, s.cfg.MaxRows, rendered, tr), nil
+	return newResult(rows, s.maxRows(), rendered, tr), nil
 }
 
 // rangeOf parses the dashboard range, answering 400 itself when it is bad.
 func (s *Server) rangeOf(w http.ResponseWriter, r *http.Request) (timeRange, bool) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return tr, false

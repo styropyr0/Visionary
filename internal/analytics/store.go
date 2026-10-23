@@ -187,6 +187,37 @@ GROUP BY route ORDER BY COUNT(*) DESC LIMIT 100`, since)
 	return routes
 }
 
+// sourceTables are the SDK tables whose first row means that kind of data
+// is connected, keyed as the dashboard asks for them.
+var sourceTables = map[string]string{
+	"requests": "api_logs",
+	"spans":    "spans",
+	"system":   "system_metrics",
+	"errors":   "errors",
+	"profiles": "profiles",
+}
+
+// sources reports which kinds of SDK data have ever been written, so empty
+// pages can tell "not connected yet" from "nothing in this range". A table
+// that has rows stays known; one that has none (or doesn't exist yet) is
+// asked again next time.
+func (s *Server) sources(ctx context.Context) map[string]bool {
+	s.seenMu.Lock()
+	defer s.seenMu.Unlock()
+	if s.seen == nil {
+		s.seen = map[string]bool{}
+	}
+	out := make(map[string]bool, len(sourceTables))
+	for key, table := range sourceTables {
+		if !s.seen[key] {
+			res, err := s.db.Query(ctx, `SELECT 1 FROM `+table+` LIMIT 1`)
+			s.seen[key] = err == nil && len(res.Rows) > 0
+		}
+		out[key] = s.seen[key]
+	}
+	return out
+}
+
 func toString(v any) string {
 	switch t := v.(type) {
 	case nil:

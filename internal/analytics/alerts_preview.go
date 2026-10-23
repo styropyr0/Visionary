@@ -75,7 +75,7 @@ FROM api_logs WHERE `+where+scope+` GROUP BY `+t+` ORDER BY t`, append(args, sar
 			return nil, err
 		}
 		tr.Bucket = bucket
-		out.Result = newResult(res, s.cfg.MaxRows, "", tr)
+		out.Result = newResult(res, s.maxRows(), "", tr)
 		st, err := s.sloStatus(ctx, rule, now)
 		if err != nil {
 			return nil, err
@@ -169,7 +169,7 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 			return nil, err
 		}
 		tr.Bucket = 3600
-		out.Result = newResult(res, s.cfg.MaxRows, "", tr)
+		out.Result = newResult(res, s.maxRows(), "", tr)
 		out.Note = "Failed checks per hour. The rule counts consecutive failures, newest first."
 
 	default:

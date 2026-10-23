@@ -44,7 +44,23 @@ export function Login({ notice, onSignedIn }: Props) {
     <main className="auth">
       <BrandPanel provider={cfg?.provider} delegated={cfg?.type === "otp" || cfg?.type === "password"} />
       <section className="auth-main">
-        {cfg ? (
+        {cfg?.error ? (
+          <div className="auth-form">
+            <div className="auth-alert error" role="alert">
+              <AlertTriangle size={15} />
+              <span>
+                Sign-in isn't working: {cfg.error}. To get back in, set <code>VISIONARY_ENABLE_AUTH=false</code> on the server and restart it, fix sign-in in
+                Settings, then remove the variable.
+              </span>
+            </div>
+          </div>
+        ) : cfg?.type === "none" ? (
+          <div className="auth-form">
+            <button type="button" className="btn primary" onClick={() => window.location.reload()}>
+              Open Visionary
+            </button>
+          </div>
+        ) : cfg ? (
           <SignInForm cfg={cfg} notice={notice} onSignedIn={onSignedIn} />
         ) : cfgError ? (
           <div className="auth-form">

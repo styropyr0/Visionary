@@ -135,7 +135,7 @@ export function SpanDetailDrawer({
                 {records(d.errors).map((e) => (
                   <li key={String(e.error)} className="sd-error">
                     <AlertTriangle size={13} aria-hidden />
-                    <span className="mono sd-error-msg">{String(e.error) || "error"}</span>
+                    <span className="mono sd-error-msg">{String(e.error) || "Error"}</span>
                     <span className="pill">×{formatCount(toNumber(e.calls) ?? 0)}</span>
                     <span className="dim">{formatLogTime(String(e.last_seen))}</span>
                   </li>
@@ -295,11 +295,11 @@ function slowestColumns(isDB: boolean): Column[] {
     width: 64,
     render: (v, row) =>
       v === "error" ? (
-        <span className="flag bad" title={String(row[3] ?? "error")}>
-          <AlertTriangle size={12} /> error
+        <span className="flag bad" title={String(row[3] ?? "Error")}>
+          <AlertTriangle size={12} /> Error
         </span>
       ) : (
-        <span className="dim">ok</span>
+        <span className="dim">OK</span>
       ),
   });
   return cols;

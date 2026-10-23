@@ -1,5 +1,5 @@
 import { api, ApiError, type Result } from "../lib/api";
-import { formatBytes, formatCount, toNumber } from "../lib/format";
+import { formatBytes, formatCount, titleCase, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatDateTime, formatFull, formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
@@ -237,8 +237,8 @@ export function MachineSnapshots({ host }: { host: string }) {
               maxHeight={420}
               columns={[
                 { key: "unit", label: "Unit", render: (v) => <span className="mono">{String(v)}</span> },
-                { key: "state", label: "State", render: (v) => <span className={`host-unit ${String(v)}`}>{String(v)}</span> },
-                { key: "sub", label: "Sub" },
+                { key: "state", label: "State", render: (v) => <span className={`host-unit ${String(v)}`}>{titleCase(String(v))}</span> },
+                { key: "sub", label: "Sub", render: (v) => (v ? titleCase(String(v)) : dim) },
               ]}
             />
           )

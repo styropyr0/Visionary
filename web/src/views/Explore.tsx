@@ -290,7 +290,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
                 {!askEnabled && (
                   <div className="notice" style={{ maxWidth: 560 }}>
                     <AlertTriangle size={15} />
-                    <span>The analyst needs OPENAI_API_KEY on the server. Dashboards and saved panels still work.</span>
+                    <span>The analyst needs an OpenAI API key in Settings → Server. Dashboards and saved panels still work.</span>
                   </div>
                 )}
                 <div className="suggest-grid">
@@ -464,7 +464,7 @@ function StepView({ step, expandable }: { step: Step; expandable: boolean }) {
           <span className="step-purpose">{step.purpose}</span>
           <span className="step-meta">
             {step.status === "error"
-              ? "retrying"
+              ? "Retrying"
               : step.status === "done"
                 ? `${formatCount(step.row_count ?? 0, false)} rows · ${step.ms ?? 0} ms`
                 : ""}

@@ -97,6 +97,9 @@ type liveSettings struct {
 	Retention   map[string]int `json:"retention"` // days by kind; 0 keeps forever
 	StatusPage  bool           `json:"status_page"`
 	StatusTitle string         `json:"status_title"`
+	// Config holds the stored config.* values by key (Settings → Server);
+	// never sent as is, since some are secrets.
+	Config map[string]string `json:"-"`
 }
 
 const (
@@ -108,7 +111,7 @@ const (
 )
 
 func defaultLiveSettings() *liveSettings {
-	l := &liveSettings{Apdex: apdexRule{DefaultMs: 500, Routes: []routeApdex{}}, SLOTarget: 99, Retention: map[string]int{}}
+	l := &liveSettings{Apdex: apdexRule{DefaultMs: 500, Routes: []routeApdex{}}, SLOTarget: 99, Retention: map[string]int{}, Config: map[string]string{}}
 	for _, k := range retentionKinds {
 		l.Retention[k.Key] = k.DefaultDays
 	}
@@ -157,7 +160,14 @@ func (s *Server) refreshLive(ctx context.Context) error {
 	}
 	l.StatusPage = m[settingStatusPage][0] == "true"
 	l.StatusTitle = m[settingStatusTitle][0]
+	for name, v := range m {
+		if key, ok := strings.CutPrefix(name, settingConfig); ok {
+			l.Config[key] = v[0]
+		}
+	}
 	s.liveSet.p.Store(l)
+	s.applySignin(m)
+	s.applyConfig()
 	return nil
 }
 
@@ -165,8 +175,13 @@ func (s *Server) refreshLive(ctx context.Context) error {
 // and keeps them fresh.
 func (s *Server) liveStart(ctx context.Context) {
 	s.seedSettingsFromEnv(ctx)
-	if err := s.refreshLive(ctx); err != nil && !missingTable(err, "visionary_settings") {
-		s.logger.Warn("reading settings failed; using defaults", "err", err)
+	s.loadSessionSecret(ctx)
+	if err := s.refreshLive(ctx); err != nil {
+		if !missingTable(err, "visionary_settings") {
+			s.logger.Warn("reading settings failed; using defaults until it works", "err", err)
+		}
+		// Sign-in waits for the settings; everything else runs on defaults.
+		s.applyConfig()
 	}
 	go func() {
 		tick := time.NewTicker(30 * time.Second)
@@ -230,6 +245,8 @@ func (s *Server) seedSettingsFromEnv(ctx context.Context) {
 		}
 	}
 	moved("VISIONARY_STATUS_TITLE", settingStatusTitle, "Status page")
+	s.seedConfigFromEnv(m, seed)
+	s.seedSigninFromEnv(m, seed)
 	// A system retention variable also set the containers' metrics.
 	if v, ok := seed[settingRetention+"system"]; ok {
 		if _, stored := m[settingRetention+"containers"]; !stored {

@@ -1,7 +1,9 @@
 import { Fragment, useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import type { Result } from "../lib/api";
-import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
+import { formatCount, formatMs, formatPercent, titleCase, toNumber } from "../lib/format";
 import { useInsights, type RegressionsResponse } from "../lib/insights";
 import { load, save } from "../lib/state";
 import { records } from "../lib/telemetry";
@@ -49,6 +51,7 @@ function ms(v: unknown) {
  * and GraphQL operations with the queries their resolvers ran.
  */
 export function Queries() {
+  const connected = useConnected("requests");
   // "#/queries?tab=depth" opens a tab directly; otherwise the last one used.
   const [tab, setTabState] = useState<Tab>(() => {
     const fromLink = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab") as Tab | null;
@@ -80,6 +83,8 @@ export function Queries() {
         }
       />
       <div className="content">
+        {connected ? (
+          <>
         <nav className="tabs" role="tablist" aria-label="Queries">
           {TABS.map((t) => (
             <button type="button" key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
@@ -93,6 +98,10 @@ export function Queries() {
           {tab === "regressions" && <Regressions onOpen={setOpen} />}
           {tab === "graphql" && <GraphQL onOpen={setOpen} />}
         </div>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API to see its queries" text="Every statement your services run against their databases, how often and for how long, with the requests that ran them and their query plans." />
+        )}
       </div>
       {open && <SpanDetailDrawer kind={open.kind} name={open.name} detail={open.detail} onClose={() => setOpen(null)} onOpenRequest={openRequest} />}
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}
@@ -149,7 +158,7 @@ function catalogueColumns(res: Result): Column[] {
           <div style={{ minWidth: 0 }}>
             <div className="mono span-name-main">
               {String(row[col("name")])}
-              {row[col("new")] === true && <span className="pill q-new">new</span>}
+              {row[col("new")] === true && <span className="pill q-new">New</span>}
             </div>
             <div className="mono dim span-detail" title={String(v)}>
               {String(v)}
@@ -389,7 +398,7 @@ const regressionColumns: Column[] = [
       </span>
     ),
   },
-  { key: "status", width: 80, render: (v) => <span className={`q-status ${String(v)}`}>{STATUS_LABEL[String(v)] ?? String(v)}</span> },
+  { key: "status", width: 80, render: (v) => <span className={`q-status ${String(v)}`}>{STATUS_LABEL[String(v)] ?? titleCase(String(v))}</span> },
   {
     key: "p95_after",
     label: "p95 before → after",

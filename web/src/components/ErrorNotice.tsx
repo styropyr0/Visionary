@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AlertTriangle, ExternalLink, RotateCw } from "lucide-react";
+import { sentence } from "../lib/format";
 import { useApp } from "../lib/state";
 
 const URL_RE = /https?:\/\/[^\s<>"')]+/g;
@@ -45,7 +46,7 @@ export function ErrorNotice({
   style?: CSSProperties;
 }) {
   const { refresh } = useApp();
-  const message = typeof error === "string" ? error : error.message;
+  const message = sentence(typeof error === "string" ? error : error.message);
   const retry = onRetry === undefined ? refresh : onRetry;
   return (
     <div className={`error-notice ${className}`} role="alert" style={style}>

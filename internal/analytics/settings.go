@@ -37,6 +37,10 @@ func (s *Server) settingsRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/settings/profile/now", s.authed(s.handleProfileNow))
 	mux.Handle("GET /api/settings/profile/services", s.authed(s.handleProfileServices))
 	mux.Handle("PUT /api/settings/pages", s.authed(s.handlePageSettings))
+	mux.Handle("GET /api/settings/config", s.authed(s.handleConfigSettings))
+	mux.Handle("PUT /api/settings/config", s.authed(s.handlePutConfig))
+	mux.Handle("GET /api/settings/signin", s.authed(s.handleSigninSettings))
+	mux.Handle("PUT /api/settings/signin", s.authed(s.handlePutSignin))
 	s.serverSettingsRoutes(mux)
 }
 
@@ -59,6 +63,17 @@ func (q sqlDialect) upsertSetting() string {
 	}
 	return ins + ` ON CONFLICT (name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
 }
+
+// insertSettingIfAbsent stores a value only when the name has none, so
+// servers starting together keep the first one.
+func (q sqlDialect) insertSettingIfAbsent() string {
+	if q.d == sdk.MySQL {
+		return `INSERT IGNORE INTO visionary_settings (name, value, updated_at) VALUES (?, ?, ?)`
+	}
+	return `INSERT INTO visionary_settings (name, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (name) DO NOTHING`
+}
+
+func nowTS() string { return time.Now().UTC().Format(tsLayout) }
 
 type profileSettings struct {
 	Enabled    bool     `json:"enabled"`

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { Search } from "lucide-react";
 import { api, rangeQuery, type Meta, type Result } from "../lib/api";
 import { formatBytes, formatMs, toNumber } from "../lib/format";
@@ -33,6 +35,7 @@ function linkedFilters(): Filters {
 }
 
 export function Logs({ meta }: { meta: Meta | undefined }) {
+  const connected = useConnected("requests");
   const { resolved, tick } = useApp();
   const [filters, setFilters] = useState<Filters>(linkedFilters);
   const [debounced, setDebounced] = useState<Filters>(filters);
@@ -92,6 +95,8 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
         }
       />
       <div className="content logs-content">
+        {connected ? (
+          <>
         <div className="filter-row" role="search">
           <Select
             label="Status"
@@ -164,6 +169,10 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
           )}
           {!merged && !first.error && <div className="panel-state" style={{ height: 320 }} />}
         </section>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API to see its requests" text="Every request with its route, status, user, bodies and a breakdown of the queries, outbound calls and background work it ran." />
+        )}
       </div>
       {selected !== null && <LogDetail id={selected} onClose={() => setSelected(null)} />}
     </>

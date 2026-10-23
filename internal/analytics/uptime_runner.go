@@ -51,7 +51,7 @@ func runnerFor(s *Server) *uptimeRunner {
 	if v, ok := uptimeRunners.Load(s); ok {
 		return v.(*uptimeRunner)
 	}
-	return newUptimeRunner(s, uptimeSettingsFromEnv())
+	return newUptimeRunner(s, s.uptimeSettings())
 }
 
 // wakeUptime makes the runner reload checks now instead of within 30s.

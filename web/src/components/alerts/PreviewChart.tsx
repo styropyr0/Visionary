@@ -12,7 +12,7 @@ const BOUND_NAMES = new Set(["Threshold", "Target", "Upper bound", "Lower bound"
  * The metric over the last 24h with the line the rule compares it against.
  * Bounds are drawn as dashed neutral lines so they never read as a series.
  */
-export function PreviewChart({ preview, label, height = 220 }: { preview: PreviewResponse; label: string; height?: number }) {
+export function PreviewChart({ preview, label, seriesLabel, height = 220 }: { preview: PreviewResponse; label: string; seriesLabel?: (v: string) => string; height?: number }) {
   const tokens = useChartTokens();
   const option = useMemo<EChartsOption | null>(() => {
     const res = preview.result;
@@ -20,7 +20,8 @@ export function PreviewChart({ preview, label, height = 220 }: { preview: Previe
     const ti = res.columns.indexOf("t");
     const si = res.columns.indexOf("series");
     const vi = res.columns.indexOf("value");
-    const rows: unknown[][] = res.rows.map((r) => [r[ti], (si >= 0 && String(r[si] ?? "")) || label, r[vi]]);
+    const name = (v: unknown) => (si >= 0 && String(v ?? "")) || "";
+    const rows: unknown[][] = res.rows.map((r) => [r[ti], (seriesLabel && name(r[si]) ? seriesLabel(name(r[si])) : name(r[si])) || label, r[vi]]);
     // Bounds get a point on every bucket of the range, so they draw as one
     // continuous line however sparse the metric is.
     const ts = [...new Set(res.rows.map((r) => Number(r[ti])))].sort((a, b) => a - b);
@@ -58,7 +59,7 @@ export function PreviewChart({ preview, label, height = 220 }: { preview: Previe
       series,
       yAxis: { ...y, ...(preview.slo ? { max: 100 } : {}), axisLabel: { ...(y.axisLabel as object), formatter: (v: number) => formatAlertValue(v, preview.unit) } },
     } as EChartsOption;
-  }, [preview, label, tokens]);
+  }, [preview, label, seriesLabel, tokens]);
 
   if (!option) {
     return <div className="panel-state" style={{ height }}>{preview.note ?? "No data in the last 24 hours."}</div>;

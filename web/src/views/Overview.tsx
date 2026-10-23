@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { api, rangeQuery, type Result, type StatsResponse, type Viz } from "../lib/api";
 import { formatCount, formatMs, formatPercent, formatValue, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -26,6 +28,7 @@ const VIZ = {
 } satisfies Record<string, Viz>;
 
 export function Overview() {
+  const connected = useConnected("requests");
   const { range } = useApp();
   const stats = usePanel<StatsResponse>("stats");
   const traffic = usePanel("traffic");
@@ -72,6 +75,8 @@ export function Overview() {
         }
       />
       <div className="content">
+        {connected ? (
+          <>
         {stats.error && !stats.data && (
           <ErrorNotice title="Could not load stats" error={stats.error} style={{ marginBottom: 12 }} />
         )}
@@ -172,6 +177,10 @@ export function Overview() {
             table={users.data && <DataTable result={users.data} columns={userColumns} maxHeight={360} />}
           />
         </div>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API" text="Requests, errors, latency, and the busiest routes and users show up here as soon as a service with the Visionary SDK serves its first request." />
+        )}
       </div>
     </>
   );

@@ -11,10 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/styropyr0/visionary/internal/authbridge"
 	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
+// Config is what the server needs before it can read its settings: where to
+// listen and which database to use. Everything else is in Settings, kept in
+// the database (settings_config.go, signin.go); VISIONARY_ENABLE_AUTH, the
+// one other variable, is read where sign-in is decided.
 type Config struct {
 	Addr string
 
@@ -23,51 +26,18 @@ type Config struct {
 	D1AccountID  string
 	D1DatabaseID string
 	D1APIToken   string
-
-	OpenAIAPIKey   string
-	OpenAIAPIBase  string
-	Model          string
-	ModelReasoning string
-	MaxRows        int
-	MaxRangeDays   int
-	// AppName is the product whose API is being analysed ("Acme"); the
-	// analyst uses it in answers. DataNotes is free text about the data the
-	// analyst should know, such as what user_role values mean.
-	AppName   string
-	DataNotes string
-
-	// Auth is delegated to an existing API; see internal/authbridge.
-	Auth            authbridge.Config
-	SessionSecret   string
-	SessionTTL      time.Duration
-	RoleCheckEvery  time.Duration
-	TrustProxy      bool
-	SecureCookieEnv string
 }
 
 // LoadConfig reads the environment. D1 variables use the same names as the
 // API server that writes the tables.
 func LoadConfig() (Config, error) {
 	cfg := Config{
-		Addr:            getEnv("VISIONARY_ADDR", ":8090"),
-		DatabaseURL:     os.Getenv("VISIONARY_DATABASE_URL"),
-		D1APIBase:       getEnv("D1_API_BASE", d1.DefaultAPIBase),
-		D1AccountID:     os.Getenv("D1_ACCOUNT_ID"),
-		D1DatabaseID:    os.Getenv("D1_DATABASE_ID"),
-		D1APIToken:      os.Getenv("D1_API_TOKEN"),
-		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
-		OpenAIAPIBase:   getEnv("OPENAI_API_BASE", "https://api.openai.com/v1"),
-		Model:           getEnv("VISIONARY_MODEL", "gpt-4.1"),
-		ModelReasoning:  strings.ToLower(os.Getenv("VISIONARY_REASONING")),
-		MaxRows:         getInt("VISIONARY_MAX_ROWS", 5000),
-		MaxRangeDays:    getInt("VISIONARY_MAX_RANGE_DAYS", 90),
-		AppName:         getEnv("VISIONARY_APP_NAME", "the application"),
-		DataNotes:       strings.TrimSpace(os.Getenv("VISIONARY_DATA_NOTES")),
-		SessionSecret:   os.Getenv("VISIONARY_SESSION_SECRET"),
-		SessionTTL:      getDuration("VISIONARY_SESSION_TTL", 12*time.Hour),
-		RoleCheckEvery:  getDuration("VISIONARY_ROLE_CHECK_INTERVAL", 5*time.Minute),
-		TrustProxy:      getBool("VISIONARY_TRUST_PROXY", false),
-		SecureCookieEnv: strings.ToLower(getEnv("VISIONARY_SECURE_COOKIE", "auto")),
+		Addr:         getEnv("VISIONARY_ADDR", ":8090"),
+		DatabaseURL:  os.Getenv("VISIONARY_DATABASE_URL"),
+		D1APIBase:    getEnv("D1_API_BASE", d1.DefaultAPIBase),
+		D1AccountID:  os.Getenv("D1_ACCOUNT_ID"),
+		D1DatabaseID: os.Getenv("D1_DATABASE_ID"),
+		D1APIToken:   os.Getenv("D1_API_TOKEN"),
 	}
 
 	var missing []string
@@ -85,16 +55,11 @@ func LoadConfig() (Config, error) {
 		sort.Strings(missing)
 		return cfg, errors.New("set VISIONARY_DATABASE_URL (postgres://, mysql://, sqlite:///path), or for Cloudflare D1: " + strings.Join(missing, ", "))
 	}
-
-	auth, err := authbridge.Load(authbridge.Source{
-		Path:   strings.TrimSpace(os.Getenv("VISIONARY_AUTH_CONFIG")),
-		Inline: strings.TrimSpace(os.Getenv("VISIONARY_AUTH_CONFIG_JSON")),
-		Getenv: os.Getenv,
-	})
-	if err != nil {
-		return cfg, err
+	if v := strings.TrimSpace(os.Getenv("VISIONARY_ENABLE_AUTH")); v != "" {
+		if _, err := strconv.ParseBool(v); err != nil {
+			return cfg, errors.New("VISIONARY_ENABLE_AUTH must be true or false")
+		}
 	}
-	cfg.Auth = auth
 	return cfg, nil
 }
 

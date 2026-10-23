@@ -41,7 +41,7 @@ func (s *Server) forbidden(w http.ResponseWriter) {
 }
 
 func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
-	smtp, ok := smtpFromEnv()
+	smtp, ok := s.smtpSettings()
 	instances, _ := s.alertEngine().knownInstances(r.Context(), time.Now().UTC())
 	names, services := []string{}, []string{}
 	seen := map[string]bool{}
@@ -52,12 +52,12 @@ func (s *Server) handleAlertsMeta(w http.ResponseWriter, r *http.Request) {
 			services = append(services, in.Service)
 		}
 	}
-	tz := digestTZ()
+	tz := s.digestTZ()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"metrics":         s.allMetrics(),
 		"apdex_ms":        s.apdex().DefaultMs,
 		"slo_target":      s.sloTarget(),
-		"llm":             s.llm != nil,
+		"llm":             s.llm() != nil,
 		"smtp_configured": ok,
 		"smtp_from":       map[bool]string{true: smtp.From}[ok],
 		"digest_tz":       tzName(tz),
@@ -472,7 +472,7 @@ func (s *Server) handleEvaluateRule(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	tr, err := parseRange(q, s.cfg.MaxRangeDays)
+	tr, err := parseRange(q, s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

@@ -11,13 +11,12 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Email goes through the SMTP server in VISIONARY_SMTP_HOST, _PORT (587),
+// Email goes through the SMTP server in Settings → Server → Email: host, port (587),
 // _USER, _PASSWORD and _FROM. The connection is upgraded with STARTTLS (or
 // TLS from the start on port 465); a server that offers neither is refused
 // unless it is on this machine, so credentials never cross a network in the
@@ -28,15 +27,16 @@ type smtpSettings struct {
 	Port                       int
 }
 
-func smtpFromEnv() (smtpSettings, bool) {
+// smtpSettings reads Settings → Server → Email.
+func (s *Server) smtpSettings() (smtpSettings, bool) {
 	c := smtpSettings{
-		Host:     strings.TrimSpace(os.Getenv("VISIONARY_SMTP_HOST")),
-		User:     os.Getenv("VISIONARY_SMTP_USER"),
-		Password: os.Getenv("VISIONARY_SMTP_PASSWORD"),
-		From:     strings.TrimSpace(os.Getenv("VISIONARY_SMTP_FROM")),
+		Host:     s.conf("VISIONARY_SMTP_HOST"),
+		User:     s.conf("VISIONARY_SMTP_USER"),
+		Password: s.conf("VISIONARY_SMTP_PASSWORD"),
+		From:     s.conf("VISIONARY_SMTP_FROM"),
 		Port:     587,
 	}
-	if p, err := strconv.Atoi(strings.TrimSpace(os.Getenv("VISIONARY_SMTP_PORT"))); err == nil && p > 0 && p < 65536 {
+	if p := s.confInt("VISIONARY_SMTP_PORT"); p > 0 && p < 65536 {
 		c.Port = p
 	}
 	if c.From == "" {
@@ -55,14 +55,14 @@ func isLoopback(host string) bool {
 
 // sendEmail sends body as plain text, with html as the formatted alternative
 // when it is set.
-func sendEmail(ctx context.Context, to []string, subject, body, html string) error {
-	cfg, ok := smtpFromEnv()
+func (s *Server) sendEmail(ctx context.Context, to []string, subject, body, html string) error {
+	cfg, ok := s.smtpSettings()
 	if !ok {
-		return errors.New("email needs VISIONARY_SMTP_HOST and VISIONARY_SMTP_FROM")
+		return errors.New("email needs an SMTP host and from address in Settings → Server → Email")
 	}
 	from, err := mail.ParseAddress(cfg.From)
 	if err != nil {
-		return errors.New("VISIONARY_SMTP_FROM is not an email address")
+		return errors.New("the from address in Settings → Server → Email is not an email address")
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {

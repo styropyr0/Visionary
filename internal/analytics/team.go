@@ -38,6 +38,7 @@ func (s *Server) team() *teamState {
 
 func (s *Server) teamRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/team/members", s.authed(s.handleMembers))
+	s.accountRoutes(mux)
 	mux.Handle("GET /api/team/about", s.authed(s.handleAbout))
 	mux.Handle("GET /api/team/audit", s.authed(s.handleAudit))
 	mux.Handle("GET /api/team/keys", s.authed(s.handleListKeys))
@@ -61,11 +62,13 @@ func (s *Server) teamStart(ctx context.Context) {
 // handleMembers shows the role mapping in effect and the current user; admins
 // also see recent sign-ins from the audit log.
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request) {
+	sg := s.signin()
 	out := map[string]any{
-		"mode":            s.cfg.Auth.Type,
-		"provider":        s.cfg.Auth.Provider,
-		"mapping":         s.auth.roles.entries,
-		"viewer_password": s.cfg.Auth.Type == authbridge.TypeShared && s.auth.viewerPassword != "",
+		"mode":            sg.cfg.Type,
+		"open":            sg.open,
+		"provider":        sg.cfg.Provider,
+		"mapping":         sg.roles.entries,
+		"viewer_password": sg.cfg.Type == authbridge.TypeShared && sg.viewerPassword != "",
 		"me":              s.sessionView(sessionFrom(r)),
 	}
 	if s.can(r, "admin") {
@@ -121,9 +124,9 @@ FROM system_metrics WHERE created_at >= ? GROUP BY instance ORDER BY last_seen D
 	return out
 }
 
-func countList(env string) int {
+func (s *Server) countList(env string) int {
 	n := 0
-	for _, k := range strings.Split(getEnv(env, ""), ",") {
+	for _, k := range strings.Split(s.conf(env), ",") {
 		if strings.TrimSpace(k) != "" {
 			n++
 		}
@@ -149,21 +152,26 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	n := strconv.Itoa
-	model := "Set OPENAI_API_KEY to turn it on."
-	if s.llm != nil {
-		model = s.llm.model
+	model := "Add an OpenAI API key in Settings → Server to turn it on."
+	if c := s.llm(); c != nil {
+		model = c.modelName()
 	}
-	sessions := "VISIONARY_SESSION_SECRET is not set: everyone is signed out on restart."
-	if s.cfg.SessionSecret != "" {
-		sessions = "Sessions survive restarts."
+	sg := s.signin()
+	signIn := sg.cfg.Type + " (" + sg.cfg.Provider + ")"
+	switch {
+	case sg.open == openDisabled:
+		signIn = "Off: VISIONARY_ENABLE_AUTH=false"
+	case sg.open == openUnconfigured:
+		signIn = "Not set up: anyone with the URL is an admin"
+	case sg.broken != nil:
+		signIn = "Broken: " + sg.broken.Error()
 	}
-	serverEnv, clientEnv := countList("VISIONARY_INGEST_KEYS"), countList("VISIONARY_CLIENT_KEYS")
+	serverList, clientList := s.countList("VISIONARY_INGEST_KEYS"), s.countList("VISIONARY_CLIENT_KEYS")
 	features := []featureStatus{
-		{"AI analyst", s.llm != nil, model},
-		{"Sign-in", s.cfg.Auth.Type != authbridge.TypeNone, s.cfg.Auth.Type + " (" + s.cfg.Auth.Provider + ")"},
-		{"Persistent sessions", s.cfg.SessionSecret != "", sessions},
-		{"Server ingest keys", serverEnv+dbKeys["server"] > 0, n(serverEnv) + " from the environment, " + n(dbKeys["server"]) + " created here"},
-		{"Client ingest keys", clientEnv+dbKeys["client"] > 0, n(clientEnv) + " from the environment, " + n(dbKeys["client"]) + " created here"},
+		{"AI analyst", s.llm() != nil, model},
+		{"Sign-in", sg.open == "" && sg.broken == nil, signIn},
+		{"Server ingest keys", serverList+dbKeys["server"] > 0, n(serverList) + " in Settings → Server, " + n(dbKeys["server"]) + " under API keys"},
+		{"Client ingest keys", clientList+dbKeys["client"] > 0, n(clientList) + " in Settings → Server, " + n(dbKeys["client"]) + " under API keys"},
 		{"Read API keys", dbKeys["read"] > 0, n(dbKeys["read"]) + " active"},
 		{"Audit log", true, "Kept for " + n(s.retentionDays("audit")) + " days"},
 	}
@@ -172,7 +180,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		"go_version": runtime.Version(),
 		"services":   s.connectedServices(r.Context()),
 		"database":   s.db.Name(),
-		"auth_mode":  s.cfg.Auth.Type,
+		"auth_mode":  s.signin().cfg.Type,
 		"features":   features,
 	})
 }

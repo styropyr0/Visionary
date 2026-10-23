@@ -8,8 +8,8 @@ unchanged.
 
 ## Sending data
 
-Point the exporter at the Visionary server and pass an ingest key from
-`VISIONARY_INGEST_KEYS` (or a server key created in Settings):
+Point the exporter at the Visionary server and pass a server key (Settings →
+API keys, or one listed in Settings → Server → Ingest):
 
 ```sh
 OTEL_EXPORTER_OTLP_ENDPOINT=https://visionary.example.com
@@ -39,10 +39,11 @@ OTEL_RESOURCE_ATTRIBUTES="service.version=1.4.2,service.instance.id=checkout-1"
   says.
 - OTLP/gRPC is not served; use the HTTP exporters.
 
-`VISIONARY_SPANS`, `VISIONARY_SPAN_THRESHOLD_MS`, `VISIONARY_SPAN_MAX` and
-`VISIONARY_ERRORS` (see `sdks/SPEC.md`) apply to OTLP data too, read from the
-Visionary server's environment. `VISIONARY_OTLP_RATE` changes the export rate
-limit (per second, default 50).
+Settings → Server → Ingest sets, for OTLP data, whether spans and errors are
+kept, the span threshold outside requests and the spans kept per request (the
+server-side `VISIONARY_SPANS`, `VISIONARY_SPAN_THRESHOLD_MS`,
+`VISIONARY_SPAN_MAX` and `VISIONARY_ERRORS`, see `sdks/SPEC.md`), and the
+export rate limit (per second, default 50). They apply after a restart.
 
 ## Mapping
 

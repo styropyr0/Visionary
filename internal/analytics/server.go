@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/styropyr0/visionary/internal/authbridge"
 	"github.com/styropyr0/visionary/internal/db"
@@ -36,19 +38,25 @@ type Server struct {
 	// with; performance() rebuilds them when the rule changes.
 	perf    atomic.Pointer[perfPanels]
 	liveSet liveHolder
-	bridge      *authbridge.Bridge
-	llm         *llm
-	auth        *auth
-	logger      *slog.Logger
-	static      fs.FS
+	// signinP and llmP follow Settings; see signin() and llm().
+	signinP atomic.Pointer[signin]
+	llmP    atomic.Pointer[llm]
+	auth    *auth
+	logger  *slog.Logger
+	static  fs.FS
 
 	routesMu sync.Mutex
 	routes   []string
 	routesAt time.Time
 
+	// seen holds the SDK tables known to have rows; see sources.
+	seenMu sync.Mutex
+	seen   map[string]bool
+
 	// schemaPending is set while some tables could not be created; Start
 	// keeps retrying until they are.
 	schemaPending atomic.Bool
+	analystLogged atomic.Bool
 }
 
 // New wires the server. static is the built frontend (index.html at its root).
@@ -64,31 +72,14 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 		return nil, err
 	}
 	logger.Info("database", "backend", conn.Name())
-	bridge := authbridge.New(cfg.Auth, UserAgent)
-	a, ephemeral, err := newAuth(cfg, bridge)
+	q := sqlDialect{conn.Dialect()}
+	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), logger: logger, static: static}
+	a, err := newAuth(s)
 	if err != nil {
 		return nil, err
 	}
-	if ephemeral {
-		logger.Warn("VISIONARY_SESSION_SECRET not set; sessions reset on every restart")
-	}
-	q := sqlDialect{conn.Dialect()}
-	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), bridge: bridge, llm: newLLM(cfg), auth: a, logger: logger, static: static}
-	if s.llm == nil {
-		logger.Warn("OPENAI_API_KEY not set; the analyst is disabled")
-	}
-	switch cfg.Auth.Type {
-	case authbridge.TypeNone:
-		logger.Warn("VISIONARY_AUTH_MODE=none: anyone who can reach this server can use it; never expose it publicly")
-	case authbridge.TypeShared:
-		logger.Info("sign-in with a shared team password")
-	default:
-		if !bridge.CanRecheck() {
-			logger.Warn("no profile endpoint (VISIONARY_AUTH_PROFILE); roles are only checked at sign-in")
-		}
-		logger.Info("sign-in delegated", "provider", cfg.Auth.Provider, "mode", cfg.Auth.Type,
-			"base_url", cfg.Auth.BaseURL, "allowed_roles", cfg.Auth.AllowedRoles, "location", cfg.Auth.Location)
-	}
+	s.auth = a
+	// Sign-in, the analyst and the rest of Settings load in Start.
 	return s, nil
 }
 
@@ -147,8 +138,13 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 			writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
 			return
 		}
-		if s.cfg.Auth.Type == authbridge.TypeNone {
+		sg := s.signin()
+		if sg.open != "" {
 			h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, localSession)))
+			return
+		}
+		if sg.broken != nil {
+			writeError(w, http.StatusUnauthorized, "sign in required")
 			return
 		}
 		sess, ok := s.auth.read(r)
@@ -156,7 +152,14 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 			writeError(w, http.StatusUnauthorized, "sign in required")
 			return
 		}
-		next, changed, err := s.auth.confirm(r.Context(), sess)
+		var next *session
+		var changed bool
+		var err error
+		if sg.cfg.Type == authbridge.TypeAccounts {
+			next, changed, err = s.confirmAccount(r.Context(), sess)
+		} else {
+			next, changed, err = s.auth.confirm(r.Context(), sg, sess)
+		}
 		if err == nil && s.roleOf(next) == roleNone {
 			// The role mapping changed since sign-in.
 			err = errNotAllowed
@@ -181,18 +184,30 @@ func needsJSON(r *http.Request) bool {
 	return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
 }
 
-// handleAuthConfig tells the sign-in screen which flow to render.
+// handleAuthConfig tells the sign-in screen which flow to render. type is
+// "none" while sign-in is off, with open saying why; a setup that can't be
+// used comes with its error, so the screen can say how to get back in.
 func (s *Server) handleAuthConfig(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.cfg.Auth.Public())
+	sg := s.signin()
+	out := map[string]any{}
+	b, _ := json.Marshal(sg.cfg.Public())
+	_ = json.Unmarshal(b, &out)
+	if sg.open != "" {
+		out["open"] = sg.open
+	}
+	if sg.broken != nil {
+		out["error"] = sg.broken.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
-// localSession stands in for a user when sign-in is off (mode none).
+// localSession stands in for a user when sign-in is off.
 var localSession = &session{UserID: "local", Name: "Local user", Roles: []string{"local"}, Role: "admin", Expires: 4102444800} // 2100-01-01
 
 // completeShared checks the team password. Sessions carry a random token only
 // so logout can end them; there is no API to re-check against.
-func (s *Server) completeShared(w http.ResponseWriter, r *http.Request, password string) {
-	granted := s.auth.checkShared(password)
+func (s *Server) completeShared(w http.ResponseWriter, r *http.Request, sg *signin, password string) {
+	granted := s.auth.checkShared(sg, password)
 	if granted == roleNone {
 		s.logger.Warn("shared password sign-in failed", "ip", s.auth.clientIP(r))
 		s.auditAs(r, nil, "auth.sign_in_failed", "", map[string]any{"mode": "shared"})
@@ -226,11 +241,16 @@ func (s *Server) handleAuthStart(w http.ResponseWriter, r *http.Request) {
 	if !s.loginPreflight(w, r, &body) {
 		return
 	}
-	id, ok := s.identifier(w, body.Identifier)
+	sg := s.signin()
+	if sg.bridge == nil || sg.cfg.Type != authbridge.TypeOTP {
+		writeError(w, http.StatusBadRequest, "sign-in doesn't use codes")
+		return
+	}
+	id, ok := s.identifier(w, sg, body.Identifier)
 	if !ok {
 		return
 	}
-	sentTo, err := s.bridge.Start(r.Context(), id)
+	sentTo, err := sg.bridge.Start(r.Context(), id)
 	if err != nil {
 		s.apiFail(w, err)
 		return
@@ -252,15 +272,23 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 	if !s.loginPreflight(w, r, &body) {
 		return
 	}
-	switch s.cfg.Auth.Type {
-	case authbridge.TypeShared:
-		s.completeShared(w, r, body.Password)
-		return
-	case authbridge.TypeNone:
+	sg := s.signin()
+	switch {
+	case sg.open != "":
 		writeJSON(w, http.StatusOK, s.sessionView(localSession))
 		return
+	case sg.broken != nil:
+		writeError(w, http.StatusServiceUnavailable, "Sign-in isn't working: "+sg.broken.Error())
+		return
+	case sg.cfg.Type == authbridge.TypeShared:
+		s.completeShared(w, r, sg, body.Password)
+		return
+	case sg.cfg.Type == authbridge.TypeAccounts:
+		s.completeAccount(w, r, body.Identifier, body.Password)
+		return
 	}
-	id, ok := s.identifier(w, body.Identifier)
+	cfg := &sg.cfg
+	id, ok := s.identifier(w, sg, body.Identifier)
 	if !ok {
 		return
 	}
@@ -272,18 +300,18 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		}
 		pos = &authbridge.Position{Latitude: *body.Latitude, Longitude: *body.Longitude}
 	}
-	if pos == nil && s.cfg.Auth.Location == authbridge.LocationRequired {
-		writeError(w, http.StatusBadRequest, "Allow location access to sign in: "+s.cfg.Auth.Provider+" needs it.")
+	if pos == nil && cfg.Location == authbridge.LocationRequired {
+		writeError(w, http.StatusBadRequest, "Allow location access to sign in: "+cfg.Provider+" needs it.")
 		return
 	}
-	if s.cfg.Auth.Location == authbridge.LocationNone {
+	if cfg.Location == authbridge.LocationNone {
 		pos = nil
 	}
 	secret := body.Password
-	if s.cfg.Auth.Type == authbridge.TypeOTP {
+	if cfg.Type == authbridge.TypeOTP {
 		secret = body.Code
-		if len(secret) != s.cfg.Auth.CodeLength || strings.Trim(secret, "0123456789") != "" {
-			writeError(w, http.StatusBadRequest, "Enter the "+strconv.Itoa(s.cfg.Auth.CodeLength)+"-digit code.")
+		if len(secret) != cfg.CodeLength || strings.Trim(secret, "0123456789") != "" {
+			writeError(w, http.StatusBadRequest, "Enter the "+strconv.Itoa(cfg.CodeLength)+"-digit code.")
 			return
 		}
 	} else if secret == "" || len(secret) > 1024 {
@@ -291,21 +319,21 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.bridge.Complete(r.Context(), id, secret, r.UserAgent(), pos)
+	res, err := sg.bridge.Complete(r.Context(), id, secret, r.UserAgent(), pos)
 	if err != nil {
 		if res != nil {
-			s.revoke(res.Token)
+			s.revoke(sg, res.Token)
 		}
 		// A rejected code or password, not an outage: the Security page counts these.
 		var ae *authbridge.APIError
 		if errors.As(err, &ae) && !ae.Unavailable() {
-			s.auditAs(r, nil, "auth.sign_in_failed", maskIdentifier(id), map[string]any{"mode": s.cfg.Auth.Type, "status": ae.Status})
+			s.auditAs(r, nil, "auth.sign_in_failed", maskIdentifier(id), map[string]any{"mode": cfg.Type, "status": ae.Status})
 		}
 		s.apiFail(w, err)
 		return
 	}
-	if !s.auth.roles.allowed(&res.User) {
-		s.revoke(res.Token)
+	if !sg.roles.allowed(&res.User) {
+		s.revoke(sg, res.Token)
 		s.logger.Warn("sign-in refused: role not allowed", "user_id", res.User.ID, "roles", res.User.Roles)
 		s.auditAs(r, &session{UserID: res.User.ID, Name: res.User.Name, Roles: res.User.Roles}, "auth.sign_in_refused", res.User.ID,
 			map[string]any{"roles": res.User.Roles})
@@ -318,16 +346,16 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("sign-in", "user_id", sess.UserID, "roles", sess.Roles)
-	s.auditAs(r, sess, "auth.sign_in", sess.UserID, map[string]any{"mode": s.cfg.Auth.Type, "roles": sess.Roles})
+	s.auditAs(r, sess, "auth.sign_in", sess.UserID, map[string]any{"mode": cfg.Type, "roles": sess.Roles})
 	writeJSON(w, http.StatusOK, s.sessionView(sess))
 }
 
-func (s *Server) identifier(w http.ResponseWriter, raw string) (string, bool) {
-	id, err := s.bridge.Normalize(raw)
+func (s *Server) identifier(w http.ResponseWriter, sg *signin, raw string) (string, bool) {
+	id, err := sg.bridge.Normalize(raw)
 	if err != nil {
-		hint := s.cfg.Auth.Identifier.PatternHint
+		hint := sg.cfg.Identifier.PatternHint
 		if hint == "" {
-			hint = "Check the " + strings.ToLower(s.cfg.Auth.Identifier.Label) + "."
+			hint = "Check the " + strings.ToLower(sg.cfg.Identifier.Label) + "."
 		}
 		writeError(w, http.StatusBadRequest, hint)
 		return "", false
@@ -367,18 +395,18 @@ func (s *Server) apiFail(w http.ResponseWriter, err error) {
 		return
 	}
 	s.logger.Error("auth api call failed", "err", err)
-	writeError(w, http.StatusBadGateway, "Can't reach "+s.cfg.Auth.Provider+" right now. Try again shortly.")
+	writeError(w, http.StatusBadGateway, "Can't reach "+s.signin().cfg.Provider+" right now. Try again shortly.")
 }
 
 // revoke logs a token out on the API without holding up the response.
-func (s *Server) revoke(token string) {
-	if token == "" {
+func (s *Server) revoke(sg *signin, token string) {
+	if token == "" || sg.bridge == nil {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := s.bridge.Logout(ctx, token); err != nil {
+		if err := sg.bridge.Logout(ctx, token); err != nil {
 			s.logger.Warn("revoke api session", "err", err)
 		}
 	}()
@@ -387,7 +415,7 @@ func (s *Server) revoke(token string) {
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if sess, ok := s.auth.read(r); ok {
 		s.auth.markSignedOut(sess)
-		s.revoke(sess.Token)
+		s.revoke(s.signin(), sess.Token)
 		s.auditAs(r, sess, "auth.sign_out", sess.UserID, nil)
 	}
 	s.auth.clear(w, r)
@@ -414,18 +442,20 @@ func (s *Server) sessionView(sess *session) map[string]any {
 
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	model := ""
-	if s.llm != nil {
-		model = s.llm.model
+	if s.llm() != nil {
+		model = s.llm().modelName()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ask_enabled":    s.llm != nil,
-		"app_name":       s.cfg.AppName,
+		"ask_enabled":    s.llm() != nil,
+		"app_name":       s.conf("VISIONARY_APP_NAME"),
 		"model":          model,
 		"routes":         s.knownRoutes(r.Context()),
-		"max_rows":       s.cfg.MaxRows,
-		"max_range_days": s.cfg.MaxRangeDays,
+		"max_rows":       s.maxRows(),
+		"max_range_days": s.maxRangeDays(),
 		"apdex_ms":       s.apdex().DefaultMs,
 		"slo_target":     s.sloTarget(),
+		"sources":        s.sources(r.Context()),
+		"sign_in_open":   s.signin().open,
 	})
 }
 
@@ -436,7 +466,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -463,7 +493,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -516,7 +546,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	tr, err := parseRange(rangeValues(body.From, body.To), s.cfg.MaxRangeDays)
+	tr, err := parseRange(rangeValues(body.From, body.To), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -574,7 +604,7 @@ func (s *Server) handleDeletePanel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -695,8 +725,19 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError answers with a message people read in the dashboard, so it
+// starts with a capital letter whatever error it came from.
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, map[string]string{"error": sentence(msg)})
+}
+
+// sentence capitalizes the first letter of msg.
+func sentence(msg string) string {
+	r, n := utf8.DecodeRuneInString(msg)
+	if n == 0 || !unicode.IsLower(r) {
+		return msg
+	}
+	return string(unicode.ToUpper(r)) + msg[n:]
 }
 
 // missingTable reports a "table does not exist" error in any supported dialect.

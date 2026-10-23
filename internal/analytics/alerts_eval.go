@@ -3,7 +3,6 @@ package analytics
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -56,7 +55,7 @@ func (s *Server) alertEngine() *alertEngine {
 	if e, ok := alertEngines.Load(s); ok {
 		return e.(*alertEngine)
 	}
-	interval := getDuration("VISIONARY_ALERTS_INTERVAL", time.Minute)
+	interval := s.confDuration("VISIONARY_ALERTS_INTERVAL")
 	if interval < 10*time.Second {
 		interval = 10 * time.Second
 	}
@@ -340,7 +339,7 @@ func (e *alertEngine) dispatch(r alertRule, ev *alertEvent, at time.Time) {
 		s := e.s
 		// Security findings name IPs, which never go to the model; their
 		// message already says what happened.
-		if ev.State == "firing" && s.llm != nil && r.Spec.Metric != "security_events" {
+		if ev.State == "firing" && s.llm() != nil && r.Spec.Metric != "security_events" {
 			ev.Explanation = s.explainAlert(ctx, r, ev, at)
 		}
 		sent := s.sendToChannels(ctx, r.Channels, s.alertNotice(r, ev, ""))
@@ -416,10 +415,10 @@ func (e *alertEngine) sloBudget(ctx context.Context, r alertRule, now time.Time,
 	return total, bad, now.Format(tsLayout), nil
 }
 
-// digestTZ is where weekly digests are scheduled: VISIONARY_DIGEST_TZ, else
-// the server's zone.
-func digestTZ() *time.Location {
-	if name := os.Getenv("VISIONARY_DIGEST_TZ"); name != "" {
+// digestTZ is where weekly digests are scheduled: the zone in Settings →
+// Server, else the server's zone.
+func (s *Server) digestTZ() *time.Location {
+	if name := s.conf("VISIONARY_DIGEST_TZ"); name != "" {
 		if loc, err := time.LoadLocation(name); err == nil {
 			return loc
 		}

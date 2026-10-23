@@ -2,6 +2,7 @@ import { api, rangeQuery, type Result } from "./api";
 import { useApp } from "./state";
 import { useQuery } from "./useQuery";
 import { dateFormat } from "./time";
+import { titleCase } from "./format";
 
 export type FindingSeverity = "info" | "warning" | "critical";
 
@@ -91,7 +92,12 @@ export const KINDS: Record<string, { label: string; source: "api" | "host"; text
 };
 
 export function kindLabel(kind: string): string {
-  return KINDS[kind]?.label ?? kind.replace(/_/g, " ");
+  return KINDS[kind]?.label ?? titleCase(kind);
+}
+
+/** Where a finding came from, as a short label. */
+export function sourceLabel(source: string): string {
+  return source === "api" ? "API" : titleCase(source);
 }
 
 /** Readable names for Visionary's own audit actions. */

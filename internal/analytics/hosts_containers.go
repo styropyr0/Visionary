@@ -154,7 +154,7 @@ var containerListColumns = []string{
 // report, with its latest sample and its events in the range, then the
 // containers the SDKs report (containers_sdk.go).
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -247,7 +247,7 @@ func (s *Server) containerLookup(ctx context.Context, sql string, args ...any) m
 // first, at most 500. source=sdk reads one SDK container's OOM kills; without
 // a container the SDKs' join the agents'.
 func (s *Server) handleContainerEvents(w http.ResponseWriter, r *http.Request) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -332,7 +332,7 @@ func (s *Server) handleContainerPanel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -466,7 +466,7 @@ FROM container_events WHERE `+where+scope+` GROUP BY `+t+`, kind ORDER BY t`, ap
 		return nil, err
 	}
 	tr.Bucket = 3600
-	return newResult(res, s.cfg.MaxRows, "", tr), nil
+	return newResult(res, s.maxRows(), "", tr), nil
 }
 
 func containerEventClause(sc alertScope) (string, []any) {

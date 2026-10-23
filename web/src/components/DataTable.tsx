@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { Result, Unit } from "../lib/api";
-import { formatValue, humanize, isTimeColumn, toNumber, unitForColumn } from "../lib/format";
+import { formatValue, humanize, isTimeColumn, toNumber, unitForColumn, yesNo } from "../lib/format";
 import { cellTitle, formatLogTime } from "../lib/time";
 
 export interface Column {
@@ -115,6 +115,7 @@ function defaultCell(c: Column, v: unknown): ReactNode {
     const n = toNumber(v);
     if (n !== null) return formatLogTime(new Date(n < 1e11 ? n * 1000 : n).toISOString());
   }
+  if (typeof v === "boolean") return yesNo(v);
   if (typeof v === "string" && isTimeColumn(c.key)) return formatLogTime(v);
   if (c.unit) return formatValue(v, c.unit);
   return String(v);

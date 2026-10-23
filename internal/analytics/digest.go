@@ -14,7 +14,7 @@ import (
 // plus the sections of digest_more.go and security_digest.go.
 // With a model configured the analyst writes the summary; otherwise it is a
 // plain list of the numbers. Each channel opts in with its own weekday and
-// hour, in VISIONARY_DIGEST_TZ (or the server's zone).
+// hour, in the digest time zone from Settings → Server (or the server's zone).
 
 type digestWeek struct {
 	Requests  int64    `json:"requests"`
@@ -164,8 +164,8 @@ GROUP BY version, COALESCE(service, '') HAVING MIN(created_at) >= ? ORDER BY fir
 // one is configured.
 func (s *Server) digestNotice(ctx context.Context, d *digestData) notice {
 	lines := digestLines(d)
-	n := notice{Event: "digest", Title: "Weekly performance digest · " + s.cfg.AppName, Severity: "info", Lines: lines, At: time.Now().UTC()}
-	if s.llm != nil {
+	n := notice{Event: "digest", Title: "Weekly performance digest · " + s.conf("VISIONARY_APP_NAME"), Severity: "info", Lines: lines, At: time.Now().UTC()}
+	if s.llm() != nil {
 		if text := s.digestSummary(ctx, d); text != "" {
 			n.Note = text
 		}
@@ -250,8 +250,8 @@ func (s *Server) digestSummary(ctx context.Context, d *digestData) string {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	data, _ := json.Marshal(d.forModel())
-	content, err := s.llm.chatJSON(ctx, []chatMessage{
-		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.cfg.AppName + `'s API. Write the weekly digest from the numbers given: this week against the week before.
+	content, err := s.llm().chatJSON(ctx, []chatMessage{
+		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.conf("VISIONARY_APP_NAME") + `'s API. Write the weekly digest from the numbers given: this week against the week before.
 Reply with one JSON object: {"summary": "<4 to 7 short lines separated by \n>"}.
 - First line: the one thing worth knowing this week.
 - Then traffic, p95 and 5xx changes with numbers, the routes that got slower ("regressed_routes"), incidents, and new versions that line up with changes. Say "may be related" for releases, never certain.
@@ -322,7 +322,7 @@ func (s *Server) sendDueDigests(ctx context.Context, now time.Time) {
 	if err != nil {
 		return
 	}
-	loc := digestTZ()
+	loc := s.digestTZ()
 	for _, c := range chans {
 		if !digestDue(c, now, loc) {
 			continue

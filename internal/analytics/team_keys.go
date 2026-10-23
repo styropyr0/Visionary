@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -176,7 +175,7 @@ func (s *Server) ingestKeyValid(key, scope string) bool {
 	if scope == "client" {
 		env = "VISIONARY_CLIENT_KEYS"
 	}
-	for _, k := range strings.Split(os.Getenv(env), ",") {
+	for _, k := range strings.Split(s.conf(env), ",") {
 		if k = strings.TrimSpace(k); k != "" && constantTimeEqual(k, key) {
 			return true
 		}

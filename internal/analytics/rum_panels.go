@@ -245,7 +245,7 @@ var errNotFound = errors.New("unknown panel")
 
 func (s *Server) handleRUM(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("panel")
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -408,7 +408,7 @@ func (s *Server) handleRUMError(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid fingerprint")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

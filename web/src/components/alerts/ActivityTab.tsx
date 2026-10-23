@@ -5,6 +5,7 @@ import { useApp } from "../../lib/state";
 import { useQuery } from "../../lib/useQuery";
 import { alertsApi, type AlertEvent, type RuleView } from "../../lib/alerts";
 import { formatLogTime } from "../../lib/time";
+import { titleCase } from "../../lib/format";
 import { SeverityTag, StateBadge } from "./bits";
 import { ErrorNotice } from "../ErrorNotice";
 
@@ -93,7 +94,7 @@ function EventItem({ e }: { e: AlertEvent }) {
           </div>
         )}
         <div className="al-event-foot">
-          <span>{e.kind}</span>
+          <span>{e.kind === "slo" ? "SLO" : titleCase(e.kind)}</span>
           <span>{e.notified ? "Notified" : "Not notified (muted, no channels or delivery failed)"}</span>
         </div>
       </div>

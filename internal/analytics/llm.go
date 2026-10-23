@@ -27,25 +27,46 @@ type chatMessage struct {
 }
 
 // newLLM returns nil when no API key is set; prompt exploration is then off.
-func newLLM(cfg Config) *llm {
-	key := strings.TrimSpace(cfg.OpenAIAPIKey)
+var errAnalystOff = errors.New("the AI analyst is off: add an OpenAI API key in Settings → Server")
+
+// newLLM builds the analyst's client from Settings → Server, or nil while
+// no API key is set.
+func (s *Server) newLLM() *llm {
+	key := strings.TrimSpace(s.conf("OPENAI_API_KEY"))
 	if key == "" {
 		return nil
 	}
+	reasoning := strings.ToLower(s.conf("VISIONARY_REASONING"))
 	timeout := 60 * time.Second
-	if cfg.ModelReasoning != "" {
+	if reasoning != "" {
 		timeout = 3 * time.Minute
 	}
 	return &llm{
 		apiKey:    key,
-		apiBase:   strings.TrimRight(cfg.OpenAIAPIBase, "/"),
-		model:     cfg.Model,
-		reasoning: cfg.ModelReasoning,
+		apiBase:   strings.TrimRight(s.conf("OPENAI_API_BASE"), "/"),
+		model:     s.conf("VISIONARY_MODEL"),
+		reasoning: reasoning,
 		http:      &http.Client{Timeout: timeout},
 	}
 }
 
+// llm is the analyst's client in force, nil while it is off. Callers keep
+// the value they got: a settings change swaps it, never mutates it.
+func (s *Server) llm() *llm { return s.llmP.Load() }
+
+// modelName is the model in use, "" while the analyst is off.
+func (c *llm) modelName() string {
+	if c == nil {
+		return ""
+	}
+	return c.model
+}
+
 func (c *llm) chatJSON(ctx context.Context, messages []chatMessage) (string, error) {
+	// The key can be removed in Settings while a caller holds no client.
+	if c == nil {
+		return "", errAnalystOff
+	}
 	body := map[string]any{
 		"model":           c.model,
 		"messages":        messages,

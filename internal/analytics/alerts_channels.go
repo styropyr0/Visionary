@@ -219,7 +219,7 @@ func (s *Server) handleSendDigest(w http.ResponseWriter, r *http.Request) {
 // handleDigestSummary asks the analyst for this week's summary, as the
 // digest itself would.
 func (s *Server) handleDigestSummary(w http.ResponseWriter, r *http.Request) {
-	if s.llm == nil {
+	if s.llm() == nil {
 		writeError(w, http.StatusNotFound, "no model is configured")
 		return
 	}
@@ -256,5 +256,5 @@ func (s *Server) handleDigestPreview(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, dbErr(err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": d, "lines": digestLines(d), "time_zone": tzName(digestTZ()), "llm": s.llm != nil})
+	writeJSON(w, http.StatusOK, map[string]any{"data": d, "lines": digestLines(d), "time_zone": tzName(s.digestTZ()), "llm": s.llm() != nil})
 }

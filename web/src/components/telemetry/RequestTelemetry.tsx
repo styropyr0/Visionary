@@ -67,7 +67,7 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
                   <Bug size={13} aria-hidden />
                   <span className="mono rt-error-type">{String(e.type)}</span>
                   <span className="rt-error-msg">{String(e.message ?? "")}</span>
-                  <span className="pill">{toNumber(e.handled) ? "handled" : "unhandled"}</span>
+                  <span className="pill">{toNumber(e.handled) ? "Handled" : "Unhandled"}</span>
                 </a>
               </li>
             ))}

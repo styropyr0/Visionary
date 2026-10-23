@@ -1227,6 +1227,10 @@ pre,
 .panel-state {
   display: grid;
   place-items: center;
+  /* Several lines (a reason and a help link) stay together in the middle
+     instead of each taking an equal share of the panel's height. */
+  align-content: center;
+  gap: 4px;
   height: 100%;
   min-height: 120px;
   padding: 16px;
@@ -2711,8 +2715,47 @@ pre.code {
   }
 }
 
+.connect-langs {
+  margin-bottom: 4px;
+}
+
+.connect-more {
+  margin-top: 6px;
+}
+
 /* Inside a page's grid, among other panels. */
 .sc.sc-inline {
   max-width: none;
   margin: 0;
+}
+
+/* Sign-in is off: shown above every page. */
+.open-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 24px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--warning-text);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.open-banner svg {
+  flex: none;
+  color: var(--warning-text);
+}
+
+.open-banner span {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .open-banner {
+    flex-wrap: wrap;
+    margin: 12px 16px 0;
+  }
 }

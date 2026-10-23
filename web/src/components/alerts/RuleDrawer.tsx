@@ -18,12 +18,15 @@ import {
   type Severity,
 } from "../../lib/alerts";
 import { PreviewChart } from "./PreviewChart";
-import { KINDS } from "../../lib/security";
+import { titleCase } from "../../lib/format";
+import { KIND_LABEL } from "./ChannelsTab";
+import { KINDS, kindLabel } from "../../lib/security";
 
 const GROUP_LABEL: Record<string, string> = { request: "Requests", system: "System", liveness: "Liveness", uptime: "Uptime", security: "Security", container: "Containers" };
 
 /** Kinds of container_events. */
 const CONTAINER_KINDS: Record<string, string> = { restarted: "Restarted", oom_killed: "Out-of-memory kill", exited: "Exited", unhealthy: "Health check failing", healthy: "Healthy again" };
+const containerKindLabel = (k: string) => CONTAINER_KINDS[k] ?? titleCase(k);
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 
 function blank(meta: AlertsMeta): RuleInput {
@@ -342,7 +345,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
               <div className="segmented" role="radiogroup" aria-label="Sensitivity">
                 {["low", "medium", "high"].map((s) => (
                   <button type="button" key={s} role="radio" aria-checked={(sp.sensitivity ?? "medium") === s} className={(sp.sensitivity ?? "medium") === s ? "on" : ""} onClick={() => setSpec({ sensitivity: s })}>
-                    {s[0].toUpperCase() + s.slice(1)}
+                    {titleCase(s)}
                   </button>
                 ))}
               </div>
@@ -392,7 +395,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             <div className="segmented" role="radiogroup" aria-label="Severity">
               {(["info", "warning", "critical"] as Severity[]).map((s) => (
                 <button type="button" key={s} role="radio" aria-checked={form.severity === s} className={form.severity === s ? "on" : ""} onClick={() => set({ severity: s })}>
-                  {s[0].toUpperCase() + s.slice(1)}
+                  {titleCase(s)}
                 </button>
               ))}
             </div>
@@ -414,7 +417,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
             </div>
           ) : preview ? (
             <>
-              <PreviewChart preview={preview} label={label} />
+              <PreviewChart preview={preview} label={label} seriesLabel={sp.metric === "container_events" ? containerKindLabel : sp.metric === "security_events" ? kindLabel : undefined} />
               {preview.note && preview.result && preview.result.rows.length > 0 && <p className="al-hint">{preview.note}</p>}
               {preview.current.length > 0 && (
                 <ul className="al-now">
@@ -448,7 +451,7 @@ export function RuleDrawer({ meta, channels, rule, onClose, onSaved }: Props) {
                     onChange={(e) => set({ channels: e.target.checked ? [...form.channels, c.id] : form.channels.filter((x) => x !== c.id) })}
                   />
                   <span>{c.name}</span>
-                  <span className="al-hint">{c.kind}</span>
+                  <span className="al-hint">{KIND_LABEL[c.kind]}</span>
                 </label>
               ))}
             </div>

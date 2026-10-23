@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import { ArrowLeft, Search, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatPercent, toNumber } from "../lib/format";
@@ -36,6 +38,7 @@ function useIssueParam(): string | null {
 const openIssue = (fp: string) => (window.location.hash = `#/errors?fp=${encodeURIComponent(fp)}`);
 
 export function Errors() {
+  const connected = useConnected("requests");
   const fp = useIssueParam();
   const list = useTelemetry<IssuesResponse>(fp ? null : "errors");
   const detail = useTelemetry<IssueDetail>(fp ? `errors/${encodeURIComponent(fp)}` : null);
@@ -51,7 +54,15 @@ export function Errors() {
           </>
         }
       />
-      <div className="content">{fp ? <IssueView fp={fp} q={detail} /> : <IssueList q={list} />}</div>
+      <div className="content">
+        {!connected ? (
+          <ConnectCard title="Connect your API to see its errors" text="Unhandled exceptions and the errors you report, grouped into issues with their stack, the requests they broke and the users they hit." />
+        ) : fp ? (
+          <IssueView fp={fp} q={detail} />
+        ) : (
+          <IssueList q={list} />
+        )}
+      </div>
     </>
   );
 }
@@ -295,7 +306,7 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
           {d && latest && (
             <div className="issue-meta">
               <IssueStatusBadge status={d.status} version={d.status_version} />
-              <span className="pill">{toNumber(latest.handled) ? "handled" : "unhandled"}</span>
+              <span className="pill">{toNumber(latest.handled) ? "Handled" : "Unhandled"}</span>
               {latest.service ? <span>{String(latest.service)}</span> : null}
               {latest.runtime ? <span className="dim">{String(latest.runtime)}</span> : null}
               <span className="dim mono" title="Fingerprint">

@@ -221,7 +221,7 @@ func (s *Server) handlePerformance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

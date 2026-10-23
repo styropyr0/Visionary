@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { ShieldAlert } from "lucide-react";
 import { api, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser } from "./lib/api";
 import { load, save } from "./lib/state";
 import { useQuery } from "./lib/useQuery";
 import { ROUTES, Sidebar, type Route } from "./components/Sidebar";
 import { HelpHost } from "./components/Help";
 import { loadPrefs, prefs } from "./lib/prefs";
+import { MetaContext } from "./lib/meta";
 import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
@@ -56,7 +58,7 @@ export function App() {
       .catch(() => setAuth("out"));
     const onUnauth = (e: Event) => {
       const msg = (e as CustomEvent<string>).detail;
-      setNotice(msg && msg !== SIGN_IN_REQUIRED ? msg : "");
+      setNotice(msg && msg.toLowerCase() !== SIGN_IN_REQUIRED ? msg : "");
       setUser(null);
       setAuth("out");
     };
@@ -115,26 +117,48 @@ export function App() {
         onSignOut={signOut}
         user={user}
       />
-      <main className="main">
-        {route === "overview" && <Overview />}
-        {route === "performance" && <Performance meta={meta.data} />}
-        {route === "queries" && <Queries />}
-        {route === "dependencies" && <Dependencies />}
-        {route === "profiles" && <Profiles />}
-        {route === "system" && <System />}
-        {route === "containers" && <Containers />}
-        {route === "errors" && <Errors />}
-        {route === "frontend" && <Frontend />}
-        {route === "uptime" && <Uptime />}
-        {route === "security" && <Security />}
-        {route === "dashboards" && <Dashboards />}
-        {route === "alerts" && <Alerts meta={meta.data} />}
-        {route === "settings" && <Settings user={user} />}
-        {route === "explore" && <Explore meta={meta.data} />}
-        {route === "saved" && <Saved />}
-        {route === "logs" && <Logs meta={meta.data} />}
-      </main>
+      <MetaContext.Provider value={meta.data}>
+        <main className="main">
+          {meta.data?.sign_in_open && <OpenBanner why={meta.data.sign_in_open} />}
+          {route === "overview" && <Overview />}
+          {route === "performance" && <Performance meta={meta.data} />}
+          {route === "queries" && <Queries />}
+          {route === "dependencies" && <Dependencies />}
+          {route === "profiles" && <Profiles />}
+          {route === "system" && <System />}
+          {route === "containers" && <Containers />}
+          {route === "errors" && <Errors />}
+          {route === "frontend" && <Frontend />}
+          {route === "uptime" && <Uptime />}
+          {route === "security" && <Security />}
+          {route === "dashboards" && <Dashboards />}
+          {route === "alerts" && <Alerts meta={meta.data} />}
+          {route === "settings" && <Settings user={user} />}
+          {route === "explore" && <Explore meta={meta.data} />}
+          {route === "saved" && <Saved />}
+          {route === "logs" && <Logs meta={meta.data} />}
+        </main>
+      </MetaContext.Provider>
       <HelpHost route={route} />
+    </div>
+  );
+}
+
+/** Says, on every page, that anyone with the URL is an admin. */
+function OpenBanner({ why }: { why: "disabled" | "unconfigured" }) {
+  return (
+    <div className="open-banner" role="status">
+      <ShieldAlert size={15} />
+      {why === "disabled" ? (
+        <span>
+          Sign-in is off (<code>VISIONARY_ENABLE_AUTH=false</code>): anyone who can reach this server is an admin. Remove the variable and restart once sign-in works.
+        </span>
+      ) : (
+        <span>Sign-in isn't set up: anyone who can reach this server is an admin.</span>
+      )}
+      <a className="btn sm" href="#/settings?tab=signin">
+        {why === "disabled" ? "Sign-in settings" : "Set up sign-in"}
+      </a>
     </div>
   );
 }

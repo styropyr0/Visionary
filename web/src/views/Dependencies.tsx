@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { ConnectCard } from "../components/ConnectCard";
+import { useConnected } from "../lib/meta";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { useInsights, type DependenciesResponse } from "../lib/insights";
@@ -42,6 +44,7 @@ function Change({ now, before, worseUp = true }: { now: unknown; before: unknown
  * previous period, and which routes depend on them.
  */
 export function Dependencies() {
+  const connected = useConnected("requests");
   const q = useInsights<DependenciesResponse>("dependencies");
   const [open, setOpen] = useState<string | null>(null);
   const [openLog, setOpenLog] = useState<number | null>(null);
@@ -79,6 +82,8 @@ export function Dependencies() {
         }
       />
       <div className="content">
+        {connected ? (
+          <>
         {q.error && !q.data && <ErrorNotice title="Could not load dependencies" error={q.error} style={{ marginBottom: 12 }} />}
         <div className="grid">
           <StatTile label="Outbound calls" value={formatCount(totals.calls)} footer={`${formatCount(totals.perMin)} per minute`} delta={null} deltaLabel="" upIs="neutral" loading={q.loading} />
@@ -127,6 +132,10 @@ export function Dependencies() {
             }
           />
         </div>
+          </>
+        ) : (
+          <ConnectCard title="Connect your API to see its dependencies" text="Every host your services call out to (payment providers, AI APIs, other services) with call counts, failures and latency." />
+        )}
       </div>
       {open !== null && <SpanDetailDrawer kind="http" name={open} onClose={() => setOpen(null)} onOpenRequest={openRequest} />}
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}

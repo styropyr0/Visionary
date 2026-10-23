@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { formatPercent, toNumber } from "../lib/format";
+import { formatPercent, titleCase, toNumber } from "../lib/format";
 import "./Machine.css";
 
 /** Pieces shared by the machine sections of System and the Containers view. */
@@ -16,7 +16,7 @@ export function StatusBadge({ status, large }: { status: HostStatus; large?: boo
   return (
     <span className={`host-status ${status} ${large ? "large" : ""}`}>
       <Icon size={large ? 16 : 14} aria-hidden />
-      {STATUS_LABEL[status] ?? status}
+      {STATUS_LABEL[status] ?? titleCase(status)}
     </span>
   );
 }

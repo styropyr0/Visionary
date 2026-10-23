@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Box, Boxes, ExternalLink, Search, Server } from "lucide-react";
 import { api, rangeQuery, type Result, type Viz } from "../lib/api";
-import { formatBytes, formatCount, toNumber } from "../lib/format";
+import { formatBytes, formatCount, titleCase, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatDateTime, formatFull, formatLogTime, formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
@@ -71,8 +71,8 @@ function StateBadge({ state, health }: { state: unknown; health?: unknown }) {
   return (
     <span className={`ctr-state ${tone}`}>
       <span className="ctr-dot" aria-hidden />
-      {s}
-      {h && <span className="ctr-health">({h})</span>}
+      {titleCase(s)}
+      {h && <span className="ctr-health">({titleCase(h)})</span>}
     </span>
   );
 }
@@ -103,8 +103,8 @@ const eventColumns = (withContainer: boolean, sdk?: Set<string>): Column[] => [
         },
       ]
     : []),
-  { key: "kind", label: "Event", render: (v) => KIND_LABEL[String(v)] ?? String(v) },
-  { key: "severity", render: (v) => <span className={`host-sev ${String(v)}`}>{String(v)}</span> },
+  { key: "kind", label: "Event", render: (v) => KIND_LABEL[String(v)] ?? titleCase(String(v)) },
+  { key: "severity", render: (v) => <span className={`host-sev ${String(v)}`}>{titleCase(String(v))}</span> },
   { key: "exit_code", label: "Exit code", align: "right", render: (v) => (v == null ? dim : String(v)) },
   { key: "detail", render: (v) => (v ? String(v) : dim) },
   { key: "count", align: "right", unit: "count" },
@@ -148,7 +148,7 @@ function ContainerList() {
           <a href={containerHref(String(row[0]), String(v), row[SOURCE])} onClick={(e) => e.stopPropagation()}>
             {String(v)}
           </a>
-          <span className="mono dim ctr-image">{row[SOURCE] === "sdk" ? "reported by the SDK" : String(row[2] ?? "")}</span>
+          <span className="mono dim ctr-image">{row[SOURCE] === "sdk" ? "Reported by the SDK" : String(row[2] ?? "")}</span>
         </span>
       ),
     },

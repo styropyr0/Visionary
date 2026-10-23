@@ -76,7 +76,7 @@ export interface SignIn {
 }
 
 export interface Members {
-  mode: "otp" | "password" | "shared" | "none";
+  mode: "otp" | "password" | "shared" | "accounts" | "none";
   provider: string;
   mapping: RoleEntry[];
   viewer_password: boolean;

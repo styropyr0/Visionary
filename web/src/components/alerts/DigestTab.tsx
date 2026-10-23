@@ -5,9 +5,10 @@ import { useToast } from "../Toast";
 import { useQuery } from "../../lib/useQuery";
 import { alertsApi, WEEKDAYS, type AlertsMeta, type Channel, type DigestChange, type DigestPreview } from "../../lib/alerts";
 import type { Result } from "../../lib/api";
-import { formatCount, formatMs, formatPercent } from "../../lib/format";
+import { formatCount, formatMs, formatPercent, titleCase } from "../../lib/format";
 import { formatDateTime, formatLogTime, dateFormat } from "../../lib/time";
 import { KIND_ICON, KIND_LABEL } from "./ChannelsTab";
+import { kindLabel } from "../../lib/security";
 import { DataTable } from "../DataTable";
 import { ErrorNotice } from "../ErrorNotice";
 import { Modal } from "../Modal";
@@ -274,7 +275,7 @@ function Sections({ d }: { d: Data }) {
             sortable={false}
             columns={[
               { key: "rule", label: "Rule" },
-              { key: "severity", render: (v) => <span className={`dg-sev ${String(v)}`}>{String(v)}</span> },
+              { key: "severity", render: (v) => <span className={`dg-sev ${String(v)}`}>{titleCase(String(v))}</span> },
               { key: "count", label: "Fired", align: "right", render: (v) => `${formatCount(Number(v))}×` },
             ]}
           />
@@ -304,10 +305,10 @@ function Sections({ d }: { d: Data }) {
           description={`${formatCount(d.errors.total)} errors, was ${formatCount(d.errors.previous_total)}${d.errors.new_issues ? `; ${d.errors.new_issues} new issue${d.errors.new_issues === 1 ? "" : "s"}` : ""}. The most frequent issues:`}
         >
           <DataTable
-            result={table(["type", "message", "route", "count"], (d.errors.top ?? []).map((i) => [i.new ? `${i.type} · new` : i.type, i.message, i.route, i.count]))}
+            result={table(["type", "message", "route", "count"], (d.errors.top ?? []).map((i) => [i.new ? `${i.type} · New` : i.type, i.message, i.route, i.count]))}
             sortable={false}
             columns={[
-              { key: "type", label: "Issue", render: (v) => (String(v).endsWith(" · new") ? <span className="dg-new">{String(v)}</span> : mono(v)) },
+              { key: "type", label: "Issue", render: (v) => (String(v).endsWith(" · New") ? <span className="dg-new">{String(v)}</span> : mono(v)) },
               { key: "message", render: (v) => <span className="dg-msg">{String(v)}</span> },
               { key: "route", render: (v) => (v ? mono(v) : <span className="dim">—</span>) },
               { key: "count", align: "right", unit: "count" },
@@ -388,7 +389,7 @@ function Sections({ d }: { d: Data }) {
             <ul className="dg-kinds">
               {(sec.findings_by_kind ?? []).slice(0, 6).map((k) => (
                 <li key={k.kind}>
-                  <span>{k.kind.replace(/_/g, " ")}</span>
+                  <span>{kindLabel(k.kind)}</span>
                   <b>{formatCount(k.count)}</b>
                 </li>
               ))}
@@ -411,7 +412,7 @@ function Delivery({ meta, channels, onChange }: { meta: AlertsMeta; channels: Ch
       </header>
       <div className="al-digest-body">
         <p className="al-hint">
-          Off by default. Each channel gets the digest weekly on its own day and hour, in {meta.digest_tz} (set <code>VISIONARY_DIGEST_TZ</code> to change). Email channels get the
+          Off by default. Each channel gets the digest weekly on its own day and hour, in {meta.digest_tz} (change it in Settings → Server → Alerts). Email channels get the
           formatted report; Slack, Discord and webhooks get it as text.
         </p>
         {channels.length === 0 ? (

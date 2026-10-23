@@ -16,7 +16,7 @@ func (s *Server) handleSecurityPanel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown panel")
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -43,7 +43,7 @@ const findingsPage = 100
 // bound): source, kind, severity (that level and above), host, ip, actor;
 // before (an id) pages.
 func (s *Server) handleSecurityFindings(w http.ResponseWriter, r *http.Request) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -213,7 +213,7 @@ func (s *Server) handleSecurityAudit(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
 	}
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -271,7 +271,8 @@ WHERE created_at >= ? AND created_at < ? AND `+sensitiveActionCond()+` GROUP BY 
 // the sign-in mode or role mapping (set in the environment, so never changed
 // through the API) differs from the last one recorded.
 func (s *Server) auditRoleMapping(ctx context.Context) {
-	cur, _ := json.Marshal(map[string]any{"mode": s.cfg.Auth.Type, "mapping": s.auth.roles.entries})
+	sg := s.signin()
+	cur, _ := json.Marshal(map[string]any{"mode": sg.cfg.Type, "mapping": sg.roles.entries})
 	for attempt := 0; attempt < 10; attempt++ {
 		res, err := s.db.Query(ctx, `SELECT detail FROM audit_log WHERE action = 'team.role_mapping' ORDER BY id DESC LIMIT 1`)
 		if err == nil {
@@ -286,13 +287,13 @@ func (s *Server) auditRoleMapping(ctx context.Context) {
 					return
 				}
 			}
-			detail := map[string]any{"mode": s.cfg.Auth.Type, "mapping": s.auth.roles.entries}
+			detail := map[string]any{"mode": sg.cfg.Type, "mapping": sg.roles.entries}
 			if len(res.Rows) == 1 {
 				detail["previous"] = json.RawMessage(toString(res.Rows[0][0]))
 			}
 			b, _ := json.Marshal(detail)
 			e := auditEntry{at: time.Now().UTC(), userID: "system", userName: "Visionary", action: "team.role_mapping",
-				target: s.cfg.Auth.Type, detailJSON: string(b)}
+				target: sg.cfg.Type, detailJSON: string(b)}
 			select {
 			case s.team().audits <- e:
 			default:

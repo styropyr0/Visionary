@@ -1,3 +1,4 @@
+import { sentence } from "./format";
 /** bytes_per_s is a rate: shown as "12.4 MB/s". */
 export type Unit = "count" | "ms" | "percent" | "bytes" | "bytes_per_s" | "none";
 export type VizType = "timeseries" | "bar" | "pie" | "stat" | "table";
@@ -56,6 +57,10 @@ export interface Meta {
   apdex_ms: number;
   /** SLO: target percent of requests that succeed within T. */
   slo_target: number;
+  /** Which kinds of SDK data have ever been written. */
+  sources?: { requests: boolean; spans: boolean; system: boolean; errors: boolean; profiles: boolean };
+  /** Why sign-in is off ("" while it is on): VISIONARY_ENABLE_AUTH=false, or not set up yet. */
+  sign_in_open?: "" | "disabled" | "unconfigured";
 }
 
 export interface SessionUser {
@@ -80,6 +85,10 @@ export interface AuthConfig {
   resend_seconds?: number;
   location: "none" | "optional" | "required";
   allowed_roles: string[];
+  /** Why sign-in is off, when type is "none". */
+  open?: "disabled" | "unconfigured";
+  /** A saved setup that can't be used: nobody can sign in until it is fixed. */
+  error?: string;
 }
 
 export interface SessionInfo {
@@ -130,7 +139,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     if (res.status === 401 && !path.startsWith("/api/auth/")) {
       window.dispatchEvent(new CustomEvent<string>(UNAUTHORIZED_EVENT, { detail: msg }));
     }
-    throw new ApiError(res.status, msg || `Request failed (${res.status})`);
+    throw new ApiError(res.status, sentence(msg || `Request failed (${res.status})`));
   }
   return body as T;
 }

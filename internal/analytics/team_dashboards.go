@@ -404,7 +404,7 @@ func (s *Server) handlePanelData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	tr, err := parseRange(q, s.cfg.MaxRangeDays)
+	tr, err := parseRange(q, s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -433,7 +433,7 @@ func (s *Server) handlePanelData(w http.ResponseWriter, r *http.Request) {
 
 // handleVariableValues lists the values a variable can take in the range.
 func (s *Server) handleVariableValues(w http.ResponseWriter, r *http.Request) {
-	tr, err := parseRange(r.URL.Query(), s.cfg.MaxRangeDays)
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

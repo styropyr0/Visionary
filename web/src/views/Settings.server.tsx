@@ -270,9 +270,9 @@ export function RetentionCard() {
                         </div>
                         {u.oldest && <div className="dim">oldest {formatRelative(u.oldest)}</div>}
                       </>
-                    ) : (
-                      <div className="dim">Summaries</div>
-                    )}
+                    ) : usage.loading && !usage.data ? (
+                      <div className="dim">Counting…</div>
+                    ) : null}
                   </div>
                   <div className="ret-keep">
                     <Select label={`Keep ${k.label} for`} value={String(days)} options={options(days)} disabled={!admin} onChange={(v) => setDraft({ ...draft, [k.key]: Number(v) })} />

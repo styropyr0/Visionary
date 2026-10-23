@@ -3,8 +3,6 @@ package analytics
 import (
 	"context"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -32,8 +30,8 @@ func (s *Server) rum() *rumState {
 		return st.(*rumState)
 	}
 	st := &rumState{
-		origins: parseOrigins(os.Getenv("VISIONARY_CLIENT_ORIGINS")),
-		limits:  newRUMLimiter(rumEnvInt("VISIONARY_CLIENT_RATE_PER_IP", 120), rumEnvInt("VISIONARY_CLIENT_RATE_PER_KEY", 6000)),
+		origins: parseOrigins(s.conf("VISIONARY_CLIENT_ORIGINS")),
+		limits:  newRUMLimiter(s.confInt("VISIONARY_CLIENT_RATE_PER_IP"), s.confInt("VISIONARY_CLIENT_RATE_PER_KEY")),
 		writer:  newRUMWriter(s),
 	}
 	actual, _ := rumStates.LoadOrStore(s, st)
@@ -170,10 +168,3 @@ func parseOrigins(raw string) []string {
 	return out
 }
 
-// rumEnvInt reads a non-negative integer; 0 is a valid value (off).
-func rumEnvInt(key string, fallback int) int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && v >= 0 {
-		return v
-	}
-	return fallback
-}

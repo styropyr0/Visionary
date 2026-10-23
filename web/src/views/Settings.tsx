@@ -25,13 +25,16 @@ import { ErrorNotice } from "../components/ErrorNotice";
 import { PagesTab, ProfilingTab } from "./Settings.profiling";
 import { DataTab } from "./Settings.data";
 import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
+import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
 import "./Settings.css";
 
-type Tab = "preferences" | "members" | "keys" | "thresholds" | "data" | "profiling" | "pages" | "status" | "audit" | "about";
+type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "profiling" | "pages" | "status" | "audit" | "about";
 
 const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "preferences", label: "Preferences", admin: false },
   { key: "members", label: "Members & roles", admin: false },
+  { key: "signin", label: "Sign-in", admin: true },
+  { key: "server", label: "Server", admin: true },
   { key: "keys", label: "API keys", admin: true },
   { key: "thresholds", label: "Thresholds", admin: false },
   { key: "data", label: "Data", admin: false },
@@ -81,10 +84,12 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {session && !admin && (
           <div className="notice settings-note">
             <ShieldCheck size={16} />
-            <span>API keys, data deletion and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
+            <span>Sign-in, server settings, API keys, data deletion and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
           </div>
         )}
         {current === "members" && <MembersTab />}
+        {current === "signin" && <SigninTab />}
+        {current === "server" && <ServerTab />}
         {current === "keys" && <KeysTab />}
         {current === "profiling" && <ProfilingTab />}
         {current === "pages" && <PagesTab />}
@@ -170,8 +175,9 @@ function MembersTab() {
           </div>
         </div>
       </Card>
+      {me.user.id.startsWith("acct:") && <OwnPasswordCard />}
 
-      <Card title="Role mapping" description={<MappingNote mode={d.mode} viewer={d.viewer_password} />}>
+      <Card title={d.mode === "accounts" ? "Accounts" : "Role mapping"} description={<MappingNote mode={d.mode} viewer={d.viewer_password} />}>
         {d.mode === "otp" || d.mode === "password" ? (
           <div className="table-wrap">
             <table className="data">
@@ -189,7 +195,7 @@ function MembersTab() {
                     <td>
                       <RoleBadge role={e.role} />
                     </td>
-                    <td className="dim">{e.source === "map" ? "VISIONARY_ROLE_MAP" : "VISIONARY_ALLOWED_ROLES (admin unless mapped)"}</td>
+                    <td className="dim">{e.source === "map" ? "Role mapping" : "Allowed role (admin unless mapped)"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -208,16 +214,21 @@ function MembersTab() {
                 {d.mode === "shared" ? (
                   <>
                     <tr>
-                      <td>Team password (VISIONARY_SHARED_PASSWORD)</td>
+                      <td>Team password</td>
                       <td>
                         <RoleBadge role="admin" />
                       </td>
                     </tr>
                     <tr>
-                      <td>Viewer password (VISIONARY_VIEWER_PASSWORD)</td>
+                      <td>Read-only password</td>
                       <td>{d.viewer_password ? <RoleBadge role="viewer" /> : <span className="dim">Not set</span>}</td>
                     </tr>
                   </>
+                ) : d.mode === "accounts" ? (
+                  <tr>
+                    <td>Each account</td>
+                    <td className="dim">The role set on the account</td>
+                  </tr>
                 ) : (
                   <tr>
                     <td>Everyone (sign-in is off)</td>
@@ -286,17 +297,18 @@ function MembersTab() {
 }
 
 function MappingNote({ mode, viewer }: { mode: Members["mode"]; viewer: boolean }) {
-  if (mode === "none") return <>Sign-in is off (VISIONARY_AUTH_MODE=none), so everyone who can reach Visionary is an admin.</>;
+  if (mode === "accounts") return <>Everyone signs in with their own account, which carries their role. Admins add people and change roles in Settings → Sign-in.</>;
+  if (mode === "none") return <>Sign-in is off, so everyone who can reach Visionary is an admin. Set it up in Settings → Sign-in.</>;
   if (mode === "shared")
     return (
       <>
         The team password signs in as admin.{" "}
-        {viewer ? "The viewer password signs in read-only." : "Set VISIONARY_VIEWER_PASSWORD for a read-only shared login."}
+        {viewer ? "The read-only password signs in as viewer." : "Add a read-only password in Settings → Sign-in for a viewer login."}
       </>
     );
   return (
     <>
-      Set with VISIONARY_ROLE_MAP, e.g. <code>ADMIN=admin,ANALYST=viewer</code>. A user gets the highest role any of their roles maps to; anyone
+      Set in Settings → Sign-in, e.g. <code>ADMIN=admin,ANALYST=viewer</code>. A user gets the highest role any of their roles maps to; anyone
       else can't sign in.
     </>
   );

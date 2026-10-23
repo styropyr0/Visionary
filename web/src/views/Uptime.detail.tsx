@@ -306,7 +306,7 @@ const INCIDENT_COLS: Column[] = [
   },
   { key: "duration_s", label: "Duration", align: "right", render: (v) => formatDuration(toNumber(v) ?? 0) },
   { key: "failures", label: "Failed checks", align: "right", unit: "count" },
-  { key: "status", label: "Status", align: "right", render: (v) => (toNumber(v) ? String(v) : <span className="dim">no response</span>) },
+  { key: "status", label: "Status", align: "right", render: (v) => (toNumber(v) ? String(v) : <span className="dim">No response</span>) },
   { key: "error", label: "Reason", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
 ];
 
@@ -324,6 +324,6 @@ const RESULT_COLS: Column[] = [
   { key: "connect_ms", label: "Connect", align: "right", render: ms },
   { key: "tls_ms", label: "TLS", align: "right", render: ms },
   { key: "ttfb_ms", label: "TTFB", align: "right", render: ms },
-  { key: "retried", label: "Retried", align: "right", render: (v) => (toNumber(v) === 1 ? "yes" : <span className="dim">no</span>) },
+  { key: "retried", label: "Retried", align: "right", render: (v) => (toNumber(v) === 1 ? "Yes" : <span className="dim">No</span>) },
   { key: "error", label: "Error", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
 ];

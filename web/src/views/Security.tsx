@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileText, ScrollText, Search, ShieldAlert, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
-import { formatCount, formatPercent, toNumber } from "../lib/format";
+import { formatCount, formatPercent, humanize, relabelColumn, titleCase, toNumber, yesNo } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { formatFull, formatLogTime } from "../lib/time";
@@ -9,6 +9,7 @@ import {
   auditLabel,
   investigateQuestion,
   kindLabel,
+  sourceLabel,
   KINDS,
   rowObjects,
   securityApi,
@@ -81,7 +82,7 @@ function SecurityPage() {
           {meta.data && !meta.data.enabled && (
             <div className="span-12 notice">
               <ShieldAlert size={16} />
-              <span>The API detectors are off (VISIONARY_SECURITY=false). Host events and the audit log still show here.</span>
+              <span>The API detectors are off (Settings → Server → Security detectors). Host events and the audit log still show here.</span>
             </div>
           )}
           {meta.data?.error && (
@@ -176,6 +177,7 @@ function SecurityPage() {
             name="findings_over_time"
             title="Findings over time"
             description="Findings first seen per interval, by severity."
+            label={titleCase}
             viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "count", stack: true }}
             span="span-6"
           />
@@ -186,7 +188,7 @@ function SecurityPage() {
             span="span-6"
             columns={[
               { key: "kind", render: (v) => kindLabel(String(v)) },
-              { key: "source", render: (v) => <span className="pill">{String(v)}</span> },
+              { key: "source", render: (v) => <span className="pill">{sourceLabel(String(v))}</span> },
               { key: "findings", align: "right", unit: "count" },
               { key: "occurrences", align: "right", unit: "count" },
               { key: "critical", align: "right", unit: "count" },
@@ -266,7 +268,7 @@ function openLogs(ip: string, from?: string, to?: string, setRange?: (r: { kind:
 }
 
 export function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={`sec-sev ${severity}`}>{severity}</span>;
+  return <span className={`sec-sev ${severity}`}>{titleCase(severity)}</span>;
 }
 
 function whoOf(f: Finding): string {
@@ -336,7 +338,7 @@ function FindingsTable({
     { key: "created_at", label: "First seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span>, width: 160 },
     { key: "severity", render: (v) => <SeverityBadge severity={String(v)} />, width: 90 },
     { key: "kind", render: (v) => kindLabel(String(v)), width: 150 },
-    { key: "source", render: (v) => <span className="pill">{String(v)}</span>, width: 70 },
+    { key: "source", render: (v) => <span className="pill">{sourceLabel(String(v))}</span>, width: 70 },
     { key: "who", label: "Host, IP or account", render: (v) => <span className="mono">{String(v)}</span>, width: 200 },
     { key: "summary", label: "What happened", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
     { key: "count", align: "right", unit: "count", width: 70 },
@@ -518,10 +520,10 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
 }
 
 function FragmentKV({ k, v }: { k: string; v: unknown }) {
-  const text = Array.isArray(v) ? v.join(", ") : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+  const text = Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? yesNo(v) : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
   return (
     <>
-      <dt>{k.replace(/_/g, " ")}</dt>
+      <dt>{humanize(k)}</dt>
       <dd className={Array.isArray(v) ? "mono" : undefined}>{text}</dd>
     </>
   );
@@ -546,9 +548,10 @@ function ChartPanel({ q, title, description, viz, span, empty }: { name: string;
   );
 }
 
-function SecurityChart(props: { name: string; title: string; description: string; viz: Viz; span: string; empty?: string }) {
+function SecurityChart({ label, ...props }: { name: string; title: string; description: string; viz: Viz; span: string; empty?: string; label?: (v: string) => string }) {
   const q = useSecurityPanel(props.name);
-  return <ChartPanel {...props} q={q} />;
+  const data = useMemo(() => (q.data && label ? relabelColumn(q.data, "series", label) : q.data), [q.data, label]);
+  return <ChartPanel {...props} q={{ ...q, data }} />;
 }
 
 function SecurityTable({

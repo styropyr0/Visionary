@@ -1,4 +1,4 @@
-import type { Unit } from "./api";
+import type { Result, Unit } from "./api";
 
 const compactFmt = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const intFmt = new Intl.NumberFormat("en");
@@ -15,6 +15,11 @@ export function toNumber(v: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+/** A message shown to people, with a capital first letter whatever produced it. */
+export function sentence(msg: string): string {
+  return msg ? msg[0].toUpperCase() + msg.slice(1) : msg;
 }
 
 export function formatCount(n: number, compact = true): string {
@@ -47,6 +52,7 @@ export function formatBytes(n: number): string {
 
 export function formatValue(v: unknown, unit: Unit = "none"): string {
   const n = toNumber(v);
+  if (typeof v === "boolean") return yesNo(v);
   if (n === null) return v === null || v === undefined ? "—" : String(v);
   switch (unit) {
     case "ms":
@@ -129,6 +135,24 @@ export function humanize(col: string): string {
 const ACRONYMS: Record<string, string> = Object.fromEntries(
   ["api", "cpu", "db", "dns", "gc", "http", "https", "id", "ids", "io", "ip", "js", "jvm", "os", "ram", "rss", "rps", "sdk", "slo", "sql", "ssl", "tcp", "tls", "ttfb", "ui", "url", "uuid", "lcp", "inp", "cls", "fcp", "otlp", "iops", "kb", "mb", "gb"].map((w) => [w, w.toUpperCase()]),
 );
+
+/** An enum-like word as a label: "auth_bruteforce" → "Auth bruteforce", "warning" → "Warning". */
+export function titleCase(s: string): string {
+  const t = s.replace(/[_-]+/g, " ").trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** A result with one column's values turned into labels, e.g. enum series names for a chart legend. */
+export function relabelColumn(res: Result, column: string, label: (v: string) => string): Result {
+  const i = res.columns.indexOf(column);
+  if (i < 0) return res;
+  return { ...res, rows: res.rows.map((r) => r.map((v, j) => (j === i && v != null ? label(String(v)) : v))) };
+}
+
+/** A boolean as a label. */
+export function yesNo(v: unknown): string {
+  return v ? "Yes" : "No";
+}
 
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

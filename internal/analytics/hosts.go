@@ -49,7 +49,7 @@ func (s *Server) hosts() *hostsState {
 	}
 	st := &hostsState{
 		inflight: make(chan struct{}, hostsMaxInFlight),
-		limiter:  rate.NewLimiter(rate.Limit(otlpEnvInt("VISIONARY_AGENT_RATE", 50)), 100),
+		limiter:  rate.NewLimiter(rate.Limit(s.confInt("VISIONARY_AGENT_RATE")), 100),
 		reportS:  map[string]float64{},
 	}
 	actual, _ := hostsStates.LoadOrStore(s, st)
