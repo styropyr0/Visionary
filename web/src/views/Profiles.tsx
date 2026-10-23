@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ConnectCard } from "../components/ConnectCard";
 import { useConnected } from "../lib/meta";
-import { Flame, Play } from "lucide-react";
+import { ArrowLeft, Flame, Play } from "lucide-react";
 import type { Result } from "../lib/api";
 import { formatCount, formatMs, toNumber } from "../lib/format";
 import { useInsights, type FlameResponse, type ProfilesResponse } from "../lib/insights";
@@ -125,7 +125,8 @@ export function Profiles() {
                   <InfoTip text="Each frame is as wide as the CPU samples taken in it and the functions it called; callers above, callees below. Click a frame to zoom in. The table below the graph lists the functions that used the most CPU themselves, which is usually where to look first." />
                   <div className="panel-actions">
                     {id !== null && (
-                      <button type="button" className="btn sm" onClick={() => setId(null)}>
+                      <button type="button" className="btn" onClick={() => setId(null)}>
+                        <ArrowLeft size={14} />
                         Back to all
                       </button>
                     )}
