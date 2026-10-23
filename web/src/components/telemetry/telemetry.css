@@ -640,10 +640,24 @@
   color: var(--text-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sd-variant-stats > * {
+  flex: none;
 }
 
 .sd-variant-total {
-  width: 110px;
+  min-width: 132px;
+}
+
+/* An open statement is shown in full below its head, so the head names it
+   instead of repeating it. */
+.sd-variant-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12px;
 }
 
 .sd-variant-body {
@@ -808,4 +822,424 @@
 
 .rt-bg-item > svg {
   color: var(--series-6);
+}
+
+/* ---------- Statements ---------- */
+
+.sqlv {
+  --sq-kw: #7fa9ec;
+  --sq-fn: #b6acf6;
+  --sq-num: #5cc79b;
+  --sq-quoted: #e8a072;
+  --sq-param: #f2c14e;
+  --sq-param-wash: rgba(242, 193, 78, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+:root[data-theme="light"] .sqlv {
+  --sq-kw: #2a5fa8;
+  --sq-fn: #6650c9;
+  --sq-num: #137a55;
+  --sq-quoted: #a4461a;
+  --sq-param: #8a5a00;
+  --sq-param-wash: rgba(201, 133, 0, 0.14);
+}
+
+.sqlv-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.sqlv-meta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sqlv-copy {
+  margin-left: auto;
+}
+
+.sqlv-param {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--sq-param-wash);
+  color: var(--sq-param);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.sqlv-code {
+  position: relative;
+  margin: 0;
+  padding: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.sqlv.compact .sqlv-code {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.sqlv-code.clipped {
+  max-height: calc(18 * 1.6em + 16px);
+  overflow-y: hidden;
+}
+
+.sqlv-code.clipped::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 48px;
+  background: linear-gradient(to bottom, transparent, var(--surface-1));
+  pointer-events: none;
+}
+
+.sqlv-stored {
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sqlv-line {
+  display: flex;
+  min-width: max-content;
+}
+
+.sqlv-line:hover {
+  background: var(--hover-wash);
+}
+
+.sqlv-ln {
+  position: sticky;
+  left: 0;
+  flex: none;
+  width: 4ch;
+  padding-right: 1ch;
+  background: var(--surface-1);
+  color: var(--text-3);
+  text-align: right;
+  user-select: none;
+}
+
+.sqlv-line:hover .sqlv-ln {
+  background: inherit;
+}
+
+.sqlv-text {
+  padding-right: 12px;
+  white-space: pre;
+}
+
+.sqlv-line:only-child .sqlv-text {
+  padding-left: 12px !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sqlv-more {
+  align-self: flex-start;
+}
+
+.sq-kw {
+  color: var(--sq-kw);
+  font-weight: 600;
+}
+
+.sq-fn {
+  color: var(--sq-fn);
+}
+
+.sq-num {
+  color: var(--sq-num);
+}
+
+.sq-quoted {
+  color: var(--sq-quoted);
+}
+
+.sq-str {
+  color: var(--sq-num);
+}
+
+.sq-param {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--sq-param-wash);
+  color: var(--sq-param);
+  font-weight: 600;
+}
+
+.sq-comment {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.sq-op,
+.sq-punct {
+  color: var(--text-2);
+}
+
+/* A plan that could not be made. */
+.qp-failed {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.qp-failed > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warning-text);
+}
+
+.qp-failed-title {
+  font-weight: 600;
+}
+
+.qp-failed-raw {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.qp-note {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* An icon beside a note that may wrap: centred on the first line. */
+.qp-icon-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.qp-icon-note > svg {
+  flex: none;
+  margin-top: calc((1.5em - 13px) / 2);
+}
+
+/* ---------- Plan steps ---------- */
+
+.pv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pv-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 20px;
+}
+
+.pv-stat {
+  min-width: 0;
+}
+
+.pv-stat-wide {
+  flex: 1 1 180px;
+}
+
+.pv-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.pv-stat-value {
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-stat-op {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.pv-tree {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  max-height: 420px;
+  overflow: auto;
+  font-size: 12.5px;
+}
+
+.pv-head,
+.pv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 128px;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.pv-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 28px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.pv-head .num {
+  text-align: right;
+}
+
+.pv-row {
+  align-items: start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  line-height: 20px;
+}
+
+.pv-node:last-child > .pv-row:last-child {
+  border-bottom: 0;
+}
+
+.pv-row:hover {
+  background: var(--hover-wash);
+}
+
+.pv-row.heaviest {
+  background: var(--accent-wash);
+}
+
+.pv-op {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.pv-elbow {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin: 0 6px 0 -14px;
+  border-bottom: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+  border-bottom-left-radius: 3px;
+}
+
+.pv-op-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pv-label {
+  line-height: 18px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pv-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.pv-warn {
+  color: var(--warning-text);
+}
+
+.pv-rel {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.pv-detail {
+  color: var(--text-3);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.pv-rows,
+.pv-cost {
+  height: 20px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pv-cost {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pv-cost .track {
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.pv-cost .fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* A labelled step (CTE words): numbers and connector line up with its name,
+   one label line down. */
+.pv-row.labelled .pv-rows,
+.pv-row.labelled .pv-cost,
+.pv-row.labelled .pv-elbow {
+  margin-top: 18px;
 }

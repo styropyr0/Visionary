@@ -162,7 +162,6 @@ var (
 	pgSeqScan   = regexp.MustCompile(`Seq Scan on (\S+)(?: \S+)?\s+\(cost=[\d.]+\.\.([\d.]+) rows=(\d+)`)
 	pgFilter    = regexp.MustCompile(`^\s*Filter: (.+)$`)
 	pgSort      = regexp.MustCompile(`^\s*(?:->\s*)?Sort\s+\(cost=[\d.]+\.\.[\d.]+ rows=(\d+)`)
-	pgTotalCost = regexp.MustCompile(`cost=[\d.]+\.\.([\d.]+) rows=(\d+)`)
 	sqliteScan  = regexp.MustCompile(`^\s*SCAN (?:TABLE )?(\S+)(.*)$`)
 )
 
@@ -202,15 +201,6 @@ func planFindings(target, plan string) []explainFinding {
 					out = append(out, explainFinding{"warning", "Large sort", "Sorts about " + m[1] + " rows; an index matching the ORDER BY avoids the sort."})
 				}
 			}
-		}
-		for _, l := range lines {
-			if strings.HasPrefix(strings.TrimSpace(l), "--") || strings.TrimSpace(l) == "" {
-				continue
-			}
-			if m := pgTotalCost.FindStringSubmatch(l); m != nil {
-				out = append(out, explainFinding{"info", "Estimated cost " + m[1], "The planner's estimate for the whole statement, about " + m[2] + " rows returned. Compare it between versions of the query."})
-			}
-			break
 		}
 	case strings.HasPrefix(target, "mysql"):
 		var table string

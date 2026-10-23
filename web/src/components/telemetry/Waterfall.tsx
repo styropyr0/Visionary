@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import type { Result } from "../../lib/api";
 import { formatCount, formatMs, titleCase, toNumber } from "../../lib/format";
 import { N_PLUS_ONE, records } from "../../lib/telemetry";
+import { SqlView } from "./SqlView";
 import "./telemetry.css";
 
 export interface SpanRow {
@@ -251,7 +252,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
                       </>
                     )}
                   </dl>
-                  {s.detail && <pre className="code mono wf-sql">{s.detail}</pre>}
+                  {s.detail && (s.kind === "db" ? <SqlView sql={s.detail} compact /> : <pre className="code mono wf-sql">{s.detail}</pre>)}
                 </div>
               )}
             </Fragment>

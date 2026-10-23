@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import type { ExplainRequest } from "../../lib/insights";
 import { formatLogTime } from "../../lib/time";
 import { RichText } from "../RichText";
+import { PlanView } from "./PlanView";
 
 /** After this long without an SDK picking the request up, say how to enable it. */
 const UNCLAIMED_HINT_MS = 30_000;
@@ -119,7 +120,7 @@ export function QueryPlan({ target, statement }: { target: string; statement: st
         </p>
       )}
 
-      {req?.status === "failed" && <div className="notice error qp-msg">The database could not plan it: {req.error || "unknown error"}</div>}
+      {req?.status === "failed" && <PlanFailure error={req.error || ""} />}
 
       {req?.status === "done" && (
         <>
@@ -140,9 +141,66 @@ export function QueryPlan({ target, statement }: { target: string; statement: st
               ))}
             </ul>
           )}
-          <pre className="code mono wf-sql qp-plan">{req.plan}</pre>
+          <PlanText plan={req.plan || ""} />
         </>
       )}
+    </div>
+  );
+}
+
+/** SDKs start an approximate plan with a "-- Planned with ..." line; it reads better as a note. */
+function PlanText({ plan }: { plan: string }) {
+  const m = /^-- (Planned with [^\n]*)\n/.exec(plan);
+  return (
+    <>
+      {m && (
+        <p className="dim qp-note qp-icon-note">
+          <Info size={13} aria-hidden />
+          <span>{m[1]} The removed values were guessed, so row estimates can differ from real calls.</span>
+        </p>
+      )}
+      <PlanView plan={m ? plan.slice(m[0].length) : plan} />
+    </>
+  );
+}
+
+/**
+ * Why a plan could not be made, in three parts: what happened, what to do,
+ * and the database's own message. SDK messages put the database error last
+ * in parentheses.
+ */
+function PlanFailure({ error }: { error: string }) {
+  const raw = /\((ERROR:[^]*|[^()]*SQLSTATE[^]*)\)\s*$/.exec(error);
+  const reason = (raw ? error.slice(0, raw.index) : error).trim().replace(/,?\s*so it cannot be planned$/, "");
+  const noPlan = /statements have no plan$|^one statement only$|^not a statement$/.test(reason);
+  if (noPlan) {
+    return (
+      <p className="dim qp-msg qp-icon-note">
+        <Info size={13} aria-hidden />
+        <span>{reason.charAt(0).toUpperCase() + reason.slice(1)}: only SELECT, INSERT, UPDATE, DELETE and WITH statements can be planned.</span>
+      </p>
+    );
+  }
+  let title = "The database could not plan this statement";
+  let hint = "Try again after a deploy, or run EXPLAIN on it yourself to see the full error.";
+  if (/values were removed/.test(reason)) {
+    title = "The database could not tell the types of the removed values";
+    hint = "Copy the statement, put a real value in place of each ?, and run EXPLAIN in your database client. Plans from the SDK guess the values, and this statement uses them in a way that cannot be guessed.";
+  } else if (/cut short/.test(reason)) {
+    title = "The stored statement is incomplete";
+    hint = "Statements longer than 10,000 characters are cut when stored. Run EXPLAIN on the full query from your code instead.";
+  } else if (/does not exist/.test(error)) {
+    title = "A table or column in this statement does not exist on that database";
+    hint = "The explaining service may point at a different database or schema than the one that ran the query.";
+  }
+  return (
+    <div className="qp-failed" role="status">
+      <AlertTriangle size={14} aria-hidden />
+      <div>
+        <div className="qp-failed-title">{title}</div>
+        <div className="dim">{hint}</div>
+        {(raw || reason) && <div className="qp-failed-raw">{raw ? raw[1] : reason}</div>}
+      </div>
     </div>
   );
 }

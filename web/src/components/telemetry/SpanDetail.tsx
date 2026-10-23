@@ -9,6 +9,7 @@ import { InfoTip } from "../InfoTip";
 import { CopyButton, Drawer } from "../Modal";
 import { VizView } from "../VizView";
 import { QueryPlan } from "./QueryPlan";
+import { SqlView } from "./SqlView";
 import { KIND_COLOR } from "./Waterfall";
 import "./telemetry.css";
 
@@ -218,7 +219,13 @@ function Variants({ result, isDB, openFirst }: { result: Result; isDB: boolean; 
               }
             >
               {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              <span className="mono sd-variant-text">{String(r.detail) || "(no detail)"}</span>
+              {isOpen && isDB ? (
+                <span className="sd-variant-label">{rows.length > 1 ? `Statement ${i + 1} of ${rows.length}` : "This statement"}</span>
+              ) : (
+                <span className="mono sd-variant-text" title={String(r.detail)}>
+                  {String(r.detail) || "(no detail)"}
+                </span>
+              )}
               <span className="sd-variant-stats">
                 <span>{formatCount(toNumber(r.calls) ?? 0)}×</span>
                 <span>p95 {ms(r.p95)}</span>
@@ -237,11 +244,13 @@ function Variants({ result, isDB, openFirst }: { result: Result; isDB: boolean; 
                   avg {ms(r.avg_ms)} · max {ms(r.max_ms)}
                   {isDB && r.avg_rows != null && <> · {formatCount(toNumber(r.avg_rows) ?? 0)} rows avg</>}
                   {r.target ? <> · {String(r.target)}</> : null}
-                  <span style={{ marginLeft: "auto" }}>
-                    <CopyButton text={String(r.detail)} />
-                  </span>
+                  {!isDB && (
+                    <span style={{ marginLeft: "auto" }}>
+                      <CopyButton text={String(r.detail)} />
+                    </span>
+                  )}
                 </div>
-                <pre className="code mono wf-sql">{String(r.detail)}</pre>
+                {isDB ? <SqlView sql={String(r.detail)} /> : <pre className="code mono wf-sql">{String(r.detail)}</pre>}
                 {isDB && r.detail && r.target ? <QueryPlan target={String(r.target)} statement={String(r.detail)} /> : null}
               </div>
             )}
