@@ -181,6 +181,43 @@ val, err := rdb.Get(ctx, key).Result()
 end(err)
 ```
 
+With go-redis, one hook covers every command and pipeline. Name spans by
+command only, so keys never reach the database, and don't count a miss as an
+error:
+
+```go
+type visionaryHook struct{}
+
+func (visionaryHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (visionaryHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		end := visionary.StartSpan(ctx, visionary.KindCache, strings.ToUpper(cmd.Name()))
+		err := next(ctx, cmd)
+		if errors.Is(err, redis.Nil) {
+			end(nil) // a cache miss is an answer, not a failure
+		} else {
+			end(err)
+		}
+		return err
+	}
+}
+
+func (visionaryHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		end := visionary.StartSpan(ctx, visionary.KindCache, "PIPELINE")
+		err := next(ctx, cmds)
+		end(err)
+		return err
+	}
+}
+
+rdb.AddHook(visionaryHook{}) // after any startup PING, so it isn't recorded
+```
+
+Calls through a Redis client show as **Cache** in the request's breakdown
+only when they get the request's `ctx`, like every other call.
+
 **Your own CPU work** (bcrypt, image resizing, rendering a report) takes no
 call, so it stays untracked unless you name it:
 

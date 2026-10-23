@@ -72,9 +72,14 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   likely caused it. A weekly digest is optional.
 - **Explore:** ask a question, get an answer with charts. **Dashboards**
   arrange any panel on a grid, with variables, share links and a TV mode.
-- **Team:** viewer, editor and admin roles from your own auth, API keys, and an
+- **Team:** viewer, editor and admin roles, from a login per person kept by
+  Visionary, a team password, or your own API's sign-in; API keys and an
   audit log. Admins choose which pages the sidebar shows (Settings → Pages)
   and whether services take CPU profiles (Settings → Profiling).
+- **Set up in the dashboard:** besides the database connection, everything
+  (sign-in, the AI analyst, email, ingest keys, limits, detectors) is in
+  Settings and applies without a redeploy. A page with nothing connected yet
+  shows how to connect it.
 - **Help on every page:** the Help button explains what the page shows, how
   to read it and the code or settings that fill it, per language.
 
