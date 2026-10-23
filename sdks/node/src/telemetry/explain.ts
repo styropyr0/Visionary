@@ -19,6 +19,7 @@ export interface Explainer {
 }
 
 const NULL_NOTE = "-- Planned with values set to NULL, so it is approximate.\n";
+const NUMBER_NOTE = "-- Planned with values used in arithmetic set to 1, so it is approximate.\n";
 
 /** One statement EXPLAIN can plan; anything else is refused. */
 export function explainable(statement: string): string {
@@ -45,6 +46,26 @@ export function numbered(s: string): string {
   let next = 0;
   for (const m of s.matchAll(/\$(\d+)/g)) next = Math.max(next, Number(m[1]));
   return s.replace(/\?/g, () => "$" + ++next);
+}
+
+// A removed value is a number when arithmetic, a CASE branch, LIMIT, BETWEEN
+// or a numeric function's first argument surrounds it.
+const NUMBER_BEFORE = /(?:[-+*/%]|\b(?:THEN|ELSE|LIMIT|OFFSET|BETWEEN)|\b(?:chr|least|greatest|round|power|mod|abs)\(|\bBETWEEN\s+\S+\s+AND)\s*$/i;
+const NUMBER_AFTER = /^\s*[-+*/%]/;
+
+/**
+ * numbered, except that a ? that can only be a number becomes 1: PostgreSQL
+ * cannot choose an operator for -$1 or $1 * x when nothing says $1 is a
+ * number. 1, not 0, so chr(?) and x / ? stay valid.
+ */
+export function numbersGuessed(s: string): string {
+  const parts = s.split("?");
+  let out = "";
+  parts.forEach((p, i) => {
+    out += p;
+    if (i < parts.length - 1) out += NUMBER_BEFORE.test(out) || NUMBER_AFTER.test(parts[i + 1]) ? "1" : "?";
+  });
+  return numbered(out);
 }
 
 function withNulls(s: string): string {
@@ -81,16 +102,23 @@ export function explainWith(db: any, opts: { target?: string } = {}): Explainer 
       // A generic plan with every removed value as a parameter; then one
       // keeping the application's own $n (real types) with removed values as
       // NULL, for parameters whose type cannot be guessed (GREATEST(?, 0.5));
-      // then, before PostgreSQL 16, a plan with NULLs.
+      // then the generic plan with values that can only be numbers set to 1,
+      // for arithmetic on them (-?, ? * x); then, before PostgreSQL 16, a plan
+      // with NULLs.
       let first: unknown;
       try {
         return (await lines("EXPLAIN (GENERIC_PLAN) " + numbered(stmt))).join("\n");
       } catch (e) {
         first = e;
       }
-      for (const q of ["EXPLAIN (GENERIC_PLAN) " + stmt.replace(/\?/g, "NULL"), "EXPLAIN " + withNulls(stmt)]) {
+      const tries: [string, string][] = [
+        [NULL_NOTE, "EXPLAIN (GENERIC_PLAN) " + stmt.replace(/\?/g, "NULL")],
+        [NUMBER_NOTE, "EXPLAIN (GENERIC_PLAN) " + numbersGuessed(stmt)],
+        [NULL_NOTE, "EXPLAIN " + withNulls(stmt)],
+      ];
+      for (const [note, q] of tries) {
         try {
-          return NULL_NOTE + (await lines(q)).join("\n");
+          return note + (await lines(q)).join("\n");
         } catch {
           // the next way
         }
@@ -106,7 +134,7 @@ function planError(e: unknown): unknown {
   if (msg.includes("end of input")) {
     return new Error(`the stored statement looks cut short (spans keep up to ${MAX_DETAIL} characters; older SDK versions kept 2000), so it cannot be planned`);
   }
-  if (/cannot be matched|could not determine|operator does not exist/.test(msg)) {
+  if (/cannot be matched|could not determine|operator does not exist|is not unique/.test(msg)) {
     return new Error(`the statement's values were removed when it was stored, and the database cannot tell their types here, so it cannot be planned (${msg})`);
   }
   return e;

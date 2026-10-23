@@ -92,12 +92,19 @@ func SQLExplainer(db *sql.DB, d Dialect, target string) *Explainer {
 	}}
 }
 
-const nullNote = "-- Planned with values set to NULL, so it is approximate.\n"
+const (
+	nullNote   = "-- Planned with values set to NULL, so it is approximate.\n"
+	numberNote = "-- Planned with values used in arithmetic set to 1, so it is approximate.\n"
+)
 
 var (
 	firstWord    = regexp.MustCompile(`^\s*\(*\s*([A-Za-z]+)`)
 	dollarParam  = regexp.MustCompile(`\$(\d+)`)
 	typedLiteral = regexp.MustCompile(`(?i)\b(INTERVAL|DATE|TIMESTAMPTZ|TIMESTAMP|TIME)\s+\?`)
+	// A removed value is a number when arithmetic, a CASE branch, LIMIT,
+	// BETWEEN or a numeric function's first argument surrounds it.
+	numberBefore = regexp.MustCompile(`(?i)(?:[-+*/%]|\b(?:THEN|ELSE|LIMIT|OFFSET|BETWEEN)|\b(?:chr|least|greatest|round|power|mod|abs)\(|\bBETWEEN\s+\S+\s+AND)\s*$`)
+	numberAfter  = regexp.MustCompile(`^\s*[-+*/%]`)
 )
 
 // typedConstants stand in for a typed literal's removed value: INTERVAL '30
@@ -147,6 +154,24 @@ func numbered(s string) string {
 	return b.String()
 }
 
+// numbersGuessed is numbered, except that a ? that can only be a number
+// becomes 1: PostgreSQL cannot choose an operator for -$1 or $1 * x when
+// nothing says $1 is a number. 1, not 0, so chr(?) and x / ? stay valid.
+func numbersGuessed(s string) string {
+	parts := strings.Split(s, "?")
+	var b strings.Builder
+	for i, p := range parts[:len(parts)-1] {
+		b.WriteString(p)
+		if numberBefore.MatchString(b.String()) || numberAfter.MatchString(parts[i+1]) {
+			b.WriteString("1")
+		} else {
+			b.WriteString("?")
+		}
+	}
+	b.WriteString(parts[len(parts)-1])
+	return numbered(b.String())
+}
+
 func withNulls(s string) string {
 	return dollarParam.ReplaceAllString(strings.ReplaceAll(s, "?", "NULL"), "NULL")
 }
@@ -154,7 +179,9 @@ func withNulls(s string) string {
 // explainPostgres tries, in order: a generic plan with every removed value as
 // a parameter; a generic plan keeping the application's own $n (which have
 // real types) with removed values as NULL, for when a parameter's type cannot
-// be guessed (GREATEST(?, 0.5)); and, before PostgreSQL 16, a plan with NULLs.
+// be guessed (GREATEST(?, 0.5)); the generic plan again with values that can
+// only be numbers set to 1, for arithmetic on them (-?, ? * x); and, before
+// PostgreSQL 16, a plan with NULLs.
 func explainPostgres(statement string, exec func(string) ([]string, error)) (string, error) {
 	stmt, err := explainable(statement)
 	if err != nil {
@@ -164,9 +191,13 @@ func explainPostgres(statement string, exec func(string) ([]string, error)) (str
 	if first == nil {
 		return strings.Join(lines, "\n"), nil
 	}
-	for _, q := range []string{"EXPLAIN (GENERIC_PLAN) " + strings.ReplaceAll(stmt, "?", "NULL"), "EXPLAIN " + withNulls(stmt)} {
-		if lines, err := exec(q); err == nil {
-			return nullNote + strings.Join(lines, "\n"), nil
+	for _, try := range []struct{ note, q string }{
+		{nullNote, "EXPLAIN (GENERIC_PLAN) " + strings.ReplaceAll(stmt, "?", "NULL")},
+		{numberNote, "EXPLAIN (GENERIC_PLAN) " + numbersGuessed(stmt)},
+		{nullNote, "EXPLAIN " + withNulls(stmt)},
+	} {
+		if lines, err := exec(try.q); err == nil {
+			return try.note + strings.Join(lines, "\n"), nil
 		}
 	}
 	return "", planError(first)
@@ -178,7 +209,7 @@ func planError(err error) error {
 	switch {
 	case strings.Contains(msg, "end of input"):
 		return fmt.Errorf("the stored statement looks cut short (spans keep up to %d characters; older SDK versions kept 2000), so it cannot be planned", maxDetail)
-	case strings.Contains(msg, "cannot be matched"), strings.Contains(msg, "could not determine"), strings.Contains(msg, "operator does not exist"):
+	case strings.Contains(msg, "cannot be matched"), strings.Contains(msg, "could not determine"), strings.Contains(msg, "operator does not exist"), strings.Contains(msg, "is not unique"):
 		return fmt.Errorf("the statement's values were removed when it was stored, and the database cannot tell their types here, so it cannot be planned (%s)", msg)
 	}
 	return err
