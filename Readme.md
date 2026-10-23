@@ -83,71 +83,99 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **Help on every page:** the Help button explains what the page shows, how
   to read it and the code or settings that fill it, per language.
 
-## Integrate in three steps
+## Get started
 
-Each step works on its own; stop wherever the detail is enough. Times are for
-a typical API in one service.
+Four steps, about 15 minutes. You need a database: PostgreSQL, MySQL, a
+SQLite file or Cloudflare D1. Your services write to it and the Visionary
+server reads it.
 
-**1. Requests, errors and the server (about 15 minutes).** Add your
-language's SDK, wrap the router in its middleware and set
-`VISIONARY_DATABASE_URL` (or the [D1 variables](#sdk-settings)). Then
-[run the server](#run-the-server) with the same database and set up sign-in
-in Settings → Sign-in.
+**1. Start the server.** Point it at the database and run it:
 
-- You get every request with route, status, duration, user and redacted
-  bodies; panics and handled errors grouped into issues; CPU, memory, GC and
-  the database pool; Performance, Apdex and SLOs; uptime checks; alerts;
-  security findings.
-- Worth the extra line: attach the signed-in user (`SetUser`), and with a
-  router that has route patterns (chi, Express, Django…) report the pattern,
-  so `/users/42` and `/users/43` count as one route.
+```sh
+docker run -d -p 8090:8090 \
+  -e VISIONARY_DATABASE_URL="postgres://user:pass@host:5432/visionary" \
+  ghcr.io/styropyr0/visionary:latest
+```
 
-**2. Database and outbound calls (another 15–30 minutes).** One line where
-the database pool is created, and the HTTP hook. Each request's breakdown
-then shows its queries and outbound calls on a timeline, and Performance gets
-slowest queries, outbound calls by host and N+1 detection.
+That one variable is all the server needs (for D1, set `D1_ACCOUNT_ID`,
+`D1_DATABASE_ID` and `D1_API_TOKEN` instead). Everything else is set in the
+dashboard.
 
-- The HTTP hook differs by language: Node patches `http` and `fetch` itself;
-  Python needs `visionary.instrument_http()`; Go needs `visionary.Transport`
-  on every `http.Client` you build (or uses `http.DefaultClient`, which is
-  instrumented for you). Search your code for each place a client is made.
+**2. Open http://localhost:8090 and set up sign-in.** You come straight in
+as admin the first time. Go to **Settings → Sign-in**, choose **Accounts**,
+add an account for yourself with the **Admin** role and save. From now on
+everyone signs in. (Prefer one team password, or your own API's login? Pick
+that instead; see [Sign-in and roles](#sign-in-and-roles).)
 
-**3. No blind spots (as long as it takes).** The middleware cannot see what
-it is not handed, so some time inside a request stays **Untracked**: calls
-made by vendor SDKs that build their own HTTP client (AWS S3 or R2, OpenAI,
-Stripe, Firebase), calls made without the request's context, Redis and queue
-clients, and your own CPU work. Each is a small code change, listed in
-[What the middleware sees](#what-the-middleware-sees-and-what-needs-code),
-with copy-paste examples in each SDK's README.
+**3. Add the SDK to your service.** Install it, add its middleware, and give
+it the same database:
 
-**Check your coverage.** Open Performance → Slowest requests and open a slow
-request:
+| Language | Install | Then |
+|---|---|---|
+| Go | `go get github.com/styropyr0/visionary/sdks/go` | wrap your router, see below |
+| Node | `npm install visionary-sdk` | `app.use(visionary.express())` |
+| Python | `pip install visionary-sdk` | Django, FastAPI or Flask middleware |
+| Ruby | `gem "visionary-sdk"` | Rails picks it up by itself |
+| Java | `io.github.styropyr0:visionary-spring-boot-starter` | Spring Boot configures itself |
+| .NET | `dotnet add package Visionary.AspNetCore` | `app.UseVisionary()` |
 
-- *Untracked* above a few percent: the hatched row sits where the time went
-  ("1.2 s after `SELECT attributed`"); the code that runs next makes a call
-  the SDK cannot see. Hook its client or wrap it in a custom span.
-- *Database* or *Outbound HTTP* missing from Calls: that hook is not
-  installed (the totals are empty, not zero).
-- An outbound call you know happens is missing: it was made without the
-  request's context, or through a client without the hook.
+Each SDK's README (in [`sdks/`](sdks)) has a copy-paste quickstart. In Go:
 
-**Things that trip people up**
+```go
+agent, _ := visionary.New(visionary.FromEnv())
+agent.Start(ctx)
+defer agent.Close(context.Background())
 
-- **Your own rate limiting.** A load test from one machine mostly measures
-  your rate limiter: requests rejected with 429 crowd out the rest. Test from
-  several addresses, or raise the limit while testing.
-- **Traffic spikes on SQLite or D1.** The SDK writes in the background and
-  never slows a request; when writes cannot keep up it drops rows and logs
-  `visionary: queue full; rows dropped`. For thousands of requests a second,
-  use PostgreSQL or MySQL.
-- **`.env` comments.** Lines must start with `#`. A line starting with `;`
-  makes the whole file unreadable, and the server starts as if no settings
-  were given ("set VISIONARY_DATABASE_URL ...").
-- **Work a request leaves running** (a goroutine, thread or task that sends
-  an email after the response) stays linked to the request as long as it
-  carries the request's context. Start it with the SDK's background helper
-  (`visionary.Go`, `visionary.background`, ...) and the request's breakdown
-  shows it by name, with its calls and when it finished after the response.
+http.ListenAndServe(":8080", agent.Middleware(mux))
+```
+
+Then set two variables on the service and deploy it:
+
+```sh
+VISIONARY_DATABASE_URL=postgres://user:pass@host:5432/visionary   # the same database
+VISIONARY_SERVICE=my-api                                          # any name you like
+```
+
+**4. Send a request.** It shows up on the API overview within a few seconds,
+with its route, status, time, user and any error. That's the integration.
+
+### Get more out of it
+
+Each of these is optional and takes a line or two. Your SDK's README shows
+the exact code.
+
+- **See each request's database queries and outbound calls** on a timeline:
+  add the database hook where you create your pool, and the HTTP hook on your
+  HTTP clients.
+- **Know who made each request:** set the signed-in user (`SetUser`).
+- **Group `/users/42` and `/users/43` as one route:** report your router's
+  route pattern.
+- **See Redis, queues or slow code of your own:** wrap the call in a span.
+- **See work that keeps running after the response** (emails, uploads):
+  start it with the SDK's background helper, `visionary.Go` in Go.
+- **Get alerts** by email, Slack or Discord: Alerts → Rules.
+- **Track a frontend or a mobile app:** add the browser or mobile SDK
+  (Frontend shows how).
+- **Watch a whole machine or its containers:** install the
+  [host agent](#host-agent).
+- **Ask questions in plain words:** add an OpenAI key in Settings → Server.
+
+To check nothing is missing, open **Performance → Slowest requests** and open
+one. Time no call accounts for shows as *Untracked*, placed right where it
+happened; [What the middleware sees](#what-the-middleware-sees-and-what-needs-code)
+lists what fills each gap.
+
+### Good to know
+
+- **Load testing from one machine** mostly hits your own rate limiter (429s).
+  Test from several addresses, or raise the limit while testing.
+- **SQLite and D1** suit modest traffic. The SDK never slows a request; if
+  writes can't keep up it drops rows and logs `visionary: queue full`. For
+  thousands of requests a second, use PostgreSQL or MySQL.
+- **`.env` files:** comment lines start with `#`. A line starting with `;`
+  stops the whole file from loading.
+- **Locked out of the dashboard?** Restart the server with
+  `VISIONARY_ENABLE_AUTH=false`, fix sign-in in Settings, then remove it.
 
 ## Collect
 
@@ -255,7 +283,8 @@ dashboard says why.
 
 ### SDK settings
 
-Every server SDK reads the same variables.
+Every server SDK reads the same variables. Only the first two matter to get
+going; the rest have sensible defaults.
 
 | Variable | Default | |
 |---|---|---|
@@ -390,7 +419,7 @@ rate limited like OTLP (Settings → Server → Ingest, 50 per second).
 ## Run the server
 
 ```sh
-docker run -d -p 8090:8090 --env-file .env ghcr.io/<owner>/visionary:latest
+docker run -d -p 8090:8090 --env-file .env ghcr.io/styropyr0/visionary:latest
 ```
 
 Or locally: `cd web && npm ci && npm run build && cd .. && go run ./cmd/visionary`.
