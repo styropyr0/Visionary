@@ -6,9 +6,9 @@ import (
 )
 
 // sanitizeSQL makes a statement safe to store and stable to group by:
-// string and numeric literals become ?, IN lists collapse to IN (?), and
-// whitespace runs become one space. Placeholders ($1, ?) and quoted
-// identifiers are kept as written.
+// string and numeric literals become ?, IN lists collapse to IN (?),
+// comments are dropped and whitespace runs become one space. Placeholders
+// ($1, ?) and quoted identifiers are kept as written.
 func sanitizeSQL(q string) string {
 	var b strings.Builder
 	b.Grow(len(q))
@@ -28,6 +28,24 @@ func sanitizeSQL(q string) string {
 		case c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f':
 			space = true
 			i++
+		// Comments are dropped: once lines are joined, a -- comment would
+		// swallow the rest of the statement, and a quote inside one would
+		// start a literal that never ends.
+		case c == '-' && i+1 < len(q) && q[i+1] == '-':
+			j := strings.IndexByte(q[i:], '\n')
+			if j < 0 {
+				j = len(q) - i
+			}
+			space = true
+			i += j
+		case c == '/' && i+1 < len(q) && q[i+1] == '*':
+			j := strings.Index(q[i+2:], "*/")
+			if j < 0 {
+				i = len(q)
+			} else {
+				i += j + 4
+			}
+			space = true
 		case c == '\'':
 			// A string literal; '' inside is an escaped quote.
 			j := i + 1

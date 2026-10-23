@@ -23,7 +23,7 @@ from typing import Any, List, Optional
 from . import _context
 
 KINDS = ("db", "http", "cache", "queue", "custom", "graphql", "background")
-DETAIL_MAX = 8000
+DETAIL_MAX = 10000
 ERROR_MAX = 500
 
 # The agent spans and errors go to: the last one started. Set by Agent.start().

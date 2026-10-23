@@ -47,7 +47,7 @@ type entry struct {
 	ResponseSize        int64
 
 	// Totals is nil when span capture is off; Spans are the rows to store
-	// with the request (none when it was fast and succeeded).
+	// with the request, at most SpanMax of them.
 	Totals *spanTotals
 	Spans  []*spanRecord
 }

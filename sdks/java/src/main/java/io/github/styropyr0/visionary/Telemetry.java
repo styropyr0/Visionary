@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 final class Telemetry {
 
     /** Long enough that a statement can still be planned with EXPLAIN. */
-    static final int MAX_DETAIL = 8000;
+    static final int MAX_DETAIL = 10000;
     private static volatile Telemetry active;
 
     final boolean spans;

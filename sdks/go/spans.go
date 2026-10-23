@@ -10,7 +10,7 @@ import (
 
 // maxDetail caps a span's detail (a statement, a URL, a GraphQL document):
 // long enough that the statement can still be planned with EXPLAIN.
-const maxDetail = 8000
+const maxDetail = 10000
 
 // Span kinds, for StartSpan.
 const (

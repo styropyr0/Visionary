@@ -5,7 +5,7 @@ import { formatTs, msBetween, round } from "../util.js";
 
 /** A span's detail (a statement, a URL, a GraphQL document) is cut here: long
  * enough that the statement can still be planned with EXPLAIN. */
-export const MAX_DETAIL = 8000;
+export const MAX_DETAIL = 10000;
 
 export type SpanKind = "db" | "http" | "cache" | "queue" | "custom" | "graphql" | "background";
 
