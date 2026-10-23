@@ -43,55 +43,101 @@ export interface PageHelp {
   setup: string[];
 }
 
+/** This server's address, for snippets that post to it. */
+const origin = typeof location === "undefined" ? "https://visionary.example.com" : location.origin;
+
 export const TOPICS: Record<string, SetupTopic> = {
   sdk: {
     id: "sdk",
-    title: "Add the SDK",
+    title: "1. Add the SDK to your service",
     intro:
-      "The SDK's middleware records every request (route, status, duration, user, bodies, errors) and samples the process every few seconds. It writes straight to the database this server reads, in the background, so it never slows a request. Set `VISIONARY_DATABASE_URL` and `VISIONARY_SERVICE` in the service's environment.",
+      "Install the package and add its middleware before your routes. The middleware records every request (route, status, duration, user, bodies, errors) and samples the process every few seconds. It writes straight to the database in the background, so it never slows a request, and a database that is down never breaks one.",
     langs: {
       go: {
-        code: `import visionary "github.com/styropyr0/visionary/sdks/go"
+        note: "Install: `go get github.com/styropyr0/visionary/sdks/go`, plus the driver for your database URL (`github.com/jackc/pgx/v5`, `github.com/go-sql-driver/mysql` or `modernc.org/sqlite`; D1 needs none).",
+        code: `import (
+	_ "github.com/jackc/pgx/v5/stdlib" // the driver for your database URL
+	visionary "github.com/styropyr0/visionary/sdks/go"
+)
 
-agent, _ := visionary.New(visionary.FromEnv()) // nil agent = collection off
+agent, err := visionary.New(visionary.FromEnv())
+if err != nil {
+	log.Print(err) // collection is off; a nil agent is a no-op
+}
 agent.Start(ctx)
 defer agent.Close(context.Background())
 
 http.ListenAndServe(":8080", agent.Middleware(mux))`,
       },
       node: {
+        note: "Install: `npm install visionary-sdk`, plus `pg`, `mysql2` or `better-sqlite3` for your database (D1 needs none). Express, Fastify, Koa and NestJS are supported.",
         code: `import visionary from "visionary-sdk";
 
-visionary.init();
-app.use(visionary.express());          // or visionary.fastify(), visionary.koa()
+visionary.init();                       // reads VISIONARY_DATABASE_URL
+app.use(visionary.express());           // or visionary.fastify(), visionary.koa()
 // ... routes ...
 app.use(visionary.expressErrorHandler());`,
       },
       python: {
-        code: `# Django settings.py, first in MIDDLEWARE
+        note: "Install: `pip install \"visionary-sdk[postgres]\"` (or `[mysql]`; plain `visionary-sdk` for SQLite and D1). Add `[system]` for host CPU and memory on macOS and Windows.",
+        code: `# Django: settings.py, first in MIDDLEWARE
 "visionary.integrations.django.VisionaryMiddleware",
 
 # FastAPI / Starlette
+from visionary.integrations.asgi import VisionaryASGIMiddleware
 app.add_middleware(VisionaryASGIMiddleware)
 
 # Flask
+from visionary.integrations.flask import Visionary
 Visionary(app)`,
       },
-      ruby: { note: "Rails loads it from the Gemfile on its own. Other Rack apps add the middleware first in `config.ru`.", code: `# Gemfile
+      ruby: {
+        note: "Add the gem and run `bundle install`. The app needs its database's driver (`pg`, `mysql2` or `sqlite3`). Rails loads the middleware on its own; other Rack apps (Sinatra, Hanami, Roda, Grape) add it first in `config.ru`.",
+        code: `# Gemfile
 gem "visionary-sdk", require: "visionary"
 
 # config.ru (not Rails)
-use Visionary::Middleware` },
-      java: { note: "The Spring Boot starter configures itself; add the JDBC driver for your database too.", code: `<dependency>
+require "visionary"
+use Visionary::Middleware
+run MyApp`,
+      },
+      java: {
+        note: "Spring Boot 3 and Java 17+. Add the starter (Maven below; Gradle: `implementation(\"io.github.styropyr0:visionary-spring-boot-starter:0.7.1\")`) and the JDBC driver for your database. It configures itself: no code needed.",
+        code: `<dependency>
   <groupId>io.github.styropyr0</groupId>
   <artifactId>visionary-spring-boot-starter</artifactId>
-  <version>0.4.0</version>
-</dependency>` },
+  <version>0.7.1</version>
+</dependency>`,
+      },
       dotnet: {
-        code: `builder.Services.AddVisionary();
+        note: "Install: `dotnet add package Visionary.AspNetCore` (.NET 8+). Npgsql, MySqlConnector and EF Core are picked up on their own.",
+        code: `using Styropyr0.Visionary;
+
+builder.Services.AddVisionary();
 var app = builder.Build();
 app.UseVisionary(); // first, before exception handlers, auth and routing`,
       },
+    },
+  },
+  connect: {
+    id: "connect",
+    title: "2. Point it at the same database",
+    intro:
+      "Server SDKs never call this server: they write to a database, and this server reads the same one. So give the service the exact database this Visionary server uses, and a name. A different database, schema or file means nothing shows up here. Browser and mobile apps, OpenTelemetry and the host agent are different: they post to this server over HTTPS with a key.",
+    any: {
+      label: "Service environment",
+      note: "One of `postgres://`, `mysql://` or `sqlite:///path/to/file.db` (on Windows `sqlite:///C:/path/file.db`; SQLite only works when the service and this server share the file). For Cloudflare D1, leave the URL out and set `D1_ACCOUNT_ID`, `D1_DATABASE_ID` and `D1_API_TOKEN` to the same D1 database. In a `.env` file, comments start with `#`; a line starting with `;` stops the whole file from loading.",
+      code: `VISIONARY_DATABASE_URL=postgres://user:pass@host:5432/visionary   # the same database as this server
+VISIONARY_SERVICE=my-api                                          # any name; tells services apart`,
+    },
+  },
+  verify: {
+    id: "verify",
+    title: "3. Check that data arrives",
+    intro:
+      "Deploy or restart the service and send it one request. It shows up on the API overview and in Request logs within a few seconds, and the service appears in the service picker. Open Performance → Slowest requests and open one: time no call accounts for shows as Untracked, which points at a database or HTTP client that still needs its hook.",
+    any: {
+      note: "Nothing yet? Look at the service's log. `no database configured … collection is off` means `VISIONARY_DATABASE_URL` (or the `D1_*` variables) is not set in that process. A connection error means the URL is wrong or unreachable from there. No message and still no data: check the service writes to the same database (and schema, or SQLite file) this server reads. `visionary: queue full` means the database can't keep up; SQLite and D1 suit modest traffic, PostgreSQL and MySQL the rest.",
     },
   },
   user: {
@@ -240,11 +286,19 @@ await visionary.graphqlOperation("query", operationName, source, () => execute(a
     id: "explain",
     title: "Allow query plans",
     intro:
-      "Visionary never connects to your database. When you ask for a plan, it queues the request and your SDK runs `EXPLAIN` (never `EXPLAIN ANALYZE`, so nothing is executed) and sends the plan back within about 10 seconds. `VISIONARY_EXPLAIN=false` turns it off without a code change.",
+      "Visionary never connects to your database. When you ask for a plan, it queues the request and a service that was given an explainer for that database runs `EXPLAIN` (never `EXPLAIN ANALYZE`, so nothing is executed) and sends the plan back within about 10 seconds. The explainer's target must match the statement's target exactly, as shown on the statement: `postgresql/<dbname>` or `mysql/<dbname>`. If the plan stays pending, no running service has an explainer with that target. Go and Node have explainers; `VISIONARY_EXPLAIN=false` turns them off without a code change.",
     langs: {
-      go: { code: `cfg.Explain = []*visionary.Explainer{visionary.PgxExplainer(pool)}
-// database/sql: visionary.SQLExplainer(db, visionary.MySQL, "mysql/shop")` },
-      node: { code: `visionary.init({ explain: [visionary.explainWith(pool)] }); // pg or mysql2` },
+      go: {
+        note: "Build the config, add the explainer, then create the agent. `PgxExplainer` takes its target from the pool's database name.",
+        code: `cfg := visionary.FromEnv()
+cfg.Explain = []*visionary.Explainer{visionary.PgxExplainer(pool)} // target postgresql/<dbname>
+// database/sql: visionary.SQLExplainer(db, visionary.MySQL, "mysql/shop")
+agent, err := visionary.New(cfg)`,
+      },
+      node: {
+        note: "The target is worked out from the pool's database; pass `{ target: \"postgresql/shop\" }` when it differs from the statement's.",
+        code: `visionary.init({ explain: [visionary.explainWith(pool)] }); // pg or mysql2`,
+      },
     },
   },
   profile: {
@@ -265,25 +319,100 @@ await visionary.graphqlOperation("query", operationName, source, () => execute(a
     id: "statuspage",
     title: "Publish a status page",
     intro:
-      "A public page at /status (and /status.json) shows the checks you mark Show on the public status page, with their uptime and incidents; their URLs only when you tick that too. An admin turns it on and sets its title in Settings → Status page.",
+      "A public page at /status (and /status.json) shows the checks you mark Show on the public status page, with their uptime and incidents; their URLs only when you tick that too.",
+    any: { note: "An admin turns it on and sets its title in Settings → Status page. Then open an uptime check and tick Show on the public status page." },
   },
   agent: {
     id: "agent",
     title: "Install the host agent",
     intro:
-      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports. It posts here with a server ingest key from Settings → API keys.",
+      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports. It runs as a systemd service and posts here over HTTPS with a Server ingest key from Settings → API keys; it never needs database credentials. The machine shows up in System within a minute, and its containers in Containers.",
     any: { code: `curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \\
-  | sudo VISIONARY_URL=${typeof location === "undefined" ? "https://visionary.example.com" : location.origin} VISIONARY_KEY=<server key> sh` },
+  | sudo VISIONARY_URL=${origin} VISIONARY_KEY=<server key> sh` },
   },
-  client: {
-    id: "client",
-    title: "Add the browser or mobile SDK",
+  clientkey: {
+    id: "clientkey",
+    title: "1. Create a client key",
     intro:
-      "Web and mobile apps post to this server with a public client key (Settings → API keys, or the client keys in Settings → Server → Ingest). Browsers must also be allowed in Allowed web origins there, when it is set. The Android and iOS SDKs are in the repository's `sdks` folder.",
-    any: { code: `<script src="https://unpkg.com/visionary-browser/dist/visionary.min.js"></script>
-<script>
-  Visionary.init({ endpoint: "${typeof location === "undefined" ? "https://visionary.example.com" : location.origin}", key: "pk_…", app_version: "1.0.0" });
-</script>` },
+      "Web and mobile apps don't write to the database; they post to this server with a public client key. Client keys can only send events, so they are safe to ship in an app.",
+    any: { note: "Create one with the Client ingest scope in Settings → API keys (or list your own under Settings → Server → Ingest → Client keys). For a website, also add its origin to Settings → Server → Ingest → Allowed web origins, which applies after a restart (wildcards like `https://*.example.com` work; empty allows any)." },
+  },
+  browser: {
+    id: "browser",
+    title: "2. Add the browser SDK",
+    intro:
+      "Run `npm install visionary-browser` and call `init` once, early, with this server's URL and the client key. A script tag works too: load `https://unpkg.com/visionary-browser@0.1.0/dist/visionary.min.js` and call `Visionary.init` with the same options. Page loads, Web Vitals, route changes, API calls and errors show up on Frontend within a few seconds of the first visit.",
+    any: {
+      label: "JavaScript",
+      code: `import Visionary from "visionary-browser";
+
+Visionary.init({
+  endpoint: "${origin}",
+  key: "pk_…",            // the client key
+  app_version: "1.0.0",
+});
+Visionary.setUser(user.id); // optional`,
+    },
+  },
+  ios: {
+    id: "ios",
+    title: "2. Add the iOS SDK",
+    intro:
+      "Swift Package Manager, iOS 14+: in Xcode, File → Add Package Dependencies, enter `https://github.com/styropyr0/Visionary.git` and add the `Visionary` library to your app target. Start it first thing at launch. Screens, API calls, errors and crashes show up on Frontend.",
+    any: {
+      label: "Swift",
+      code: `import Visionary
+
+Visionary.start(config: VisionaryConfig(
+    endpoint: URL(string: "${origin}")!,
+    key: "pk_…"
+))`,
+    },
+  },
+  android: {
+    id: "android",
+    title: "2. Add the Android SDK",
+    intro:
+      "minSdk 24. Add `implementation(\"io.github.styropyr0:visionary-android:0.7.1\")` from Maven Central and start it in your `Application`. For API timings, add `VisionaryInterceptor` to your OkHttp client. Screens, API calls, errors and crashes show up on Frontend.",
+    any: {
+      label: "Kotlin",
+      code: `class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Visionary.init(this, VisionaryConfig(
+            endpoint = "${origin}",
+            key = "pk_…",
+        ))
+    }
+}`,
+    },
+  },
+  otlp: {
+    id: "otlp",
+    title: "Or send OpenTelemetry",
+    intro:
+      "A service that already has an OpenTelemetry SDK can report here without a Visionary SDK. Point its OTLP/HTTP exporter at this server with a Server ingest key from Settings → API keys. Traces become requests and calls, exceptions become errors, metrics fill System. gRPC is not served; use the HTTP exporter. Whether spans and errors are kept, and how many, is set in Settings → Server → Ingest.",
+    any: {
+      label: "Service environment",
+      code: `OTEL_EXPORTER_OTLP_ENDPOINT=${origin}
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer <server key>"
+OTEL_SERVICE_NAME=my-api`,
+    },
+  },
+  analyst: {
+    id: "analyst",
+    title: "Turn on the analyst",
+    intro:
+      "Explore and Ask need a model. Query results are sent to the model provider; IPs, user agents, headers and bodies are masked first.",
+    any: { note: "An admin adds an OpenAI API key in Settings → Server → AI analyst. Any OpenAI-compatible API works: set its API base URL and model there too. Product name and Notes about your data help the answers." },
+  },
+  email: {
+    id: "email",
+    title: "Send alerts",
+    intro:
+      "A rule watches a metric or a query and notifies its channels. Slack, Discord and webhooks need only their URL, added as a channel under Alerts.",
+    any: { note: "Email needs an SMTP server: an admin fills in host, port, user, password and from address in Settings → Server → Email. Then add a rule, or start from a preset, and pick the channels it notifies." },
   },
 };
 
@@ -297,7 +426,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Deploy marks on the charts show when a new version started, so a step in a line can be matched to a release.",
       "Click a route or a user to open their requests in Request logs.",
     ],
-    setup: ["sdk", "user", "release"],
+    setup: ["sdk", "connect", "verify", "user", "release", "otlp"],
   },
   performance: {
     title: "Performance",
@@ -353,7 +482,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Waiting for a connection above zero means the pool is too small for the traffic, or queries hold connections too long.",
       "In a container the host charts describe the machine underneath; the container panel shows what the service may use.",
     ],
-    setup: ["sdk", "agent"],
+    setup: ["sdk", "connect", "agent", "otlp"],
   },
   containers: {
     title: "Containers",
@@ -384,7 +513,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Web Vitals are rated good, needs improvement or poor by Google's thresholds, at the 75th percentile.",
       "Slow screens on low-end devices show up in the device breakdown.",
     ],
-    setup: ["client"],
+    setup: ["clientkey", "browser", "ios", "android"],
   },
   uptime: {
     title: "Uptime",
@@ -414,7 +543,7 @@ export const HELP: Record<Route, PageHelp> = {
       "The analyst only reads; it cannot change your data.",
       "Check the SQL it wrote when a number looks off, and refine the question.",
     ],
-    setup: [],
+    setup: ["analyst"],
   },
   logs: {
     title: "Request logs",
@@ -448,7 +577,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Each firing is kept in history with the value that triggered it.",
       "Email needs an SMTP server in Settings → Server → Email.",
     ],
-    setup: [],
+    setup: ["email"],
   },
   settings: {
     title: "Settings",
@@ -459,8 +588,9 @@ export const HELP: Record<Route, PageHelp> = {
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
       "Hidden pages stay reachable by their link; Settings always shows.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
+      "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
-    setup: [],
+    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email"],
   },
 
 };

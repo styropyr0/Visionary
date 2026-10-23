@@ -40,10 +40,9 @@ OTEL_RESOURCE_ATTRIBUTES="service.version=1.4.2,service.instance.id=checkout-1"
 - OTLP/gRPC is not served; use the HTTP exporters.
 
 Settings → Server → Ingest sets, for OTLP data, whether spans and errors are
-kept, the span threshold outside requests and the spans kept per request (the
-server-side `VISIONARY_SPANS`, `VISIONARY_SPAN_THRESHOLD_MS`,
-`VISIONARY_SPAN_MAX` and `VISIONARY_ERRORS`, see `sdks/SPEC.md`), and the
-export rate limit (per second, default 50). They apply after a restart.
+kept, the span threshold outside requests (default 100 ms) and the spans kept
+per request (default 100), and the export rate limit (per second, default 50).
+They apply after a restart.
 
 ## Mapping
 
@@ -79,7 +78,7 @@ parent) of `INTERNAL`/unspecified kind with `http.request.method` or
 | `request_content_type`, `response_content_type` | `http.request.header.content-type`, `http.response.header.content-type` |
 | `request_size`, `response_size` | `http.request.body.size` / `http.request_content_length`; `http.response.body.size` / `http.response_content_length`; else 0 |
 | `service`, `version` | resource |
-| `db_count`, `db_ms`, `http_count`, `http_ms` | the request's `db` and `http` spans (below), counted and summed; 0 when there were none, NULL with `VISIONARY_SPANS=false` |
+| `db_count`, `db_ms`, `http_count`, `http_ms` | the request's `db` and `http` spans (below), counted and summed; 0 when there were none, NULL when *Keep OpenTelemetry spans* is off |
 
 Bodies, `error_code` and `error_key` are not part of OpenTelemetry and stay
 NULL.
@@ -98,9 +97,9 @@ NULL.
 `db.response.returned_rows` / `db.rows_affected`. Span rows link to their
 request's `request_id` with `offset_ms` from the request start, and follow the
 contract's rules per request: stored for every request, at most
-`VISIONARY_SPAN_MAX` in start order, while the totals count every call. Spans
+*Spans kept per request* in start order, while the totals count every call. Spans
 outside any request are stored when they themselves take at least
-`VISIONARY_SPAN_THRESHOLD_MS`, with `request_id` NULL.
+*Span threshold outside requests*, with `request_id` NULL.
 
 Exporters send spans as they end, so children usually arrive before their
 request span and sometimes in an earlier export. Spans whose request has not

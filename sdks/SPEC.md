@@ -343,7 +343,7 @@ Columns:
 | `kind` | `db`, `http`, `cache`, `queue`, `custom`, `graphql` or `background` |
 | `name` | short and low-cardinality, used for grouping: `db`: first keyword + main table, e.g. `SELECT users`, `INSERT bookings`, `UPDATE trips`, `BEGIN`; `http`: `METHOD host`, e.g. `POST api.stripe.com`; `graphql`: operation type and name, e.g. `query GetUser`; others: the operation |
 | `target` | `db`: system and database, e.g. `postgresql/voygram`; `http`: host |
-| `detail` | `db`: the statement, sanitized (below); `http`: method and URL without query string; `graphql`: the operation document with literal values removed; at most 8000 characters, so a statement can still be planned with EXPLAIN |
+| `detail` | `db`: the statement, sanitized (below); `http`: method and URL without query string; `graphql`: the operation document with literal values removed; at most 10000 characters, so a statement can still be planned with EXPLAIN |
 | `offset_ms` | start relative to the request start (NULL outside a request) |
 | `duration_ms` | 3 decimals |
 | `status` | `ok` or `error` (`http`: `error` on a transport error or a 5xx response) |
@@ -545,10 +545,11 @@ Visionary server, which writes `client_events`.
 
 `POST /api/ingest/client`, `Content-Type: application/json` (or
 `text/plain`, for `navigator.sendBeacon`). The key is a public client key
-(`VISIONARY_CLIENT_KEYS` on the server, or a key created in Settings), sent as
+(a client key created in Settings → API keys, or listed under Settings →
+Server → Ingest → Client keys), sent as
 `Authorization: Bearer <key>` or, where headers cannot be set, as `?key=<key>`.
-Browsers are also checked against `VISIONARY_CLIENT_ORIGINS` (comma list; empty
-allows any origin). The server answers `204`, `400` for a bad payload,
+Browsers are also checked against Settings → Server → Ingest → Allowed web
+origins (comma list; empty allows any origin). The server answers `204`, `400` for a bad payload,
 `401` for a bad key, `413` over 64 KB, and `429` when a client sends too much;
 SDKs drop the batch on 4xx and retry once later on 5xx.
 
