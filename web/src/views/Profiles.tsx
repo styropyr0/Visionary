@@ -124,10 +124,11 @@ export function Profiles() {
                   <h3 className="panel-title">{id !== null ? `Profile #${id}` : route ? `While ${route} was busy` : "Every profile in the range"}</h3>
                   <InfoTip text="Each frame is as wide as the CPU samples taken in it and the functions it called; callers above, callees below. Click a frame to zoom in. The table below the graph lists the functions that used the most CPU themselves, which is usually where to look first." />
                   <div className="panel-actions">
-                    {id !== null && (
-                      <button type="button" className="btn" onClick={() => setId(null)}>
+                    {/* One profile goes back to the list it was opened from; a route back to every profile. */}
+                    {(id !== null || route !== "") && (
+                      <button type="button" className="btn" onClick={() => (id !== null ? setId(null) : setRoute(""))}>
                         <ArrowLeft size={14} />
-                        Back to all
+                        {id !== null && route ? "Back to the route" : "Back to all"}
                       </button>
                     )}
                     <Select label="Profiles" value={route} options={options} onChange={(v) => (setRoute(v), setId(null))} maxWidth={360} />
