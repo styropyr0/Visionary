@@ -4,9 +4,11 @@ The Visionary server keeps the switch in ``visionary_settings``. A daemon
 thread reads it at start and every 30 seconds and, while profiling is on,
 samples every thread's Python stack about every 10 ms for
 ``profile.duration_ms`` every ``profile.interval_s``, skipping a turn when no
-request arrived since the last one. Each profile becomes one ``profiles`` row
-of folded stacks plus the milliseconds each route's requests took while it
-ran. ``VISIONARY_PROFILE=false`` ignores the dashboard entirely.
+request arrived since the last one. A scheduled profile is kept when it has
+at least ``MIN_SAMPLES`` samples, a "Profile now" one with any, whether or not
+a request finished while it ran. Each profile becomes one ``profiles`` row of
+folded stacks plus the milliseconds each route's requests took while it ran
+(``{}`` when none finished). ``VISIONARY_PROFILE=false`` ignores the dashboard entirely.
 
 Only threads that are using the CPU are counted. Where the OS has per-thread
 CPU clocks (Linux, and other Unixes with ``pthread_getcpuclockid``) a thread
@@ -37,7 +39,7 @@ from ._entry import format_ts
 
 MAX_FOLDED = 90_000
 KEEP_WHOLE = 72_000  # the heaviest stacks kept whole; the rest roll up (see fold)
-MIN_SAMPLES = 20
+MIN_SAMPLES = 20  # a scheduled profile with fewer is dropped; "Profile now" keeps any
 SETTINGS_POLL_S = 30.0
 NOW_WINDOW_S = 300.0
 DEFAULT_INTERVAL_S = 300.0
@@ -652,7 +654,7 @@ class Profiler:
             self.one_off = False
             self._last_started = tally.started
             self._logger.info("visionary: taking a CPU profile now (asked from the dashboard)")
-            self.capture()
+            self.capture(min_samples=1)
             self._next = time.time() + self.settings.interval_s
         elif self.on and now >= self._next:
             self._next = now + self.settings.interval_s
@@ -664,9 +666,10 @@ class Profiler:
             self._next_purge = time.time() + 24 * 3600
             self._purge()
 
-    def capture(self) -> Optional[Profile]:
-        """Sample for the configured duration and queue the profile, unless
-        it is too thin to be useful."""
+    def capture(self, min_samples: int = MIN_SAMPLES) -> Optional[Profile]:
+        """Sample for the configured duration and queue the profile when it
+        has at least ``min_samples`` samples, whether or not a request
+        finished meanwhile. A profile cut short by close() is dropped."""
         sampler = Sampler(self._namer)
         tally.begin()
         began = time.time()
@@ -685,10 +688,10 @@ class Profiler:
         finally:
             elapsed = (time.perf_counter() - t0) * 1000.0
             busy = tally.end()
-        if self._stop.is_set() or not busy:
+        if self._stop.is_set():
             return None
         folded, samples = sampler.result()
-        if samples < MIN_SAMPLES:
+        if samples < min_samples:
             return None
         routes = {k: max(1, int(round(ms))) for k, ms in busy.items()}
         p = Profile(began, round(elapsed, 3), samples, json.dumps(routes, sort_keys=True), folded)

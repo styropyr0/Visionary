@@ -453,7 +453,10 @@ never profile: the switch for code that must never be sampled.
 
 When enabled it samples the CPU for `duration_ms` every `interval_s`,
 skipping a turn when no request arrived since the last one, and dropping a
-profile during which no request finished or that has fewer than 20 samples.
+profile that has fewer than 20 samples. A profile is kept whether or not a
+request finished during it (`routes` is then `{}`): quiet services and
+background work are profiled too. A "Profile now" profile is kept with any
+samples at all.
 When `profile.now` changes to a value newer than the SDK's start and less
 than 5 minutes old, the SDK takes one profile at once, whether or not
 profiling is enabled (still honouring `profile.services` and

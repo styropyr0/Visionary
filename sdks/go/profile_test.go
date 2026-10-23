@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -356,12 +357,19 @@ func TestFreshNow(t *testing.T) {
 	}
 }
 
-// fakeStore answers the settings query; nothing else is used.
+// fakeStore answers the settings query and keeps what batch writes.
 type fakeStore struct {
 	store
-	data [][]string
-	err  error
+	data    [][]string
+	err     error
+	written []stmt
 }
+
+func (f *fakeStore) batch(_ context.Context, stmts []stmt) error {
+	f.written = append(f.written, stmts...)
+	return nil
+}
+func (f *fakeStore) dialect() Dialect { return SQLite }
 
 func (f *fakeStore) rows(context.Context, string, ...any) ([][]string, error) {
 	return f.data, f.err
@@ -461,6 +469,35 @@ func TestProfilerTally(t *testing.T) {
 	if p.started.Load() != 1 || p.busy["GET /x"] != 2 {
 		t.Fatalf("started %d busy %v", p.started.Load(), p.busy)
 	}
+}
+
+// A profile is kept even when no request finished during it: quiet services
+// and background workers are worth profiling too.
+func TestProfileWithoutRequests(t *testing.T) {
+	st := &fakeStore{}
+	p := newProfiler(identity{service: "api", instance: "i"}, st, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	p.settings.duration = 300 * time.Millisecond
+	// Keep a CPU busy on a goroutine that starts outside the SDK's package,
+	// which foldProfile would leave out.
+	spin := &spinReader{}
+	go io.Copy(io.Discard, spin)
+	p.capture(context.Background(), 1)
+	spin.stop.Store(true)
+	if len(st.written) != 1 {
+		t.Fatalf("want one profile row, got %d", len(st.written))
+	}
+	if routes := st.written[0].args[7]; routes != "{}" {
+		t.Fatalf("routes = %v, want {}", routes)
+	}
+}
+
+type spinReader struct{ stop atomic.Bool }
+
+func (s *spinReader) Read(b []byte) (int, error) {
+	if s.stop.Load() {
+		return 0, io.EOF
+	}
+	return len(b), nil
 }
 
 // Retention is the server's job: FromEnv leaves the SDK's own purge off.

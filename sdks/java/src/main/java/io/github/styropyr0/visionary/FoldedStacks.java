@@ -19,6 +19,7 @@ final class FoldedStacks {
     static final int MAX_BYTES = 90_000;
     /** The heaviest stacks are kept whole up to this many bytes. */
     static final int KEEP_WHOLE = 72_000;
+    /** A scheduled profile with fewer samples is dropped; a "Profile now" one is kept with any. */
     static final int MIN_SAMPLES = 20;
 
     private final Map<String, long[]> lines = new HashMap<>();

@@ -325,9 +325,10 @@ profile: use it for code that must never be sampled.
 While a profile runs, a daemon thread reads every thread's Python stack
 (`sys._current_frames()`) about every 10 ms. It costs a few percent of one CPU
 while it samples and nothing in between, never touches the request path, and
-is skipped when no request arrived since the last profile. A profile during
-which no request finished, or with fewer than 20 samples, is dropped. Each
-profile is one `profiles` row:
+is skipped when no request arrived since the last profile. A scheduled profile
+with fewer than 20 samples is dropped, and kept otherwise even when no request
+finished during it (`routes` is then `{}`); a **Profile now** one is kept with
+any samples. Each profile is one `profiles` row:
 
 - `folded`: one `frame;frame;frame count` line per distinct stack, outermost
   first, heaviest first up to 90 000 bytes (the rest summed into `(other) n`).

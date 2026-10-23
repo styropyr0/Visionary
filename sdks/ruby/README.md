@@ -186,9 +186,10 @@ profile:
 - `routes`: the milliseconds that the requests finishing during the profile
   took, per `METHOD route`.
 
-A turn is skipped when no request arrived since the last one. A profile is
-dropped when no request finished during it, or when it has fewer than 20
-samples (about 200 ms of CPU).
+A turn is skipped when no request arrived since the last one. A scheduled
+profile is dropped when it has fewer than 20 samples (about 200 ms of CPU), and
+kept otherwise even when no request finished during it (`routes` is then
+`{}`). A **Profile now** one is kept with any samples.
 
 **Cost:** nothing while profiling is off apart from the settings read every
 30 s. While a profile runs, the sampler takes some tens of stack walks per

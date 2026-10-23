@@ -16,6 +16,8 @@ export interface ProfilerConfig {
  * rolled up into their callers (see foldLines). */
 const MAX_FOLDED = 90_000;
 const KEEP_WHOLE = 72_000;
+/** A scheduled profile with fewer samples than this is dropped; a "Profile
+ * now" one is kept with any. */
 const MIN_SAMPLES = 20;
 /** How often the dashboard's settings are read again. */
 const POLL_MS = 30_000;
@@ -69,8 +71,8 @@ export function servesProfile(settings: ProfileSettings, service: string): boole
  * Samples the process's CPU now and then, while the dashboard has profiling
  * on (Settings → Profiling) and only while requests are being served: it
  * skips a turn when no request arrived since the last one, and drops a
- * profile during which none finished. "Profile now" in the dashboard takes
- * one at once. Each profile is stored as folded stacks ("frame;frame;frame
+ * profile with fewer than MIN_SAMPLES samples. "Profile now" in the
+ * dashboard takes one at once, kept with any samples at all. Each profile is stored as folded stacks ("frame;frame;frame
  * samples" per line) with the time each route's requests took while it ran.
  */
 export class Profiler {
@@ -129,17 +131,19 @@ export class Profiler {
       this.seenNow = s.now;
       const at = Date.parse(s.now);
       if (at >= this.startedAt && now - at < NOW_FRESH_MS) {
-        await this.capture(s.durationMs);
+        await this.capture(s.durationMs, 1);
         return;
       }
     }
     if (!on || now < this.nextAt) return;
     this.nextAt = now + s.intervalS * 1000;
     if (requestTally.started === this.lastStarted) return;
-    await this.capture(s.durationMs);
+    await this.capture(s.durationMs, MIN_SAMPLES);
   }
 
-  private async capture(durationMs: number): Promise<void> {
+  /** Samples for durationMs and stores the profile when it has at least
+   * minSamples samples, whether or not a request finished meanwhile. */
+  private async capture(durationMs: number, minSamples: number): Promise<void> {
     if (this.running) return;
     this.lastStarted = requestTally.started;
     this.running = true;
@@ -159,7 +163,7 @@ export class Profiler {
       const { folded, samples } = fold(profile);
       const routes: Record<string, number> = {};
       for (const [k, ms] of Object.entries(requestTally.busy ?? {})) routes[k] = Math.max(1, Math.round(ms));
-      if (samples < MIN_SAMPLES || Object.keys(routes).length === 0) return;
+      if (samples < minSamples) return;
       this.push([
         formatTs(started),
         this.cfg.service || null,

@@ -20,7 +20,8 @@ import (
 // on, samples the CPU with runtime/pprof for profile.duration_ms every
 // profile.interval_s, skipping turns when no request arrived. Each profile is
 // one profiles row of folded stacks plus the time each route's requests took
-// while it ran. VISIONARY_PROFILE=false ignores the dashboard entirely.
+// while it ran (empty when none finished: quiet services and workers still
+// get profiles). VISIONARY_PROFILE=false ignores the dashboard entirely.
 
 const (
 	profileMinSamples   = 20
@@ -237,13 +238,13 @@ func (p *profiler) turn(ctx context.Context, now time.Time) {
 	case p.oneOff:
 		p.oneOff = false
 		p.lastStarted = p.started.Load()
-		p.capture(ctx)
+		p.capture(ctx, 1)
 		p.next = time.Now().Add(p.settings.interval)
 	case p.on && !now.Before(p.next):
 		p.next = now.Add(p.settings.interval)
 		if n := p.started.Load(); n != p.lastStarted {
 			p.lastStarted = n
-			p.capture(ctx)
+			p.capture(ctx, profileMinSamples)
 		}
 	}
 	if p.wrote && p.retention > 0 && time.Since(p.lastPurge) > 24*time.Hour {
@@ -253,8 +254,9 @@ func (p *profiler) turn(ctx context.Context, now time.Time) {
 }
 
 // capture samples the CPU for the configured duration and writes the
-// profile, unless it is too thin to be useful.
-func (p *profiler) capture(ctx context.Context) {
+// profile when it has at least minSamples: 1 for "Profile now", which was
+// asked for, profileMinSamples for the schedule.
+func (p *profiler) capture(ctx context.Context, minSamples int) {
 	var buf bytes.Buffer
 	if err := pprof.StartCPUProfile(&buf); err != nil {
 		return // the process already profiles itself
@@ -281,7 +283,7 @@ func (p *profiler) capture(ctx context.Context) {
 	busy := p.busy
 	p.busy = nil
 	p.mu.Unlock()
-	if interrupted || len(busy) == 0 {
+	if interrupted {
 		return
 	}
 	folded, samples, err := foldProfile(buf.Bytes(), p.namer)
@@ -289,7 +291,8 @@ func (p *profiler) capture(ctx context.Context) {
 		p.logger.Warn("visionary: reading a CPU profile failed", "err", err)
 		return
 	}
-	if samples < profileMinSamples {
+	if samples < minSamples {
+		p.logger.Debug("visionary: CPU profile dropped, too few samples", "samples", samples, "min", minSamples)
 		return
 	}
 	routes := make(map[string]int64, len(busy))

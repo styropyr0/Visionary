@@ -13,8 +13,10 @@ namespace Styropyr0.Visionary.Profiling;
 /// <summary>
 /// Takes CPU profiles while the dashboard has profiling on (SPEC.md "CPU profiles"): reads
 /// visionary_settings at start and every 30 seconds, samples for duration_ms every interval_s
-/// while requests are being served, and takes one at once for a fresh "Profile now". Runs on
-/// its own background service, never on the request path.
+/// while requests are being served, and takes one at once for a fresh "Profile now". A scheduled
+/// profile is kept with at least <see cref="Folder.MinSamples"/> samples, a "Profile now" one with
+/// any, whether or not a request finished while it ran. Runs on its own background service,
+/// never on the request path.
 /// </summary>
 internal sealed class ProfilerService : BackgroundService
 {
@@ -138,7 +140,7 @@ internal sealed class ProfilerService : BackgroundService
             _seenNow = s.Now;
             if (ProfileSettings.FreshNow(s.Now, _startedAt, now))
             {
-                await ProfileAsync(s, ct).ConfigureAwait(false);
+                await ProfileAsync(s, 1, ct).ConfigureAwait(false);
                 return;
             }
         }
@@ -152,7 +154,7 @@ internal sealed class ProfilerService : BackgroundService
         {
             return;
         }
-        await ProfileAsync(s, ct).ConfigureAwait(false);
+        await ProfileAsync(s, Folder.MinSamples, ct).ConfigureAwait(false);
     }
 
     private async Task<ProfileSettings?> ReadSettingsAsync(CancellationToken ct)
@@ -176,7 +178,11 @@ internal sealed class ProfilerService : BackgroundService
         }
     }
 
-    private async Task ProfileAsync(ProfileSettings s, CancellationToken ct)
+    /// <summary>
+    /// Samples for duration_ms and queues the profile when it has at least
+    /// <paramref name="minSamples"/> samples; routes is {} when no request finished.
+    /// </summary>
+    private async Task ProfileAsync(ProfileSettings s, int minSamples, CancellationToken ct)
     {
         _lastStarted = _agent.Tally.Started;
         _agent.Tally.BeginProfile();
@@ -216,7 +222,7 @@ internal sealed class ProfilerService : BackgroundService
             _agent.Logger.LogWarning("visionary: reading a CPU profile failed: {Error}", e.Message);
             return;
         }
-        if (profile.Samples < Folder.MinSamples || routes.Count == 0)
+        if (profile.Samples < minSamples)
         {
             _agent.Logger.LogDebug("visionary: CPU profile dropped ({Samples} samples, {Routes} routes)", profile.Samples, routes.Count);
             return;

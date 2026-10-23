@@ -20,6 +20,7 @@ import threading
 import time
 import unittest
 from contextlib import closing
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
@@ -207,9 +208,11 @@ class ScheduleTest(unittest.TestCase):
     def profiler(self, rows, service="api"):
         p = P.Profiler(_FakeBackend(rows), lambda _: None, quiet, service)
         p.captured = 0
+        p.min_samples = []
 
-        def capture():
+        def capture(min_samples=P.MIN_SAMPLES):
             p.captured += 1
+            p.min_samples.append(min_samples)
 
         p.capture = capture
         return p
@@ -243,6 +246,7 @@ class ScheduleTest(unittest.TestCase):
         P.tally.request_started()
         p.turn(now + 183)
         self.assertEqual(p.captured, 2)
+        self.assertEqual(p.min_samples, [P.MIN_SAMPLES, P.MIN_SAMPLES])
 
     def test_services_filter_excludes(self):
         p = self.profiler([("profile.enabled", "true"), ("profile.services", '["worker"]')])
@@ -261,6 +265,7 @@ class ScheduleTest(unittest.TestCase):
         self.assertFalse(p.on)
         p.turn(now)
         self.assertEqual(p.captured, 1)
+        self.assertEqual(p.min_samples, [1])  # kept with any samples
         p.poll(now + 30)  # same value: no second profile
         p.turn(now + 30)
         self.assertEqual(p.captured, 1)
@@ -501,11 +506,49 @@ class SamplerTest(unittest.TestCase):
         self.assertIn("_pbkdf2_worker", prof.folded)
         self.assertIsNone(P.tally._busy)  # stops counting after the profile
 
-    def test_capture_dropped_without_finished_requests(self):
+    def test_capture_kept_without_finished_requests(self):
+        pushed = []
+        p = P.Profiler(_FakeBackend(), pushed.append, quiet)
+        p.settings = P.Settings(enabled=True, duration_ms=400)
+        stop = threading.Event()
+        busy = threading.Thread(target=_pbkdf2_worker, args=(stop,), daemon=True)
+        busy.start()
+        try:
+            prof = p.capture()
+        finally:
+            stop.set()
+        self.assertIsNotNone(prof)
+        self.assertEqual(pushed, [prof])
+        self.assertEqual(json.loads(prof.routes), {})
+        self.assertGreaterEqual(prof.samples, P.MIN_SAMPLES)
+
+    def test_capture_min_samples(self):
+        class Thin:
+            def __init__(self, namer):
+                pass
+
+            def tick(self):
+                pass
+
+            def result(self):
+                return "main app.py:1 5\n", 5
+
+        pushed = []
+        p = P.Profiler(_FakeBackend(), pushed.append, quiet)
+        p.settings = P.Settings(enabled=True, duration_ms=50)
+        with mock.patch.object(P, "Sampler", Thin):
+            self.assertIsNone(p.capture())  # scheduled: too thin
+            prof = p.capture(min_samples=1)  # "Profile now": any will do
+        self.assertIsNotNone(prof)
+        self.assertEqual(prof.samples, 5)
+        self.assertEqual(pushed, [prof])
+
+    def test_capture_dropped_when_closed(self):
         pushed = []
         p = P.Profiler(_FakeBackend(), pushed.append, quiet)
         p.settings = P.Settings(enabled=True, duration_ms=200)
-        self.assertIsNone(p.capture())
+        p.close()
+        self.assertIsNone(p.capture(min_samples=1))
         self.assertEqual(pushed, [])
 
 

@@ -8,8 +8,11 @@ module Visionary
   # Profiling, kept in visionary_settings). One background thread reads the
   # settings every 30 s and, while profiling is on, samples the stacks of the
   # threads that are running every 10 ms for profile.duration_ms every
-  # profile.interval_s. Each profile is one profiles row: folded stacks plus
-  # the time each route's requests took while it ran.
+  # profile.interval_s, skipping a turn when no request arrived since the
+  # last. A scheduled profile is kept with at least MIN_SAMPLES samples, a
+  # "Profile now" one with any, whether or not a request finished while it
+  # ran. Each profile is one profiles row: folded stacks plus the time each
+  # route's requests took while it ran ({} when none finished).
   #
   # Ruby has no CPU-time sampler without a native extension, so this walks
   # Thread.list and keeps the threads whose status is "run". Threads that
@@ -412,8 +415,8 @@ module Visionary
     end
 
     # Samples for duration_ms and queues the profile. Returns the row, or
-    # nil when it was dropped (too few samples, no finished request).
-    def capture
+    # nil when it was dropped (fewer than min_samples, or cut short by close).
+    def capture(min_samples = MIN_SAMPLES)
       @last_started = Tally.started
       duration_s = @settings.duration_ms / 1000.0
       counts = Hash.new(0)
@@ -448,7 +451,7 @@ module Visionary
       elapsed_ms = ((mono - t0) * 1000).round(3)
       folded, samples = Profiler.fold(counts)
       routes = busy.transform_values { |ms| [ms.round, 1].max }
-      return nil if samples < MIN_SAMPLES || routes.empty?
+      return nil if samples < min_samples || stopped?
 
       row = [Visionary.timestamp(started_at), @cfg.service, @instance, @cfg.version, "ruby",
              elapsed_ms, samples, JSON.generate(routes), folded]
@@ -478,7 +481,7 @@ module Visionary
           next_poll = mono + POLL_S
           if poll
             @logger.info("visionary: taking a CPU profile now (asked for in the dashboard)")
-            capture
+            capture(1)
             next_profile = mono + @settings.interval_s if next_profile
           end
         end

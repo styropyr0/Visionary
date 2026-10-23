@@ -309,7 +309,7 @@ class ProfilerTest < Minitest::Test
     [a, b, c, d].compact.each { |t| t.kill.join(1) }
   end
 
-  def run_capture(duration_ms:, finish_request:)
+  def run_capture(duration_ms:, finish_request:, min_samples: P::MIN_SAMPLES)
     p = profiler([["profile.enabled", "true"], ["profile.duration_ms", duration_ms.to_s]])
     p.poll
     stop = [false]
@@ -319,7 +319,7 @@ class ProfilerTest < Minitest::Test
       sleep 0.05
       P::Tally.finished("GET", "/fib", 12.4) if finish_request
     end
-    row = p.capture
+    row = p.capture(min_samples)
     [row, @writer.items]
   ensure
     stop[0] = true
@@ -342,15 +342,32 @@ class ProfilerTest < Minitest::Test
     assert_equal samples, folded.lines.sum { |l| l.split(" ").last.to_i }
   end
 
-  def test_capture_dropped_without_a_finished_request
+  def test_capture_kept_without_a_finished_request
     row, items = run_capture(duration_ms: 300, finish_request: false)
-    assert_nil row
-    assert_empty items
+    refute_nil row, "profile kept"
+    assert_equal [[:profile, row]], items
+    assert_operator row[6], :>=, P::MIN_SAMPLES
+    assert_equal({}, JSON.parse(row[7]))
   end
 
   def test_capture_dropped_with_too_few_samples
     row, items = run_capture(duration_ms: 50, finish_request: true)
     assert_nil row
     assert_empty items
+  end
+
+  def test_profile_now_kept_with_few_samples
+    row, items = run_capture(duration_ms: 50, finish_request: false, min_samples: 1)
+    refute_nil row, "profile kept"
+    assert_equal [[:profile, row]], items
+    assert_operator row[6], :<, P::MIN_SAMPLES
+  end
+
+  def test_capture_dropped_when_closed
+    p = profiler([["profile.enabled", "true"], ["profile.duration_ms", "300"]])
+    p.poll
+    p.close
+    assert_nil p.capture(1)
+    assert_empty @writer.items
   end
 end

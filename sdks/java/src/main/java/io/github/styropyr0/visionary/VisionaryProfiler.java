@@ -23,8 +23,10 @@ import org.springframework.context.SmartLifecycle;
  * {@code profile.*} settings at start and every 30 seconds on its own thread;
  * while profiling is on for this service it samples the CPU for
  * {@code duration_ms} every {@code interval_s}, skipping a turn when no request
- * arrived since the last one, and hands each profile to the writer. A fresh
- * {@code profile.now} takes one profile at once. {@code VISIONARY_PROFILE=false}
+ * arrived since the last one, and hands each profile with at least
+ * {@link FoldedStacks#MIN_SAMPLES} samples to the writer, whether or not a
+ * request finished while it ran. A fresh {@code profile.now} takes one profile
+ * at once, kept with any samples. {@code VISIONARY_PROFILE=false}
  * turns all of it off, settings reads included.
  */
 final class VisionaryProfiler implements SmartLifecycle {
@@ -146,14 +148,14 @@ final class VisionaryProfiler implements SmartLifecycle {
         }
         if (oneOff) {
             oneOff = false;
-            capture();
+            capture(1);
             return;
         }
         if (active && nanos - nextProfile >= 0) {
             nextProfile = nanos + settings.intervalS() * 1_000_000_000L;
             long started = ProfileTally.startedCount();
             if (started != lastStarted) {
-                capture();
+                capture(FoldedStacks.MIN_SAMPLES);
             }
         }
     }
@@ -213,8 +215,12 @@ final class VisionaryProfiler implements SmartLifecycle {
         return settings;
     }
 
-    /** Samples for {@code duration_ms} and hands the profile to the writer unless it is dropped. */
-    void capture() {
+    /**
+     * Samples for {@code duration_ms} and hands the profile to the writer when it has at least
+     * {@code minSamples} samples; {@code routes} is {@code {}} when no request finished. A profile
+     * interrupted by shutdown is dropped.
+     */
+    void capture(int minSamples) {
         if (!sampling.compareAndSet(false, true)) {
             return;
         }
@@ -231,8 +237,7 @@ final class VisionaryProfiler implements SmartLifecycle {
             sampling.set(false);
         }
         double measuredMs = (System.nanoTime() - t0) / 1_000_000.0;
-        if (Thread.currentThread().isInterrupted() || stacks.samples() < FoldedStacks.MIN_SAMPLES
-                || routes.isEmpty()) {
+        if (Thread.currentThread().isInterrupted() || stacks.samples() < minSamples) {
             return;
         }
         String routesJson;

@@ -271,8 +271,9 @@ for a one-off.
 While it is on, the Agent runs `runtime/pprof`'s CPU profiler (about one
 sample every 10 ms, counting only goroutines running on a CPU) for the chosen
 duration, then decodes the profile itself; no extra dependency. It skips a turn
-when no request arrived since the last one, and keeps a profile only when a
-request finished during it and it has at least 20 samples. If the process
+when no request arrived since the last one, and keeps a profile when it has at
+least 20 samples, whether or not a request finished during it (a "Profile now"
+profile is kept with any samples). If the process
 already runs its own CPU profile (`pprof.StartCPUProfile`, `net/http/pprof`),
 the turn is skipped quietly.
 

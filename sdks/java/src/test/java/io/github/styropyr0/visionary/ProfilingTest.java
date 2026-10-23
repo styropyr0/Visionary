@@ -239,10 +239,11 @@ class ProfilingTest {
         }
     }
 
-    /** Emits a fixed number of samples and finishes one request while "sampling". */
+    /** Emits a fixed number of samples and finishes one request while "sampling" (unless told not to). */
     private static final class FakeSampler implements CpuSampler {
         final AtomicInteger runs = new AtomicInteger();
         int samples = 30;
+        boolean finishRequest = true;
 
         @Override
         public void sample(long durationMs, FoldedStacks out) {
@@ -250,7 +251,9 @@ class ProfilingTest {
             for (int i = 0; i < samples; i++) {
                 out.add(List.of("main", "com.example.demo.Hot.spin com/example/demo/Hot.java:5"));
             }
-            ProfileTally.finished("GET", "/hot", 12.4);
+            if (finishRequest) {
+                ProfileTally.finished("GET", "/hot", 12.4);
+            }
         }
 
         @Override
@@ -361,16 +364,65 @@ class ProfilingTest {
         assertEquals(1, sampler.runs.get());
     }
 
+    /** Enabled every 5 s with a request since: the next tick at 5 s takes a scheduled profile. */
+    private VisionaryProfiler scheduled(FakeStore store, FakeSampler sampler, List<ProfileEntry> out) {
+        store.rows = rows("profile.enabled", "true", "profile.interval_s", "5");
+        VisionaryProfiler p = profiler(store, sampler, out, "api", true);
+        p.tick(0, Instant.now());
+        ProfileTally.started();
+        p.tick(5 * SECOND, Instant.now());
+        assertEquals(1, sampler.runs.get());
+        return p;
+    }
+
     @Test
-    void tooFewSamplesOrNoRequestIsDropped() {
-        FakeStore store = new FakeStore();
+    void scheduledProfileWithTooFewSamplesIsDropped() {
         FakeSampler sampler = new FakeSampler();
         sampler.samples = FoldedStacks.MIN_SAMPLES - 1;
+        List<ProfileEntry> out = new ArrayList<>();
+        scheduled(new FakeStore(), sampler, out);
+        assertTrue(out.isEmpty());
+    }
+
+    @Test
+    void scheduledProfileWithoutAFinishedRequestIsKept() {
+        FakeSampler sampler = new FakeSampler();
+        sampler.finishRequest = false;
+        List<ProfileEntry> out = new ArrayList<>();
+        scheduled(new FakeStore(), sampler, out);
+        assertEquals(1, out.size());
+        assertEquals(30L, out.get(0).row()[6]);
+        assertEquals("{}", out.get(0).row()[7]);
+    }
+
+    @Test
+    void profileNowKeepsAnySamples() {
+        FakeStore store = new FakeStore();
+        FakeSampler sampler = new FakeSampler();
+        sampler.samples = 1;
+        sampler.finishRequest = false;
         List<ProfileEntry> out = new ArrayList<>();
         VisionaryProfiler p = profiler(store, sampler, out, null, true);
         p.tick(0, Instant.now());
         store.rows = rows("profile.now", Values.timestamp(Instant.now().plusSeconds(1)));
         p.tick(30 * SECOND, Instant.now().plusSeconds(2));
+        assertEquals(1, sampler.runs.get());
+        assertEquals(1, out.size());
+        assertEquals(1L, out.get(0).row()[6]);
+        assertEquals("{}", out.get(0).row()[7]);
+    }
+
+    @Test
+    void interruptedProfileIsDropped() {
+        FakeSampler sampler = new FakeSampler();
+        List<ProfileEntry> out = new ArrayList<>();
+        VisionaryProfiler p = profiler(new FakeStore(), sampler, out, "api", true);
+        Thread.currentThread().interrupt();
+        try {
+            p.capture(1);
+        } finally {
+            Thread.interrupted();
+        }
         assertEquals(1, sampler.runs.get());
         assertTrue(out.isEmpty());
     }

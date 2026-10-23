@@ -289,8 +289,9 @@ Each profile is one row: when it started, service, instance, release, `sdk` = `j
 duration, the sample count, `routes` (JSON: `"METHOD /route/{id}"` to the milliseconds the
 requests that finished during the profile took; the path when no route matched) and `folded`:
 one `frame;frame;... count` line per distinct stack, outermost caller first, heaviest first up to
-90 000 bytes with the rest summed into one `(other) n` line. A profile during which no request
-finished, or with fewer than 20 samples, is dropped. Frames read `pkg.Class.method file:line`,
+90 000 bytes with the rest summed into one `(other) n` line. A scheduled profile with fewer than
+20 samples is dropped, and kept otherwise even when no request finished during it (`routes` is
+then `{}`); a **Profile now** one is kept with any samples. Frames read `pkg.Class.method file:line`,
 where the file says whose code it is:
 
 - the JDK (`java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`): `std:java/util/HashMap.java`;

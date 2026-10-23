@@ -377,6 +377,7 @@ internal static class Folder
 {
     public const int MaxFolded = 90_000;
     public const int KeepWhole = 72_000;
+    /// <summary>A scheduled profile with fewer samples is dropped; a "Profile now" one is kept with any.</summary>
     public const int MinSamples = 20;
 
     /// <summary>

@@ -142,23 +142,45 @@ public sealed class ProfilerServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DropsThinOrIdleProfiles()
+    public async Task DropsThinScheduledProfilesAndKeepsIdleOnes()
     {
         Settings(new() { ["profile.enabled"] = "true", ["profile.interval_s"] = "10" });
         var (agent, svc) = Make();
-        _samples = 19;
+        _samples = Folder.MinSamples - 1;
         agent.Tally.Start();
         await svc.TickAsync(CancellationToken.None);
         Assert.Equal(1, svc.Recorded);
         Assert.Equal(0, svc.Taken);
 
-        _samples = 500;
+        // No request finished while sampling: kept all the same, with no routes.
+        _samples = Folder.MinSamples;
         _finishRequest = false;
         agent.Tally.Start();
         await Advance(svc, 10);
         Assert.Equal(2, svc.Recorded);
+        Assert.Equal(1, svc.Taken);
+        var p = Assert.Single(Written(agent));
+        Assert.Equal("{}", p.Routes);
+    }
+
+    [Fact]
+    public async Task ProfileNowKeepsAnySamples()
+    {
+        var (agent, svc) = Make();
+        _samples = 0;
+        _finishRequest = false;
+        Settings(new() { ["profile.now"] = RowBuilder.Timestamp(_now.AddSeconds(1)) });
+        await Advance(svc, 2);
+        Assert.Equal(1, svc.Recorded);
         Assert.Equal(0, svc.Taken);
-        Assert.Empty(Written(agent));
+
+        _samples = 1;
+        Settings(new() { ["profile.now"] = RowBuilder.Timestamp(_now.AddSeconds(1)) });
+        await Advance(svc, 30);
+        Assert.Equal(2, svc.Recorded);
+        var p = Assert.Single(Written(agent));
+        Assert.Equal(1, p.Samples);
+        Assert.Equal("{}", p.Routes);
     }
 
     [Theory]

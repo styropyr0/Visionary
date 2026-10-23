@@ -280,8 +280,10 @@ on a thread-pool thread). Requests are never blocked or failed by it.
 measured `duration_ms`, `routes` (each `"METHOD route"` and the milliseconds
 its requests that finished during the profile took) and `folded`: one
 `frame;frame;...;frame count` line per distinct stack, heaviest first, cut at
-90 000 bytes with the rest summed into one `(other) n` line. Profiles with
-fewer than 20 samples or no finished request are dropped. Frames read:
+90 000 bytes with the rest summed into one `(other) n` line. A scheduled
+profile with fewer than 20 samples is dropped, and kept otherwise even when no
+request finished during it (`routes` is then `{}`); a **Profile now** one is
+kept with any samples. Frames read:
 
 | Code | Frame |
 |---|---|
