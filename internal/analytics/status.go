@@ -74,8 +74,8 @@ func (s *Server) statusTitle() string {
 	if t := strings.TrimSpace(s.live().StatusTitle); t != "" {
 		return t
 	}
-	if s.conf("VISIONARY_APP_NAME") != "" && s.conf("VISIONARY_APP_NAME") != "the application" {
-		return s.conf("VISIONARY_APP_NAME") + " status"
+	if s.conf("app_name") != "" && s.conf("app_name") != "the application" {
+		return s.conf("app_name") + " status"
 	}
 	return "Service status"
 }

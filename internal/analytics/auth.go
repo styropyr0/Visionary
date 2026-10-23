@@ -112,9 +112,9 @@ func (a *auth) setSecret(secret []byte) error {
 	return nil
 }
 
-func (a *auth) ttl() time.Duration        { return a.srv.confDuration("VISIONARY_SESSION_TTL") }
-func (a *auth) checkEvery() time.Duration { return a.srv.confDuration("VISIONARY_ROLE_CHECK_INTERVAL") }
-func (a *auth) trustProxy() bool          { return a.srv.confBool("VISIONARY_TRUST_PROXY") }
+func (a *auth) ttl() time.Duration        { return a.srv.confDuration("session_ttl") }
+func (a *auth) checkEvery() time.Duration { return a.srv.confDuration("role_check_interval") }
+func (a *auth) trustProxy() bool          { return a.srv.confBool("trust_proxy") }
 
 func (a *auth) seal(s *session) (string, error) {
 	plain, err := json.Marshal(s)
@@ -332,7 +332,7 @@ func (a *auth) confirm(ctx context.Context, sg *signin, s *session) (*session, b
 // secure decides the cookie's Secure flag. "auto" follows the request scheme,
 // including X-Forwarded-Proto when the proxy is trusted.
 func (a *auth) secure(r *http.Request) bool {
-	switch a.srv.conf("VISIONARY_SECURE_COOKIE") {
+	switch a.srv.conf("secure_cookie") {
 	case "true":
 		return true
 	case "false":

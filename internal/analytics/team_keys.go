@@ -164,18 +164,18 @@ func (s *Server) pendingUse(id int64) (time.Time, bool) {
 }
 
 // ingestKeyValid checks a key presented to an ingest endpoint. scope is
-// "server" (SDKs and OTLP, VISIONARY_INGEST_KEYS) or "client" (browser and
-// mobile apps, VISIONARY_CLIENT_KEYS); both lists are comma separated. Keys
-// created in Settings with the same scope are accepted too.
+// "server" (SDKs and OTLP, the Server keys setting) or "client" (browser and
+// mobile apps, Client keys); both lists are comma separated. Keys created
+// under API keys with the same scope are accepted too.
 func (s *Server) ingestKeyValid(key, scope string) bool {
 	if key == "" {
 		return false
 	}
-	env := "VISIONARY_INGEST_KEYS"
+	name := "ingest_keys"
 	if scope == "client" {
-		env = "VISIONARY_CLIENT_KEYS"
+		name = "client_keys"
 	}
-	for _, k := range strings.Split(s.conf(env), ",") {
+	for _, k := range strings.Split(s.conf(name), ",") {
 		if k = strings.TrimSpace(k); k != "" && constantTimeEqual(k, key) {
 			return true
 		}

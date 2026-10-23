@@ -227,7 +227,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		"repo":    "https://github.com/" + upstreamRepo,
 	}
 
-	if s.confBool("VISIONARY_UPDATE_CHECK") {
+	if s.confBool("update_check") {
 		releases, err, checked := upstream.get()
 		switch {
 		case !checked:
@@ -270,7 +270,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 // usually has them before anyone opens it. Settings → Server can turn the
 // check off.
 func (s *Server) releasesStart() {
-	if !s.confBool("VISIONARY_UPDATE_CHECK") {
+	if !s.confBool("update_check") {
 		return
 	}
 	upstream.mu.Lock()

@@ -32,19 +32,19 @@ var errAnalystOff = errors.New("the AI analyst is off: add an OpenAI API key in 
 // newLLM builds the analyst's client from Settings → Server, or nil while
 // no API key is set.
 func (s *Server) newLLM() *llm {
-	key := strings.TrimSpace(s.conf("OPENAI_API_KEY"))
+	key := strings.TrimSpace(s.conf("openai_api_key"))
 	if key == "" {
 		return nil
 	}
-	reasoning := strings.ToLower(s.conf("VISIONARY_REASONING"))
+	reasoning := strings.ToLower(s.conf("reasoning"))
 	timeout := 60 * time.Second
 	if reasoning != "" {
 		timeout = 3 * time.Minute
 	}
 	return &llm{
 		apiKey:    key,
-		apiBase:   strings.TrimRight(s.conf("OPENAI_API_BASE"), "/"),
-		model:     s.conf("VISIONARY_MODEL"),
+		apiBase:   strings.TrimRight(s.conf("openai_api_base"), "/"),
+		model:     s.conf("model"),
 		reasoning: reasoning,
 		http:      &http.Client{Timeout: timeout},
 	}

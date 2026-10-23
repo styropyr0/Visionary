@@ -447,7 +447,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ask_enabled":    s.llm() != nil,
-		"app_name":       s.conf("VISIONARY_APP_NAME"),
+		"app_name":       s.conf("app_name"),
 		"model":          model,
 		"routes":         s.knownRoutes(r.Context()),
 		"max_rows":       s.maxRows(),

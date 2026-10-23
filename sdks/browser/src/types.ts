@@ -20,7 +20,7 @@ export interface ClientEvent {
 export interface InitOptions {
   /** The Visionary server, e.g. "https://visionary.example.com". */
   endpoint: string;
-  /** A public client key (VISIONARY_CLIENT_KEYS or one made in Settings). */
+  /** A public client key (Settings → API keys, scope Client ingest). */
   key: string;
   /** Your app's version name, e.g. "2.4.1". */
   app_version?: string;

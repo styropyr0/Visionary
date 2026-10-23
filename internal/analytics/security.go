@@ -43,30 +43,30 @@ type securitySettings struct {
 	ignore           []netip.Prefix
 }
 
-// defaultLoginWords match login-like routes when VISIONARY_SECURITY_LOGIN_ROUTES
-// is not set.
+// defaultLoginWords match login-like routes when the Login routes setting is
+// empty.
 var defaultLoginWords = []string{"login", "signin", "sign-in", "auth", "token", "otp", "password", "session"}
 
 // securitySettings reads Settings → Server → Security detectors.
 func (s *Server) securitySettings() securitySettings {
 	st := securitySettings{
-		enabled:          s.confBool("VISIONARY_SECURITY"),
-		interval:         s.confDuration("VISIONARY_SECURITY_INTERVAL"),
-		window:           s.confDuration("VISIONARY_SECURITY_WINDOW"),
-		dedupe:           s.confDuration("VISIONARY_SECURITY_DEDUPE"),
-		bruteforce:       max(s.confInt("VISIONARY_SECURITY_BRUTEFORCE"), 1),
-		stuffingAccounts: max(s.confInt("VISIONARY_SECURITY_STUFFING_ACCOUNTS"), 1),
-		targetedIPs:      max(s.confInt("VISIONARY_SECURITY_TARGETED_IPS"), 1),
-		scannerHits:      max(s.confInt("VISIONARY_SECURITY_SCANNER_HITS"), 1),
-		rateMin:          max(s.confInt("VISIONARY_SECURITY_RATE_MIN"), 1),
-		rateFactor:       max(s.confFloat("VISIONARY_SECURITY_RATE_FACTOR"), 1),
-		forbidden:        max(s.confInt("VISIONARY_SECURITY_FORBIDDEN"), 1),
+		enabled:          s.confBool("security"),
+		interval:         s.confDuration("security_interval"),
+		window:           s.confDuration("security_window"),
+		dedupe:           s.confDuration("security_dedupe"),
+		bruteforce:       max(s.confInt("security_bruteforce"), 1),
+		stuffingAccounts: max(s.confInt("security_stuffing_accounts"), 1),
+		targetedIPs:      max(s.confInt("security_targeted_ips"), 1),
+		scannerHits:      max(s.confInt("security_scanner_hits"), 1),
+		rateMin:          max(s.confInt("security_rate_min"), 1),
+		rateFactor:       max(s.confFloat("security_rate_factor"), 1),
+		forbidden:        max(s.confInt("security_forbidden"), 1),
 	}
 	st.interval = max(st.interval, 10*time.Second)
 	st.window = min(max(st.window, time.Minute), time.Hour)
 	st.dedupe = max(st.dedupe, st.interval)
-	st.loginLikes = loginLikes(s.conf("VISIONARY_SECURITY_LOGIN_ROUTES"))
-	for _, v := range strings.Split(s.conf("VISIONARY_SECURITY_IGNORE_IPS"), ",") {
+	st.loginLikes = loginLikes(s.conf("security_login_routes"))
+	for _, v := range strings.Split(s.conf("security_ignore_ips"), ",") {
 		if v = strings.TrimSpace(v); v == "" {
 			continue
 		}

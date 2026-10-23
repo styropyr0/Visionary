@@ -9,11 +9,9 @@
 package authbridge
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -29,7 +27,7 @@ const (
 	TypeAccounts = "accounts"
 	TypeNone     = "none"
 
-	// AnyRole in AllowedRoles or VISIONARY_ROLE_MAP matches every user of the
+	// AnyRole in AllowedRoles or the role map matches every user of the
 	// API, whatever their role.
 	AnyRole = "*"
 
@@ -120,48 +118,6 @@ type Fields struct {
 	Handle       string `json:"handle,omitempty"`
 	Role         string `json:"role"`
 	ErrorMessage string `json:"error_message,omitempty"`
-}
-
-// Source says where the auth config comes from: an optional JSON file (Path)
-// or JSON text (Inline), then VISIONARY_AUTH_* variables from Getenv on top.
-// Environment variables alone are enough.
-type Source struct {
-	Path   string
-	Inline string
-	Getenv func(string) string
-}
-
-// Load reads and validates the auth config. There is no built-in default:
-// every deployment chooses its mode.
-func Load(src Source) (Config, error) {
-	var cfg Config
-	var raw []byte
-	name := "VISIONARY_AUTH_CONFIG_JSON"
-	switch {
-	case src.Path != "" && src.Inline != "":
-		return cfg, errors.New("set VISIONARY_AUTH_CONFIG or VISIONARY_AUTH_CONFIG_JSON, not both")
-	case src.Path != "":
-		var err error
-		if raw, err = os.ReadFile(src.Path); err != nil {
-			return cfg, fmt.Errorf("read auth config: %w", err)
-		}
-		name = src.Path
-	case src.Inline != "":
-		raw = []byte(src.Inline)
-	}
-	if raw != nil {
-		dec := json.NewDecoder(strings.NewReader(string(raw)))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&cfg); err != nil {
-			return cfg, fmt.Errorf("parse auth config %s: %w", name, err)
-		}
-	}
-	if src.Getenv != nil {
-		if err := ApplyEnv(&cfg, src.Getenv); err != nil {
-			return cfg, err
-		}
-	}
-	return cfg, cfg.Validate(os.Getenv("VISIONARY_ROLE_MAP"))
 }
 
 // Delegated reports whether sign-in goes through an external API.

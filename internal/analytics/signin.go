@@ -179,63 +179,9 @@ func (s *Server) applySignin(m map[string][2]string) {
 	}
 }
 
-// seedSigninFromEnv copies a sign-in setup from the old VISIONARY_AUTH_*
-// variables once, when nothing is stored yet.
-func (s *Server) seedSigninFromEnv(m map[string][2]string, seed map[string]string) {
-	if !envHasAuth() {
-		return
-	}
-	if _, ok := m[settingAuthConfig]; ok {
-		s.logger.Warn("VISIONARY_AUTH_* variables are ignored: sign-in is set in Settings → Sign-in. Remove them from the environment.")
-		return
-	}
-	cfg, err := authbridge.Load(authbridge.Source{
-		Path:   strings.TrimSpace(os.Getenv("VISIONARY_AUTH_CONFIG")),
-		Inline: strings.TrimSpace(os.Getenv("VISIONARY_AUTH_CONFIG_JSON")),
-		Getenv: os.Getenv,
-	})
-	switch {
-	case err != nil:
-		s.logger.Warn("the VISIONARY_AUTH_* variables were not copied to Settings → Sign-in", "err", err)
-		return
-	case cfg.Type == authbridge.TypeNone:
-		s.logger.Warn("VISIONARY_AUTH_MODE=none is gone: set VISIONARY_ENABLE_AUTH=false to keep sign-in off. Remove the VISIONARY_AUTH_* variables.")
-		return
-	}
-	shared := cfg.SharedPassword
-	cfg.SharedPassword = ""
-	b, _ := json.Marshal(cfg)
-	seed[settingAuthConfig] = string(b)
-	if shared != "" {
-		seed[settingAuthShared] = shared
-	}
-	if v := os.Getenv("VISIONARY_VIEWER_PASSWORD"); v != "" && cfg.Type == authbridge.TypeShared {
-		seed[settingAuthViewer] = v
-	}
-	if v := strings.TrimSpace(os.Getenv("VISIONARY_ROLE_MAP")); v != "" {
-		seed[settingAuthRoleMap] = v
-	}
-	s.logger.Warn("the VISIONARY_AUTH_* variables are now a setting: sign-in was copied to Settings → Sign-in. Remove them from the environment.")
-}
-
-func envHasAuth() bool {
-	for _, kv := range os.Environ() {
-		name, v, _ := strings.Cut(kv, "=")
-		if strings.TrimSpace(v) == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(name, "VISIONARY_AUTH_"), name == "VISIONARY_SHARED_PASSWORD",
-			name == "VISIONARY_ALLOWED_ROLES", name == "VISIONARY_ROLE_MAP":
-			return true
-		}
-	}
-	return false
-}
-
 // loadSessionSecret sets the cookie key from the stored secret, creating one
-// on first start (from VISIONARY_SESSION_SECRET when it is still set). Two
-// servers starting at once agree: only the first insert wins.
+// on first start. Two servers starting at once agree: only the first insert
+// wins.
 func (s *Server) loadSessionSecret(ctx context.Context) {
 	m, err := s.readSettings(ctx)
 	if err != nil {
@@ -244,25 +190,18 @@ func (s *Server) loadSessionSecret(ctx context.Context) {
 	}
 	secret := m[settingSessionSecret][0]
 	if secret == "" {
-		secret = os.Getenv("VISIONARY_SESSION_SECRET")
-		if len(secret) < 32 {
-			b := make([]byte, 32)
-			if _, err := rand.Read(b); err != nil {
-				s.logger.Warn("creating a session secret failed", "err", err)
-				return
-			}
-			secret = hex.EncodeToString(b)
-		} else {
-			s.logger.Warn("VISIONARY_SESSION_SECRET is now a setting and was copied to the database. Remove it from the environment.")
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			s.logger.Warn("creating a session secret failed", "err", err)
+			return
 		}
+		secret = hex.EncodeToString(b)
 		if err := s.db.Exec(ctx, s.q.insertSettingIfAbsent(), settingSessionSecret, secret, nowTS()); err != nil {
 			s.logger.Warn("storing the session secret failed; sessions end on restart", "err", dbErr(err))
 		}
 		if m, err = s.readSettings(ctx); err == nil && m[settingSessionSecret][0] != "" {
 			secret = m[settingSessionSecret][0]
 		}
-	} else if os.Getenv("VISIONARY_SESSION_SECRET") != "" {
-		s.logger.Warn("VISIONARY_SESSION_SECRET is ignored: the session secret is kept in the database. Remove it from the environment.")
 	}
 	if err := s.auth.setSecret([]byte(secret)); err != nil {
 		s.logger.Warn("using the session secret failed", "err", err)

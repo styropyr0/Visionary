@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -15,55 +18,51 @@ func testServer() *Server {
 	return &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
-// A stored value wins over the variable, which wins over the default.
+// A stored value wins over the default; the old variables are not read.
 func TestConfPrecedence(t *testing.T) {
 	s := testServer()
-	if got := s.confInt("VISIONARY_MAX_ROWS"); got != 5000 {
-		t.Fatalf("default: %d", got)
-	}
 	t.Setenv("VISIONARY_MAX_ROWS", "200")
-	if got := s.confInt("VISIONARY_MAX_ROWS"); got != 200 {
-		t.Fatalf("env: %d", got)
+	if got := s.confInt("max_rows"); got != 5000 {
+		t.Fatalf("default: %d", got)
 	}
 	l := defaultLiveSettings()
 	l.Config["max_rows"] = "70"
 	s.liveSet.p.Store(l)
-	if got := s.confInt("VISIONARY_MAX_ROWS"); got != 70 {
+	if got := s.confInt("max_rows"); got != 70 {
 		t.Fatalf("stored: %d", got)
 	}
 	// Stored empty is a value: an SMTP host cleared in Settings stays off.
-	t.Setenv("VISIONARY_SMTP_HOST", "smtp.example.com")
 	l.Config["smtp_host"] = ""
-	if got := s.conf("VISIONARY_SMTP_HOST"); got != "" {
+	if got := s.conf("smtp_host"); got != "" {
 		t.Fatalf("stored empty: %q", got)
 	}
-	if d := s.confDuration("VISIONARY_SESSION_TTL"); d != 12*time.Hour {
+	if d := s.confDuration("session_ttl"); d != 12*time.Hour {
 		t.Fatalf("duration default: %v", d)
 	}
 }
 
 func TestConfNormalize(t *testing.T) {
 	cases := []struct {
-		env, in, want string
+		key, in, want string
 		bad           bool
 	}{
-		{"VISIONARY_MAX_ROWS", " 250 ", "250", false},
-		{"VISIONARY_MAX_ROWS", "0", "", true},
-		{"VISIONARY_MAX_ROWS", "lots", "", true},
-		{"VISIONARY_TRUST_PROXY", "TRUE", "true", false},
-		{"VISIONARY_SESSION_TTL", "90m", "1h30m0s", false},
-		{"VISIONARY_SESSION_TTL", "10s", "", true}, // under the 5 minute floor
-		{"VISIONARY_SECURE_COOKIE", "Auto", "auto", false},
-		{"VISIONARY_SECURE_COOKIE", "maybe", "", true},
-		{"VISIONARY_SECURITY_IGNORE_IPS", "10.0.0.0/8, 1.2.3.4", "10.0.0.0/8, 1.2.3.4", false},
-		{"VISIONARY_SECURITY_IGNORE_IPS", "not-an-ip", "", true},
-		{"VISIONARY_DIGEST_TZ", "Asia/Kolkata", "Asia/Kolkata", false},
-		{"VISIONARY_DIGEST_TZ", "Mars/Olympus", "", true},
+		{"max_rows", " 250 ", "250", false},
+		{"max_rows", "0", "", true},
+		{"max_rows", "lots", "", true},
+		{"trust_proxy", "TRUE", "true", false},
+		{"session_ttl", "90m", "1h30m0s", false},
+		{"session_ttl", "10s", "", true}, // under the 5 minute floor
+		{"secure_cookie", "Auto", "auto", false},
+		{"secure_cookie", "maybe", "", true},
+		{"security_ignore_ips", "10.0.0.0/8, 1.2.3.4", "10.0.0.0/8, 1.2.3.4", false},
+		{"security_ignore_ips", "not-an-ip", "", true},
+		{"digest_tz", "Asia/Kolkata", "Asia/Kolkata", false},
+		{"digest_tz", "Mars/Olympus", "", true},
 	}
 	for _, c := range cases {
-		got, err := confByEnv[c.env].normalize(c.in)
+		got, err := confByKey[c.key].normalize(c.in)
 		if (err != nil) != c.bad || (!c.bad && got != c.want) {
-			t.Errorf("%s %q: got %q, err %v", c.env, c.in, got, err)
+			t.Errorf("%s %q: got %q, err %v", c.key, c.in, got, err)
 		}
 	}
 }
@@ -77,11 +76,11 @@ func TestConfDefs(t *testing.T) {
 	}
 	for _, d := range confDefs {
 		if !groups[d.Group] {
-			t.Errorf("%s: unknown group %q", d.Env, d.Group)
+			t.Errorf("%s: unknown group %q", d.Key, d.Group)
 		}
 		if d.Default != "" {
 			if _, err := d.normalize(d.Default); err != nil {
-				t.Errorf("%s: default %q: %v", d.Env, d.Default, err)
+				t.Errorf("%s: default %q: %v", d.Key, d.Default, err)
 			}
 		}
 	}
@@ -94,9 +93,9 @@ func TestSecretsNeverShown(t *testing.T) {
 	s.liveSet.p.Store(l)
 	for _, v := range s.confView() {
 		if v.Kind == confSecret && v.Value != "" {
-			t.Fatalf("%s sent back", v.Env)
+			t.Fatalf("%s sent back", v.Key)
 		}
-		if v.Env == "VISIONARY_SMTP_PASSWORD" && !v.Set {
+		if v.Key == "smtp_password" && !v.Set {
 			t.Fatal("a stored secret reports set")
 		}
 	}
@@ -166,5 +165,23 @@ func TestNewSigninDelegated(t *testing.T) {
 	}
 	if _, err := newSignin(`{"type":"shared","surprise":1}`, "", "correct horse battery", ""); err == nil {
 		t.Fatal("unknown fields are rejected")
+	}
+}
+
+// conf panics on a key with no confDef, so every key named in the code must
+// have one.
+func TestConfKeysExist(t *testing.T) {
+	call := regexp.MustCompile(`\.(?:conf(?:Int|Float|Bool|Duration)?|countList)\("([^"]+)"\)`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range call.FindAllStringSubmatch(string(b), -1) {
+			if confByKey[m[1]] == nil {
+				t.Errorf("%s: no setting %q", f, m[1])
+			}
+		}
 	}
 }

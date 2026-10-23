@@ -173,7 +173,7 @@ type uptimeSettings struct {
 }
 
 func (s *Server) uptimeSettings() uptimeSettings {
-	return uptimeSettings{allowPrivate: s.confBool("VISIONARY_UPTIME_ALLOW_PRIVATE"), workers: 8}
+	return uptimeSettings{allowPrivate: s.confBool("uptime_allow_private"), workers: 8}
 }
 
 func uptimeNow() string { return time.Now().UTC().Format(tsLayout) }

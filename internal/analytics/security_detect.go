@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// The detectors run every VISIONARY_SECURITY_INTERVAL over the last
-// VISIONARY_SECURITY_WINDOW of api_logs (ending securityLag ago), in two
+// The detectors run every security_interval over the last security_window
+// of api_logs (ending securityLag ago), in two
 // grouped queries that each read the window once through the created_at
 // index: one row per IP, one per signed-in account. Only keys worth a look
 // come back (HAVING), so the work in Go stays small.
 //
 // Deduplication: a finding is one row per (kind, ip, actor) per
-// VISIONARY_SECURITY_DEDUPE (10m), written by the run that first sees it with
+// security_dedupe (10m), written by the run that first sees it with
 // the window's count. While the activity goes on, later runs add only the
 // requests that arrived since the previous run, refresh detail and raise
 // (never lower) the severity. Once the period is over, the next row of the

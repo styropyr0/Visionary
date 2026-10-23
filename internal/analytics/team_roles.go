@@ -46,8 +46,8 @@ func parseRole(s string) role {
 var actionRoles = map[string]role{"view": roleViewer, "edit": roleEditor, "admin": roleAdmin}
 
 // roleMapping turns the auth provider's roles into Visionary roles.
-// VISIONARY_ROLE_MAP ("ADMIN=admin,ANALYST=viewer") names them explicitly;
-// any VISIONARY_ALLOWED_ROLES entry the map does not mention is an admin, as
+// The role map ("ADMIN=admin,ANALYST=viewer", Settings → Sign-in) names them
+// explicitly; any allowed role the map does not mention is an admin, as
 // before roles existed. The role "*" matches every user of the API, with or
 // without a role ("ADMIN=admin,*=viewer").
 type roleMapping struct {
@@ -57,7 +57,7 @@ type roleMapping struct {
 type roleEntry struct {
 	Provider string `json:"provider_role"`
 	Role     string `json:"role"`
-	// Source is "map" (VISIONARY_ROLE_MAP) or "allowed" (VISIONARY_ALLOWED_ROLES).
+	// Source is "map" (the role map) or "allowed" (the allowed roles).
 	Source string `json:"source"`
 }
 

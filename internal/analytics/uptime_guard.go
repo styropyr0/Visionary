@@ -14,7 +14,7 @@ import (
 // so by default they may not reach the server's own network: loopback,
 // private, link-local, CGNAT and other non-public ranges are refused. The
 // check runs on the dialer, after DNS resolution, so it also covers DNS
-// rebinding and every redirect hop. VISIONARY_UPTIME_ALLOW_PRIVATE=true turns
+// rebinding and every redirect hop. The uptime_allow_private setting turns
 // it off for monitoring internal services.
 
 var blockedPrefixes = []netip.Prefix{

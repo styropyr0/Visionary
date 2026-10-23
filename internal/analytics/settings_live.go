@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,11 +12,9 @@ import (
 )
 
 // The settings the server itself runs on (thresholds, retention, the status
-// page), kept in visionary_settings and edited in Settings. They replace the
-// environment variables that used to hold them: on the first start without
-// a stored value, a variable that is still set is copied in once (see
-// seedSettingsFromEnv). Readers get them from s.live(), refreshed every 30
-// seconds and right after a change, so several servers on one database agree.
+// page), kept in visionary_settings and edited in Settings. Readers get them
+// from s.live(), refreshed every 30 seconds and right after a change, so
+// several servers on one database agree.
 
 // apdexRule is the Apdex threshold T: a default, and overrides for routes
 // that are slow by design (exports, uploads).
@@ -68,26 +65,25 @@ type retentionKind struct {
 	Description string `json:"description"`
 	DefaultDays int    `json:"default_days"`
 	tables      []string
-	env         string // the variable that used to set it
 }
 
 var retentionKinds = []retentionKind{
 	{Key: "requests", Label: "Request logs", Description: "Every request with headers and bodies.", DefaultDays: 30, tables: []string{"api_logs"}},
 	{Key: "spans", Label: "Calls inside requests", Description: "Queries, outbound calls and custom spans.", DefaultDays: 30, tables: []string{"spans"}},
 	{Key: "errors", Label: "Errors", Description: "Captured exceptions and panics.", DefaultDays: 30, tables: []string{"errors"}},
-	{Key: "system", Label: "System metrics", Description: "CPU, memory and runtime samples from SDKs and host agents.", DefaultDays: 30, tables: []string{"system_metrics"}, env: "VISIONARY_SYSTEM_RETENTION_DAYS"},
+	{Key: "system", Label: "System metrics", Description: "CPU, memory and runtime samples from SDKs and host agents.", DefaultDays: 30, tables: []string{"system_metrics"}},
 	{Key: "containers", Label: "Container metrics", Description: "Per-container samples, restarts, kills and health changes.", DefaultDays: 30, tables: []string{"container_metrics", "container_events"}},
-	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services and containers the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers"}, env: "VISIONARY_HOST_RETENTION_DAYS"},
+	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services and containers the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers"}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled flame graphs.", DefaultDays: 30, tables: []string{"profiles"}},
-	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.", DefaultDays: 30, tables: []string{"client_events"}, env: "VISIONARY_CLIENT_RETENTION_DAYS"},
-	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results"}, env: "VISIONARY_UPTIME_RETENTION_DAYS"},
-	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}, env: "VISIONARY_SECURITY_RETENTION_DAYS"},
+	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.", DefaultDays: 30, tables: []string{"client_events"}},
+	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results"}},
+	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}},
 	{Key: "alerts", Label: "Alert history", Description: "Past firings and resolutions.", DefaultDays: 365, tables: []string{"alert_events"}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN results asked for from Queries.", DefaultDays: 30, tables: []string{"explain_requests"}},
 	{Key: "releases", Label: "Deploys", Description: "Version starts: the deploy marks on charts.", DefaultDays: 0, tables: []string{"releases"}},
-	{Key: "audit", Label: "Audit log", Description: "Who changed what in Visionary.", DefaultDays: 365, tables: []string{"audit_log"}, env: "VISIONARY_AUDIT_RETENTION_DAYS"},
-	{Key: "rollup_minute", Label: "Per-minute chart summaries", Description: "Pre-aggregated requests and system metrics behind charts of a few days.", DefaultDays: 14, env: "VISIONARY_ROLLUP_MINUTE_DAYS"},
-	{Key: "rollup_hour", Label: "Hourly chart summaries", Description: "Behind charts of weeks and months; they outlive the raw rows.", DefaultDays: 400, env: "VISIONARY_ROLLUP_HOUR_DAYS"},
+	{Key: "audit", Label: "Audit log", Description: "Who changed what in Visionary.", DefaultDays: 365, tables: []string{"audit_log"}},
+	{Key: "rollup_minute", Label: "Per-minute chart summaries", Description: "Pre-aggregated requests and system metrics behind charts of a few days.", DefaultDays: 14},
+	{Key: "rollup_hour", Label: "Hourly chart summaries", Description: "Behind charts of weeks and months; they outlive the raw rows.", DefaultDays: 400},
 }
 
 // liveSettings are the values in force.
@@ -171,10 +167,8 @@ func (s *Server) refreshLive(ctx context.Context) error {
 	return nil
 }
 
-// liveStart loads the settings, copies old environment variables in once,
-// and keeps them fresh.
+// liveStart loads the settings and keeps them fresh.
 func (s *Server) liveStart(ctx context.Context) {
-	s.seedSettingsFromEnv(ctx)
 	s.loadSessionSecret(ctx)
 	if err := s.refreshLive(ctx); err != nil {
 		if !missingTable(err, "visionary_settings") {
@@ -196,68 +190,6 @@ func (s *Server) liveStart(ctx context.Context) {
 		}
 	}()
 	go s.retentionLoop(ctx)
-}
-
-// seedSettingsFromEnv copies a value from a variable that used to set it,
-// when nothing is stored yet, so an upgrade keeps the old behaviour. The
-// variable is ignored from then on; the log says where it went.
-func (s *Server) seedSettingsFromEnv(ctx context.Context) {
-	m, err := s.readSettings(ctx)
-	if err != nil {
-		return
-	}
-	seed := map[string]string{}
-	moved := func(env, name, where string) {
-		v := strings.TrimSpace(os.Getenv(env))
-		if v == "" {
-			return
-		}
-		if _, ok := m[name]; !ok {
-			seed[name] = v
-			s.logger.Warn(env+" is now a setting: its value was copied to Settings → "+where+". Remove it from the environment.", "value", v)
-		} else {
-			s.logger.Warn(env + " is ignored: it is set in Settings → " + where + ". Remove it from the environment.")
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("VISIONARY_APDEX_MS")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			if _, ok := m[settingApdex]; !ok {
-				b, _ := json.Marshal(apdexRule{DefaultMs: n, Routes: []routeApdex{}})
-				seed[settingApdex] = string(b)
-				s.logger.Warn("VISIONARY_APDEX_MS is now a setting: its value was copied to Settings → Thresholds. Remove it from the environment.", "value", n)
-			} else {
-				s.logger.Warn("VISIONARY_APDEX_MS is ignored: it is set in Settings → Thresholds. Remove it from the environment.")
-			}
-		}
-	}
-	moved("VISIONARY_SLO_TARGET", settingSLOTarget, "Thresholds")
-	for _, k := range retentionKinds {
-		if k.env != "" {
-			moved(k.env, settingRetention+k.Key, "Retention")
-		}
-	}
-	if os.Getenv("VISIONARY_STATUS_PAGE") != "" {
-		if _, ok := m[settingStatusPage]; !ok {
-			seed[settingStatusPage] = strconv.FormatBool(getBool("VISIONARY_STATUS_PAGE", false))
-			s.logger.Warn("VISIONARY_STATUS_PAGE is now a setting: its value was copied to Settings → Status page. Remove it from the environment.")
-		} else {
-			s.logger.Warn("VISIONARY_STATUS_PAGE is ignored: it is set in Settings → Status page. Remove it from the environment.")
-		}
-	}
-	moved("VISIONARY_STATUS_TITLE", settingStatusTitle, "Status page")
-	s.seedConfigFromEnv(m, seed)
-	s.seedSigninFromEnv(m, seed)
-	// A system retention variable also set the containers' metrics.
-	if v, ok := seed[settingRetention+"system"]; ok {
-		if _, stored := m[settingRetention+"containers"]; !stored {
-			seed[settingRetention+"containers"] = v
-		}
-	}
-	if len(seed) > 0 {
-		if err := s.writeSettings(ctx, seed); err != nil {
-			s.logger.Warn("copying settings from the environment failed", "err", err)
-		}
-	}
 }
 
 // retentionLoop deletes rows past each kind's retention, 90 s after start

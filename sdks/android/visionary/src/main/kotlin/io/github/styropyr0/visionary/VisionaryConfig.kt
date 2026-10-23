@@ -5,7 +5,7 @@ package io.github.styropyr0.visionary
  *
  * @param endpoint the Visionary server, e.g. `https://visionary.example.com`. The SDK posts to
  *   `<endpoint>/api/ingest/client` unless the URL already ends with that path.
- * @param key a public client key (`VISIONARY_CLIENT_KEYS` or one created in Settings).
+ * @param key a public client key (Settings → API keys, scope Client ingest).
  * @param appVersion the user-facing version; defaults to the package's `versionName`.
  * @param version the build or commit the dashboards group releases by, e.g. a short git hash.
  * @param sampleRate fraction of app launches (sessions) that report events, 0.0 to 1.0.

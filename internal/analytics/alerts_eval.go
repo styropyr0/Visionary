@@ -55,7 +55,7 @@ func (s *Server) alertEngine() *alertEngine {
 	if e, ok := alertEngines.Load(s); ok {
 		return e.(*alertEngine)
 	}
-	interval := s.confDuration("VISIONARY_ALERTS_INTERVAL")
+	interval := s.confDuration("alerts_interval")
 	if interval < 10*time.Second {
 		interval = 10 * time.Second
 	}
@@ -418,7 +418,7 @@ func (e *alertEngine) sloBudget(ctx context.Context, r alertRule, now time.Time,
 // digestTZ is where weekly digests are scheduled: the zone in Settings →
 // Server, else the server's zone.
 func (s *Server) digestTZ() *time.Location {
-	if name := s.conf("VISIONARY_DIGEST_TZ"); name != "" {
+	if name := s.conf("digest_tz"); name != "" {
 		if loc, err := time.LoadLocation(name); err == nil {
 			return loc
 		}

@@ -30,13 +30,13 @@ type smtpSettings struct {
 // smtpSettings reads Settings → Server → Email.
 func (s *Server) smtpSettings() (smtpSettings, bool) {
 	c := smtpSettings{
-		Host:     s.conf("VISIONARY_SMTP_HOST"),
-		User:     s.conf("VISIONARY_SMTP_USER"),
-		Password: s.conf("VISIONARY_SMTP_PASSWORD"),
-		From:     s.conf("VISIONARY_SMTP_FROM"),
+		Host:     s.conf("smtp_host"),
+		User:     s.conf("smtp_user"),
+		Password: s.conf("smtp_password"),
+		From:     s.conf("smtp_from"),
 		Port:     587,
 	}
-	if p := s.confInt("VISIONARY_SMTP_PORT"); p > 0 && p < 65536 {
+	if p := s.confInt("smtp_port"); p > 0 && p < 65536 {
 		c.Port = p
 	}
 	if c.From == "" {

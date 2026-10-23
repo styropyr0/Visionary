@@ -164,7 +164,7 @@ GROUP BY version, COALESCE(service, '') HAVING MIN(created_at) >= ? ORDER BY fir
 // one is configured.
 func (s *Server) digestNotice(ctx context.Context, d *digestData) notice {
 	lines := digestLines(d)
-	n := notice{Event: "digest", Title: "Weekly performance digest · " + s.conf("VISIONARY_APP_NAME"), Severity: "info", Lines: lines, At: time.Now().UTC()}
+	n := notice{Event: "digest", Title: "Weekly performance digest · " + s.conf("app_name"), Severity: "info", Lines: lines, At: time.Now().UTC()}
 	if s.llm() != nil {
 		if text := s.digestSummary(ctx, d); text != "" {
 			n.Note = text
@@ -251,7 +251,7 @@ func (s *Server) digestSummary(ctx context.Context, d *digestData) string {
 	defer cancel()
 	data, _ := json.Marshal(d.forModel())
 	content, err := s.llm().chatJSON(ctx, []chatMessage{
-		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.conf("VISIONARY_APP_NAME") + `'s API. Write the weekly digest from the numbers given: this week against the week before.
+		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.conf("app_name") + `'s API. Write the weekly digest from the numbers given: this week against the week before.
 Reply with one JSON object: {"summary": "<4 to 7 short lines separated by \n>"}.
 - First line: the one thing worth knowing this week.
 - Then traffic, p95 and 5xx changes with numbers, the routes that got slower ("regressed_routes"), incidents, and new versions that line up with changes. Say "may be related" for releases, never certain.

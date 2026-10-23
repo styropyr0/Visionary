@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/styropyr0/visionary/sdks/go/d1"
 )
@@ -65,35 +64,6 @@ func LoadConfig() (Config, error) {
 
 func getEnv(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func getInt(key string, fallback int) int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && v > 0 {
-		return v
-	}
-	return fallback
-}
-
-func getBool(key string, fallback bool) bool {
-	if v, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(key))); err == nil {
-		return v
-	}
-	return fallback
-}
-
-func getDuration(key string, fallback time.Duration) time.Duration {
-	if v, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key))); err == nil && v > 0 {
-		return v
-	}
-	return fallback
-}
-
-// getFloat reads a percentage in (0, 100).
-func getFloat(key string, fallback float64) float64 {
-	if v, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv(key)), 64); err == nil && v > 0 && v < 100 {
 		return v
 	}
 	return fallback

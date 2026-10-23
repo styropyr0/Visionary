@@ -5,7 +5,7 @@ public struct VisionaryConfig {
     /// The Visionary server, e.g. `https://visionary.example.com`. Events go to
     /// `<endpoint>/api/ingest/client` unless the URL already ends with that path.
     public var endpoint: URL
-    /// A public client key (`VISIONARY_CLIENT_KEYS` or one created in Settings).
+    /// A public client key (Settings → API keys, scope Client ingest).
     public var key: String
     /// The user-facing version; defaults to `CFBundleShortVersionString`.
     public var appVersion: String?

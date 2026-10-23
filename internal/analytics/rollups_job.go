@@ -138,7 +138,7 @@ func (rt *rollupRuntime) loadSpans(ctx context.Context) error {
 }
 
 func (s *Server) rollupsStart(ctx context.Context) {
-	if !s.confBool("VISIONARY_ROLLUPS") {
+	if !s.confBool("rollups") {
 		s.logger.Info("rollups disabled in Settings → Server; long ranges read raw rows")
 		return
 	}

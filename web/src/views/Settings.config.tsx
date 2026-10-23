@@ -13,7 +13,6 @@ import { Card, Switch } from "./Settings.profiling";
 type Kind = "text" | "long" | "secret" | "int" | "float" | "bool" | "duration" | "choice";
 
 interface ConfSetting {
-  env: string;
   key: string;
   group: string;
   label: string;
@@ -26,7 +25,6 @@ interface ConfSetting {
   value: string;
   set: boolean;
   stored: boolean;
-  from_env?: boolean;
 }
 
 interface ConfView {
@@ -177,7 +175,6 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
         <div className="pset-label">
           {s.label}
           {s.restart && <span className="conf-tag">After restart</span>}
-          {s.from_env && <span className="conf-tag warn" title={`${s.env} is still set; it is copied here on the next start, then ignored.`}>From {s.env}</span>}
         </div>
         {s.help && <div className="dim pset-hint">{s.help}</div>}
       </div>

@@ -124,9 +124,9 @@ FROM system_metrics WHERE created_at >= ? GROUP BY instance ORDER BY last_seen D
 	return out
 }
 
-func (s *Server) countList(env string) int {
+func (s *Server) countList(key string) int {
 	n := 0
-	for _, k := range strings.Split(s.conf(env), ",") {
+	for _, k := range strings.Split(s.conf(key), ",") {
 		if strings.TrimSpace(k) != "" {
 			n++
 		}
@@ -166,7 +166,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	case sg.broken != nil:
 		signIn = "Broken: " + sg.broken.Error()
 	}
-	serverList, clientList := s.countList("VISIONARY_INGEST_KEYS"), s.countList("VISIONARY_CLIENT_KEYS")
+	serverList, clientList := s.countList("ingest_keys"), s.countList("client_keys")
 	features := []featureStatus{
 		{"AI analyst", s.llm() != nil, model},
 		{"Sign-in", sg.open == "" && sg.broken == nil, signIn},

@@ -72,7 +72,7 @@ GROUP BY instance ORDER BY window_cpu DESC LIMIT 10`},
 		evidence.WriteString("\n")
 	}
 
-	prompt := `You explain production alerts for ` + s.conf("VISIONARY_APP_NAME") + `'s API. An alert just fired. You get three comparisons of the 30 minutes before it (window) with the same 30 minutes a day earlier (baseline).
+	prompt := `You explain production alerts for ` + s.conf("app_name") + `'s API. An alert just fired. You get three comparisons of the 30 minutes before it (window) with the same 30 minutes a day earlier (baseline).
 Reply with one JSON object: {"cause": "<2 to 4 short lines, separated by \n>"}.
 - Lead with the most likely cause, naming the route, error key, instance or resource that moved with the alert, with numbers.
 - Say "likely", not certain. If the data does not point anywhere, say so in one line.

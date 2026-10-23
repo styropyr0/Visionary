@@ -30,8 +30,8 @@ func (s *Server) rum() *rumState {
 		return st.(*rumState)
 	}
 	st := &rumState{
-		origins: parseOrigins(s.conf("VISIONARY_CLIENT_ORIGINS")),
-		limits:  newRUMLimiter(s.confInt("VISIONARY_CLIENT_RATE_PER_IP"), s.confInt("VISIONARY_CLIENT_RATE_PER_KEY")),
+		origins: parseOrigins(s.conf("client_origins")),
+		limits:  newRUMLimiter(s.confInt("client_rate_per_ip"), s.confInt("client_rate_per_key")),
 		writer:  newRUMWriter(s),
 	}
 	actual, _ := rumStates.LoadOrStore(s, st)

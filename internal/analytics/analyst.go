@@ -364,8 +364,8 @@ func (s *Server) analystPrompt(req analystRequest, tr timeRange) string {
 		tz = "UTC"
 	}
 	notes := "none"
-	if s.conf("VISIONARY_DATA_NOTES") != "" {
-		notes = s.conf("VISIONARY_DATA_NOTES")
+	if s.conf("data_notes") != "" {
+		notes = s.conf("data_notes")
 	}
 	routes := s.knownRoutes(context.Background())
 	knownRoutes := "unknown"
@@ -373,7 +373,7 @@ func (s *Server) analystPrompt(req analystRequest, tr timeRange) string {
 		knownRoutes = strings.Join(head(routes, 60), ", ")
 	}
 
-	return `You are Visionary, an analyst for ` + s.conf("VISIONARY_APP_NAME") + `'s production API. You answer questions about traffic, errors, latency and server health by querying a ` + s.db.Name() + ` database, then explaining what you found in plain language.
+	return `You are Visionary, an analyst for ` + s.conf("app_name") + `'s production API. You answer questions about traffic, errors, latency and server health by querying a ` + s.db.Name() + ` database, then explaining what you found in plain language.
 
 Context
 - Now: ` + time.Now().UTC().Format(tsLayout) + ` UTC. The viewer is in ` + tz + ` (` + offset + `). Data is stored in UTC; in your answer, convert every time to the viewer's zone and say so once (e.g. "all times ` + tz + `").` + example + `
