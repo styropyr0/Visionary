@@ -67,9 +67,14 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   server-side latency, JS and mobile crashes, sessions, devices and countries.
 - **Uptime:** HTTP checks with timing phases, incidents, certificate expiry,
   and an optional public status page.
-- **Alerts:** thresholds, seasonal anomalies, SLO burn rates and silent
-  instances, to Slack, Discord, webhooks or email; each alert says what most
-  likely caused it. A weekly digest is optional.
+- **Alerts:** thresholds, seasonal anomalies and SLO burn rates over 60+
+  metrics (requests, hosts, exceptions, Web Vitals, dependencies, uptime and
+  certificates, security, containers), with presets to start from. They go to
+  Slack, Discord, Teams, Google Chat, webhooks, email, PagerDuty, Opsgenie,
+  Telegram or SMS, retried when a send fails; each alert says what most likely
+  caused it. Acknowledge, escalate, silence for maintenance or quiet hours,
+  and hold back alerts that depend on one already firing. A weekly digest is
+  optional.
 - **Explore:** ask a question, get an answer with charts. **Dashboards**
   arrange any panel on a grid, with variables, share links and a TV mode.
 - **Team:** viewer, editor and admin roles, from a login per person kept by
@@ -278,11 +283,14 @@ Help drawer on each page shows it too.
   database (Go and Node); see [Query plans](#query-plans).
 - **CPU profiles:** no code. Turn them on in Settings → Profiling, for all
   services or chosen ones.
-- **Alerts:** add a channel and a rule under Alerts. Slack, Discord and
-  webhooks need only their URL; email needs an SMTP server in Settings →
-  Server → Email.
+- **Alerts:** add a channel and a rule under Alerts. Slack, Discord, Teams,
+  Google Chat and webhooks need only their URL; PagerDuty, Opsgenie, Telegram
+  and Twilio need their key; email needs an SMTP server in Settings → Server →
+  Email. Rules and silences export to JSON and import elsewhere.
 - **Uptime checks:** add one under Uptime. The server calls the URL itself;
-  no code.
+  no code. The first check also creates an "Uptime check down" rule for every
+  check, sent to your first channel; a check can have its own alert settings
+  or none, in its form.
 - **Public status page:** turn it on in Settings → Status page, then mark
   checks as public.
 - **Deploy markers:** set `VISIONARY_RELEASE` on the service, or let the SDK

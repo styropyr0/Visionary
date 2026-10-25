@@ -591,6 +591,50 @@ pre,
   color: var(--accent);
 }
 
+/* A count on a page link (firing alerts, checks down). Collapsed, it sits on
+   the icon's corner. */
+.nav-item {
+  position: relative;
+}
+
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-badge.urgent {
+  background: var(--critical);
+  color: #fff;
+}
+
+.shell.collapsed .nav-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 9.5px;
+  line-height: 14px;
+}
+
+.info-tip .tip-badge {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--critical-text);
+  font-weight: 500;
+}
+
 .sidebar-foot {
   display: flex;
   flex-direction: column;

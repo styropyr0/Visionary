@@ -47,7 +47,7 @@ var dataKinds = []dataKind{
 	{Key: "uptime", Label: "Uptime results", Description: "Check results and their timings. The checks themselves stay.",
 		tables: []dataTable{{"uptime_results", false}}},
 	{Key: "alerts", Label: "Alert history", Description: "Past alert firings. The rules stay.",
-		tables: []dataTable{{"alert_events", false}}},
+		tables: []dataTable{{"alert_events", false}, {"alert_deliveries", false}}},
 	{Key: "security", Label: "Security findings", Description: "Findings from the detectors and host events.", Service: true,
 		tables: []dataTable{{"security_events", true}}},
 	{Key: "hosts", Label: "Host agent data", Description: "Processes, mounts, services, containers and their metrics and events.",

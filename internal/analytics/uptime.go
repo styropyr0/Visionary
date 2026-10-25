@@ -144,6 +144,8 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/uptime/checks/{id}/run", s.authed(s.handleUptimeRun))
 	mux.Handle("GET /api/uptime/checks/{id}/summary", s.authed(s.handleUptimeSummary))
 	mux.Handle("GET /api/uptime/checks/{id}/incidents", s.authed(s.handleUptimeIncidents))
+	mux.Handle("GET /api/uptime/checks/{id}/alert", s.authed(s.handleUptimeAlertGet))
+	mux.Handle("PUT /api/uptime/checks/{id}/alert", s.authed(s.handleUptimeAlertSet))
 	mux.Handle("GET /api/uptime/checks/{id}/{panel}", s.authed(s.handleUptimePanel))
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /status.json", s.handleStatusJSON)

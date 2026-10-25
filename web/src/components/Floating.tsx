@@ -18,6 +18,7 @@ export function FloatingMenu({
   className = "",
   style,
   role,
+  ariaLabel,
   children,
 }: {
   anchor: RefObject<HTMLElement>;
@@ -29,6 +30,7 @@ export function FloatingMenu({
   className?: string;
   style?: CSSProperties;
   role?: string;
+  ariaLabel?: string;
   children: ReactNode;
 }) {
   const [pos, setPos] = useState<CSSProperties | null>(null);
@@ -66,6 +68,7 @@ export function FloatingMenu({
       ref={menuRef}
       className={`popover floating ${className}`}
       role={role}
+      aria-label={ariaLabel}
       // Hidden until placed, so it never flashes at the wrong spot.
       style={{ ...style, ...(pos ?? { position: "fixed", visibility: "hidden" }) }}
     >

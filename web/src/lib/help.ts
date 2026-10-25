@@ -312,7 +312,7 @@ agent, err := visionary.New(cfg)`,
     id: "checks",
     title: "Add an uptime check",
     intro:
-      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and can alert.",
+      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form.",
     any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless an admin turns on Settings → Server → Other → Uptime checks may reach private addresses." },
   },
   statuspage: {
@@ -411,7 +411,7 @@ OTEL_SERVICE_NAME=my-api`,
     id: "email",
     title: "Send alerts",
     intro:
-      "A rule watches a metric or a query and notifies its channels. Slack, Discord and webhooks need only their URL, added as a channel under Alerts.",
+      "A rule watches a metric or a query and notifies its channels. Slack, Discord, Teams, Google Chat and webhooks need only their URL; PagerDuty, Opsgenie, Telegram and SMS (Twilio) need their key. Add channels under Alerts → Channels.",
     any: { note: "Email needs an SMTP server: an admin fills in host, port, user, password and from address in Settings → Server → Email. Then add a rule, or start from a preset, and pick the channels it notifies." },
   },
 };
@@ -518,7 +518,7 @@ export const HELP: Record<Route, PageHelp> = {
   uptime: {
     title: "Uptime",
     tip: "Checks that call your endpoints from outside on a schedule, with response times, incidents and an optional public status page.",
-    what: "HTTP checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; failing checks can alert.",
+    what: "HTTP checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
     read: [
       "A check fails after its retries, so a single slow answer does not open an incident.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
@@ -571,10 +571,12 @@ export const HELP: Record<Route, PageHelp> = {
   },
   alerts: {
     title: "Alerts",
-    tip: "Rules that notify Slack, Discord, email or a webhook when error rate, latency, uptime or anything you can query crosses a threshold.",
-    what: "Alert rules, the channels they notify, their history and the weekly digest. A rule watches a metric or a query and fires when it crosses its threshold for long enough.",
+    tip: "Rules that notify chat, email, paging or SMS when errors, latency, hosts, uptime, Web Vitals or anything you can query go wrong, with acknowledgements, escalation and silences.",
+    what: "Alert rules, the channels they notify, their activity, silences and the weekly digest. A rule watches a metric or a query and fires when it crosses its threshold for long enough; presets cover the common cases.",
     read: [
-      "Each firing is kept in history with the value that triggered it.",
+      "Acknowledge a firing rule to stop its reminders and escalation; the channels that were told hear who took it.",
+      "Silences hold back notifications during a maintenance window or quiet hours. Rules keep recording, and Activity says what was held back and why.",
+      "Activity shows each channel's delivery. A failed send is retried for about 20 minutes before it is marked failed.",
       "Email needs an SMTP server in Settings → Server → Email.",
     ],
     setup: ["email"],

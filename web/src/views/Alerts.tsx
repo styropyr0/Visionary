@@ -9,13 +9,15 @@ import { ChannelsTab } from "../components/alerts/ChannelsTab";
 import { DigestTab } from "../components/alerts/DigestTab";
 import { RulesTab } from "../components/alerts/RulesTab";
 import { SLOsTab } from "../components/alerts/SLOsTab";
+import { SilencesTab } from "../components/alerts/SilencesTab";
 import { ErrorNotice } from "../components/ErrorNotice";
 import "./Alerts.css";
 
-type Tab = "rules" | "activity" | "channels" | "slos" | "digest";
+type Tab = "rules" | "activity" | "silences" | "channels" | "slos" | "digest";
 const TABS: { key: Tab; label: string }[] = [
   { key: "rules", label: "Rules" },
   { key: "activity", label: "Activity" },
+  { key: "silences", label: "Silences" },
   { key: "channels", label: "Channels" },
   { key: "slos", label: "SLOs" },
   { key: "digest", label: "Digest" },
@@ -45,6 +47,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
   const rules = useQuery(`alerts-rules#${tick}.${version}`, (signal) => alertsApi.rules(signal));
   const channels = useQuery(`alerts-channels#${tick}.${version}`, (signal) => alertsApi.channels(signal));
   const firing = (rules.data?.rules ?? []).filter((r) => r.enabled && r.status.state === "firing").length;
+  const unacked = (rules.data?.rules ?? []).some((r) => r.enabled && r.status.firing > r.status.acked);
   // A request that failed and has nothing to show yet; one that fails on a
   // background refresh keeps its last result on screen.
   const error = [am, rules, channels].find((q) => q.error && !q.data)?.error;
@@ -66,7 +69,11 @@ export function Alerts({ meta }: { meta?: Meta }) {
           {TABS.map((t) => (
             <button type="button" key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
               {t.label}
-              {t.key === "rules" && firing > 0 && <span className="al-tab-count" aria-label={`${firing} firing`}>{firing}</span>}
+              {t.key === "rules" && firing > 0 && (
+                <span className={`al-tab-count ${unacked ? "" : "acked"}`} aria-label={`${firing} firing${unacked ? "" : ", all acknowledged"}`}>
+                  {firing}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -78,6 +85,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
           <>
             {tab === "rules" && <RulesTab meta={am.data} rules={rules.data.rules} channels={channels.data.channels} loading={rules.loading} onChange={changed} />}
             {tab === "activity" && <ActivityTab rules={rules.data.rules} refreshKey={version} />}
+            {tab === "silences" && <SilencesTab meta={am.data} rules={rules.data.rules} refreshKey={tick} />}
             {tab === "channels" && <ChannelsTab meta={am.data} channels={channels.data.channels} onChange={changed} />}
             {tab === "slos" && <SLOsTab meta={am.data} refreshKey={0} />}
             {tab === "digest" && <DigestTab meta={am.data} channels={channels.data.channels} onChange={changed} />}

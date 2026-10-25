@@ -172,6 +172,23 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 		out.Result = newResult(res, s.maxRows(), "", tr)
 		out.Note = "Failed checks per hour. The rule counts consecutive failures, newest first."
 
+	case sp.Metric == "uptime_cert_days":
+		out.Unit, out.Threshold = "days", ptr(sp.Threshold)
+		out.Note = "Each check's days until its certificate expires are below; certificates change too rarely to chart."
+
+	case sp.Metric == "new_error_types":
+		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
+		where, args := spansClause(day)
+		t := s.q.bucketOf("3600")
+		res, err := s.db.Query(ctx, `SELECT `+t+` AS t, '' AS series, COUNT(DISTINCT fingerprint) AS value
+FROM errors WHERE `+where+` GROUP BY `+t+` ORDER BY t`, args...)
+		if err != nil {
+			return nil, err
+		}
+		tr.Bucket = 3600
+		out.Result = newResult(res, s.maxRows(), "", tr)
+		out.Note = "Distinct error types per hour. The rule counts only those not seen in the 30 days before its window."
+
 	default:
 		m, ok := s.metricByID(sp.Metric)
 		if !ok {
@@ -185,7 +202,19 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 				out.Note = errNoSystemMetrics
 				return out, nil
 			}
+			if missingTable(err, m.table) {
+				out.Note = "No data for this metric yet: nothing has written to " + m.table + "."
+				return out, nil
+			}
 			return nil, err
+		}
+		if m.keyCol == "check_id" {
+			names := s.checkNames(ctx)
+			for i := range pts {
+				if n := names[pts[i].Series]; n != "" {
+					pts[i].Series = n
+				}
+			}
 		}
 		tr.Bucket = bucket
 		out.Result = pointsResult(pts, tr)

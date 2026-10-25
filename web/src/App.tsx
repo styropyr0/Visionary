@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { api, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser } from "./lib/api";
 import { load, save } from "./lib/state";
@@ -7,6 +7,7 @@ import { ROUTES, Sidebar, type Route } from "./components/Sidebar";
 import { HelpHost } from "./components/Help";
 import { loadPrefs, prefs } from "./lib/prefs";
 import { MetaContext } from "./lib/meta";
+import { clearSession, refreshSession } from "./lib/team";
 import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
@@ -42,12 +43,29 @@ const SIGN_IN_REQUIRED = "sign in required";
 // Opened at the root: the start page from Settings → Preferences applies.
 const openedAtRoot = !window.location.hash || window.location.hash === "#/" || window.location.hash === "#";
 
+// Every tab of the dashboard shares one session cookie. A tab that signs in or
+// out says so here, and the others follow instead of keeping the previous
+// user's role until they are reloaded.
+const SESSION_CHANNEL = "va.session";
+
+function openSessionChannel(): BroadcastChannel | null {
+  try {
+    return new BroadcastChannel(SESSION_CHANNEL);
+  } catch {
+    return null;
+  }
+}
+
 export function App() {
   const [auth, setAuth] = useState<Auth>("checking");
   const [user, setUser] = useState<SessionUser | null>(null);
   const [notice, setNotice] = useState("");
   const [route, setRoute] = useState<Route>(readRoute);
   const [collapsed, setCollapsed] = useState(() => load("va.sidebar", false));
+  // Bumped when another tab changes who is signed in, so every page mounts
+  // again and asks the server what this user may do.
+  const [sessionKey, setSessionKey] = useState(0);
+  const channel = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
     api<SessionInfo>("/api/session")
@@ -59,6 +77,7 @@ export function App() {
     const onUnauth = (e: Event) => {
       const msg = (e as CustomEvent<string>).detail;
       setNotice(msg && msg.toLowerCase() !== SIGN_IN_REQUIRED ? msg : "");
+      clearSession();
       setUser(null);
       setAuth("out");
     };
@@ -71,6 +90,28 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const ch = openSessionChannel();
+    channel.current = ch;
+    if (!ch) return;
+    ch.onmessage = () => {
+      // A 401 here signs this tab out through UNAUTHORIZED_EVENT.
+      api<SessionInfo>("/api/session")
+        .then((s) => {
+          refreshSession();
+          setNotice("");
+          setUser(s.user);
+          setAuth("in");
+          setSessionKey((k) => k + 1);
+        })
+        .catch(() => undefined);
+    };
+    return () => {
+      ch.close();
+      channel.current = null;
+    };
+  }, []);
+
   // The server's copy of the preferences, once signed in. A different time
   // zone or clock than this browser's copy needs every time drawn again.
   useEffect(() => {
@@ -80,10 +121,12 @@ export function App() {
       const start = prefs().startPage;
       if (openedAtRoot && start && ROUTES.includes(start as Route) && readRoute() === "overview") window.location.hash = `#/${start}`;
     });
-  }, [auth]);
+  }, [auth, sessionKey]);
 
   const signOut = useCallback(async () => {
     await api("/api/logout", { method: "POST", json: {} }).catch(() => undefined);
+    clearSession();
+    channel.current?.postMessage("signed-out");
     setNotice("");
     setUser(null);
     setAuth("out");
@@ -97,6 +140,10 @@ export function App() {
       <Login
         notice={notice}
         onSignedIn={(s) => {
+          // Pages read the role from the shared session, which still holds
+          // the previous user's until it is loaded again.
+          refreshSession();
+          channel.current?.postMessage("signed-in");
           setNotice("");
           setUser(s.user);
           setAuth("in");
@@ -118,7 +165,7 @@ export function App() {
         user={user}
       />
       <MetaContext.Provider value={meta.data}>
-        <main className="main">
+        <main className="main" key={sessionKey}>
           {meta.data?.sign_in_open && <OpenBanner why={meta.data.sign_in_open} />}
           {route === "overview" && <Overview />}
           {route === "performance" && <Performance meta={meta.data} />}
@@ -151,7 +198,7 @@ function OpenBanner({ why }: { why: "disabled" | "unconfigured" }) {
       <ShieldAlert size={15} />
       {why === "disabled" ? (
         <span>
-          Sign-in is off (<code>VISIONARY_ENABLE_AUTH=false</code>): anyone who can reach this server is an admin. Remove the variable and restart once sign-in works.
+          Authentication is off (<code>VISIONARY_ENABLE_AUTH=false</code>), so anyone who can open this page is an admin. Once sign-in works, remove the variable and restart the server.
         </span>
       ) : (
         <span>Sign-in isn't set up: anyone who can reach this server is an admin.</span>

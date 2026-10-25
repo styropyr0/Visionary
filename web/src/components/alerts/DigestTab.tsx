@@ -7,7 +7,7 @@ import { alertsApi, WEEKDAYS, type AlertsMeta, type Channel, type DigestChange, 
 import type { Result } from "../../lib/api";
 import { formatCount, formatMs, formatPercent, titleCase } from "../../lib/format";
 import { formatDateTime, formatLogTime, dateFormat } from "../../lib/time";
-import { KIND_ICON, KIND_LABEL } from "./ChannelsTab";
+import { KIND_ICON, KIND_LABEL, NO_DIGEST_KINDS } from "./ChannelsTab";
 import { kindLabel } from "../../lib/security";
 import { DataTable } from "../DataTable";
 import { ErrorNotice } from "../ErrorNotice";
@@ -405,6 +405,7 @@ function Sections({ d }: { d: Data }) {
 }
 
 function Delivery({ meta, channels, onChange }: { meta: AlertsMeta; channels: Channel[]; onChange: () => void }) {
+  const digestable = channels.filter((c) => !NO_DIGEST_KINDS.includes(c.kind));
   return (
     <section className="panel span-12 al-digest-schedule">
       <header className="panel-head">
@@ -415,11 +416,11 @@ function Delivery({ meta, channels, onChange }: { meta: AlertsMeta; channels: Ch
           Off by default. Each channel gets the digest weekly on its own day and hour, in {meta.digest_tz} (change it in Settings → Server → Alerts). Email channels get the
           formatted report; Slack, Discord and webhooks get it as text.
         </p>
-        {channels.length === 0 ? (
-          <p className="al-hint">Add a channel in the Channels tab first.</p>
+        {digestable.length === 0 ? (
+          <p className="al-hint">Add a chat, webhook or email channel in the Channels tab first. Paging and SMS channels do not get the digest.</p>
         ) : (
           <ul className="al-digest-list">
-            {channels.map((c) => (
+            {digestable.map((c) => (
               <DigestRow key={c.id} channel={c} canEdit={meta.can_edit} offsetMin={meta.digest_offset_min} onChange={onChange} />
             ))}
           </ul>
@@ -440,6 +441,10 @@ function DigestRow({ channel, canEdit, offsetMin, onChange }: { channel: Channel
         name: next.name,
         kind: next.kind,
         to: next.to,
+        chat_id: next.chat_id,
+        account_sid: next.account_sid,
+        from: next.from,
+        region: next.region,
         digest_enabled: next.digest_enabled,
         digest_weekday: next.digest_weekday,
         digest_hour: next.digest_hour,

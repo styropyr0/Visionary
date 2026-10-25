@@ -35,7 +35,8 @@ func (s *Server) securityMetrics() []metricDef {
 
 // allMetrics is every metric a rule can watch.
 func (s *Server) allMetrics() []metricDef {
-	return append(append(alertMetrics(s.apdex()), s.securityMetrics()...), containerMetrics()...)
+	rule := s.apdex()
+	return append(append(append(alertMetrics(rule), moreMetrics(rule)...), s.securityMetrics()...), containerMetrics()...)
 }
 
 // securityClause narrows security_events to a rule's scope, bound.

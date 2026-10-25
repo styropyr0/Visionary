@@ -94,7 +94,7 @@ func (s *Server) observeAnomaly(ctx context.Context, r alertRule, now time.Time)
 func (s *Server) anomalyBaseline(ctx context.Context, r alertRule, now time.Time) (baseline, metricDef, error) {
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok || !m.Anomaly {
-		return baseline{}, m, errors.New("anomaly rules watch request rate, p95 latency, 5xx rate or host CPU")
+		return baseline{}, m, errors.New("this metric has no anomaly mode")
 	}
 	w := anomalyWindow(r.Spec)
 	bucket := int64(w.Seconds())
@@ -124,7 +124,7 @@ func (s *Server) anomalyBaseline(ctx context.Context, r alertRule, now time.Time
 	if err != nil {
 		return b, m, err
 	}
-	values, weeks := seasonalValues(pts, spans, bucket, m.ID == "requests_per_min")
+	values, weeks := seasonalValues(pts, spans, bucket, m.zeroFill)
 	b.Source, b.Weeks = "seasonal", weeks
 	if weeks < minSeasonalWeeks || len(values) < minBaselinePoints {
 		day := []timeSpan{{floorToStep(now.Add(-24*time.Hour), w), floorToStep(now.Add(-w), w)}}
@@ -132,7 +132,7 @@ func (s *Server) anomalyBaseline(ctx context.Context, r alertRule, now time.Time
 		if err != nil {
 			return b, m, err
 		}
-		values, _ = seasonalValues(pts, day, bucket, m.ID == "requests_per_min")
+		values, _ = seasonalValues(pts, day, bucket, m.zeroFill)
 		b.Source, b.Weeks = "24h", 0
 	}
 	if len(values) < minBaselinePoints {
@@ -214,6 +214,10 @@ func scaleFloor(m metricDef) float64 {
 		return 1
 	case "rpm":
 		return 0.2
+	case "count":
+		// A quiet baseline of zero errors should not make one error an
+		// anomaly.
+		return 1
 	}
 	return 0.01
 }

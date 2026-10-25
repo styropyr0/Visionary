@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Github,
   Activity,
@@ -34,6 +34,7 @@ import { LOGO_EYE, LOGO_SUN, LOGO_VIEWBOX } from "./logo";
 import { useHoverTip } from "./InfoTip";
 import { HELP } from "../lib/help";
 import { useSettings } from "../lib/settings";
+import { alertsApi, type AlertsSummary } from "../lib/alerts";
 
 export type Route =
   | "overview"
@@ -109,11 +110,20 @@ export function BrandMark() {
   );
 }
 
+/** A count on a page link: something there needs someone. */
+interface NavBadge {
+  count: number;
+  /** urgent is red; otherwise neutral (firing but acknowledged). */
+  urgent: boolean;
+  title: string;
+}
+
 /** A page link whose tip says what the page is for. */
-function NavItem({ route, label, icon: Icon, active }: { route: Route; label: string; icon: typeof LayoutDashboard; active: boolean }) {
+function NavItem({ route, label, icon: Icon, active, badge }: { route: Route; label: string; icon: typeof LayoutDashboard; active: boolean; badge?: NavBadge }) {
   const { props, bubble } = useHoverTip<HTMLAnchorElement>(
     <>
       <span className="tip-title">{label}</span>
+      {badge && <span className="tip-badge">{badge.title}</span>}
       {HELP[route].tip}
     </>,
     "right",
@@ -123,10 +133,58 @@ function NavItem({ route, label, icon: Icon, active }: { route: Route; label: st
       <a {...props} href={`#/${route}`} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
         <Icon size={16} />
         <span className="nav-text">{label}</span>
+        {badge && (
+          <span className={`nav-badge ${badge.urgent ? "urgent" : ""}`} aria-label={badge.title}>
+            {badge.count > 99 ? "99+" : badge.count}
+          </span>
+        )}
       </a>
       {bubble}
     </>
   );
+}
+
+/** Firing alerts and down uptime checks, refreshed every 30 seconds while the page is open. */
+function useAlertBadges(): Partial<Record<Route, NavBadge>> {
+  const [summary, setSummary] = useState<AlertsSummary | null>(null);
+  useEffect(() => {
+    let ctrl = new AbortController();
+    const load = () => {
+      if (document.visibilityState !== "visible") return;
+      ctrl.abort();
+      ctrl = new AbortController();
+      alertsApi
+        .summary(ctrl.signal)
+        .then(setSummary)
+        .catch(() => undefined);
+    };
+    load();
+    const id = window.setInterval(load, 30_000);
+    document.addEventListener("visibilitychange", load);
+    return () => {
+      ctrl.abort();
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", load);
+    };
+  }, []);
+  const out: Partial<Record<Route, NavBadge>> = {};
+  if (!summary) return out;
+  if (summary.firing_series > 0) {
+    const n = summary.unacked || summary.firing_series;
+    out.alerts = {
+      count: n,
+      urgent: summary.unacked > 0,
+      title: summary.unacked > 0 ? `${summary.unacked} firing alert${summary.unacked === 1 ? "" : "s"} nobody acknowledged` : `${summary.firing_series} firing, all acknowledged`,
+    };
+  }
+  if (summary.checks_down > 0) {
+    out.uptime = {
+      count: summary.checks_down,
+      urgent: true,
+      title: `Down: ${summary.down.join(", ")}${summary.checks_down > summary.down.length ? ` and ${summary.checks_down - summary.down.length} more` : ""}`,
+    };
+  }
+  return out;
 }
 
 /** The Visionary role (admin, editor, viewer) from the session. */
@@ -151,6 +209,7 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
   const version = versionLabel(project.data);
   // Pages the team hid in Settings → Pages; the open page always shows.
   const hidden = new Set(useSettings().settings?.hidden_pages ?? []);
+  const badges = useAlertBadges();
   const shownNav = NAV.map(({ group, items }) => ({ group, items: items.filter((i) => i.route === route || !hidden.has(i.route)) })).filter((g) => g.items.length > 0);
   return (
     <aside className="sidebar">
@@ -178,7 +237,7 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
           <div className="nav-group" key={group}>
             <div className="nav-label">{group}</div>
             {items.map(({ route: r, label, icon }) => (
-              <NavItem key={r} route={r} label={label} icon={icon} active={route === r} />
+              <NavItem key={r} route={r} label={label} icon={icon} active={route === r} badge={badges[r]} />
             ))}
           </div>
         ))}

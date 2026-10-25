@@ -3,7 +3,9 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
-import { deleteCheck, formatInterval, INTERVALS, MASK, saveCheck, type CheckInput, type UptimeCheck } from "../lib/uptime";
+import { deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type CheckInput, type UptimeCheck } from "../lib/uptime";
+import { useQuery } from "../lib/useQuery";
+import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
@@ -39,6 +41,11 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const set = <K extends keyof CheckInput>(k: K, v: CheckInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+  // How the check is alerted on; a new check gets the rule for every check
+  // unless the form says otherwise.
+  const current = useQuery(check ? `check-alert-${check.id}` : null, (signal) => getCheckAlert(check!.id, signal));
+  const [draft, setDraft] = useState<CheckAlertDraft | null>(null);
+  const alertDraft = draft ?? draftOf(current.data?.alert);
 
   const submit = async () => {
     setErr("");
@@ -48,8 +55,10 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     }
     setBusy(true);
     try {
-      const { check: saved } = await saveCheck({ ...form, headers: h }, check?.id);
-      toast("ok", check ? `Saved “${saved.name}”` : `Created “${saved.name}”`);
+      const { touched, ...alert } = alertDraft;
+      const { check: saved, alert_error } = await saveCheck({ ...form, headers: h, alert: touched ? alert : undefined }, check?.id);
+      if (alert_error) toast("err", `Saved, but its alert was not: ${alert_error}`);
+      else toast("ok", check ? `Saved “${saved.name}”` : `Created “${saved.name}”`);
       onSaved(saved);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -183,6 +192,8 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
             Show the URL there too
           </label>
         </fieldset>
+
+        {(!check || current.data) && <CheckAlertSection current={current.data?.alert} draft={alertDraft} onChange={setDraft} />}
 
         {err && <div className="form-error">{err}</div>}
 

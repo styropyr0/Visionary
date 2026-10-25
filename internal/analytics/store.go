@@ -51,6 +51,11 @@ func (s *Server) ensureSchema(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
+	for table, cols := range alertAddedColumns {
+		if err := s.addColumns(ctx, table, cols); err != nil {
+			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
+		}
+	}
 	return errors.Join(errs...)
 }
 

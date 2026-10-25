@@ -19,8 +19,8 @@ import (
 type metricDef struct {
 	ID          string   `json:"id"`
 	Label       string   `json:"label"`
-	Group       string   `json:"group"` // request, system, liveness, uptime
-	Unit        string   `json:"unit"`  // ms, percent, rpm, score, minutes, count, none
+	Group       string   `json:"group"` // request, system, liveness, uptime, errors, frontend, dependency, security, container
+	Unit        string   `json:"unit"`  // ms, percent, rpm, score, minutes, count, gb, mb, days, none
 	Description string   `json:"description"`
 	Scopes      []string `json:"scopes"`
 	Anomaly     bool     `json:"anomaly"`
@@ -32,10 +32,23 @@ type metricDef struct {
 
 	table       string
 	perInstance bool
-	keyCol      string // the column a grouped metric fans out by; empty is instance
-	pct         float64                      // percentile of duration_ms, 0 when not one
+	keyCol      string                       // the column a grouped metric fans out by; empty is instance
+	pct         float64                      // percentile of pctCol, 0 when not one
+	pctCol      string                       // the column a percentile reads; duration_ms when empty
+	filter      string                       // a fixed condition on the table's rows
 	agg         func(windowSec int64) string // aggregate over the rows in a window
 	minRequests int64                        // fewer rows than this is "no data"
+	// zeroFill: a bucket without rows is a real zero (no errors), not a gap,
+	// when building an anomaly baseline.
+	zeroFill bool
+}
+
+// filterSQL is the metric's fixed condition as an AND clause.
+func (m metricDef) filterSQL() string {
+	if m.filter == "" {
+		return ""
+	}
+	return " AND (" + m.filter + ")"
 }
 
 var requestScopes = []string{"route", "method", "service"}
@@ -76,7 +89,7 @@ func alertMetrics(rule apdexRule) []metricDef {
 	e5.Anomaly = true
 	rpm := req("requests_per_min", "Requests per minute", "rpm", "Requests per minute over the window. Use < to catch traffic drops.",
 		func(w int64) string { return "COUNT(*) * 60.0 / " + strconv.FormatInt(w, 10) }, "<", 1)
-	rpm.Anomaly, rpm.UpIsBad, rpm.minRequests = true, false, 0
+	rpm.Anomaly, rpm.UpIsBad, rpm.minRequests, rpm.zeroFill = true, false, 0, true
 	apdex := req("apdex", "Apdex", "score", "Apdex with T = "+strconv.Itoa(rule.DefaultMs)+" ms"+routeNote(rule)+": satisfied within T, tolerating within 4T. 1 is perfect.",
 		func(int64) string {
 			return "SUM(CASE WHEN status < 500 AND duration_ms <= " + t + " THEN 1.0 WHEN status < 500 AND duration_ms <= " + t4 + " THEN 0.5 ELSE 0 END) / NULLIF(COUNT(*), 0)"
@@ -140,6 +153,8 @@ func scopeClause(m metricDef, sc alertScope) (string, []any) {
 	add("service", "service", sc.Service)
 	add("container", "container", sc.Container)
 	add("host", "host", sc.Host)
+	add("app", "app", sc.App)
+	add("check", "check_id", sc.Check)
 	return b.String(), args
 }
 
@@ -171,12 +186,14 @@ func (s *Server) valueSQL(m metricDef, sc alertScope, span timeSpan, grouped boo
 	where, args := spansClause([]timeSpan{span})
 	scope, sargs := scopeClause(m, sc)
 	args = append(args, sargs...)
+	scope += m.filterSQL()
 	if m.pct > 0 {
+		col := fallback(m.pctCol, "duration_ms")
 		return `WITH o AS (
-  SELECT duration_ms, ROW_NUMBER() OVER (ORDER BY duration_ms) AS rn, COUNT(*) OVER () AS n
-  FROM api_logs WHERE ` + where + scope + `
+  SELECT ` + col + ` AS v, ROW_NUMBER() OVER (ORDER BY ` + col + `) AS rn, COUNT(*) OVER () AS n
+  FROM ` + m.table + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
 )
-SELECT '' AS k, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN duration_ms END) AS value, COUNT(*) AS n FROM o`, args
+SELECT '' AS k, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN v END) AS value, COUNT(*) AS n FROM o`, args
 	}
 	agg := m.agg(int64(span.To.Sub(span.From).Seconds()))
 	if grouped {
@@ -193,15 +210,17 @@ func (s *Server) seriesSQL(m metricDef, sc alertScope, spans []timeSpan, bucket 
 	where, args := spansClause(spans)
 	scope, sargs := scopeClause(m, sc)
 	args = append(args, sargs...)
+	scope += m.filterSQL()
 	t := s.q.bucketOf(strconv.FormatInt(bucket, 10))
 	if m.pct > 0 {
+		col := fallback(m.pctCol, "duration_ms")
 		return `WITH b AS (
-  SELECT ` + t + ` AS t, duration_ms FROM api_logs WHERE ` + where + scope + `
+  SELECT ` + t + ` AS t, ` + col + ` AS v FROM ` + m.table + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
 ),
 r AS (
-  SELECT t, duration_ms, ROW_NUMBER() OVER (PARTITION BY t ORDER BY duration_ms) AS rn, COUNT(*) OVER (PARTITION BY t) AS n FROM b
+  SELECT t, v, ROW_NUMBER() OVER (PARTITION BY t ORDER BY v) AS rn, COUNT(*) OVER (PARTITION BY t) AS n FROM b
 )
-SELECT t, '' AS series, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN duration_ms END) AS value, COUNT(*) AS n
+SELECT t, '' AS series, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN v END) AS value, COUNT(*) AS n
 FROM r GROUP BY t ORDER BY t`, args
 	}
 	agg := m.agg(bucket)
@@ -282,6 +301,10 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeSecurity(ctx, r, now)
 	case "container_events":
 		return s.observeContainerEvents(ctx, r, now)
+	case "uptime_cert_days":
+		return s.observeCertExpiry(ctx, r, now)
+	case "new_error_types":
+		return s.observeNewErrors(ctx, r, now)
 	}
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok {
@@ -296,6 +319,10 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		}
 		return nil, err
 	}
+	var names map[string]string
+	if m.keyCol == "check_id" {
+		names = s.checkNames(ctx)
+	}
 	var out []observation
 	for _, row := range res.Rows {
 		if len(row) != 3 {
@@ -303,11 +330,14 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		}
 		key := toString(row[0])
 		ob := observation{Key: key, Label: key, Threshold: ptr(r.Spec.Threshold)}
+		if n := names[key]; n != "" {
+			ob.Label = n
+		}
 		if v, ok := cellFloat(row[1]); ok && toInt(row[2]) >= m.minRequests {
 			ob.Value = ptr(v)
 			ob.Breach = compare(r.Spec.Op, v, r.Spec.Threshold)
 		}
-		ob.Message = thresholdMessage(m.Label, m.Unit, ob, r.Spec, describeScope(r.Spec.Scope, key))
+		ob.Message = thresholdMessage(m.Label, m.Unit, ob, r.Spec, describeScope(r.Spec.Scope, ob.Label))
 		out = append(out, ob)
 	}
 	return out, nil
@@ -443,6 +473,12 @@ WHERE created_at >= ? ORDER BY created_at DESC LIMIT 5000`, now.Add(-w).UTC().Fo
 		broken                     bool
 		total                      int
 	}
+	// A rule for every check leaves out the checks with a rule of their own
+	// (uptime_alerts.go), so they are alerted once, as they asked.
+	own := map[string]bool{}
+	if r.Spec.Scope.Check == "" {
+		own = s.checksWithOwnRule(ctx)
+	}
 	checks := map[string]*check{}
 	var order []string
 	for _, row := range res.Rows {
@@ -450,7 +486,7 @@ WHERE created_at >= ? ORDER BY created_at DESC LIMIT 5000`, now.Add(-w).UTC().Fo
 			continue
 		}
 		id := toString(row[0])
-		if r.Spec.Scope.Check != "" && id != r.Spec.Scope.Check {
+		if r.Spec.Scope.Check != "" && id != r.Spec.Scope.Check || own[id] {
 			continue
 		}
 		c := checks[id]
@@ -553,6 +589,12 @@ func formatUnit(v float64, unit string) string {
 		return strconv.FormatFloat(v, 'f', 1, 64) + "×"
 	case "count":
 		return strconv.FormatFloat(v, 'f', 0, 64)
+	case "gb":
+		return strconv.FormatFloat(v, 'f', 1, 64) + " GB"
+	case "mb":
+		return strconv.FormatFloat(v, 'f', 0, 64) + " MB"
+	case "days":
+		return strconv.FormatFloat(v, 'f', 1, 64) + " days"
 	}
 	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }

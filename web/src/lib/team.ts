@@ -18,8 +18,8 @@ export const ROLE_INFO: Record<Role, string> = {
   admin: "Also manages settings: API keys, role mapping, the audit log and notification channels.",
 };
 
-// One request per page load; every view shares it. Sign-in and sign-out reload
-// the session through refreshSession.
+// One request per page load; every view shares it. Sign-in reloads it through
+// refreshSession, sign-out drops it through clearSession.
 let sessionPromise: Promise<TeamSession> | null = null;
 const listeners = new Set<(s: TeamSession | null) => void>();
 
@@ -38,6 +38,12 @@ export function refreshSession() {
   loadSession()
     .then((s) => listeners.forEach((l) => l(s)))
     .catch(() => listeners.forEach((l) => l(null)));
+}
+
+/** Forgets the signed-out user's session, so the next one is loaded fresh. */
+export function clearSession() {
+  sessionPromise = null;
+  listeners.forEach((l) => l(null));
 }
 
 /** The signed-in user's role. Until it loads, nothing is allowed. */

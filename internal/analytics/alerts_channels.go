@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +14,10 @@ type channelInput struct {
 	Secret        string   `json:"secret"`
 	ClearSecret   bool     `json:"clear_secret"`
 	To            []string `json:"to"`
+	ChatID        string   `json:"chat_id"`
+	AccountSID    string   `json:"account_sid"`
+	From          string   `json:"from"`
+	Region        string   `json:"region"`
 	DigestEnabled bool     `json:"digest_enabled"`
 	DigestWeekday *int     `json:"digest_weekday"`
 	DigestHour    *int     `json:"digest_hour"`
@@ -33,7 +38,7 @@ func (in channelInput) apply(c *alertChannel) error {
 		c.Kind = in.Kind
 	}
 	if !channelKinds[c.Kind] {
-		return badInput("kind must be slack, discord, webhook or email")
+		return badInput("unknown channel kind")
 	}
 	if u := strings.TrimSpace(in.URL); u != "" {
 		c.Config.URL = u
@@ -41,25 +46,41 @@ func (in channelInput) apply(c *alertChannel) error {
 	if in.ClearSecret {
 		c.Config.Secret = ""
 	}
-	if in.Secret != "" {
-		c.Config.Secret = in.Secret
+	if sec := strings.TrimSpace(in.Secret); sec != "" {
+		c.Config.Secret = sec
 	}
-	if c.Kind == "email" {
-		c.Config.URL, c.Config.Secret = "", ""
-		c.Config.To = nil
+	if !urlKinds[c.Kind] {
+		c.Config.URL = ""
+	}
+	if !secretKinds[c.Kind] {
+		c.Config.Secret = ""
+	}
+	c.Config.To = nil
+	if c.Kind == "email" || c.Kind == "sms" {
 		for _, to := range in.To {
 			if to = strings.TrimSpace(to); to != "" {
 				c.Config.To = append(c.Config.To, to)
 			}
 		}
-	} else {
-		c.Config.To = nil
-		if c.Kind != "webhook" {
-			c.Config.Secret = ""
+	}
+	// As with the URL, a field left empty keeps the stored value, so a
+	// partial update (the digest settings) leaves the rest alone.
+	keep := func(stored *string, in string, used bool) {
+		if !used {
+			*stored = ""
+		} else if v := strings.TrimSpace(in); v != "" {
+			*stored = v
 		}
 	}
+	keep(&c.Config.ChatID, in.ChatID, c.Kind == "telegram")
+	keep(&c.Config.AccountSID, in.AccountSID, c.Kind == "sms")
+	keep(&c.Config.From, in.From, c.Kind == "sms")
+	keep(&c.Config.Region, in.Region, c.Kind == "opsgenie")
 	if err := validateChannelConfig(c.Kind, c.Config); err != nil {
 		return badInput(err.Error())
+	}
+	if in.DigestEnabled && noDigestKinds[c.Kind] {
+		return badInput("weekly digests go to chat, webhook or email channels, not paging or SMS")
 	}
 	c.DigestEnabled = in.DigestEnabled
 	if in.DigestWeekday != nil {
@@ -150,7 +171,14 @@ func (s *Server) handleDeleteChannel(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.audit(r, "alert.channel.delete", c.Name, map[string]any{"id": c.ID})
+	// Rules keep no reference to a channel that is gone.
+	changed, err := s.dropChannelFromRules(r.Context(), c.ID)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.alertEngine().invalidate(0)
+	s.audit(r, "alert.channel.delete", c.Name, map[string]any{"id": c.ID, "rules_changed": changed})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -257,4 +285,40 @@ func (s *Server) handleDigestPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": d, "lines": digestLines(d), "time_zone": tzName(s.digestTZ()), "llm": s.llm() != nil})
+}
+
+// dropChannelFromRules removes a channel from every rule's channels and
+// escalation steps, and reports how many rules changed.
+func (s *Server) dropChannelFromRules(ctx context.Context, id int64) (int, error) {
+	rules, err := s.listRules(ctx, false)
+	if err != nil {
+		return 0, err
+	}
+	without := func(ids []int64) ([]int64, bool) {
+		out := make([]int64, 0, len(ids))
+		for _, x := range ids {
+			if x != id {
+				out = append(out, x)
+			}
+		}
+		return out, len(out) != len(ids)
+	}
+	n := 0
+	for _, r := range rules {
+		var dropped bool
+		r.Channels, dropped = without(r.Channels)
+		for i := range r.Spec.Escalation {
+			var d bool
+			r.Spec.Escalation[i].Channels, d = without(r.Spec.Escalation[i].Channels)
+			dropped = dropped || d
+		}
+		if !dropped {
+			continue
+		}
+		if err := s.updateRule(ctx, &r); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }

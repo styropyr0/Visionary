@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// checkWithAlert is a check as the form sends it, with its alert settings
+// (uptime_alerts.go); without them the alerting is left as it is.
+type checkWithAlert struct {
+	UptimeCheck
+	Alert *checkAlertInput `json:"alert"`
+}
+
 // UptimeCheck is one HTTP probe. Header values with secret-looking names are
 // masked in API responses; sending the mask back keeps the stored value.
 type UptimeCheck struct {
@@ -316,9 +323,14 @@ func (s *Server) handleUptimeList(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	alerts, err := s.uptimeAlertViews(r.Context(), checks)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	out := make([]map[string]any, 0, len(checks))
 	for _, c := range checks {
-		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID]})
+		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID], "alert": alerts[c.ID]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checks": out, "can_edit": s.can(r, "edit")})
 }
@@ -337,11 +349,12 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Fields left out of the body keep these defaults.
-	c := UptimeCheck{FollowRedirects: true, Enabled: true}
-	if err := readJSON(r, &c); err != nil {
+	body := checkWithAlert{UptimeCheck: UptimeCheck{FollowRedirects: true, Enabled: true}}
+	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	c := body.UptimeCheck
 	c.ID = 0
 	if err := c.normalize(nil); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -362,6 +375,18 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "uptime.create", c.Name, map[string]any{"id": c.ID, "url": redactURL(c.URL)})
 	wakeUptime(s)
+	// A new check is alerted on from the start: by the settings sent with it,
+	// else by the rule for every check (made now if there is none).
+	if body.Alert != nil {
+		err = s.setCheckAlert(r, c, *body.Alert)
+	} else {
+		_, err = s.ensureDefaultUptimeRule(r)
+	}
+	if err != nil {
+		// The check exists; say what went wrong with its alert.
+		writeJSON(w, http.StatusCreated, map[string]any{"check": c.masked(), "alert_error": userMessage(err)})
+		return
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"check": c.masked()})
 }
 
@@ -374,11 +399,12 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var c UptimeCheck
-	if err := readJSON(r, &c); err != nil {
+	var body checkWithAlert
+	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	c := body.UptimeCheck
 	c.ID, c.CreatedAt = prev.ID, prev.CreatedAt
 	if err := c.normalize(&prev); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -390,6 +416,21 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "uptime.update", c.Name, map[string]any{"id": c.ID, "url": redactURL(c.URL), "changed": checkChanges(prev, c)})
 	wakeUptime(s)
+	alert := body.Alert
+	if alert == nil && prev.Name != c.Name {
+		// The check's own rule is named after it.
+		if views, err := s.uptimeAlertViews(r.Context(), []UptimeCheck{c}); err == nil {
+			if v := views[c.ID]; v.Mode == "custom" || v.Mode == "off" {
+				alert = &checkAlertInput{Mode: v.Mode, Channels: v.ChannelIDs, Failures: v.Failures, Severity: v.Severity}
+			}
+		}
+	}
+	if alert != nil {
+		if err := s.setCheckAlert(r, c, *alert); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"check": c.masked(), "alert_error": userMessage(err)})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"check": c.masked()})
 }
 
@@ -468,6 +509,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.Exec(r.Context(), `DELETE FROM uptime_results WHERE check_id = ?`, c.ID); err != nil {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
+	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)
 	w.WriteHeader(http.StatusNoContent)

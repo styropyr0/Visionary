@@ -47,9 +47,38 @@ export interface CheckState {
   spark: (number | null)[];
 }
 
+/** How a check is alerted on. */
+export interface CheckAlert {
+  /** custom: its own rule; off: its own rule, disabled; default: the rule for every check; none: nothing alerts on it. */
+  mode: "custom" | "off" | "default" | "none";
+  rule_id?: number;
+  rule_name?: string;
+  /** Names of the rule's channels. */
+  channels: string[];
+  channel_ids: number[];
+  failures: number;
+  severity?: string;
+  firing: boolean;
+}
+
+export interface CheckAlertInput {
+  mode: "default" | "custom" | "off";
+  channels?: number[];
+  failures?: number;
+  severity?: string;
+}
+
 export interface CheckList {
-  checks: { check: UptimeCheck; state: CheckState }[];
+  checks: { check: UptimeCheck; state: CheckState; alert: CheckAlert }[];
   can_edit: boolean;
+}
+
+/** Whether anyone hears when the check goes down. */
+export function alertGap(a: CheckAlert | undefined): string {
+  if (!a || a.mode === "none") return "No alert rule covers this check";
+  if (a.mode === "off") return "Alerts are off for this check";
+  if (a.channels.length === 0) return `“${a.rule_name}” has no channels, so nobody is notified`;
+  return "";
 }
 
 export type Window = "24h" | "7d" | "30d" | "90d";
@@ -95,11 +124,16 @@ export const getIncidents = (id: number, from: Date, to: Date, signal?: AbortSig
 
 export type CheckInput = Omit<UptimeCheck, "id" | "created_at" | "updated_at">;
 
-export function saveCheck(input: CheckInput, id?: number) {
+/** Saves a check; alert, when given, sets how it is alerted on in the same step. */
+export function saveCheck(input: CheckInput & { alert?: CheckAlertInput }, id?: number) {
   return id
-    ? api<{ check: UptimeCheck }>(`/api/uptime/checks/${id}`, { method: "PUT", json: input })
-    : api<{ check: UptimeCheck }>("/api/uptime/checks", { method: "POST", json: input });
+    ? api<{ check: UptimeCheck; alert_error?: string }>(`/api/uptime/checks/${id}`, { method: "PUT", json: input })
+    : api<{ check: UptimeCheck; alert_error?: string }>("/api/uptime/checks", { method: "POST", json: input });
 }
+
+export const getCheckAlert = (id: number, signal?: AbortSignal) => api<{ alert: CheckAlert }>(`/api/uptime/checks/${id}/alert`, { signal });
+
+export const setCheckAlert = (id: number, input: CheckAlertInput) => api<{ alert: CheckAlert }>(`/api/uptime/checks/${id}/alert`, { method: "PUT", json: input });
 
 export const deleteCheck = (id: number) => api<void>(`/api/uptime/checks/${id}`, { method: "DELETE" });
 

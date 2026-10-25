@@ -78,7 +78,7 @@ var retentionKinds = []retentionKind{
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.", DefaultDays: 30, tables: []string{"client_events"}},
 	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results"}},
 	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}},
-	{Key: "alerts", Label: "Alert history", Description: "Past firings and resolutions.", DefaultDays: 365, tables: []string{"alert_events"}},
+	{Key: "alerts", Label: "Alert history", Description: "Past firings and resolutions.", DefaultDays: 365, tables: []string{"alert_events", "alert_deliveries"}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN results asked for from Queries.", DefaultDays: 30, tables: []string{"explain_requests"}},
 	{Key: "releases", Label: "Deploys", Description: "Version starts: the deploy marks on charts.", DefaultDays: 0, tables: []string{"releases"}},
 	{Key: "audit", Label: "Audit log", Description: "Who changed what in Visionary.", DefaultDays: 365, tables: []string{"audit_log"}},

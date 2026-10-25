@@ -40,7 +40,50 @@ type ruleSpec struct {
 	Direction   string `json:"direction,omitempty"`
 	// SLO rules: percent of requests that succeed within the Apdex threshold.
 	Target float64 `json:"target,omitempty"`
+
+	// NoData is what a window without data means: "ok" (the default),
+	// "alerting", or "keep" (the series holds its last state).
+	NoData string `json:"no_data,omitempty"`
+	// ClearFor is how long the condition must stay clear before a firing
+	// series resolves. ClearThreshold (threshold rules) is the value a reading
+	// must pass to count as clear, so one hovering at the threshold does not
+	// flap: > 90 with a clear threshold of 80 resolves below 80.
+	ClearFor       string   `json:"clear_for,omitempty"`
+	ClearThreshold *float64 `json:"clear_threshold,omitempty"`
+
+	// Notification options; changing them keeps the rule's state.
+	// NotifyResolved nil means true.
+	NotifyResolved *bool `json:"notify_resolved,omitempty"`
+	// Mention starts every message, e.g. <!here> on Slack or @oncall.
+	Mention string `json:"mention,omitempty"`
+	// Title and Message replace the default text; see renderTemplate.
+	Title   string `json:"title,omitempty"`
+	Message string `json:"message,omitempty"`
+	// Escalation sends a firing alert nobody acknowledged to more channels.
+	Escalation []escalationStep `json:"escalation,omitempty"`
+	// DependsOn holds back notifications while one of these rules fires for
+	// the same series (or at all, when it has one series).
+	DependsOn []int64           `json:"depends_on,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
 }
+
+// escalationStep notifies Channels once a series has fired for After
+// without an acknowledgement.
+type escalationStep struct {
+	After    string  `json:"after"`
+	Channels []int64 `json:"channels"`
+}
+
+// conditionKey is the part of a spec that decides what is measured and when
+// it breaches. A rule whose key changes starts from a clean state.
+func (sp ruleSpec) conditionKey() string {
+	c := sp
+	c.Repeat, c.NoData, c.ClearFor, c.ClearThreshold = "", "", "", nil
+	c.NotifyResolved, c.Mention, c.Title, c.Message, c.Escalation, c.DependsOn, c.Labels = nil, "", "", "", nil, nil, nil
+	return mustJSON(c)
+}
+
+func (sp ruleSpec) notifyResolved() bool { return sp.NotifyResolved == nil || *sp.NotifyResolved }
 
 type alertScope struct {
 	Route    string `json:"route,omitempty"`
@@ -57,6 +100,8 @@ type alertScope struct {
 	// Container rules (hosts_containers.go): the container's name. Host and
 	// EventKind narrow them too.
 	Container string `json:"container,omitempty"`
+	// Frontend rules: the client app (client_events.app).
+	App string `json:"app,omitempty"`
 }
 
 // seriesState is the state machine of one rule series (one per instance or
@@ -73,6 +118,8 @@ type seriesState struct {
 	Threshold    *float64     `json:"threshold"`
 	Message      string       `json:"message"`
 	Recent       [][2]float64 `json:"recent"`
+	// ClearSince is when a firing series' condition last went clear.
+	ClearSince string `json:"clear_since,omitempty"`
 }
 
 const ruleColumns = `id, name, kind, spec, severity, channels, runbook, enabled, muted_until, created_at, updated_at`
@@ -169,7 +216,7 @@ func (s *Server) clearRuleState(ctx context.Context, id int64) error {
 
 // ruleStates loads every series state, keyed by rule id.
 func (s *Server) ruleStates(ctx context.Context, ruleID int64) (map[int64][]*seriesState, error) {
-	sql := `SELECT rule_id, series_key, label, state, state_since, pending_since, notified_at, evaluated_at, value, threshold, message, recent FROM alert_state`
+	sql := `SELECT rule_id, series_key, label, state, state_since, pending_since, notified_at, evaluated_at, value, threshold, message, recent, clear_since FROM alert_state`
 	var args []any
 	if ruleID > 0 {
 		sql += ` WHERE rule_id = ?`
@@ -181,7 +228,7 @@ func (s *Server) ruleStates(ctx context.Context, ruleID int64) (map[int64][]*ser
 	}
 	out := map[int64][]*seriesState{}
 	for _, row := range res.Rows {
-		if len(row) != 12 {
+		if len(row) != 13 {
 			continue
 		}
 		st := &seriesState{
@@ -195,6 +242,7 @@ func (s *Server) ruleStates(ctx context.Context, ruleID int64) (map[int64][]*ser
 			Value:        cellPtr(row[8]),
 			Threshold:    cellPtr(row[9]),
 			Message:      toString(row[10]),
+			ClearSince:   toString(row[12]),
 		}
 		_ = json.Unmarshal([]byte(toString(row[11])), &st.Recent)
 		id := toInt(row[0])
@@ -207,7 +255,7 @@ func (s *Server) saveState(ctx context.Context, ruleID int64, st *seriesState) e
 	recent, _ := json.Marshal(st.Recent)
 	sql, args := bindNulls(s.q.upsertState(), []any{
 		ruleID, st.Key, st.Label, st.State, st.Since, st.PendingSince, st.NotifiedAt, st.EvaluatedAt,
-		floatArg(st.Value), floatArg(st.Threshold), st.Message, string(recent),
+		floatArg(st.Value), floatArg(st.Threshold), st.Message, string(recent), st.ClearSince,
 	})
 	return s.db.Exec(ctx, sql, args...)
 }
@@ -219,26 +267,33 @@ func (s *Server) deleteState(ctx context.Context, ruleID int64, key string) erro
 // alertEvent is one row of alert_events: a series starting to fire or
 // resolving.
 type alertEvent struct {
-	ID          int64    `json:"id"`
-	CreatedAt   string   `json:"created_at"`
-	RuleID      int64    `json:"rule_id"`
-	RuleName    string   `json:"rule_name"`
-	Kind        string   `json:"kind"`
-	Severity    string   `json:"severity"`
-	State       string   `json:"state"`
-	SeriesKey   string   `json:"series_key"`
+	ID        int64  `json:"id"`
+	CreatedAt string `json:"created_at"`
+	RuleID    int64  `json:"rule_id"`
+	RuleName  string `json:"rule_name"`
+	Kind      string `json:"kind"`
+	Severity  string `json:"severity"`
+	State     string `json:"state"`
+	SeriesKey string `json:"series_key"`
+	// SeriesLabel names the series in notices (a check's name, where the
+	// key is its id). It is not stored.
+	SeriesLabel string   `json:"-"`
 	Value       *float64 `json:"value"`
 	Threshold   *float64 `json:"threshold"`
 	Message     string   `json:"message"`
 	Explanation string   `json:"explanation"`
 	Notified    bool     `json:"notified"`
+	// Suppressed says why nothing was sent: muted, silence: <name>,
+	// depends on: <rule>, acknowledged, or resolved notices turned off.
+	Suppressed string         `json:"suppressed"`
+	Deliveries []deliveryView `json:"deliveries"`
 }
 
 func (s *Server) insertEvent(ctx context.Context, ev *alertEvent) error {
-	sql, args := bindNulls(`INSERT INTO alert_events (created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message, explanation, notified)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{
+	sql, args := bindNulls(`INSERT INTO alert_events (created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message, explanation, notified, suppressed)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{
 		ev.CreatedAt, ev.RuleID, ev.RuleName, ev.Kind, ev.Severity, ev.State, ev.SeriesKey,
-		floatArg(ev.Value), floatArg(ev.Threshold), ev.Message, ev.Explanation, boolInt(ev.Notified),
+		floatArg(ev.Value), floatArg(ev.Threshold), ev.Message, ev.Explanation, boolInt(ev.Notified), ev.Suppressed,
 	})
 	id, err := s.db.InsertID(ctx, sql, args...)
 	if err != nil {
@@ -248,8 +303,17 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{
 	return nil
 }
 
-func (s *Server) finishEvent(ctx context.Context, id int64, explanation string, notified bool) error {
-	return s.db.Exec(ctx, `UPDATE alert_events SET explanation = ?, notified = ? WHERE id = ?`, explanation, boolInt(notified), id)
+func (s *Server) setExplanation(ctx context.Context, id int64, explanation string) error {
+	return s.db.Exec(ctx, `UPDATE alert_events SET explanation = ? WHERE id = ?`, explanation, id)
+}
+
+func (s *Server) markNotified(ctx context.Context, ids []int64) error {
+	for _, id := range ids {
+		if err := s.db.Exec(ctx, `UPDATE alert_events SET notified = 1 WHERE id = ?`, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type eventFilter struct {
@@ -257,12 +321,26 @@ type eventFilter struct {
 	RuleID   int64
 	Severity string
 	State    string
+	Search   string
+	// Before continues a listing: the created_at and id of its last event.
+	BeforeAt string
+	BeforeID int64
 	Limit    int
+	MaxLimit int
 }
 
 func (s *Server) listEvents(ctx context.Context, f eventFilter) ([]alertEvent, error) {
 	where := []string{"created_at >= ?", "created_at < ?"}
 	args := []any{f.From.Format(tsLayout), f.To.Format(tsLayout)}
+	if f.BeforeAt != "" {
+		where = append(where, "(created_at < ? OR (created_at = ? AND id < ?))")
+		args = append(args, f.BeforeAt, f.BeforeAt, f.BeforeID)
+	}
+	if f.Search != "" {
+		like := "%" + strings.ToLower(f.Search) + "%"
+		where = append(where, "(LOWER(rule_name) LIKE ? OR LOWER(message) LIKE ? OR LOWER(series_key) LIKE ?)")
+		args = append(args, like, like, like)
+	}
 	if f.RuleID > 0 {
 		where = append(where, "rule_id = ?")
 		args = append(args, f.RuleID)
@@ -275,24 +353,28 @@ func (s *Server) listEvents(ctx context.Context, f eventFilter) ([]alertEvent, e
 		where = append(where, "state = ?")
 		args = append(args, f.State)
 	}
-	if f.Limit <= 0 || f.Limit > 500 {
-		f.Limit = 200
+	if f.MaxLimit == 0 {
+		f.MaxLimit = 500
 	}
-	res, err := s.db.Query(ctx, `SELECT id, created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message, explanation, notified
+	if f.Limit <= 0 || f.Limit > f.MaxLimit {
+		f.Limit = min(200, f.MaxLimit)
+	}
+	res, err := s.db.Query(ctx, `SELECT id, created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message, explanation, notified, suppressed
 FROM alert_events WHERE `+strings.Join(where, " AND ")+` ORDER BY created_at DESC, id DESC LIMIT `+strconv.Itoa(f.Limit), args...)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]alertEvent, 0, len(res.Rows))
 	for _, row := range res.Rows {
-		if len(row) != 13 {
+		if len(row) != 14 {
 			continue
 		}
 		out = append(out, alertEvent{
 			ID: toInt(row[0]), CreatedAt: toString(row[1]), RuleID: toInt(row[2]), RuleName: toString(row[3]),
 			Kind: toString(row[4]), Severity: toString(row[5]), State: toString(row[6]), SeriesKey: toString(row[7]),
 			Value: cellPtr(row[8]), Threshold: cellPtr(row[9]), Message: toString(row[10]),
-			Explanation: toString(row[11]), Notified: toInt(row[12]) == 1,
+			Explanation: toString(row[11]), Notified: toInt(row[12]) == 1, Suppressed: toString(row[13]),
+			Deliveries: []deliveryView{},
 		})
 	}
 	return out, nil

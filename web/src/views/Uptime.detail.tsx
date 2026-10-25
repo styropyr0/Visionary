@@ -10,7 +10,8 @@ import type { Result, Viz } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
-import { formatDuration, formatInterval, formatUptime, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { formatDuration, formatInterval, formatUptime, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { CheckAlertLine } from "./Uptime.alerts";
 import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, StateBadge } from "./Uptime.parts";
@@ -39,6 +40,7 @@ export function UptimeDetail({ id }: { id: number }) {
   const phasesRaw = useQuery(`up-ph-${key}`, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
   const results = useQuery(`up-res-${key}`, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
   const incidents = useQuery(`up-inc-${key}`, (signal) => getIncidents(id, resolved.from, resolved.to, signal));
+  const alert = useQuery(`up-alert-${id}#${tick}#${version}`, (signal) => getCheckAlert(id, signal));
 
   // Phase columns read as labels in the legend and the table.
   const phases = useMemo<Result | undefined>(
@@ -124,6 +126,7 @@ export function UptimeDetail({ id }: { id: number }) {
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
                   </div>
+                  {alert.data && c.enabled && <CheckAlertLine alert={alert.data.alert} canEdit={!!s.can_edit} onFix={() => setEditing(true)} />}
                 </div>
                 <div className="up-head-last dim">
                   {st.last_at ? (
