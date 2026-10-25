@@ -594,5 +594,12 @@ export const HELP: Record<Route, PageHelp> = {
     ],
     setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email"],
   },
+  guide: {
+    title: "How to use",
+    tip: "A tour of every page: what it is for and how to use it, with screenshots.",
+    what: "One section per page, in the order of the sidebar, with the steps to get things done there. Search to find a feature; each section opens its page.",
+    read: [],
+    setup: ["sdk", "connect", "verify"],
+  },
 
 };

@@ -4,6 +4,7 @@ import {
   Activity,
   Bell,
   Bookmark,
+  BookOpen,
   Bug,
   Database,
   Flame,
@@ -53,9 +54,10 @@ export type Route =
   | "dashboards"
   | "saved"
   | "alerts"
-  | "settings";
+  | "settings"
+  | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -88,6 +90,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     items: [
       { route: "alerts", label: "Alerts", icon: Bell },
       { route: "settings", label: "Settings", icon: Settings },
+      { route: "guide", label: "How to use", icon: BookOpen },
     ],
   },
 ];

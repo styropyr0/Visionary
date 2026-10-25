@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, CircleHelp, ExternalLink, ListChecks, Wrench } from "lucide-react";
+import { ArrowRight, BookOpen, CircleHelp, ExternalLink, ListChecks, Wrench } from "lucide-react";
 import type { Route } from "./Sidebar";
 import { CopyButton, Drawer } from "./Modal";
 import { HELP, LANGS, TOPICS, type Lang, type LangSetup } from "../lib/help";
@@ -114,6 +114,11 @@ function HelpDrawer({ route, topic, onClose }: { route: Route; topic?: string; o
           )}
         </section>
 
+        {route !== "guide" && (
+          <a href={`#/guide/${route}`} className="about-guide" onClick={onClose}>
+            How to use this page, step by step <ArrowRight size={12} />
+          </a>
+        )}
         <a href={`${REPO}#readme`} target="_blank" rel="noreferrer" className="about-guide">
           Full integration guide <ExternalLink size={12} />
         </a>

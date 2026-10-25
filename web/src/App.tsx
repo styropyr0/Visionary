@@ -26,6 +26,7 @@ import { Settings } from "./views/Settings";
 import { Uptime } from "./views/Uptime";
 import { Containers } from "./views/Containers";
 import { Security } from "./views/Security";
+import { Guide } from "./views/Guide";
 
 
 function readRoute(): Route {
@@ -184,6 +185,7 @@ export function App() {
           {route === "explore" && <Explore meta={meta.data} />}
           {route === "saved" && <Saved />}
           {route === "logs" && <Logs meta={meta.data} />}
+          {route === "guide" && <Guide />}
         </main>
       </MetaContext.Provider>
       <HelpHost route={route} />

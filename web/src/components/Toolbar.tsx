@@ -157,7 +157,8 @@ export function RefreshControl({ busy }: { busy?: boolean }) {
   );
 }
 
-export function TopBar({ title, section, actions }: { title: string; section?: string; actions?: ReactNode }) {
+/** help={false} drops the Help button, on pages that are help themselves. */
+export function TopBar({ title, section, actions, help = true }: { title: string; section?: string; actions?: ReactNode; help?: boolean }) {
   return (
     <header className="topbar">
       <div className="crumbs">
@@ -173,7 +174,7 @@ export function TopBar({ title, section, actions }: { title: string; section?: s
       </div>
       <div className="topbar-actions">
         {actions}
-        <HelpButton />
+        {help && <HelpButton />}
       </div>
     </header>
   );
