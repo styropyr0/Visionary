@@ -1,3 +1,14 @@
+/* Inter's → (cut from the full font): the packaged subsets leave it out, so it
+   fell back to a smaller system arrow. Only U+2192 comes from this file. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/fonts/inter-arrow.woff2") format("woff2-variations");
+  unicode-range: U+2192;
+}
+
 /* Design tokens. Chart colors are the validated reference palette; chrome uses
    the same neutral ramp so charts and UI read as one system. */
 :root {
