@@ -30,7 +30,7 @@ internal static class Schema
         "user_id", "user_handle", "user_role", "request_headers", "request_content_type", "request_body",
         "request_body_truncated", "request_size", "response_content_type", "response_body",
         "response_body_truncated", "response_size", "error_code", "error_key",
-        "service", "version", "db_count", "db_ms", "http_count", "http_ms",
+        "service", "version", "db_count", "db_ms", "http_count", "http_ms", "login_account",
     };
 
     /// <summary>AddedRequestColumns in sdks/go/migrate.go.</summary>
@@ -39,6 +39,7 @@ internal static class Schema
         new("service", "text"), new("version", "text"),
         new("db_count", "int"), new("db_ms", "real"),
         new("http_count", "int"), new("http_ms", "real"),
+        new("login_account", "text"),
     };
 
     private static readonly string[] SystemBaseColumns =

@@ -24,7 +24,7 @@ class Entry:
 
     __slots__ = (
         "request_id", "started_at", "method", "path", "route", "query", "status",
-        "duration", "ip", "user_agent", "user_id", "user_handle", "user_role",
+        "duration", "ip", "user_agent", "user_id", "user_handle", "user_role", "login_account",
         "headers", "request_content_type", "request_body", "request_truncated",
         "request_size", "response_content_type", "response_body",
         "response_truncated", "response_size",
@@ -45,6 +45,7 @@ class Entry:
         self.user_id = ""
         self.user_handle = ""
         self.user_role = ""
+        self.login_account = ""
         self.headers: List[Tuple[str, str]] = []
         self.request_content_type = ""
         self.request_body = b""
@@ -61,6 +62,11 @@ class Entry:
         self.http_count: Optional[int] = None
         self.http_ms: Optional[float] = None
         self.spans: List[Any] = []
+
+
+def clip_login(account: str) -> str:
+    """Trims a login identifier to what the column holds (255 characters)."""
+    return account.strip()[:255]
 
 
 class BodyCapture:

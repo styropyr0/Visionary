@@ -155,6 +155,7 @@ class VisionaryMiddleware:
 
         e.route = state.ann.route or _route(request)
         e.user_id, e.user_handle, e.user_role = state.ann.user()
+        e.login_account = state.ann.login_account
         if not e.user_id:
             e.user_id, e.user_handle = _django_user(request)
 

@@ -173,6 +173,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
                     HttpCapture.clientIp(request),
                     request.getHeader("User-Agent"),
                     user,
+                    request.getAttribute(Visionary.LOGIN_ATTRIBUTE) instanceof String login ? login : null,
                     c.headers,
                     c.requestType,
                     requestBody,

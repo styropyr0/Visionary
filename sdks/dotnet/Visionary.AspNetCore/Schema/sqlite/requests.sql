@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS api_logs (
     db_count                INTEGER,
     db_ms                   REAL,
     http_count              INTEGER,
-    http_ms                 REAL
+    http_ms                 REAL,
+    login_account           TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_api_logs_created_at ON api_logs (created_at);
 CREATE INDEX IF NOT EXISTS idx_api_logs_user_created ON api_logs (user_id, created_at);

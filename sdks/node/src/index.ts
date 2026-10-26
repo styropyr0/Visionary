@@ -7,7 +7,7 @@
  *     visionary.init();
  *     app.use(visionary.express());
  */
-import { setRoute, setUser } from "./context.js";
+import { loginAttempt, setRoute, setUser } from "./context.js";
 import { captureException, close, getAgent, init } from "./global.js";
 import { express, expressErrorHandler } from "./integrations/express.js";
 import { fastify } from "./integrations/fastify.js";
@@ -46,6 +46,7 @@ export {
   instrumentPg,
   instrumentSqlite,
   koa,
+  loginAttempt,
   mysqlPoolStats,
   pgPoolStats,
   prismaExtension,
@@ -61,6 +62,7 @@ const visionary = {
   getAgent,
   setUser,
   setRoute,
+  loginAttempt,
   captureException,
   span,
   background,

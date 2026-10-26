@@ -54,6 +54,7 @@ export const ADDED_REQUEST_COLUMNS: [string, Kind][] = [
   ["db_ms", "real"],
   ["http_count", "int"],
   ["http_ms", "real"],
+  ["login_account", "text"],
 ];
 
 export const REQUEST_COLUMNS = [

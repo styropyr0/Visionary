@@ -152,6 +152,22 @@ Visionary.setUser(request, user.getId(), user.getUsername(), user.getRole());
 Visionary.setUser(request, user.getId());
 ```
 
+To let the security detectors spot one IP trying many accounts, many IPs
+trying one account, or a signed-in user trying someone else's, record the
+account each sign-in tried, whether or not it exists or the password was right:
+
+```java
+@PostMapping("/login")
+ResponseEntity<?> login(@RequestBody LoginForm form, HttpServletRequest request) {
+    Visionary.loginAttempt(request, form.email());
+    return auth.authenticate(form.email(), form.password())
+            .map(user -> ResponseEntity.ok(tokens.issue(user)))
+            .orElse(ResponseEntity.status(401).build());
+}
+```
+
+The value is trimmed and clipped to 255 characters (`login_account`).
+
 To fill in handle and role from an id, declare a `VisionaryUserLookup` bean.
 It runs on the background writer, once per distinct user per batch, only for
 users missing a handle or role. Keep it cheap (a cache) and return `null` for

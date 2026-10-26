@@ -88,6 +88,17 @@ module Visionary
       nil
     end
 
+    # Records the account a sign-in request tried: the username or email
+    # typed, whether or not it exists or the password was right. Call it in
+    # the login handler; the security detectors use it to tell one IP trying
+    # many accounts, many IPs trying one account, and a signed-in user trying
+    # someone else's. No-op outside a request seen by Visionary::Middleware.
+    def login_attempt(account)
+      ctx = RequestContext.current
+      ctx.login_account = account if ctx
+      nil
+    end
+
     # Records the route pattern (e.g. "/users/:id") for routers Visionary
     # can't see. No-op outside a request.
     def set_route(pattern)

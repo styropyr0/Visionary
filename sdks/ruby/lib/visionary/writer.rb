@@ -5,7 +5,7 @@ module Visionary
   # user lookup happen on the writer thread, off the request path.
   Entry = Struct.new(
     :request_id, :started_at, :method, :path, :route, :query, :status, :duration_ms, :ip, :user_agent,
-    :user_id, :user_handle, :user_role, :headers, :request_content_type, :request_body, :request_truncated,
+    :user_id, :user_handle, :user_role, :login_account, :headers, :request_content_type, :request_body, :request_truncated,
     :request_size, :response_content_type, :response_body, :response_truncated, :response_size,
     :totals, :span_rows, :error_rows,
     keyword_init: true
@@ -180,8 +180,14 @@ module Visionary
         e.status, e.duration_ms, nz(e.ip), nz(e.user_agent), nz(e.user_id), nz(handle), nz(role),
         nz(@redactor.headers(e.headers)), nz(e.request_content_type), nz(req_body), e.request_truncated ? 1 : 0,
         e.request_size, nz(e.response_content_type), nz(resp_body), e.response_truncated ? 1 : 0, e.response_size,
-        nz(code), nz(key), @cfg.service, @cfg.version, db_count, db_ms, http_count, http_ms
+        nz(code), nz(key), @cfg.service, @cfg.version, db_count, db_ms, http_count, http_ms,
+        nz(clip_login(e.login_account))
       ]
+    end
+
+    # Trims a login identifier to what the column holds.
+    def clip_login(s)
+      Visionary.utf8(s).strip[0, 255]
     end
 
     def nz(s)

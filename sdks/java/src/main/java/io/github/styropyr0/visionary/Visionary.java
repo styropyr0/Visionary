@@ -48,6 +48,9 @@ public final class Visionary {
     /** Request attribute holding the {@link VisionaryUser} for the current request. */
     public static final String USER_ATTRIBUTE = Visionary.class.getName() + ".USER";
 
+    /** Request attribute holding the account a sign-in on the current request tried. */
+    public static final String LOGIN_ATTRIBUTE = Visionary.class.getName() + ".LOGIN";
+
     private static final Set<String> KINDS = Set.of("db", "http", "cache", "queue", "custom", "background");
 
     private Visionary() {
@@ -62,6 +65,19 @@ public final class Visionary {
 
     public static void setUser(HttpServletRequest request, String id) {
         setUser(request, id, null, null);
+    }
+
+    /**
+     * Records the account a sign-in request tried: the username or email typed,
+     * whether or not it exists or the password was right. Call it in the login
+     * handler; the security detectors use it to tell one IP trying many accounts,
+     * many IPs trying one account, and a signed-in user trying someone else's.
+     */
+    public static void loginAttempt(HttpServletRequest request, String account) {
+        if (request == null || account == null) {
+            return;
+        }
+        request.setAttribute(LOGIN_ATTRIBUTE, account);
     }
 
     /**

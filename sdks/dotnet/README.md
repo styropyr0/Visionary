@@ -186,6 +186,27 @@ builder.Services.AddVisionary(o => o.LookupUser = async (id, ct) =>
     cache.TryGetValue(id, out var u) ? new VisionaryUser(id, u.Name, u.Role) : null);
 ```
 
+### Record login attempts
+
+**When:** you want the security detectors to spot one IP trying many
+accounts, many IPs trying one account, or a signed-in user trying someone
+else's.
+
+```csharp
+app.MapPost("/login", async (LoginForm form, HttpContext ctx, AuthService auth) =>
+{
+    Visionary.LoginAttempt(ctx, form.Email);
+    var user = await auth.AuthenticateAsync(form.Email, form.Password);
+    return user is null ? Results.Unauthorized() : Results.Ok(auth.IssueToken(user));
+});
+```
+
+Call it in the login handler with the username or email typed, whether or
+not it exists or the password was right. The value is trimmed and clipped to
+255 characters.
+
+**Records:** `login_account` on the request row.
+
 ### EF Core, Npgsql, MySqlConnector, Dapper
 
 **When:** the app talks to a database. Nothing to add. The span listeners
@@ -593,6 +614,7 @@ app.UseVisionary();                              // the request middleware, firs
 
 Visionary.SetUser(ctx, id, handle, role);        // the signed-in user of this request
 Visionary.SetRoute(ctx, "/files/{id}");          // route pattern, for requests without an endpoint
+Visionary.LoginAttempt(ctx, form.Email);         // the account a sign-in request tried
 Visionary.CaptureException(e);                   // a handled error (handled = 1)
 Visionary.CaptureException(ctx, e);              // the same, for a specific request
 using var span = Visionary.StartSpan(kind, name, target, detail);   // a manual span

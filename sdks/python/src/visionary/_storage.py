@@ -21,6 +21,7 @@ REQUEST_COLUMNS = [
 ADDED_REQUEST_COLUMNS = [
     ("service", "text"), ("version", "text"),
     ("db_count", "int"), ("db_ms", "real"), ("http_count", "int"), ("http_ms", "real"),
+    ("login_account", "text"),
 ]
 REQUEST_COLUMNS = REQUEST_COLUMNS + [name for name, _ in ADDED_REQUEST_COLUMNS]
 
@@ -102,7 +103,7 @@ _MYSQL_CHARS = {
     "user_handle": 255, "user_role": 64, "request_content_type": 255, "response_content_type": 255,
     "error_code": 128, "error_key": 255, "instance": 128,
     "service": 255, "version": 255, "kind": 255, "name": 255, "target": 255, "type": 255,
-    "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255,
+    "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255, "login_account": 255,
 }
 _MYSQL_BYTES = {
     "path": 65535, "query": 65535, "user_agent": 65535, "request_headers": 65535,

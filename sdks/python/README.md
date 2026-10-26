@@ -161,6 +161,26 @@ asyncio tasks. Outside a request handled by an integration, it does nothing.
 `visionary.set_route("/custom/{pattern}")` sets the route the same way, for
 routers the integration cannot see.
 
+## Login attempts
+
+In the login view, record the account the request tried, whether or not it
+exists or the password was right. The security detectors use it to spot one
+IP trying many accounts, many IPs trying one account, and a signed-in user
+trying someone else's:
+
+```python
+@app.post("/login")
+async def login(form: LoginForm):
+    visionary.login_attempt(form.email)
+    user = await authenticate(form.email, form.password)
+    if user is None:
+        raise HTTPException(401, "invalid credentials")
+    return {"token": issue_token(user)}
+```
+
+The value is trimmed and clipped to 255 characters; outside a request handled
+by an integration it does nothing.
+
 To fill in handles and roles for ids logged without them:
 
 ```python
@@ -467,7 +487,7 @@ time and kept (up to an hour) while the database is unreachable.
 | `get_agent()` | The agent from `init()`, if any. |
 | `from_env()`, `Config(...)`, `Agent(config).start()`, `agent.close(timeout=10)` | Explicit setup. |
 | `VisionaryMiddleware` (Django), `Visionary` (Flask), `VisionaryASGIMiddleware` | Framework integrations, in `visionary.integrations.*`. |
-| `set_user(id, handle=None, role=None)`, `set_route(pattern)` | Annotate the current request. |
+| `set_user(id, handle=None, role=None)`, `set_route(pattern)`, `login_attempt(account)` | Annotate the current request. |
 | `capture_exception(exc=None)` | Record a handled error. |
 | `span(kind, name, target=None, detail=None)` | Custom span (`with` / `async with`). |
 | `background(name, fn, *args, **kwargs)`, `background_span(name)` | Work after the response. |

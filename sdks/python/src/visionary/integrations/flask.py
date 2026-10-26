@@ -208,6 +208,7 @@ class Visionary:
         rule = request.url_rule
         e.route = st.ann.route or (rule.rule if rule is not None else "")
         e.user_id, e.user_handle, e.user_role = st.ann.user()
+        e.login_account = st.ann.login_account
 
         body = st.body
         if body is not None and body.size == 0:

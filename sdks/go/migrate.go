@@ -60,8 +60,8 @@ var AddedSystemColumns = []Column{
 
 // AddedRequestColumns are api_logs columns beyond the original set, in insert
 // order after the original columns: the service and release (version) that
-// served the request, and how many database and outbound HTTP calls it made
-// and how long they took in total.
+// served the request, how many database and outbound HTTP calls it made and
+// how long they took in total, and the account a sign-in tried (LoginAttempt).
 var AddedRequestColumns = []Column{
 	{"service", "text"},
 	{"version", "text"},
@@ -69,6 +69,7 @@ var AddedRequestColumns = []Column{
 	{"db_ms", "real"},
 	{"http_count", "int"},
 	{"http_ms", "real"},
+	{"login_account", "text"},
 }
 
 // SQLType is the column type of kind in d.

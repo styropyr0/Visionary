@@ -29,7 +29,7 @@ var (
 		"user_id", "user_handle", "user_role", "request_headers", "request_content_type", "request_body",
 		"request_body_truncated", "request_size", "response_content_type", "response_body",
 		"response_body_truncated", "response_size", "error_code", "error_key",
-		"service", "version", "db_count", "db_ms", "http_count", "http_ms",
+		"service", "version", "db_count", "db_ms", "http_count", "http_ms", "login_account",
 	}}
 	otlpSpansTable = &otlpTable{"spans", []string{
 		"created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",

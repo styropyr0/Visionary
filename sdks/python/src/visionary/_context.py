@@ -13,13 +13,14 @@ class Annotations:
     set_user works from wherever the request's code runs.
     """
 
-    __slots__ = ("_lock", "user_id", "user_handle", "user_role", "route", "trace", "request")
+    __slots__ = ("_lock", "user_id", "user_handle", "user_role", "login_account", "route", "trace", "request")
 
     def __init__(self, trace: Any = None, request: Optional["RequestInfo"] = None) -> None:
         self._lock = threading.Lock()
         self.user_id = ""
         self.user_handle = ""
         self.user_role = ""
+        self.login_account = ""  # the account a sign-in tried (login_attempt)
         self.route = ""
         self.trace = trace  # _spans.Trace, or None when spans are off
         self.request = request
@@ -97,6 +98,19 @@ def set_user(id: Any, handle: Optional[str] = None, role: Optional[str] = None) 
     ann = _current.get()
     if ann is not None:
         ann.set_user(id, handle, role)
+
+
+def login_attempt(account: str) -> None:
+    """Record the account a sign-in request tried: the username or email
+    typed, whether or not it exists or the password was right.
+
+    Call it in the login handler; the security detectors use it to tell one
+    IP trying many accounts, many IPs trying one account, and a signed-in
+    user trying someone else's. No-op outside a request.
+    """
+    ann = _current.get()
+    if ann is not None:
+        ann.login_account = "" if account is None else str(account)
 
 
 def set_route(pattern: str) -> None:

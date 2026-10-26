@@ -26,6 +26,7 @@ internal sealed class VisionaryMiddleware
     public const string RequestIdHeader = "X-Request-ID";
     internal const string UserKey = "__visionary.user";
     internal const string RouteKey = "__visionary.route";
+    internal const string LoginKey = "__visionary.login";
 
     private readonly RequestDelegate _next;
     private readonly VisionaryAgent _agent;
@@ -188,6 +189,7 @@ internal sealed class VisionaryMiddleware
                 Ip = ClientIp(ctx),
                 UserAgent = ctx.Request.Headers.UserAgent.ToString(),
                 User = UserOf(ctx),
+                LoginAccount = LoginOf(ctx),
                 RequestHeaders = headers,
                 RequestContentType = reqType,
                 RequestBody = reqCapture?.Text(),
@@ -286,6 +288,24 @@ internal sealed class VisionaryMiddleware
         var roleType = (principal.Identity as ClaimsIdentity)?.RoleClaimType ?? ClaimTypes.Role;
         var role = principal.FindFirst(roleType)?.Value ?? principal.FindFirst("role")?.Value;
         return new VisionaryUser(id, handle, role);
+    }
+
+    /// <summary>
+    /// The account set with <see cref="Visionary.LoginAttempt"/>, trimmed and clipped to the
+    /// column's 255 characters without splitting a surrogate pair; null when none.
+    /// </summary>
+    internal static string? LoginOf(HttpContext ctx)
+    {
+        if (!ctx.Items.TryGetValue(LoginKey, out var l) || l is not string account)
+        {
+            return null;
+        }
+        account = account.Trim();
+        if (account.Length > 255)
+        {
+            account = account[..(char.IsHighSurrogate(account[254]) ? 254 : 255)];
+        }
+        return account.Length > 0 ? account : null;
     }
 
     /// <summary>

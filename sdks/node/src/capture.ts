@@ -198,6 +198,7 @@ export function observeRequest(
       userId: state.userId,
       userHandle: state.userHandle,
       userRole: state.userRole,
+      loginAccount: state.loginAccount,
       headers: req.headersDistinct ?? req.headers,
       requestContentType: reqType,
       requestBody: reqBody.data(),

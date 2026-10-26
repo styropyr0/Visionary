@@ -158,6 +158,27 @@ handle or role.
 **Records:** `user_id`, `user_handle`, `user_role` on the request row and on
 its errors.
 
+### Record login attempts
+
+**When:** you want the security detectors to spot one IP trying many
+accounts, many IPs trying one account, or a signed-in user trying someone
+else's.
+
+```ruby
+# Rails: app/controllers/sessions_controller.rb
+def create
+  Visionary.login_attempt(params[:email])
+  user = User.authenticate_by(email: params[:email], password: params[:password])
+  user ? sign_in(user) : head(:unauthorized)
+end
+```
+
+Call it in the login handler with the username or email typed, whether or
+not it exists or the password was right. The value is trimmed and clipped to
+255 characters. No-op outside a request seen by the middleware.
+
+**Records:** `login_account` on the request row.
+
 ### Database queries (ActiveRecord)
 
 **When:** the app uses ActiveRecord (Rails or standalone). Nothing to add.
@@ -573,6 +594,7 @@ samples of runnable threads:
 ```ruby
 Visionary.set_user(id, handle: nil, role: nil)   # the signed-in user of the current request
 Visionary.set_route("/users/:id")                # route pattern, for routers Visionary can't see
+Visionary.login_attempt(params[:email])          # the account a sign-in request tried
 Visionary.span(name, kind: "custom", target: nil, detail: nil) { ... }   # a manual span
 Visionary.background(name) { ... }               # a thread that stays with the request
 Visionary.capture_exception(e)                   # a handled error (handled = 1)

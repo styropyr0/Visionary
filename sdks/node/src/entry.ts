@@ -20,6 +20,8 @@ export interface Entry {
   userId: string;
   userHandle: string;
   userRole: string;
+  /** The account a sign-in tried (loginAttempt). */
+  loginAccount: string;
   headers: Record<string, string | string[] | undefined>;
   requestContentType: string;
   requestBody: Buffer;
@@ -39,6 +41,12 @@ export interface Entry {
 }
 
 const orNull = (s: string): string | null => s || null;
+
+/** Trims a login identifier to what the column holds (255 characters). */
+export function clipLogin(s: string): string {
+  const t = String(s ?? "").trim();
+  return t.length > 255 ? Array.from(t).slice(0, 255).join("") : t;
+}
 
 /** The api_logs row in REQUEST_COLUMNS order. */
 export function requestValues(e: Entry, cfg: Config, redact: Redactor, users: Map<string, LookupResult>): Value[] {
@@ -85,5 +93,6 @@ export function requestValues(e: Entry, cfg: Config, redact: Redactor, users: Ma
     e.dbMs === null ? null : Math.round(e.dbMs * 1000) / 1000,
     e.httpCount,
     e.httpMs === null ? null : Math.round(e.httpMs * 1000) / 1000,
+    orNull(clipLogin(e.loginAccount)),
   ];
 }

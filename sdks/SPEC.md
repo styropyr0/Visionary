@@ -83,6 +83,7 @@ Keep this cheap; everything slow happens on the writer thread.
 | `ip` | First `X-Forwarded-For` hop if present, else the peer address without port. |
 | `user_agent` | `User-Agent` header. |
 | `user_id`, `user_handle`, `user_role` | From `set_user` / `setUser` (see below), else framework auth if the integration knows it, else empty. |
+| `login_account` | From `login_attempt` / `loginAttempt` (see below), trimmed and clipped to 255; empty means NULL. |
 | `request_headers` | JSON object of all request headers, multiple values joined with `", "`, sensitive ones replaced with `[REDACTED]`. |
 | `request_content_type`, `response_content_type` | Header values. |
 | `request_body`, `response_body` | Only when bodies are on and the content type is capturable (below). At most `max_body_bytes` bytes each, decoded as UTF-8 with replacement, then redacted. |
@@ -107,6 +108,14 @@ user to the current request:
 - Python: `visionary.set_user(id, handle=None, role=None)` (contextvar-based,
   works in sync and async code)
 - Java: `Visionary.setUser(request, id, handle, role)` (request attribute)
+
+A second call records the account a sign-in request tried (the username or
+email typed, whether or not it exists or the password was right), for the
+security detectors:
+
+- Go: `visionary.LoginAttempt(ctx, account)`
+- Python: `visionary.login_attempt(account)`
+- Java: `Visionary.loginAttempt(request, account)`
 
 Integrations may also read the framework's own user (Django `request.user`,
 Spring Security principal name) when nothing was set explicitly. An optional
@@ -160,16 +169,17 @@ INSERT INTO api_logs (
 	user_id, user_handle, user_role, request_headers, request_content_type, request_body,
 	request_body_truncated, request_size, response_content_type, response_body,
 	response_body_truncated, response_size, error_code, error_key,
-	service, version, db_count, db_ms, http_count, http_ms
-) VALUES (30 placeholders)
+	service, version, db_count, db_ms, http_count, http_ms, login_account
+) VALUES (31 placeholders)
 ```
 
-The last six columns were added later (`AddedRequestColumns` in
+The last seven columns were added later (`AddedRequestColumns` in
 `sdks/go/migrate.go`); add them to old tables at startup exactly as described for
 `system_metrics` below. `service` and `version` are the service name and release
 (see Telemetry); `db_count`/`db_ms` and `http_count`/`http_ms` are the number and
 total duration of database and outbound HTTP calls the request made (0 when it
-made none, NULL when the SDK cannot see that kind of call).
+made none, NULL when the SDK cannot see that kind of call); `login_account` is
+the account a sign-in tried.
 
 Types: `status`, `*_truncated` (0/1), `*_size` are integers; `duration_ms` a
 float; everything else text.

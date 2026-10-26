@@ -152,7 +152,7 @@ module Visionary
         request_id: ctx.request_id, started_at: ctx.started_at, method: ctx.method, path: ctx.path,
         route: route, query: env["QUERY_STRING"].to_s, status: status, duration_ms: duration,
         ip: client_ip(env), user_agent: env["HTTP_USER_AGENT"].to_s,
-        user_id: user_id, user_handle: handle, user_role: role, headers: headers,
+        user_id: user_id, user_handle: handle, user_role: role, login_account: ctx.login_account, headers: headers,
         request_content_type: env["CONTENT_TYPE"].to_s, request_body: req_capture.bytes,
         request_truncated: req_capture.truncated?,
         request_size: [env["CONTENT_LENGTH"].to_i, req_capture.size].max,

@@ -16,7 +16,8 @@ module Visionary
 
     # api_logs columns added after the first release, in insert order.
     ADDED_REQUEST_COLUMNS = [
-      %w[service text], %w[version text], %w[db_count int], %w[db_ms real], %w[http_count int], %w[http_ms real]
+      %w[service text], %w[version text], %w[db_count int], %w[db_ms real], %w[http_count int], %w[http_ms real],
+      %w[login_account text]
     ].freeze
 
     SYSTEM_BASE_COLUMNS = %w[

@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import _spans
-from ._entry import Entry, format_ts
+from ._entry import Entry, clip_login, format_ts
 from ._errors import ErrorEvent
 from ._profiler import Profile
 from ._redact import Redactor, error_fields
@@ -300,6 +300,7 @@ class RequestWriter:
             None if e.db_ms is None else round(e.db_ms, 3),
             e.http_count,
             None if e.http_ms is None else round(e.http_ms, 3),
+            clip_login(e.login_account) or None,
         )
 
 

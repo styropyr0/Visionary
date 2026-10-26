@@ -37,6 +37,7 @@ final class Table {
             .text("service", "version")
             .integer("db_count").real("db_ms")
             .integer("http_count").real("http_ms")
+            .text("login_account")
             .build();
 
     static final Table SYSTEM_METRICS = builder("system_metrics", "system")

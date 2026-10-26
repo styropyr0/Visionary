@@ -23,6 +23,7 @@ internal sealed record RequestEntry : WriteItem
     public string? Ip { get; init; }
     public string? UserAgent { get; init; }
     public VisionaryUser? User { get; init; }
+    public string? LoginAccount { get; init; }
     public required IReadOnlyList<KeyValuePair<string, string>> RequestHeaders { get; init; }
     public string? RequestContentType { get; init; }
     public string? RequestBody { get; init; }

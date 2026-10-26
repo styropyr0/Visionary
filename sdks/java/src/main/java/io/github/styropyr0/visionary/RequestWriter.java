@@ -325,6 +325,7 @@ final class RequestWriter {
             t == null ? null : Values.round(t.dbMs(), 3),
             t == null ? null : t.httpCount(),
             t == null ? null : Values.round(t.httpMs(), 3),
+            e.loginAccount() == null ? null : Values.cap(e.loginAccount().strip(), 255),
         };
     }
 

@@ -27,6 +27,23 @@ public static class Visionary
         context.Items[VisionaryMiddleware.UserKey] = new VisionaryUser(id, handle, role);
     }
 
+    /// <summary>
+    /// Records the account a sign-in request tried: the username or email typed, whether or not
+    /// it exists or the password was right. Call it in the login handler; the security detectors
+    /// use it to tell one IP trying many accounts, many IPs trying one account, and a signed-in
+    /// user trying someone else's.
+    /// </summary>
+    public static void LoginAttempt(HttpContext context, string? account)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (account is null)
+        {
+            context.Items.Remove(VisionaryMiddleware.LoginKey);
+            return;
+        }
+        context.Items[VisionaryMiddleware.LoginKey] = account;
+    }
+
     /// <summary>Records the route pattern (e.g. /users/{id}) for requests endpoint routing doesn't see.</summary>
     public static void SetRoute(HttpContext context, string pattern)
     {

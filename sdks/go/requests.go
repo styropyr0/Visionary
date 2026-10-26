@@ -3,6 +3,7 @@ package visionary
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,7 @@ type entry struct {
 	IP                  string
 	UserAgent           string
 	User                User
+	LoginAccount        string
 	RequestHeaders      http.Header
 	RequestContentType  string
 	RequestBody         []byte
@@ -129,7 +131,17 @@ func (w *writer) requestParams(e *entry, users map[string]User) []any {
 		nullable(w.ident.service),
 		nullable(w.ident.version),
 		dbCount, dbMs, httpCount, httpMs,
+		nullable(clipLogin(e.LoginAccount)),
 	}
+}
+
+// clipLogin trims a login identifier to what the column holds.
+func clipLogin(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 255 {
+		s = strings.ToValidUTF8(s[:255], "")
+	}
+	return s
 }
 
 func nullable(s string) any {

@@ -113,6 +113,7 @@ internal sealed class RowBuilder
             e.Totals?.DbMs,
             e.Totals?.HttpCount,
             e.Totals?.HttpMs,
+            Null(e.LoginAccount),
         };
     }
 

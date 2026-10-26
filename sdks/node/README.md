@@ -183,6 +183,25 @@ To fill in handles and roles for ids logged without them:
 visionary.init({ lookupUser: async (id) => ({ handle, role }) }); // keep it cheap (a cache)
 ```
 
+## Login attempts
+
+In the login handler, record the account the request tried, whether or not
+it exists or the password was right. The security detectors use it to spot
+one IP trying many accounts, many IPs trying one account, and a signed-in
+user trying someone else's:
+
+```js
+app.post("/login", async (req, res) => {
+  visionary.loginAttempt(req.body.email);
+  const user = await authenticate(req.body.email, req.body.password);
+  if (!user) return res.status(401).json({ error: "invalid credentials" });
+  res.json({ token: issueToken(user) });
+});
+```
+
+The value is trimmed and clipped to 255 characters; outside a logged request
+it does nothing.
+
 It runs on the writer, once per distinct user per batch.
 
 ## Database queries
@@ -447,7 +466,7 @@ truncated bodies.
 | `getAgent()` | The agent from `init()`, if any. |
 | `express()`, `expressErrorHandler()`, `fastify()`, `koa()`, `wrap(handler)` | Framework integrations. |
 | `VisionaryModule.forRoot(options?)`, `VisionaryInterceptor` | NestJS. |
-| `setUser({ id, handle?, role? })`, `setRoute(pattern)` | Annotate the current request. |
+| `setUser({ id, handle?, role? })`, `setRoute(pattern)`, `loginAttempt(account)` | Annotate the current request. |
 | `captureException(err)` | Record a handled error. |
 | `span(kind, name, fn, { target?, detail? })`, `background(name, fn)` | Custom spans. |
 | `instrumentPg`, `instrumentMysql2`, `instrumentSqlite`, `prismaExtension()` | Database hooks. |

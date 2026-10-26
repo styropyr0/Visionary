@@ -32,6 +32,8 @@ type annotations struct {
 	mu    sync.Mutex
 	user  User
 	route string
+	// login is the account a sign-in on this request tried (LoginAttempt).
+	login string
 	// errs are errors captured during the request, written when it ends so
 	// they carry its final route and user.
 	errs []*errorRecord
@@ -53,6 +55,19 @@ func SetUser(ctx context.Context, u User) {
 	if a, ok := ctx.Value(ctxKey{}).(*annotations); ok {
 		a.mu.Lock()
 		a.user = u
+		a.mu.Unlock()
+	}
+}
+
+// LoginAttempt records the account a sign-in request tried: the username or
+// email typed, whether or not it exists or the password was right. Call it
+// in the login handler; the security detectors use it to tell one IP trying
+// many accounts, many IPs trying one account, and a signed-in user trying
+// someone else's. No-op outside Middleware.
+func LoginAttempt(ctx context.Context, account string) {
+	if a, ok := ctx.Value(ctxKey{}).(*annotations); ok {
+		a.mu.Lock()
+		a.login = account
 		a.mu.Unlock()
 	}
 }
@@ -178,7 +193,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 					e.Totals, e.Spans = ann.trace.finish()
 				}
 				ann.mu.Lock()
-				e.User = ann.user
+				e.User, e.LoginAccount = ann.user, ann.login
 				ann.mu.Unlock()
 				a.writer.enqueue(e)
 			}

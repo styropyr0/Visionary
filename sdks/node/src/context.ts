@@ -15,6 +15,8 @@ export class RequestState {
   userId = "";
   userHandle = "";
   userRole = "";
+  /** The account a sign-in on this request tried (loginAttempt). */
+  loginAccount = "";
   route = "";
   /** Span slots are taken in start order; only the first spanMax keep rows. */
   nextSlot = 0;
@@ -104,6 +106,20 @@ export function setUser(user: User | string | number | null | undefined, handle?
   if (!state) return;
   if (user !== null && typeof user === "object") state.setUser(user.id, user.handle, user.role);
   else state.setUser(user, handle, role);
+}
+
+/**
+ * Records the account a sign-in request tried: the username or email typed,
+ * whether or not it exists or the password was right. Call it in the login
+ * handler; the security detectors use it to tell one IP trying many accounts,
+ * many IPs trying one account, and a signed-in user trying someone else's.
+ * No-op outside a request.
+ *
+ *     loginAttempt(req.body.email)
+ */
+export function loginAttempt(account: string): void {
+  const state = requests.getStore();
+  if (state) state.loginAccount = account ?? "";
 }
 
 /** Records the route pattern (e.g. `/users/:id`) for routers the integration

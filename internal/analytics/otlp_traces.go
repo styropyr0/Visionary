@@ -425,6 +425,8 @@ func otlpRequestRow(sp *otlpSpan, r *otlpReqInfo, status int64, dbCount, dbMs, h
 		otlpNullStr(r.res.service),
 		otlpNullStr(r.res.version),
 		dbCount, dbMs, httpCount, httpMs,
+		// The account a sign-in tried; see LoginAttempt in the Go SDK.
+		otlpNullStr(otlpClip(a.str("visionary.login_account", "enduser.login"), 255)),
 	}
 }
 

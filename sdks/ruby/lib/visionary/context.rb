@@ -23,6 +23,7 @@ module Visionary
       @db_visible = db_visible
       @mutex = Mutex.new
       @user = ["", "", ""]
+      @login_account = ""
       @route = ""
       @spans = []
       @errors = []
@@ -38,6 +39,15 @@ module Visionary
 
     def user
       @mutex.synchronize { @user }
+    end
+
+    # The account a sign-in on this request tried (Visionary.login_attempt).
+    def login_account=(account)
+      @mutex.synchronize { @login_account = account.to_s }
+    end
+
+    def login_account
+      @mutex.synchronize { @login_account }
     end
 
     def route=(pattern)

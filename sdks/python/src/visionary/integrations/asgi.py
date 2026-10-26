@@ -132,6 +132,7 @@ class VisionaryASGIMiddleware:
                 e.headers = headers
                 e.route = ann.route or _route(scope)
                 e.user_id, e.user_handle, e.user_role = ann.user()
+                e.login_account = ann.login_account
                 e.request_body, e.request_truncated = req.data, req.truncated
                 e.request_size = max(parse_content_length(lookup.get("content-length")), req.size)
                 e.response_body, e.response_truncated = resp.data, resp.truncated

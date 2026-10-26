@@ -20,6 +20,7 @@ record RequestEntry(
         String ip,
         String userAgent,
         VisionaryUser user,
+        String loginAccount,
         Map<String, String> requestHeaders,
         String requestContentType,
         byte[] requestBody,
