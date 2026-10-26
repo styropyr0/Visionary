@@ -1,128 +1,208 @@
-# Visionary Non-Commercial License (VNCL) v1.0
+Visionary Non-Commercial License (VNCL) v1.0
 
-**Copyright © 2026 Saurav Sajeev. All rights reserved, except as expressly permitted below.**
+Copyright (c) 2026 Saurav Sajeev. All rights reserved, except as expressly
+permitted below.
 
-## 1. Definitions
 
-**“Software”** means Visionary, including its source code, object code, server, host agent, SDKs, libraries, documentation, and associated materials distributed under this License.
+1. Definitions
 
-**“Author”** means Saurav Sajeev, the original author and copyright holder of the Software, to the extent of their ownership of the relevant material.
+"Software" means Visionary, including its source code, object code, server,
+host agent, SDKs, libraries, documentation, and associated materials
+distributed under this License.
 
-**“Commercial Use”** means using the Software, in whole or in part, to sell, license, sublicense, rent, lease, monetize, commercially distribute, or provide a paid product or service. It also includes offering the Software as a hosted service to third parties for compensation, or incorporating it into a product or service distributed commercially.
+"Author" means Saurav Sajeev, the original author and copyright holder of the
+Software, to the extent of their ownership of the relevant material.
 
-**“Redistribution”** means making the Software, or a modified or derivative version of it, available to another person or entity by distribution, publication, hosting for download, sublicensing, or other transfer.
+"Commercial Use" means using the Software, in whole or in part, to sell,
+license, sublicense, rent, lease, monetize, commercially distribute, or provide
+a paid product or service. It also includes offering the Software as a hosted
+service to third parties for compensation, or incorporating it into a product
+or service distributed commercially.
 
-**“Internal Use”** means use by an individual or an organization solely for its own internal operations, without providing the Software or its functionality as a product or service to external customers or third parties.
+"Redistribution" means making the Software, or a modified or derivative version
+of it, available to another person or entity by distribution, publication,
+hosting for download, sublicensing, or other transfer.
 
-## 2. Grant of Permission
+"Internal Use" means use by an individual or an organization solely for its
+own internal operations, without providing the Software or its functionality
+as a product or service to external customers or third parties.
 
-Subject to the terms of this License, the Author grants you a limited, worldwide, non-exclusive, royalty-free, revocable only as permitted by applicable law, and non-transferable license to:
 
-a. Access, view, and study the Software's source code.
+2. Grant of Permission
 
-b. Download and run the Software for personal, non-commercial purposes.
+Subject to the terms of this License, the Author grants you a limited,
+worldwide, non-exclusive, royalty-free, revocable only as permitted by
+applicable law, and non-transferable license to:
 
-c. Install and deploy the Software in development, testing, staging, and production environments for Internal Use.
+  a. Access, view, and study the Software's source code.
 
-d. Modify the Software for personal use or Internal Use, including within commercial organizations, provided such modifications are not redistributed or commercially exploited.
+  b. Download and run the Software for personal, non-commercial purposes.
 
-e. Make reasonable backup copies for permitted use.
+  c. Install and deploy the Software in development, testing, staging, and
+     production environments for Internal Use.
 
-These permissions do not transfer ownership of the Software or grant any rights beyond those expressly stated in this License.
+  d. Modify the Software for personal use or Internal Use, including within
+     commercial organizations, provided such modifications are not
+     redistributed or commercially exploited.
 
-## 3. Non-Commercial Restriction
+  e. Make reasonable backup copies for permitted use.
+
+These permissions do not transfer ownership of the Software or grant any rights
+beyond those expressly stated in this License.
+
+
+3. Non-Commercial Restriction
 
 You must not, without the Author's prior written permission:
 
-a. Sell, license, sublicense, rent, lease, or otherwise commercially exploit the Software.
+  a. Sell, license, sublicense, rent, lease, or otherwise commercially exploit
+     the Software.
 
-b. Offer the Software or a modified version as a paid product, subscription, managed service, or hosted monitoring service.
+  b. Offer the Software or a modified version as a paid product, subscription,
+     managed service, or hosted monitoring service.
 
-c. Incorporate the Software or a substantial portion of it into a product or service that is sold, licensed, distributed, or otherwise commercially offered to third parties.
+  c. Incorporate the Software or a substantial portion of it into a product or
+     service that is sold, licensed, distributed, or otherwise commercially
+     offered to third parties.
 
-d. Use the Software to provide monitoring, observability, analytics, or other functionality to external customers as a commercial service.
+  d. Use the Software to provide monitoring, observability, analytics, or other
+     functionality to external customers as a commercial service.
 
-e. Monetize access to the Software or charge third parties for access to its functionality.
+  e. Monetize access to the Software or charge third parties for access to its
+     functionality.
 
-**Internal production use by a commercial organization is permitted** under Section 2, provided that the organization does not commercially exploit or redistribute the Software in a manner prohibited by this License.
+Internal production use by a commercial organization is permitted under
+Section 2, provided that the organization does not commercially exploit or
+redistribute the Software in a manner prohibited by this License.
 
-## 4. Redistribution and Publication
+
+4. Redistribution and Publication
 
 Without the Author's prior written permission, you must not:
 
-a. Redistribute or republish the original Software, in source or binary form.
+  a. Redistribute or republish the original Software, in source or binary
+     form.
 
-b. Publish, distribute, or make publicly available a modified version, fork, or derivative work of the Software.
+  b. Publish, distribute, or make publicly available a modified version, fork,
+     or derivative work of the Software.
 
-c. Upload the Software or modified versions to public package registries, software marketplaces, application stores, repositories, or download platforms for redistribution.
+  c. Upload the Software or modified versions to public package registries,
+     software marketplaces, application stores, repositories, or download
+     platforms for redistribution.
 
-d. Sublicense, transfer, or grant others rights to use the Software beyond the permissions expressly provided in this License.
+  d. Sublicense, transfer, or grant others rights to use the Software beyond
+     the permissions expressly provided in this License.
 
-e. Remove or misrepresent the Software's authorship, copyright notices, or license information.
+  e. Remove or misrepresent the Software's authorship, copyright notices, or
+     license information.
 
-Private modifications and internal deployments permitted by Section 2 are not prohibited merely because they exist within a commercial organization's infrastructure.
+Private modifications and internal deployments permitted by Section 2 are not
+prohibited merely because they exist within a commercial organization's
+infrastructure.
 
-## 5. Commercial Licensing
 
-The Author may separately grant commercial licenses, redistribution rights, or other permissions under different terms.
+5. Commercial Licensing
 
-Anyone wishing to sell, redistribute, sublicense, incorporate, or commercially exploit the Software beyond the permissions granted here must obtain prior written authorization from the Author.
+The Author may separately grant commercial licenses, redistribution rights, or
+other permissions under different terms.
 
-A separate commercial agreement may specify fees, attribution requirements, support terms, distribution rights, and other conditions.
+Anyone wishing to sell, redistribute, sublicense, incorporate, or commercially
+exploit the Software beyond the permissions granted here must obtain prior
+written authorization from the Author.
 
-## 6. Ownership and Intellectual Property
+A separate commercial agreement may specify fees, attribution requirements,
+support terms, distribution rights, and other conditions.
+
+
+6. Ownership and Intellectual Property
 
 The Software remains the property of its respective copyright holders.
 
-This License does not transfer ownership of the Software, its name, branding, trademarks, or logos. No trademark license is granted except as necessary to identify the unmodified Software truthfully.
+This License does not transfer ownership of the Software, its name, branding,
+trademarks, or logos. No trademark license is granted except as necessary to
+identify the unmodified Software truthfully.
 
-You retain ownership of your independently created contributions to the extent provided by applicable law, but this does not grant you permission to distribute or commercially exploit the Software or derivative works in violation of this License.
+You retain ownership of your independently created contributions to the extent
+provided by applicable law, but this does not grant you permission to
+distribute or commercially exploit the Software or derivative works in
+violation of this License.
 
-## 7. Third-Party Components
 
-This License applies only to material the Author has the legal right to license under these terms.
+7. Third-Party Components
 
-Third-party components, dependencies, and contributions remain subject to their respective licenses. Where another license grants rights that cannot legally be restricted by this License, those rights remain unaffected.
+This License applies only to material the Author has the legal right to
+license under these terms.
 
-You are responsible for complying with applicable third-party license obligations when using or distributing such components.
+Third-party components, dependencies, and contributions remain subject to their
+respective licenses. Where another license grants rights that cannot legally
+be restricted by this License, those rights remain unaffected.
 
-## 8. Termination
+You are responsible for complying with applicable third-party license
+obligations when using or distributing such components.
 
-Your permissions under this License terminate automatically if you materially violate its terms.
 
-Upon termination, you must cease activities that are no longer authorized by this License, including prohibited redistribution or commercial exploitation, subject to any rights or remedies provided by applicable law.
+8. Termination
+
+Your permissions under this License terminate automatically if you materially
+violate its terms.
+
+Upon termination, you must cease activities that are no longer authorized by
+this License, including prohibited redistribution or commercial exploitation,
+subject to any rights or remedies provided by applicable law.
 
 Permissions may be reinstated by the Author in writing.
 
-Termination does not eliminate rights that applicable law makes irrevocable, nor does it automatically revoke separate licenses granted by third-party copyright holders.
+Termination does not eliminate rights that applicable law makes irrevocable,
+nor does it automatically revoke separate licenses granted by third-party
+copyright holders.
 
-## 9. Disclaimer of Warranty
 
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+9. Disclaimer of Warranty
 
-YOU ASSUME ALL RISKS ARISING FROM THE USE OF THE SOFTWARE, TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
 
-## 10. Limitation of Liability
+YOU ASSUME ALL RISKS ARISING FROM THE USE OF THE SOFTWARE, TO THE MAXIMUM
+EXTENT PERMITTED BY APPLICABLE LAW.
 
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE, DISTRIBUTION, OR OTHER DEALINGS.
 
-Nothing in this License excludes liability that cannot lawfully be excluded under applicable law.
+10. Limitation of Liability
 
-## 11. No Additional Rights
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT,
+OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS
+USE, DISTRIBUTION, OR OTHER DEALINGS.
 
-No rights are granted by implication, estoppel, or otherwise beyond those expressly stated in this License.
+Nothing in this License excludes liability that cannot lawfully be excluded
+under applicable law.
 
-Any use, distribution, or commercialization not expressly permitted requires the Author's prior written permission, unless applicable law provides otherwise.
 
-## 12. Governing Law
+11. No Additional Rights
 
-The governing law and jurisdiction applicable to this License shall be determined by a separate written agreement between the relevant parties or, in the absence of such an agreement, by applicable law and conflict-of-law rules.
+No rights are granted by implication, estoppel, or otherwise beyond those
+expressly stated in this License.
 
-## 13. Entire Agreement
+Any use, distribution, or commercialization not expressly permitted requires
+the Author's prior written permission, unless applicable law provides
+otherwise.
 
-This License governs the permissions granted by the Author for the Software covered by it. If any provision is held unenforceable, the remaining provisions shall continue to apply to the extent permitted by law.
 
-**License:** Visionary Non-Commercial License (VNCL) v1.0
-**Copyright holder:** Saurav Sajeev
-**Project:** Visionary
-**Commercial licensing:** Requires separate written authorization.
+12. Governing Law
+
+The governing law and jurisdiction applicable to this License shall be
+determined by a separate written agreement between the relevant parties or, in
+the absence of such an agreement, by applicable law and conflict-of-law rules.
+
+
+13. Entire Agreement
+
+This License governs the permissions granted by the Author for the Software
+covered by it. If any provision is held unenforceable, the remaining provisions
+shall continue to apply to the extent permitted by law.
+
+
+License:              Visionary Non-Commercial License (VNCL) v1.0
+Copyright holder:     Saurav Sajeev
+Project:              Visionary
+Commercial licensing: Requires separate written authorization.
