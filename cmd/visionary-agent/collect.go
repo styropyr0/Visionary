@@ -40,6 +40,9 @@ type agent struct {
 	auth    *authCollector
 	ports   *portCollector
 	updates *updateChecker
+	keys    *sshKeyCollector // nil when off, like files and suspect
+	files   *fileCollector
+	suspect *procCollector
 	docker  *dockerCollector // nil when VISIONARY_AGENT_DOCKER is off
 }
 
@@ -59,6 +62,18 @@ func newAgent(cfg config, logger *slog.Logger) *agent {
 		a.auth = newAuthCollector(a, cfg.authLog)
 		a.ports = &portCollector{a: a}
 		a.updates = &updateChecker{a: a}
+		if cfg.sshKeys {
+			a.keys = &sshKeyCollector{a: a}
+		}
+		if cfg.fileIntegrity {
+			a.files = &fileCollector{a: a}
+		}
+		if cfg.processChecks {
+			a.suspect = &procCollector{a: a}
+		}
+		if cfg.containerRisks && a.docker != nil {
+			a.docker.risks = newRiskTracker()
+		}
 	}
 	return a
 }
@@ -94,6 +109,18 @@ func (a *agent) report(ctx context.Context, samples []agentapi.Sample) *agentapi
 		rep.Events = append(rep.Events, a.auth.collect(ctx)...)
 		rep.Events = append(rep.Events, a.ports.collect()...)
 		rep.Events = append(rep.Events, a.updates.take()...)
+		if a.keys != nil {
+			rep.Events = append(rep.Events, a.keys.collect()...)
+		}
+		if a.files != nil {
+			rep.Events = append(rep.Events, a.files.collect()...)
+		}
+		if a.suspect != nil {
+			rep.Events = append(rep.Events, a.suspect.collect()...)
+		}
+		if a.docker != nil && a.docker.risks != nil {
+			rep.Events = append(rep.Events, a.docker.risks.take()...)
+		}
 	}
 	return rep
 }

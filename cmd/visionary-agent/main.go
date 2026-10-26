@@ -7,7 +7,8 @@
 // SDK's sampler; once a minute it posts those samples with the inventory, the
 // top processes, every real mount, failed and watched systemd units, and the
 // security findings since the last report (SSH logins, sudo, listening ports,
-// pending updates). With Docker or Podman on the host it also reports every
+// pending updates, authorized SSH keys, changed system files, suspicious
+// processes). With Docker or Podman on the host it also reports every
 // container: its state, CPU, memory, network and disk use, and restarts, OOM
 // kills, exits and failed health checks. The wire format is internal/agentapi.
 //
@@ -51,6 +52,12 @@ type config struct {
 	disks    []string
 	authLog  string // a log file, "journald", "off", or "" to pick one
 	docker   string // the engine's socket, "off", or "" to find one
+
+	// Security collectors that run when security is on.
+	sshKeys        bool
+	fileIntegrity  bool
+	processChecks  bool
+	containerRisks bool
 }
 
 func main() {
@@ -85,6 +92,10 @@ func loadConfig(args []string) (config, error) {
 	fs.BoolVar(&c.security, "security", envBool("VISIONARY_AGENT_SECURITY", true), "collect SSH, sudo, port and update findings (VISIONARY_AGENT_SECURITY)")
 	disks := fs.String("disk-paths", os.Getenv("VISIONARY_DISK_PATHS"), "comma-separated mount points to report; the first fills the disk columns (VISIONARY_DISK_PATHS)")
 	fs.StringVar(&c.authLog, "auth-log", os.Getenv("VISIONARY_AGENT_AUTH_LOG"), `auth log to read: a file, "journald" or "off" (VISIONARY_AGENT_AUTH_LOG, default auto)`)
+	fs.BoolVar(&c.sshKeys, "ssh-keys", envBool("VISIONARY_AGENT_SSH_KEYS", true), "report SSH keys added to or removed from authorized_keys (VISIONARY_AGENT_SSH_KEYS)")
+	fs.BoolVar(&c.fileIntegrity, "file-integrity", envBool("VISIONARY_AGENT_FILE_INTEGRITY", true), "report changes to accounts, sudoers, cron, PAM, sshd and systemd files (VISIONARY_AGENT_FILE_INTEGRITY)")
+	fs.BoolVar(&c.processChecks, "process-checks", envBool("VISIONARY_AGENT_PROCESS_CHECKS", true), "report miners, reverse shells and programs run from /tmp (VISIONARY_AGENT_PROCESS_CHECKS)")
+	fs.BoolVar(&c.containerRisks, "container-risks", envBool("VISIONARY_AGENT_CONTAINER_RISKS", true), "report privileged, root and new-image containers (VISIONARY_AGENT_CONTAINER_RISKS)")
 	fs.StringVar(&c.docker, "docker", os.Getenv("VISIONARY_AGENT_DOCKER"), `container engine socket: a path, "off", or empty to find Docker or Podman (VISIONARY_AGENT_DOCKER)`)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {

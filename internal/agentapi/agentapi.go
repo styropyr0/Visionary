@@ -93,8 +93,24 @@ type Unit struct {
 // Event is a host security finding, aggregated over the report interval.
 // The server sets source = 'host' and the severity.
 type Event struct {
-	// Kind is ssh_failed, ssh_login, sudo, port_opened, port_closed or
-	// updates_pending.
+	// Kind is ssh_failed, ssh_login, sudo, port_opened, port_closed,
+	// updates_pending, or:
+	//   - ssh_key_added, ssh_key_removed: Actor is the account owning the
+	//     authorized_keys file, Target "<type> SHA256:<fp> <comment>", Detail
+	//     the file's path. The key itself is never sent.
+	//   - file_changed: Target is a watched system file, Detail created,
+	//     modified, deleted or permissions changed (comma-joined), plus
+	//     "; new UID 0 account <name>" for /etc/passwd.
+	//   - suspicious_process: Actor is the process's user, Target
+	//     "pid <N> <exe> <cmdline>" (redacted), Detail the reason, e.g. "runs
+	//     from /tmp", "deleted executable", "known miner xmrig", "shell
+	//     attached to a network socket", "netcat with exec".
+	//   - container_privileged: Target is the container, Detail "<image>:
+	//     <reasons>" (privileged, host network, host PID, docker socket
+	//     mounted, CAP_SYS_ADMIN, all capabilities).
+	//   - container_root: Target is the container, Detail the image.
+	//   - container_new_image: Target is the container, Detail "<image>
+	//     <short image ID>" for an image this host had not run before.
 	Kind   string `json:"kind"`
 	Actor  string `json:"actor,omitempty"`  // the user name tried or used
 	IP     string `json:"ip,omitempty"`     // the remote address

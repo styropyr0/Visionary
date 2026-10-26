@@ -32,6 +32,7 @@ type dockerCollector struct {
 	limits  map[string]ctrLimits    // by container ID, from the last inspect
 	states  map[string]ctrState     // by container ID, at the last report
 	samples []agentapi.ContainerSample
+	risks   *riskTracker // nil when container risks are off
 }
 
 type statsReading struct {
@@ -355,11 +356,23 @@ type inspected struct {
 		} `json:"Health"`
 	} `json:"State"`
 	HostConfig struct {
-		NanoCPUs  int64 `json:"NanoCpus"`
-		CPUQuota  int64 `json:"CpuQuota"`
-		CPUPeriod int64 `json:"CpuPeriod"`
-		Memory    int64 `json:"Memory"`
+		NanoCPUs    int64    `json:"NanoCpus"`
+		CPUQuota    int64    `json:"CpuQuota"`
+		CPUPeriod   int64    `json:"CpuPeriod"`
+		Memory      int64    `json:"Memory"`
+		Privileged  bool     `json:"Privileged"`
+		NetworkMode string   `json:"NetworkMode"`
+		PidMode     string   `json:"PidMode"`
+		CapAdd      []string `json:"CapAdd"`
+		Binds       []string `json:"Binds"`
 	} `json:"HostConfig"`
+	Image  string `json:"Image"` // the image ID, sha256:...
+	Config struct {
+		User string `json:"User"`
+	} `json:"Config"`
+	Mounts []struct {
+		Source string `json:"Source"`
+	} `json:"Mounts"`
 }
 
 func (in inspected) limits() ctrLimits {
@@ -446,6 +459,9 @@ func (d *dockerCollector) report(ctx context.Context) ([]agentapi.Container, []a
 		sort.Slice(events, func(i, j int) bool { return events[i].Container < events[j].Container })
 	}
 	d.states, d.limits = states, limits
+	if d.risks != nil {
+		d.risks.check(ctx, d, all, details)
+	}
 	return out, events
 }
 
