@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, KeyRound, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
@@ -39,6 +39,8 @@ interface ConfView {
 const getConfig = () => api<ConfView>("/api/settings/config");
 /** null resets a setting to its default; a secret left out stays as it is. */
 const saveConfig = (values: Record<string, string | null>) => api<ConfView>("/api/settings/config", { method: "PUT", json: values });
+/** Fetches one stored secret; the server audits each reveal. */
+const revealSecret = (key: string) => api<{ value: string }>(`/api/settings/config/${encodeURIComponent(key)}/reveal`, { method: "POST", json: {} });
 
 /** Settings → Server: everything the server used to read from its environment. */
 export function ServerTab() {
@@ -129,6 +131,26 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
   const value = draft === undefined ? s.value : draft === null ? (s.kind === "secret" ? "" : s.default) : draft;
   const set = (v: string) => onChange(v === s.value && s.kind !== "secret" ? undefined : v);
   const canReset = s.stored && draft !== null && (s.kind === "secret" ? s.set : s.value !== s.default);
+  const toast = useToast();
+  // A secret is shown only after an eye click: revealed holds what the server sent.
+  const [visible, setVisible] = useState(false);
+  const [revealed, setRevealed] = useState<string>();
+  useEffect(() => {
+    setVisible(false);
+    setRevealed(undefined);
+  }, [s]);
+  const toggleSecret = async () => {
+    if (visible) return setVisible(false);
+    if (s.set && draft === undefined && revealed === undefined) {
+      try {
+        setRevealed((await revealSecret(s.key)).value);
+      } catch (e) {
+        toast("err", e instanceof Error ? e.message : String(e));
+        return;
+      }
+    }
+    setVisible(true);
+  };
 
   let control;
   switch (s.kind) {
@@ -163,14 +185,22 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
       break;
     case "secret":
       control = (
-        <input
-          className="input conf-input"
-          type="password"
-          autoComplete="new-password"
-          value={draft ?? ""}
-          placeholder={draft === null ? "Cleared on save" : s.set ? "Set; type to replace" : "Not set"}
-          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
-        />
+        <>
+          <input
+            className="input conf-input"
+            type={visible ? "text" : "password"}
+            autoComplete="new-password"
+            spellCheck={false}
+            value={draft ?? (visible ? (revealed ?? "") : "")}
+            placeholder={draft === null ? "Cleared on save" : s.set ? "Set; type to replace" : "Not set"}
+            onChange={(e) => onChange(e.target.value === "" || e.target.value === revealed ? undefined : e.target.value)}
+          />
+          {draft !== null && (s.set || draft) && (
+            <button type="button" className="icon-btn" title={visible ? "Hide" : "Show"} aria-label={visible ? `Hide ${s.label}` : `Show ${s.label}`} aria-pressed={visible} onClick={toggleSecret}>
+              {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          )}
+        </>
       );
       break;
     default:

@@ -39,6 +39,7 @@ func (s *Server) settingsRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/settings/pages", s.authed(s.handlePageSettings))
 	mux.Handle("GET /api/settings/config", s.authed(s.handleConfigSettings))
 	mux.Handle("PUT /api/settings/config", s.authed(s.handlePutConfig))
+	mux.Handle("POST /api/settings/config/{key}/reveal", s.authed(s.handleRevealSecret))
 	mux.Handle("GET /api/settings/signin", s.authed(s.handleSigninSettings))
 	mux.Handle("PUT /api/settings/signin", s.authed(s.handlePutSignin))
 	s.serverSettingsRoutes(mux)

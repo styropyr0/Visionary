@@ -275,6 +275,22 @@ func (s *Server) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"groups": confGroups, "settings": s.confView()})
 }
 
+// handleRevealSecret shows one stored secret to an admin who asks for it. The
+// settings list never carries secrets; each reveal is audited instead.
+func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r, "admin") {
+		return
+	}
+	key := r.PathValue("key")
+	if d, ok := confByKey[key]; !ok || d.Kind != confSecret {
+		writeError(w, http.StatusNotFound, "no secret setting "+key)
+		return
+	}
+	s.audit(r, "settings.secret_viewed", key, nil)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"value": s.conf(key)})
+}
+
 // handlePutConfig saves settings by key; null resets one to its default.
 // A secret left out stays as it is.
 func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
