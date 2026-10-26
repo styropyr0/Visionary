@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
@@ -634,6 +634,7 @@ interface Account {
   created_at: string;
   last_sign_in_at?: string;
   password_changed_at: string;
+  two_step: boolean;
 }
 
 const ROLES = [
@@ -691,6 +692,7 @@ function AccountsCard() {
                 <th>Name</th>
                 <th>Role</th>
                 <th>Last sign-in</th>
+                <th>Two-step</th>
                 <th>Status</th>
                 <th aria-label="Actions" />
               </tr>
@@ -704,6 +706,7 @@ function AccountsCard() {
                     <Select label={`Role of ${a.username}`} value={a.role} options={ROLES} onChange={(r) => update(a, { role: r as Account["role"] }, `${a.username} is now ${r === "admin" ? "an admin" : `a ${r}`}.`)} />
                   </td>
                   <td>{a.last_sign_in_at ? formatRelative(a.last_sign_in_at) : <span className="dim">Never</span>}</td>
+                  <td>{a.two_step ? "On" : <span className="dim">Off</span>}</td>
                   <td>
                     <Switch
                       on={!a.disabled}
@@ -712,6 +715,21 @@ function AccountsCard() {
                     />
                   </td>
                   <td className="acct-actions">
+                    {a.two_step && (
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Turn off two-step sign-in"
+                        aria-label={`Turn off two-step sign-in for ${a.username}`}
+                        onClick={() => {
+                          if (window.confirm(`Turn off two-step sign-in for ${a.username}? Do this only if they lost their phone and recovery codes; they can set it up again.`)) {
+                            void act(() => api(`/api/team/accounts/${a.id}/two-step/reset`, { method: "POST", json: {} }), `Two-step sign-in is off for ${a.username}.`);
+                          }
+                        }}
+                      >
+                        <ShieldOff size={14} />
+                      </button>
+                    )}
                     <button type="button" className="icon-btn" title="Set a new password" aria-label={`Set a new password for ${a.username}`} onClick={() => setResetting(a)}>
                       <KeyRound size={14} />
                     </button>

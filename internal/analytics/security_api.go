@@ -34,14 +34,14 @@ var (
 	findingKey  = regexp.MustCompile(`^[^\x00-\x1f]{1,255}$`)
 )
 
-const findingColumns = `id, created_at, source, kind, severity, host, service, actor, ip, target, detail, count`
+const findingColumns = `id, created_at, source, kind, severity, host, service, actor, ip, target, detail, count, status, note, status_by, status_at`
 
 // findingsPage is how many findings one request returns.
 const findingsPage = 100
 
 // handleSecurityFindings lists findings newest first. Filters (all exact,
-// bound): source, kind, severity (that level and above), host, ip, actor;
-// before (an id) pages.
+// bound): source, kind, severity (that level and above), host, ip, actor,
+// status (open for untriaged); before (an id) pages.
 func (s *Server) handleSecurityFindings(w http.ResponseWriter, r *http.Request) {
 	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
@@ -75,6 +75,16 @@ func (s *Server) handleSecurityFindings(w http.ResponseWriter, r *http.Request) 
 		for _, l := range levels {
 			args = append(args, l)
 		}
+	}
+	switch v := q.Get("status"); v {
+	case "":
+	case "open":
+		where = append(where, "(status IS NULL OR status = '')")
+	case "acknowledged", "resolved", "false_positive":
+		where, args = append(where, "status = ?"), append(args, v)
+	default:
+		writeError(w, http.StatusBadRequest, "status must be open, acknowledged, resolved or false_positive")
+		return
 	}
 	if v := q.Get("before"); v != "" {
 		id, err := strconv.ParseInt(v, 10, 64)
@@ -114,7 +124,7 @@ func severitiesFrom(v string) []string {
 }
 
 func findingView(row []any) map[string]any {
-	if len(row) != 12 {
+	if len(row) != 16 {
 		return nil
 	}
 	var detail map[string]any
@@ -126,6 +136,7 @@ func findingView(row []any) map[string]any {
 		"id": toInt(row[0]), "created_at": toString(row[1]), "source": toString(row[2]), "kind": toString(row[3]),
 		"severity": toString(row[4]), "host": toString(row[5]), "service": toString(row[6]), "actor": toString(row[7]),
 		"ip": toString(row[8]), "target": toString(row[9]), "detail": detail, "summary": summary, "count": toInt(row[11]),
+		"status": fallback(toString(row[12]), "open"), "note": toString(row[13]), "status_by": toString(row[14]), "status_at": toString(row[15]),
 	}
 }
 
@@ -154,8 +165,21 @@ func (s *Server) handleSecurityFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	st := s.security().st
-	tr := timeRange{From: at.Add(-st.window - time.Minute), To: at.Add(st.dedupe + time.Minute)}
+	kind := f["kind"].(string)
+	back := st.window
+	if slowKinds[kind] {
+		back = st.slowWindow
+	}
+	tr := timeRange{From: at.Add(-back - time.Minute), To: at.Add(st.dedupeFor(kind) + time.Minute)}
 	out := map[string]any{"finding": f, "from": tr.From.Format(time.RFC3339Nano), "to": tr.To.Format(time.RFC3339Nano)}
+	if f["source"] == "audit" {
+		if err := s.findingAudit(r.Context(), out, f, tr); err != nil {
+			s.fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 
 	ip, actor := f["ip"].(string), f["actor"].(string)
 	var cond string
@@ -168,7 +192,7 @@ func (s *Server) handleSecurityFinding(w http.ResponseWriter, r *http.Request) {
 		cond, args = "user_role = ?", []any{strings.TrimPrefix(actor, "role:")}
 		out["match"] = "role"
 	case actor != "" && f["source"] == "api":
-		cond, args = "(user_handle = ? OR "+s.q.text("user_id")+" = ?)", []any{actor, actor}
+		cond, args = "(user_handle = ? OR "+s.q.text("user_id")+" = ? OR login_account = ?)", []any{actor, actor, actor}
 		out["match"] = "user"
 	}
 	if cond == "" {
@@ -176,7 +200,7 @@ func (s *Server) handleSecurityFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	span := append([]any{tr.From.Format(tsLayout), tr.To.Format(tsLayout)}, args...)
-	reqs, err := s.db.Query(r.Context(), `SELECT id, created_at, method, path, route, status, duration_ms, user_id, user_handle, user_agent, error_key
+	reqs, err := s.db.Query(r.Context(), `SELECT id, created_at, method, path, route, status, duration_ms, user_id, user_handle, login_account, user_agent, error_key
 FROM api_logs WHERE created_at >= ? AND created_at < ? AND `+cond+`
 ORDER BY created_at DESC LIMIT 100`, span...)
 	if err != nil {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldAlert } from "lucide-react";
-import { api, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser } from "./lib/api";
+import { api, TWO_STEP_SETUP_EVENT, UNAUTHORIZED_EVENT, type Meta, type SessionInfo, type SessionUser } from "./lib/api";
+import { TwoStepRequired } from "./components/TwoStep";
 import { load, save } from "./lib/state";
 import { useQuery } from "./lib/useQuery";
 import { ROUTES, Sidebar, type Route } from "./components/Sidebar";
@@ -61,6 +62,8 @@ export function App() {
   const [auth, setAuth] = useState<Auth>("checking");
   const [user, setUser] = useState<SessionUser | null>(null);
   const [notice, setNotice] = useState("");
+  // The server refused a request until two-step sign-in is set up.
+  const [needsTwoStep, setNeedsTwoStep] = useState(false);
   const [route, setRoute] = useState<Route>(readRoute);
   const [collapsed, setCollapsed] = useState(() => load("va.sidebar", false));
   // Bumped when another tab changes who is signed in, so every page mounts
@@ -83,10 +86,13 @@ export function App() {
       setAuth("out");
     };
     const onHash = () => setRoute(readRoute());
+    const onTwoStep = () => setNeedsTwoStep(true);
+    window.addEventListener(TWO_STEP_SETUP_EVENT, onTwoStep);
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauth);
     window.addEventListener("hashchange", onHash);
     return () => {
       window.removeEventListener(UNAUTHORIZED_EVENT, onUnauth);
+      window.removeEventListener(TWO_STEP_SETUP_EVENT, onTwoStep);
       window.removeEventListener("hashchange", onHash);
     };
   }, []);
@@ -167,25 +173,38 @@ export function App() {
       />
       <MetaContext.Provider value={meta.data}>
         <main className="main" key={sessionKey}>
-          {meta.data?.sign_in_open && <OpenBanner why={meta.data.sign_in_open} />}
-          {route === "overview" && <Overview />}
-          {route === "performance" && <Performance meta={meta.data} />}
-          {route === "queries" && <Queries />}
-          {route === "dependencies" && <Dependencies />}
-          {route === "profiles" && <Profiles />}
-          {route === "system" && <System />}
-          {route === "containers" && <Containers />}
-          {route === "errors" && <Errors />}
-          {route === "frontend" && <Frontend />}
-          {route === "uptime" && <Uptime />}
-          {route === "security" && <Security />}
-          {route === "dashboards" && <Dashboards />}
-          {route === "alerts" && <Alerts meta={meta.data} />}
-          {route === "settings" && <Settings user={user} />}
-          {route === "explore" && <Explore meta={meta.data} />}
-          {route === "saved" && <Saved />}
-          {route === "logs" && <Logs meta={meta.data} />}
-          {route === "guide" && <Guide />}
+          {needsTwoStep && (
+            <TwoStepRequired
+              onSignOut={signOut}
+              onDone={() => {
+                setNeedsTwoStep(false);
+                setSessionKey((k) => k + 1);
+              }}
+            />
+          )}
+          {!needsTwoStep && meta.data?.sign_in_open && <OpenBanner why={meta.data.sign_in_open} />}
+{!needsTwoStep && (
+            <>
+            {route === "overview" && <Overview />}
+            {route === "performance" && <Performance meta={meta.data} />}
+            {route === "queries" && <Queries />}
+            {route === "dependencies" && <Dependencies />}
+            {route === "profiles" && <Profiles />}
+            {route === "system" && <System />}
+            {route === "containers" && <Containers />}
+            {route === "errors" && <Errors />}
+            {route === "frontend" && <Frontend />}
+            {route === "uptime" && <Uptime />}
+            {route === "security" && <Security />}
+            {route === "dashboards" && <Dashboards />}
+            {route === "alerts" && <Alerts meta={meta.data} />}
+            {route === "settings" && <Settings user={user} />}
+            {route === "explore" && <Explore meta={meta.data} />}
+            {route === "saved" && <Saved />}
+            {route === "logs" && <Logs meta={meta.data} />}
+            {route === "guide" && <Guide />}
+            </>
+          )}
         </main>
       </MetaContext.Provider>
       <HelpHost route={route} />

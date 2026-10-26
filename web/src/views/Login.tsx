@@ -82,6 +82,9 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
   const shared = cfg.type === "shared";
   const codeLength = cfg.code_length ?? 6;
   const [step, setStep] = useState<"identifier" | "code">("identifier");
+  // twoStep: the password was right and the account wants its authenticator code.
+  const [twoStep, setTwoStep] = useState(false);
+  const [totp, setTotp] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -169,8 +172,18 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
       const s = await api<SessionInfo>("/api/auth/complete", { method: "POST", json: { identifier, ...secret, ...(pos ?? {}) } });
       onSignedIn(s);
     } catch (e) {
-      fail(e);
       setPending(false);
+      if (e instanceof ApiError && e.data?.two_step) {
+        if (!twoStep) {
+          setTwoStep(true);
+          setError("");
+        } else {
+          fail(e);
+          setTotp("");
+        }
+        return;
+      }
+      fail(e);
       if (otp) {
         if (e instanceof ApiError && e.status === 403) {
           // Not allowed in: the code is spent, so go back to the start.
@@ -217,7 +230,8 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (pending) return;
-    if (!otp) complete({ password });
+    if (twoStep) complete({ password, code: totp });
+    else if (!otp) complete({ password });
     else if (step === "identifier") sendCode();
     else if (digits.every(Boolean)) complete({ code: digits.join("") });
   };
@@ -230,9 +244,11 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
     <form className="auth-form" onSubmit={submit} noValidate>
       <div className="auth-form-head">
         <BrandMark />
-        <h1>{step === "code" ? "Check your messages" : "Sign in to Visionary"}</h1>
+        <h1>{twoStep ? "Two-step sign-in" : step === "code" ? "Check your messages" : "Sign in to Visionary"}</h1>
         <p>
-          {step === "code"
+          {twoStep
+            ? "Enter the 6-digit code from your authenticator app."
+            : step === "code"
             ? `Enter the ${codeLength}-digit code we sent you.`
             : shared
               ? "Enter the team password to continue."
@@ -249,7 +265,40 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
         </div>
       )}
 
-      {step === "identifier" ? (
+      {twoStep ? (
+        <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 14 }} key="totp">
+          <label className="field">
+            <span>Authenticator code</span>
+            <div className="input-wrap">
+              <ShieldCheck size={16} />
+              <input
+                className="input mono"
+                inputMode="text"
+                autoComplete="one-time-code"
+                autoFocus
+                maxLength={12}
+                value={totp}
+                onChange={(e) => setTotp(e.target.value)}
+                aria-describedby="totp-hint"
+              />
+            </div>
+          </label>
+          <div id="totp-hint" style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-3)" }}>
+            <span>Lost your phone? Enter one of your recovery codes.</span>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setTwoStep(false);
+                setTotp("");
+                setError("");
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      ) : step === "identifier" ? (
         <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 14 }} key="id">
           {!shared && (
             <label className="field">
@@ -371,11 +420,16 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
           pending ||
           (!shared && !identifier) ||
           (!otp && !password) ||
-          (otp && step === "code" && !digits.every(Boolean))
+          (otp && step === "code" && !digits.every(Boolean)) ||
+          (twoStep && totp.trim().length < 6)
         }
       >
         {pending && <Loader2 size={15} className="spin" />}
-        {!otp
+        {twoStep
+          ? pending
+            ? "Verifying…"
+            : "Verify and sign in"
+          : !otp
           ? pending
             ? "Signing in…"
             : "Sign in"

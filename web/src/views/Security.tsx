@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, ScrollText, Search, ShieldAlert, Sparkles } from "lucide-react";
+import { FileText, Globe, ScrollText, Search, ShieldAlert, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatPercent, humanize, relabelColumn, titleCase, toNumber, yesNo } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -27,6 +27,7 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
+import { AccountDrawer, AuditExport, FindingActions, IntelPanel, IPCard, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
 import "./Security.css";
 import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
@@ -47,7 +48,7 @@ export function Security() {
   return <SecurityPage />;
 }
 
-const EMPTY: FindingFilters = { source: "", kind: "", severity: "", host: "", ip: "" };
+const EMPTY: FindingFilters = { source: "", kind: "", severity: "", host: "", ip: "", status: "" };
 
 function SecurityPage() {
   const { resolved, tick } = useApp();
@@ -56,6 +57,7 @@ function SecurityPage() {
   const failed = useSecurityPanel("failed_logins");
   const [filters, setFilters] = useState<FindingFilters>(EMPTY);
   const [selected, setSelected] = useState<Finding | null>(null);
+  const [account, setAccount] = useState<string | null>(null);
 
   const s = rowObjects(summary.data)[0] ?? {};
   const n = (k: string) => toNumber(s[k]);
@@ -157,6 +159,10 @@ function SecurityPage() {
           />
           <FindingsTable filters={filters} setFilters={setFilters} onSelect={setSelected} />
 
+          <Section title="Response" text="What the detectors skip, and where they get the place, network and reputation of an address." />
+          <SuppressionsPanel />
+          <IntelPanel />
+
           <Section title="Sign-ins and access" text="Failed logins and auth errors over time, and the IPs, paths and clients behind them." />
           <ChartPanel
             name="failed_logins"
@@ -256,7 +262,26 @@ function SecurityPage() {
           <AuditSection admin={meta.data?.is_admin ?? false} />
         </div>
       </div>
-      {selected && <FindingDrawer finding={selected} onClose={() => setSelected(null)} />}
+      {account && (
+        <AccountDrawer
+          account={account}
+          onClose={() => setAccount(null)}
+          onFinding={(f) => {
+            setAccount(null);
+            setSelected(f);
+          }}
+        />
+      )}
+      {selected && (
+        <FindingDrawer
+          finding={selected}
+          onClose={() => setSelected(null)}
+          onTimeline={(a) => {
+            setSelected(null);
+            setAccount(a);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -321,8 +346,8 @@ function FindingsTable({
   const pick = (k: keyof FindingFilters) => (v: string) => setFilters({ ...filters, [k]: v });
   const result: Result = useMemo(
     () => ({
-      columns: ["id", "created_at", "severity", "kind", "source", "who", "summary", "count"],
-      rows: rows.map((f) => [f.id, f.created_at, f.severity, f.kind, f.source, whoOf(f), f.summary || f.target, f.count]),
+      columns: ["id", "created_at", "severity", "kind", "source", "who", "summary", "count", "status"],
+      rows: rows.map((f) => [f.id, f.created_at, f.severity, f.kind, f.source, whoOf(f), f.summary || f.target, f.count, f.status]),
       truncated: false,
       rows_read: 0,
       duration_ms: 0,
@@ -342,6 +367,7 @@ function FindingsTable({
     { key: "who", label: "Host, IP or account", render: (v) => <span className="mono">{String(v)}</span>, width: 200 },
     { key: "summary", label: "What happened", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
     { key: "count", align: "right", unit: "count", width: 70 },
+    { key: "status", render: (v) => <StatusPill status={(v as Finding["status"]) || "open"} />, width: 110 },
   ];
   const active = Object.values(filters).some(Boolean);
 
@@ -358,6 +384,20 @@ function FindingsTable({
             { value: "", label: "All sources" },
             { value: "api", label: "API detectors" },
             { value: "host", label: "Host agent" },
+            { value: "audit", label: "Visionary itself" },
+          ]}
+        />
+        <Select
+          label="Status"
+          align="left"
+          value={filters.status}
+          onChange={pick("status")}
+          options={[
+            { value: "", label: "Any status" },
+            { value: "open", label: "Open" },
+            { value: "acknowledged", label: "Acknowledged" },
+            { value: "resolved", label: "Resolved" },
+            { value: "false_positive", label: "False positive" },
           ]}
         />
         <Select
@@ -415,10 +455,12 @@ function FindingsTable({
   );
 }
 
-function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => void }) {
+function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onClose: () => void; onTimeline: (account: string) => void }) {
   const { setRange } = useApp();
   const q = useQuery(`sec-finding-${finding.id}`, (signal) => securityApi.finding(finding.id, signal));
-  const f = q.data?.finding ?? finding;
+  const [triaged, setTriaged] = useState<Finding | null>(null);
+  const [ipOpen, setIpOpen] = useState(false);
+  const f = triaged ?? q.data?.finding ?? finding;
   const extra = Object.entries(f.detail ?? {}).filter(([k]) => k !== "summary");
   const investigate = () => {
     window.location.hash = `#/explore?q=${encodeURIComponent(investigateQuestion(f))}`;
@@ -441,6 +483,8 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
       }
     >
       {f.summary && <p className="sec-summary">{f.summary}</p>}
+      <TriageBox finding={f} onChange={setTriaged} />
+      <FindingActions finding={f} onTimeline={onTimeline} />
       <div className="sec-actions">
         <button type="button" className="btn primary" onClick={investigate}>
           <Sparkles size={14} />
@@ -460,7 +504,7 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
           {KINDS[f.kind] && <div className="dim">{KINDS[f.kind].text}</div>}
         </dd>
         <dt>Source</dt>
-        <dd>{f.source === "api" ? "API detectors" : f.source === "host" ? "Host agent" : f.source}</dd>
+        <dd>{f.source === "api" ? "API detectors" : f.source === "host" ? "Host agent" : f.source === "audit" ? "Visionary's audit log" : f.source}</dd>
         <dt>First seen</dt>
         <dd>{formatFull(new Date(f.created_at))}</dd>
         <dt>Occurrences</dt>
@@ -474,7 +518,15 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
         {f.ip && (
           <>
             <dt>IP</dt>
-            <dd className="mono">{f.ip}</dd>
+            <dd className="sec-ip-row">
+              <span className="mono">{f.ip}</span>
+              {!ipOpen && (
+                <button type="button" className="btn sm" onClick={() => setIpOpen(true)}>
+                  <Globe size={14} />
+                  About this IP
+                </button>
+              )}
+            </dd>
           </>
         )}
         {f.actor && (
@@ -499,10 +551,17 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
           <FragmentKV key={k} k={k} v={v} />
         ))}
       </dl>
-      <div className="section-label">Related requests</div>
+      {f.ip && ipOpen && (
+        <>
+          <div className="section-label">About {f.ip}</div>
+          <IPCard ip={f.ip} />
+        </>
+      )}
+      <div className="section-label">{q.data?.match === "audit" ? "Audit entries" : "Related requests"}</div>
       {q.error && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {!q.data && !q.error && <div className="panel-state">Loading…</div>}
-      {q.data && !q.data.requests && <p className="dim">This finding has no IP or account to match requests against.</p>}
+      {q.data?.audit && <DataTable result={q.data.audit} sortable={false} maxHeight={360} columns={auditColumns} />}
+      {q.data && !q.data.requests && !q.data.audit && <p className="dim">This finding has no IP or account to match requests against.</p>}
       {q.data?.requests && (
         <>
           <p className="dim" style={{ marginTop: 4 }}>
@@ -518,6 +577,14 @@ function FindingDrawer({ finding, onClose }: { finding: Finding; onClose: () => 
     </Drawer>
   );
 }
+
+const auditColumns: Column[] = [
+  { key: "created_at", label: "Time", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span>, width: 160 },
+  { key: "action", render: (v) => auditLabel(String(v)) },
+  { key: "user_name", label: "User", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
+  { key: "target", render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>) },
+  { key: "ip", label: "IP", render: (v) => <span className="mono dim">{String(v || "—")}</span> },
+];
 
 function FragmentKV({ k, v }: { k: string; v: unknown }) {
   const text = Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? yesNo(v) : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
@@ -691,7 +758,7 @@ function AuditSection({ admin }: { admin: boolean }) {
   }, [q.data]);
   return (
     <>
-      <Section title="Visionary audit" text="Sensitive actions in Visionary itself: sign-ins and failed sign-ins, API keys, notification channels and role mapping." />
+      <Section title="Visionary audit" text="Sensitive actions in Visionary itself: sign-ins and failed sign-ins, API keys, notification channels, role mapping, secrets shown and security actions." />
       {!admin ? (
         <div className="span-12 panel">
           <div className="panel-state">Only admins can see Visionary's audit log.</div>
@@ -731,6 +798,7 @@ function AuditSection({ admin }: { admin: boolean }) {
           }
         />
       )}
+      {admin && <AuditExport />}
     </>
   );
 }

@@ -47,6 +47,9 @@ type session struct {
 	Issued int64 `json:"i,omitempty"`
 	// Checked is when the API last confirmed the token and role.
 	Checked int64 `json:"c"`
+	// NoTwoStep marks a Visionary account signed in without two-step
+	// sign-in, so it can be made to set it up when that is required.
+	NoTwoStep bool `json:"m,omitempty"`
 }
 
 func (s *session) expiresAt() time.Time { return time.Unix(s.Expires, 0) }

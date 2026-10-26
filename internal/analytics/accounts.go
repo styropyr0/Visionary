@@ -52,7 +52,11 @@ type account struct {
 	CreatedAt  string `json:"created_at"`
 	LastSignIn string `json:"last_sign_in_at,omitempty"`
 	PasswordAt string `json:"password_changed_at"`
+	TwoStep    bool   `json:"two_step"`
 	hash       string
+	// totpSecret is sealed (security_portal.go); totpRecovery is a JSON list
+	// of hashes of the unused recovery codes.
+	totpSecret, totpRecovery string
 }
 
 func (s *Server) accountsSchema() []string {
@@ -84,13 +88,14 @@ func (s *Server) accountsSchema() []string {
 )`}
 }
 
-const accountColumns = `id, username, name, role, disabled, created_by, created_at, last_sign_in_at, password_at, password_hash`
+const accountColumns = `id, username, name, role, disabled, created_by, created_at, last_sign_in_at, password_at, password_hash, totp_enabled, totp_secret, totp_recovery`
 
 func accountFrom(r []any) account {
 	return account{
 		ID: toString(r[0]), Username: toString(r[1]), Name: toString(r[2]), Role: toString(r[3]),
 		Disabled: toInt(r[4]) != 0, CreatedBy: toString(r[5]), CreatedAt: toString(r[6]),
 		LastSignIn: toString(r[7]), PasswordAt: toString(r[8]), hash: toString(r[9]),
+		TwoStep: toInt(r[10]) != 0, totpSecret: toString(r[11]), totpRecovery: toString(r[12]),
 	}
 }
 
@@ -167,7 +172,7 @@ func newAccountID() string {
 
 // completeAccount checks a username and password. Unknown users, wrong
 // passwords and disabled accounts all get the same answer.
-func (s *Server) completeAccount(w http.ResponseWriter, r *http.Request, username, password string) {
+func (s *Server) completeAccount(w http.ResponseWriter, r *http.Request, username, password, code string) {
 	fail := func() {
 		s.auditAs(r, nil, "auth.sign_in_failed", maskIdentifier(username), map[string]any{"mode": authbridge.TypeAccounts})
 		writeError(w, http.StatusUnauthorized, "That username or password isn't right.")
@@ -191,6 +196,24 @@ func (s *Server) completeAccount(w http.ResponseWriter, r *http.Request, usernam
 		fail()
 		return
 	}
+	if a.TwoStep {
+		// The password was right; the code is asked for separately, so the
+		// sign-in page can show its own step.
+		if strings.TrimSpace(code) == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Enter the code from your authenticator app.", "two_step": true})
+			return
+		}
+		ok, err := s.checkSecondFactor(r.Context(), a, code)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if !ok {
+			s.auditAs(r, nil, "auth.sign_in_failed", maskIdentifier(username), map[string]any{"mode": authbridge.TypeAccounts, "two_step": true})
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "That code isn't right.", "two_step": true})
+			return
+		}
+	}
 	token := make([]byte, 24)
 	if _, err := rand.Read(token); err != nil {
 		s.fail(w, err)
@@ -200,7 +223,7 @@ func (s *Server) completeAccount(w http.ResponseWriter, r *http.Request, usernam
 		Token: accountsPrefix + hex.EncodeToString(token),
 		User:  authbridge.User{ID: accountsPrefix + a.ID, Name: a.Name, Handle: a.Username, Roles: []string{a.Role}},
 	})
-	sess.Role = a.Role
+	sess.Role, sess.NoTwoStep = a.Role, !a.TwoStep
 	if err := s.auth.write(w, r, sess); err != nil {
 		s.fail(w, err)
 		return
@@ -246,6 +269,7 @@ func (s *Server) accountRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/team/accounts/{id}", s.authed(s.handleUpdateAccount))
 	mux.Handle("DELETE /api/team/accounts/{id}", s.authed(s.handleDeleteAccount))
 	mux.Handle("PUT /api/me/password", s.authed(s.handleOwnPassword))
+	s.twoStepRoutes(mux)
 }
 
 func (s *Server) handleListAccounts(w http.ResponseWriter, r *http.Request) {

@@ -61,6 +61,103 @@
   margin-right: 6px;
 }
 
+/* Triage, actions and the account and IP views in the finding drawer. */
+
+.sec-triage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.sec-triage .textarea {
+  min-height: 56px;
+}
+
+.sec-triage-by {
+  margin: 0;
+  font-size: 12px;
+}
+
+.sec-status {
+  font-size: 11.5px;
+}
+
+.sec-status.acknowledged {
+  color: var(--warning-text);
+}
+
+.sec-status.resolved {
+  color: var(--good-text);
+}
+
+.sec-status.false_positive {
+  color: var(--text-3);
+}
+
+.sec-suppress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -6px 0 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.sec-suppress p {
+  margin: 0;
+}
+
+.sec-suppress-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sec-suppress-add {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-ip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sec-ipcard {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sec-ipcard .kv {
+  margin: 0;
+}
+
+.sec-intel {
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.sec-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.flag.ok {
+  color: var(--good-text);
+}
+
 
 /* ---------- Report ---------- */
 

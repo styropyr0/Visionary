@@ -41,11 +41,17 @@ const (
 )
 
 type finding struct {
+	// source is "api" (the default), "audit" (Visionary's own audit log) or
+	// "host" (detected over the host agent's events).
+	source            string
+	host              string
 	kind, severity    string
 	ip, actor, target string
 	service           string
 	n, nNew           int64 // occurrences in the window, and since the previous run
 	detail            map[string]any
+	// each findings are one row per occurrence (an audit entry), never merged.
+	each bool
 }
 
 func (f finding) key() string { return f.kind + "|" + f.ip + "|" + f.actor }
@@ -85,6 +91,11 @@ func (s *Server) runDetectors(parent context.Context, now time.Time) {
 		cursor = from
 	}
 	found, err := s.detect(ctx, from, to, cursor)
+	if err == nil {
+		var more []finding
+		more, err = s.detectMore(ctx, from, to, cursor, now)
+		found = append(found, more...)
+	}
 	if err == nil {
 		err = s.writeFindings(ctx, found, now)
 	}
@@ -127,7 +138,7 @@ func (s *Server) detect(ctx context.Context, from, to, cursor time.Time) ([]find
 	byIP, err := s.db.Query(ctx, `SELECT ip, MAX(service) AS service, COUNT(*) AS n, `+countIf(isNew)+` AS n_new,
   `+countIf(failed)+` AS fails, `+countIf(failed+" AND "+isNew)+` AS fails_new,
   `+countIf(login+" AND status < 400")+` AS login_ok,
-  COUNT(DISTINCT CASE WHEN `+failed+` THEN COALESCE(`+accountExpr(q)+`, path) END) AS accounts,
+  COUNT(DISTINCT CASE WHEN `+failed+` THEN COALESCE(`+loginAccountExpr(q)+`, path) END) AS accounts,
   MAX(CASE WHEN `+failed+` THEN COALESCE(route, path) END) AS login_route,
   `+countIf(probe)+` AS probes, `+countIf(probe+" AND status >= 200 AND status < 300")+` AS probes_ok,
   `+countIf(agent)+` AS agent_hits, MAX(CASE WHEN `+agent+` THEN user_agent END) AS agent,
@@ -203,14 +214,14 @@ LIMIT 500`, append([]any{cur, cur, cur}, append(span, track, min(st.bruteforce, 
 		return nil, err
 	}
 
-	acct := accountExpr(q)
+	acct := loginAccountExpr(q)
 	byUser, err := s.db.Query(ctx, `SELECT `+acct+` AS account, MAX(user_role) AS role, MAX(service) AS service,
   COUNT(*) AS n, `+countIf(isNew)+` AS n_new,
   `+countIf("status = 403")+` AS forbidden, `+countIf("status = 403 AND "+isNew)+` AS forbidden_new,
   COUNT(DISTINCT CASE WHEN status = 403 THEN COALESCE(route, path) END) AS forbidden_routes,
   `+countIf(failed)+` AS fails, `+countIf(failed+" AND "+isNew)+` AS fails_new,
   COUNT(DISTINCT CASE WHEN `+failed+` THEN ip END) AS fail_ips
-FROM api_logs WHERE created_at >= ? AND created_at < ? AND (user_id IS NOT NULL OR (user_handle IS NOT NULL AND user_handle <> ''))
+FROM api_logs WHERE created_at >= ? AND created_at < ? AND `+hasAccount+`
 GROUP BY `+acct+`
 HAVING COUNT(*) >= ? OR `+countIf("status = 403")+` > 0 OR COUNT(DISTINCT CASE WHEN `+failed+` THEN ip END) >= ?
 ORDER BY n DESC
@@ -224,6 +235,7 @@ LIMIT 500`, append([]any{cur, cur, cur}, append(span, track, st.targetedIPs)...)
 		service                 string
 	}
 	roles := map[string]*roleSum{}
+	var targeted []int // indexes of account_targeted findings in out
 	for _, row := range byUser.Rows {
 		if len(row) != 11 {
 			continue
@@ -236,6 +248,7 @@ LIMIT 500`, append([]any{cur, cur, cur}, append(span, track, st.targetedIPs)...)
 			continue
 		}
 		if failIPs >= int64(st.targetedIPs) {
+			targeted = append(targeted, len(out))
 			out = append(out, finding{kind: "account_targeted", severity: grade(failIPs, st.targetedIPs, false),
 				actor: who, service: service, n: fails, nNew: failsNew,
 				detail: map[string]any{"failures": fails, "ips": failIPs, "window": win,
@@ -281,6 +294,9 @@ LIMIT 500`, append([]any{cur, cur, cur}, append(span, track, st.targetedIPs)...)
 			flagged[key] = true
 			out = append(out, f)
 		}
+	}
+	if err := s.targetedSucceeded(ctx, out, targeted, span, login, failed); err != nil {
+		return nil, err
 	}
 	sec.record(samples, flagged)
 	return out, nil
@@ -437,8 +453,8 @@ func (sec *securityState) record(samples map[string]float64, flagged map[string]
 // dedupe period.
 func (s *Server) writeFindings(ctx context.Context, found []finding, now time.Time) error {
 	sec := s.security()
-	res, err := s.db.Query(ctx, `SELECT id, kind, COALESCE(ip, ''), COALESCE(actor, ''), severity FROM security_events
-WHERE source = 'api' AND created_at >= ? ORDER BY id`, now.Add(-sec.st.dedupe).Format(tsLayout))
+	res, err := s.db.Query(ctx, `SELECT id, kind, COALESCE(ip, ''), COALESCE(actor, ''), severity, created_at FROM security_events
+WHERE (source IN ('api', 'audit') OR kind = 'ssh_bruteforce') AND created_at >= ? ORDER BY id`, now.Add(-max(sec.st.dedupe, sec.st.slowWindow)).Format(tsLayout))
 	if err != nil {
 		return err
 	}
@@ -448,9 +464,18 @@ WHERE source = 'api' AND created_at >= ? ORDER BY id`, now.Add(-sec.st.dedupe).F
 	}
 	open := map[string]openRow{}
 	for _, row := range res.Rows {
-		if len(row) == 5 {
-			open[toString(row[1])+"|"+toString(row[2])+"|"+toString(row[3])] = openRow{toInt(row[0]), toString(row[4])}
+		if len(row) != 6 {
+			continue
 		}
+		kind := toString(row[1])
+		if at, err := time.Parse(tsLayout, toString(row[5])); err == nil && now.Sub(at) >= sec.st.dedupeFor(kind) {
+			continue
+		}
+		open[kind+"|"+toString(row[2])+"|"+toString(row[3])] = openRow{toInt(row[0]), toString(row[4])}
+	}
+	found, err = s.prepareFindings(ctx, found)
+	if err != nil {
+		return err
 	}
 	sec.mu.Lock()
 	prev := sec.active
@@ -463,7 +488,7 @@ WHERE source = 'api' AND created_at >= ? ORDER BY id`, now.Add(-sec.st.dedupe).F
 		if b, err := json.Marshal(f.detail); err == nil && len(b) <= maxDetailBytes {
 			detail = string(b)
 		}
-		if o, ok := open[k]; ok {
+		if o, ok := open[k]; ok && !f.each {
 			sev := maxSeverity(o.severity, f.severity)
 			if f.nNew <= 0 && sev == o.severity {
 				continue
@@ -484,8 +509,8 @@ WHERE source = 'api' AND created_at >= ? ORDER BY id`, now.Add(-sec.st.dedupe).F
 			continue
 		}
 		if err := s.db.Exec(ctx, `INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count)
-VALUES (?, 'api', ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
-			now.Format(tsLayout), f.kind, f.severity, nullable(f.service), nullable(clip(f.actor, 255)), nullable(f.ip),
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			now.Format(tsLayout), fallback(f.source, "api"), f.kind, f.severity, nullable(f.host), nullable(f.service), nullable(clip(f.actor, 255)), nullable(f.ip),
 			nullable(clip(f.target, 255)), detail, count); err != nil {
 			return err
 		}

@@ -55,6 +55,8 @@ var hostIntCols = func() map[string]bool {
 // hostEventKinds are the kinds an agent may report.
 var hostEventKinds = map[string]bool{
 	"ssh_failed": true, "ssh_login": true, "sudo": true, "port_opened": true, "port_closed": true, "updates_pending": true,
+	"ssh_key_added": true, "ssh_key_removed": true, "file_changed": true, "suspicious_process": true,
+	"container_privileged": true, "container_root": true, "container_new_image": true,
 }
 
 func (s *Server) handleAgentReport(w http.ResponseWriter, r *http.Request) {
@@ -220,12 +222,26 @@ func hostSeverity(e agentapi.Event) string {
 		if e.Count >= 10 {
 			return "warning"
 		}
-	case "port_opened":
+	case "port_opened", "container_privileged":
 		return "warning"
 	case "updates_pending":
 		if e.Security > 0 {
 			return "warning"
 		}
+	case "ssh_key_added":
+		if e.Actor == "root" {
+			return "critical"
+		}
+		return "warning"
+	case "file_changed":
+		// A preload library, sudo rights or a new UID 0 account is how an
+		// intruder stays.
+		if e.Target == "/etc/ld.so.preload" || strings.HasPrefix(e.Target, "/etc/sudoers") || strings.Contains(e.Detail, "new UID 0") {
+			return "critical"
+		}
+		return "warning"
+	case "suspicious_process":
+		return "critical"
 	}
 	return "info"
 }

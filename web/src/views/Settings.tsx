@@ -26,6 +26,7 @@ import { PagesTab, ProfilingTab } from "./Settings.profiling";
 import { DataTab } from "./Settings.data";
 import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
+import { TwoStepCard } from "../components/TwoStep";
 import "./Settings.css";
 
 type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "profiling" | "pages" | "status" | "audit" | "about";
@@ -176,6 +177,7 @@ function MembersTab() {
         </div>
       </Card>
       {me.user.id.startsWith("acct:") && <OwnPasswordCard />}
+      {me.user.id.startsWith("acct:") && <TwoStepCard />}
 
       <Card title={d.mode === "accounts" ? "Accounts" : "Role mapping"} description={<MappingNote mode={d.mode} viewer={d.viewer_password} />}>
         {d.mode === "otp" || d.mode === "password" ? (

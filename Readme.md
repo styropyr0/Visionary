@@ -529,7 +529,16 @@ credentials. What it reports shows up in three places:
   `/var/run/docker.sock` or Podman's socket on its own (or `DOCKER_HOST`).
 - **Security** (Linux): failed and successful SSH logins and sudo from
   `/var/log/auth.log`, `/var/log/secure` or journald; listening ports opened or
-  closed; pending package updates every 6 hours (apt, dnf, yum, apk); reboots.
+  closed; pending package updates every 6 hours (apt, dnf, yum, apk); reboots;
+  keys added to or removed from `authorized_keys` (fingerprints only, never the
+  key); changes to `/etc/passwd`, `shadow`, `group`, `sudoers`, cron, PAM,
+  `sshd_config`, `ld.so.preload` and systemd units (hashes, never contents,
+  with a new UID 0 account called out); suspicious processes (known miners,
+  executables in `/tmp`, `/var/tmp`, `/dev/shm` or deleted from disk, shells
+  attached to a network socket, netcat with exec); and containers that run
+  privileged, on the host network or PID namespace, with the Docker socket or
+  `SYS_ADMIN`, as root, or from an image the machine hadn't run before. The
+  first scan after a start only records what is there.
 
 While the server is unreachable it keeps up to an hour of reports in memory and
 retries with backoff.
@@ -558,7 +567,11 @@ passed to it (any variable below) go into the env file;
 | `VISIONARY_AGENT_INTERVAL` (`-interval`) | `15s` | Sample interval. |
 | `VISIONARY_AGENT_REPORT` (`-report`) | `1m` | Report interval. |
 | `VISIONARY_AGENT_UNITS` (`-units`) | | systemd services to watch, comma-separated. |
-| `VISIONARY_AGENT_SECURITY` (`-security`) | `true` | SSH, sudo, port and update findings. |
+| `VISIONARY_AGENT_SECURITY` (`-security`) | `true` | SSH, sudo, port and update findings, and the four below. |
+| `VISIONARY_AGENT_SSH_KEYS` (`-ssh-keys`) | `true` | Keys added to or removed from `authorized_keys`. |
+| `VISIONARY_AGENT_FILE_INTEGRITY` (`-file-integrity`) | `true` | Changes to watched system files. |
+| `VISIONARY_AGENT_PROCESS_CHECKS` (`-process-checks`) | `true` | Suspicious processes. |
+| `VISIONARY_AGENT_CONTAINER_RISKS` (`-container-risks`) | `true` | Privileged, root and new-image containers. |
 | `VISIONARY_AGENT_AUTH_LOG` (`-auth-log`) | auto | A log file, `journald` or `off`. |
 | `VISIONARY_AGENT_DOCKER` (`-docker`) | auto | The Docker or Podman socket, or `off`. |
 | `VISIONARY_DISK_PATHS` (`-disk-paths`) | all mounts | Mount points to report; the first fills the disk columns. |
@@ -742,22 +755,55 @@ The **Security** page (under Monitor) works from data Visionary already has:
 the request log, the host agent's events and Visionary's own audit log. It
 shows open findings, failed logins, scanner IPs, the blocked/forbidden rate,
 SSH failures and hosts with pending updates; a findings table with filters
-and a detail drawer (the IP's or account's requests around the finding, a
-link to Request logs, and **Investigate** for the analyst); charts of failed
-logins, auth errors, top IPs, probed paths and user agents; host security;
-and recent sensitive actions in Visionary (admins). **Report** opens a
-printable report of the range (`#/security/report?from=&to=`) with a
-**Print / Save as PDF** button.
+(source, kind, severity, status, host, IP) and a detail drawer (triage, the
+actions below, the IP's or account's requests around the finding, what is
+known about the IP, a link to Request logs, and **Investigate** for the
+analyst); an account timeline (sign-ins with place and device, findings,
+and what the account signed in from before); the "not flagged" rules and
+the threat-intelligence status; charts of failed logins, auth errors, top
+IPs, probed paths and user agents; host security; recent sensitive actions in
+Visionary and a signed audit export (admins). **Report** opens a printable
+report of the range (`#/security/report?from=&to=`) with a **Print / Save as
+PDF** button.
+
+**Record sign-in attempts.** In your login handler, call the SDK's login
+helper with the account typed, whether or not it exists:
+`visionary.LoginAttempt(ctx, email)` (Go), `loginAttempt(email)` (Node),
+`login_attempt(email)` (Python, Ruby), `Visionary.loginAttempt(request, email)`
+(Java), `Visionary.LoginAttempt(ctx, email)` (.NET). It fills
+`api_logs.login_account`, which the account detectors use before
+`user_handle`/`user_id`. Without it, a failed sign-in usually carries no
+account at all, so `credential_stuffing` counts paths instead and
+`account_targeted` and `login_as_other` can't fire. OpenTelemetry spans can
+send the attribute `visionary.login_account` (or `enduser.login`).
 
 Findings live in `security_events`. The host agent writes rows with source
 `host`; the server's detectors read `api_logs` every minute and write rows
-with source `api`:
+with source `api`, and read Visionary's own audit log for rows with source
+`audit`:
 
 | Kind | Fires when (per 5-minute window) | Critical when |
 |---|---|---|
 | `auth_bruteforce` | an IP has 10+ failed logins | 5× the threshold, or a login from that IP then succeeded |
 | `credential_stuffing` | an IP fails against 5+ different accounts | 5× the threshold, or a login succeeded |
-| `account_targeted` | 5+ IPs fail to sign in as one account | 5× the threshold |
+| `account_targeted` | 5+ IPs fail to sign in as one account | 5× the threshold, or one of those IPs then signed in |
+| `login_as_other` | a browser (IP and user agent) signed in as one user in the last hour fails 3+ times to sign in as another account | 5× the threshold, or it then got in |
+| `auth_bruteforce_slow`, `account_targeted_slow` | 30+ failed logins from one IP, or 10+ IPs failing on one account, over 24 h (checked every 15 minutes) | 5× the threshold |
+| `distributed_login_attack` | 50+ IPs each failing on login routes but under the per-IP limit, over 24 h | 5× the threshold |
+| `new_login_location` | a sign-in from a country the account never used before (needs a location database) | warning |
+| `new_login_device` | a sign-in with a browser and system the account never used before | info |
+| `impossible_travel` | two sign-ins 500+ km apart faster than 1000 km/h (needs a city database) | always |
+| `listed_ip_login` | a sign-in from an address a blocklist names | warning |
+| `session_spread` | one account used from 5+ addresses in one window, across countries or devices | 3+ countries |
+| `risky_account_change` | a POST/PUT/PATCH/DELETE to a password, email, phone, MFA, recovery, API key or payout route within 1 h of one of the findings above | always |
+| `enumeration` | one user or IP reads 50+ different records through a route with an ID (`/orders/:id`) | 5× the threshold |
+| `idor_probe` | 20+ different records through such a route are refused (403/404) | 5× the threshold |
+| `injection_attempt` | 3+ requests with SQL, script, template, command, JNDI or traversal patterns in the path or query (raw or URL-encoded) | 5× the threshold, or one was answered 5xx |
+| `route_rate_limit` | a user or IP over a route's limit in **Route limits** | 5× the limit |
+| `signup_abuse`, `otp_abuse` | 10+ sign-ups, or 10+ codes sent, from one IP (codes also per account) | 5× the threshold |
+| `portal_bruteforce`, `portal_account_targeted` | 5+ failed sign-ins to Visionary from one IP, or 5+ IPs on one Visionary account | 5× the threshold, or a sign-in then succeeded |
+| `portal_*` changes | a secret shown, an account added, changed or deleted, roles or sign-in changed, an API key created, data deleted, a request refused by the allow list, two-step reset | admin role changes, role and sign-in changes, deletions and refusals are warnings |
+| `ssh_bruteforce` | an address fails 10+ SSH logins on one host in the window (from the agent's events) | 5× the threshold, or a login from it then succeeded |
 | `scanner` | an IP asks for 3+ probe paths (`/.env`, `/.git/`, `/wp-admin`, `/actuator`, `../`…) or sends a scanner user agent (sqlmap, nikto, nuclei, masscan, zgrab, gobuster…) | a probe path was answered with 2xx |
 | `rate_abuse` | an IP or user makes 120+ requests/min and 5× its own median of the last hour | 5× the floor |
 | `forbidden_spike` | a user (or a role, across users) gets 20+ 403s and 5× their usual | 5× the threshold |
@@ -766,10 +812,54 @@ Everything else is a warning. A failed login is a 401 or 403 on a login
 route, or a 4xx whose `error_key` says the credentials or code were wrong.
 Login routes are those whose route or path contains login, signin, sign-in,
 auth, token, otp, password or session, or match your own globs in
-Settings → Server → Security detectors → Login routes. Accounts come from `user_handle`/`user_id`,
-so `account_targeted` needs your API to set the user on failed logins; request
-bodies are never read and findings never store bodies, query strings or
-secrets (token-like path segments are masked).
+Settings → Server → Security detectors → Login routes. Accounts come from
+`login_account` (above), else `user_handle`/`user_id`; request bodies are never
+read and findings never store bodies, query strings or secrets (token-like path
+segments are masked; injection findings keep only the categories matched).
+
+**Places, networks and blocklists** (Settings → Server → Threat intelligence).
+Point **Location database** at a GeoLite2-City or DB-IP City Lite `.mmdb` on
+the server, and **Network database** at a GeoLite2-ASN or DB-IP ASN Lite one:
+findings then carry the place and network of their address, and the
+new-location, impossible-travel and session-spread checks use countries.
+**Blocklist feeds** takes URLs of plain IP or CIDR lists (one per line, `#`
+comments), fetched at start and every 6 hours; a finding from a listed address
+is raised one level and names the list. Nothing is looked up or fetched until
+these are set. `GET /api/security/ip/{ip}` returns what is known about one
+address.
+
+**Working a finding.** Each finding has a status (open, acknowledged,
+resolved, false positive) and a note, with who changed them. **Don't flag
+this again** adds a rule to `security_suppressions` for that kind and IP (or
+CIDR) or account, forever or for a number of days; **Ignore this IP** adds one
+for every kind. **Block IP** and **End sessions** POST to the **Action
+webhook** (Settings → Server → Response):
+
+```json
+{"action": "block_ip", "ip": "203.0.113.7", "at": "2026-10-26T12:00:00Z", "requested_by": "Ana",
+ "finding": {"id": 42, "kind": "auth_bruteforce", "severity": "critical", "summary": "…", "ip": "203.0.113.7", "account": ""}}
+```
+
+(`"action": "end_sessions"` carries `"account"` instead of `"ip"`). With a
+signing secret set, `X-Visionary-Signature: sha256=<hex HMAC-SHA256 of the
+body>`. Every action is in the audit log.
+
+**Protecting Visionary.** In Settings → Server → Sessions, **Allow Visionary
+only from** limits the dashboard and its API to addresses or CIDR ranges;
+ingest (SDK writes, `/v1/*`, `/api/ingest/*`, the host agent), the health
+check and the public status page stay open, and the server's own machine is
+always allowed. **Require two-step sign-in** makes every Visionary account set
+up an authenticator app (TOTP, with ten one-time recovery codes) before it can
+do anything else; each person sets it up under Settings → Members & roles, and
+an admin can turn it off for someone in the Accounts list.
+
+**Audit export.** `GET /api/security/audit/export?from=&to=` (admins) streams
+the audit log as JSON lines: each line has `prev` (the hash of the line
+before) and `hash` (SHA-256 of itself), and the last line signs the chain
+with an HMAC key derived from the session secret. `POST
+/api/security/audit/verify` with `{"file": "…"}` says whether a file is intact
+or which line breaks it. Findings and the audit log are kept as long as
+Settings → Data says (180 and 365 days by default).
 
 **One row per finding, not per minute.** A finding is written once per kind
 and IP (or account) per *Repeat a finding after* (10m). While the activity
@@ -810,11 +900,26 @@ restart):
 | Requests per minute before a rate finding, Times the usual rate | `120`, `5` | Requests per minute floor, and times the key's usual rate. |
 | 403s from one IP | `20` | 403s for one user or role per window. |
 | Ignore IPs | — | IPs or CIDRs never flagged (health checks, office, internal services). |
+| Failed sign-ins as someone else | `3` | For `login_as_other`. |
+| Failed Visionary sign-ins from one IP | `5` | For `portal_bruteforce`. |
+| Slow attacks: look back, failed logins from one IP, IPs failing on one account | `24h`, `30`, `10` | The slow pass. |
+| Distributed attacks: IPs failing on login routes | `50` | |
 
-Each run reads the window twice through the `created_at` index (once grouped
-per IP, once per account). On D1, which bills by rows read, that is about
-`2 × window ÷ interval` reads of every request; a longer interval or shorter
-window lowers it.
+**Account takeover:** *IPs for one user at once* (`5`), *Sensitive routes*
+(password, email, phone, mfa, 2fa, totp, recovery, api-key, payout, bank,
+withdraw) and *Watch changes after a risky sign-in for* (`1h`). **API abuse:**
+*Records read through one route* (`50`), *Records refused through one route*
+(`20`), *Injection attempts from one IP* (`3`), *Route limits* (one per line:
+an optional method, a route or path glob and requests per minute, e.g.
+`POST /api/export* 10`), *Sign-up routes* and *Sign-ups from one IP* (`10`),
+*Code-sending routes* and *Codes sent from one IP* (`10`).
+
+Each run reads the window through the `created_at` index about ten times
+(grouped per IP, per account, per route with an ID, for injection patterns,
+for each route limit and for sign-ups and codes), and every 15 minutes the
+slow pass reads its long window twice. On D1, which bills by rows read, that is
+roughly `10 × window ÷ interval` reads of every request plus the slow pass; a
+longer interval or shorter window lowers it.
 
 ## Deploy
 

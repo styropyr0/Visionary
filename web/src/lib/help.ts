@@ -153,6 +153,20 @@ VISIONARY_SERVICE=my-api                                          # any name; te
       dotnet: { code: `Visionary.SetUser(ctx, id, handle: "ann", role: "admin");` },
     },
   },
+  login: {
+    id: "login",
+    title: "Record sign-in attempts",
+    intro:
+      "In your login handler, record the account each sign-in tried: the email or username typed, whether or not it exists or the password was right. Security can then tell one address trying many accounts, many addresses trying one account, and someone signed in as one user trying another's password. Without it, failed sign-ins count per address only.",
+    langs: {
+      go: { code: `visionary.LoginAttempt(r.Context(), req.Email)` },
+      node: { code: `visionary.loginAttempt(req.body.email);` },
+      python: { code: `visionary.login_attempt(form.email)` },
+      ruby: { code: `Visionary.login_attempt(params[:email])` },
+      java: { code: `Visionary.loginAttempt(request, form.email());` },
+      dotnet: { code: `Visionary.LoginAttempt(ctx, form.Email);` },
+    },
+  },
   db: {
     id: "db",
     title: "Record database queries",
@@ -326,7 +340,7 @@ agent, err := visionary.New(cfg)`,
     id: "agent",
     title: "Install the host agent",
     intro:
-      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports. It runs as a systemd service and posts here over HTTPS with a Server ingest key from Settings → API keys; it never needs database credentials. The machine shows up in System within a minute, and its containers in Containers.",
+      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports, and for Security new SSH keys, changes to system files (passwd, sudoers, cron, systemd units), suspicious processes and risky containers. It runs as a systemd service and posts here over HTTPS with a Server ingest key from Settings → API keys; it never needs database credentials. The machine shows up in System within a minute, and its containers in Containers.",
     any: { code: `curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \\
   | sudo VISIONARY_URL=${origin} VISIONARY_KEY=<server key> sh` },
   },
@@ -527,13 +541,15 @@ export const HELP: Record<Route, PageHelp> = {
   },
   security: {
     title: "Security",
-    tip: "Suspicious traffic and host events: brute-force logins, scanners, request floods, SSH logins, opened ports, and the audit log.",
-    what: "Findings from the API detectors (brute force and credential stuffing on login routes, accounts targeted from many addresses, scanners probing paths like `/.env`, request floods, bursts of 403s) and, with the host agent, SSH logins, sudo, opened ports and pending updates. The audit log records who changed what in Visionary.",
+    tip: "Attacks and account takeovers found in your traffic, events from your machines, and changes to Visionary itself, with what to do about each.",
+    what: "Findings from the API detectors: brute force, credential stuffing and targeted accounts on login routes (also slow and spread across many addresses), someone signed in as one user trying another's account, new places and devices, impossible travel, one session used from many places, sensitive changes right after a risky sign-in, scraping and ID guessing, injection attempts, per-route limits, sign-up and code floods, scanners, request floods and bursts of 403s. With the host agent: SSH brute force, logins, sudo, new SSH keys, changed system files, suspicious processes, risky containers, opened ports and pending updates. From Visionary's own audit log: failed sign-ins to this dashboard, secrets shown, role and sign-in changes. Each finding can be acknowledged, resolved or marked a false positive, and acted on.",
     read: [
-      "Each finding links to the requests behind it, so you can see what was sent and by whom.",
-      "Settings → Server → Security detectors turns the API detectors off and tunes them; host events still show.",
+      "Each finding links to the requests behind it; click an account for its sign-in history, or About this IP for where an address is and what else it did.",
+      "Don't flag this again stops one kind of finding for one IP or account; Not flagged lists those rules.",
+      "Places, impossible travel and networks need a location database, and blocklists raise findings from listed addresses: both in Settings → Server → Threat intelligence.",
+      "Settings → Server tunes every detector; host events still show when the API detectors are off.",
     ],
-    setup: ["sdk", "user", "agent"],
+    setup: ["sdk", "user", "login", "agent"],
   },
   explore: {
     title: "Explore",

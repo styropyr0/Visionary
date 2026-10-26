@@ -57,6 +57,10 @@ var confGroups = []struct {
 	{"alerts", "Alerts", "How often alert rules are checked, and the time zone of digests."},
 	{"ingest", "Ingest", "Keys, origins and rate limits for SDKs, OpenTelemetry, host agents and frontend apps. Keys created under API keys work as well."},
 	{"security", "Security detectors", "What the request log is scanned for, and how sensitive each detector is."},
+	{"security_accounts", "Account takeover", "Signs that someone else is using an account: new places and devices, impossible travel, and changes right after a risky sign-in."},
+	{"security_abuse", "API abuse", "Scraping, guessing IDs, injection attempts, per-route limits, and sign-up or code-sending floods."},
+	{"security_intel", "Threat intelligence", "Where IP addresses are, who runs them, and whether a blocklist names them."},
+	{"security_response", "Response", "Where Block IP and End sessions on a finding are sent."},
 	{"other", "Other", ""},
 }
 
@@ -74,6 +78,8 @@ var confDefs = []confDef{
 	{Key: "role_check_interval", Group: "sessions", Label: "Re-check roles every", Help: "How often a signed-in user's role is confirmed with your API.", Kind: confDuration, Default: "5m", Min: 30},
 	{Key: "trust_proxy", Group: "sessions", Label: "Behind a trusted proxy", Help: "Read the client IP and scheme from X-Forwarded-For and X-Forwarded-Proto.", Kind: confBool, Default: "false"},
 	{Key: "secure_cookie", Group: "sessions", Label: "Secure cookie", Help: "auto sets it on HTTPS requests.", Kind: confChoice, Choices: []string{"auto", "true", "false"}, Default: "auto"},
+	{Key: "portal_allow_ips", Group: "sessions", Label: "Allow Visionary only from", Help: "Comma-separated addresses or CIDR ranges. Empty allows every address; the server's own machine is always allowed, so you can't lock yourself out.", Kind: confText},
+	{Key: "portal_require_2fa", Group: "sessions", Label: "Require two-step sign-in", Help: "Accounts mode: everyone must set up an authenticator app before using Visionary.", Kind: confBool, Default: "false"},
 
 	{Key: "smtp_host", Group: "email", Label: "SMTP host", Kind: confText},
 	{Key: "smtp_port", Group: "email", Label: "Port", Kind: confInt, Default: "587", Min: 1, Max: 65535},
@@ -109,6 +115,32 @@ var confDefs = []confDef{
 	{Key: "security_forbidden", Group: "security", Label: "403s from one IP", Kind: confInt, Default: "20", Min: 1, Restart: true},
 	{Key: "security_login_routes", Group: "security", Label: "Login routes", Help: "Comma-separated words or routes; empty matches login, signin, auth, token, otp, password and session.", Kind: confText, Restart: true},
 	{Key: "security_ignore_ips", Group: "security", Label: "Ignore IPs", Help: "Comma-separated addresses or CIDR ranges, such as your own monitors.", Kind: confText, Restart: true},
+	{Key: "security_other_account_fails", Group: "security", Label: "Failed sign-ins as someone else", Help: "A browser signed in as one user that fails this many times to sign in as another account.", Kind: confInt, Default: "3", Min: 1, Restart: true},
+	{Key: "security_portal_failures", Group: "security", Label: "Failed Visionary sign-ins from one IP", Help: "Sign-ins to this dashboard, from its audit log.", Kind: confInt, Default: "5", Min: 1, Restart: true},
+	{Key: "security_slow_window", Group: "security", Label: "Slow attacks: look back", Help: "A second, longer window for attacks that stay under the limits above.", Kind: confDuration, Default: "24h", Min: 3600, Max: 604800, Restart: true},
+	{Key: "security_slow_failures", Group: "security", Label: "Slow attacks: failed logins from one IP", Kind: confInt, Default: "30", Min: 1, Restart: true},
+	{Key: "security_slow_ips", Group: "security", Label: "Slow attacks: IPs failing on one account", Kind: confInt, Default: "10", Min: 1, Restart: true},
+	{Key: "security_distributed_ips", Group: "security", Label: "Distributed attacks: IPs failing on login routes", Help: "Many addresses each failing only a few times, as a botnet does.", Kind: confInt, Default: "50", Min: 2, Restart: true},
+
+	{Key: "security_user_ips", Group: "security_accounts", Label: "IPs for one user at once", Help: "One account used from this many addresses in one window, in different countries or on different devices, looks like a stolen session.", Kind: confInt, Default: "5", Min: 2, Restart: true},
+	{Key: "security_sensitive_routes", Group: "security_accounts", Label: "Sensitive routes", Help: "Comma-separated words or routes; empty matches password, email, phone, mfa, 2fa, totp, recovery, api-key, payout, bank and withdraw.", Kind: confText, Restart: true},
+	{Key: "security_risky_window", Group: "security_accounts", Label: "Watch changes after a risky sign-in for", Kind: confDuration, Default: "1h", Min: 300, Max: 86400, Restart: true},
+
+	{Key: "security_enum_ids", Group: "security_abuse", Label: "Records read through one route", Help: "Distinct IDs one user or IP reads through a route such as /orders/:id in one window.", Kind: confInt, Default: "50", Min: 2, Restart: true},
+	{Key: "security_idor_ids", Group: "security_abuse", Label: "Records refused through one route", Help: "Distinct IDs answered 403 or 404 for one user or IP: someone trying records that aren't theirs.", Kind: confInt, Default: "20", Min: 2, Restart: true},
+	{Key: "security_injection_hits", Group: "security_abuse", Label: "Injection attempts from one IP", Help: "SQL injection, script, template, command or JNDI patterns in a path or query string.", Kind: confInt, Default: "3", Min: 1, Restart: true},
+	{Key: "security_route_limits", Group: "security_abuse", Label: "Route limits", Help: "One per line: an optional method, a route or path glob, and requests per minute for one user or IP. Example: POST /api/export* 10", Kind: confLong, Restart: true},
+	{Key: "security_signup_routes", Group: "security_abuse", Label: "Sign-up routes", Help: "Comma-separated words or routes; empty matches signup, sign-up, register and create-account.", Kind: confText, Restart: true},
+	{Key: "security_signup_max", Group: "security_abuse", Label: "Sign-ups from one IP", Kind: confInt, Default: "10", Min: 1, Restart: true},
+	{Key: "security_otp_routes", Group: "security_abuse", Label: "Code-sending routes", Help: "Comma-separated words or routes; empty matches otp, send-code, verify, magic-link, resend and sms.", Kind: confText, Restart: true},
+	{Key: "security_otp_max", Group: "security_abuse", Label: "Codes sent from one IP", Kind: confInt, Default: "10", Min: 1, Restart: true},
+
+	{Key: "geoip_city_db", Group: "security_intel", Label: "Location database", Help: "Path on the server to a GeoLite2-City or DB-IP City Lite .mmdb file. Adds places to findings and turns on the new-location and impossible-travel checks.", Kind: confText},
+	{Key: "geoip_asn_db", Group: "security_intel", Label: "Network database", Help: "Path to a GeoLite2-ASN or DB-IP ASN Lite .mmdb file. Names who runs each address.", Kind: confText},
+	{Key: "security_blocklists", Group: "security_intel", Label: "Blocklist feeds", Help: "One URL per line, each a list of IP addresses or CIDR ranges, such as https://check.torproject.org/torbulkexitlist. Fetched every 6 hours; findings from listed addresses are raised one level.", Kind: confLong},
+
+	{Key: "security_action_webhook", Group: "security_response", Label: "Action webhook", Help: "Block IP and End sessions on a finding POST JSON here, for your firewall, API gateway or app to act on.", Kind: confText},
+	{Key: "security_action_secret", Group: "security_response", Label: "Webhook signing secret", Help: "Signs each call with HMAC-SHA256 in the X-Visionary-Signature header.", Kind: confSecret},
 
 	{Key: "rollups", Group: "other", Label: "Chart summaries", Help: "Pre-aggregate requests and system metrics so long ranges load fast.", Kind: confBool, Default: "true", Restart: true},
 	{Key: "uptime_allow_private", Group: "other", Label: "Uptime checks may reach private addresses", Kind: confBool, Default: "false", Restart: true},

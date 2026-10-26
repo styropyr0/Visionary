@@ -311,22 +311,50 @@ export const GUIDE: GuideSection[] = [
     group: "Monitor",
     title: "Security",
     route: "security",
-    intro: "Suspicious traffic found in your request log, events from your machines, and who changed what in Visionary.",
+    intro: "Attacks and account takeovers found in your request log, events from your machines, and who changed what in Visionary, with what to do about each.",
     shot: "security",
     steps: [
       {
-        title: "Review findings",
-        text: "**Findings** lists brute-force logins, credential stuffing, scanners, request floods and bursts of 403s. Filter by source, kind, severity, host or IP.",
+        title: "Record sign-in attempts",
+        text: "In your login handler, call the SDK's **LoginAttempt** (Go), **loginAttempt** (Node, Java), **login_attempt** (Python, Ruby) or **LoginAttempt** (.NET) with the email or username typed. Without it Security counts failed sign-ins per address only; with it, it can tell one address trying many accounts, many addresses trying one account, and someone signed in as one user trying another's password.",
       },
       {
-        title: "Open a finding",
-        text: "Click a finding for the requests behind it. **Request logs for this IP** shows everything the address sent; **Investigate** asks the analyst.",
+        title: "Review findings",
+        text: "**Findings** lists what the detectors found. Filter by source (**API detectors**, **Host agent**, **Visionary itself**), kind, severity, status, host or IP. The **Status** column shows what's been looked at.",
+      },
+      {
+        title: "Open and triage a finding",
+        text: "Click a finding for the requests behind it. Mark it **Acknowledged**, **Resolved** or **False positive** and add a note, so the team knows who looked at it. **Request logs for this IP** shows everything the address sent; **Investigate** asks the analyst.",
         shot: "security-finding",
         caption: "A scanner probing for secrets, with the requests it sent.",
       },
       {
+        title: "Look up an account or an address",
+        text: "**Account timeline** on a finding shows that account's sign-ins with place and device, its findings, and where it signed in from before. **About this IP** shows where an address is, who runs it, which blocklists name it, and what else it did this week.",
+      },
+      {
+        title: "Act on a finding",
+        text: "**Block IP** and **End sessions** POST a signed JSON call to the **Action webhook** in **Settings → Server → Response**, for your firewall, gateway or app to act on: `{\"action\": \"block_ip\", \"ip\": \"…\", \"finding\": {…}}` or `{\"action\": \"end_sessions\", \"account\": \"…\"}`, signed with HMAC-SHA256 in **X-Visionary-Signature**. **Ignore this IP** makes every detector skip the address, for your own monitors.",
+      },
+      {
+        title: "Stop a false alarm",
+        text: "**Don't flag this again** stops that kind of finding for the IP or the account, forever or for a while, and marks the finding a false positive. **Not flagged** lists these rules; add one there by hand or remove one to start flagging again.",
+      },
+      {
+        title: "Add places and blocklists",
+        text: "In **Settings → Server → Threat intelligence**, point **Location database** at a GeoLite2-City or DB-IP City Lite `.mmdb` file on the server to get places on findings and the new-location and impossible-travel checks, and **Network database** at an ASN file to name who runs each address. **Blocklist feeds** takes URLs of IP lists, such as `https://check.torproject.org/torbulkexitlist`; findings from listed addresses go up one level. **Threat intelligence** on the Security page shows whether they loaded.",
+      },
+      {
+        title: "Protect Visionary itself",
+        text: "**Settings → Server → Sessions**: **Allow Visionary only from** limits the dashboard to your addresses (SDKs, OpenTelemetry, the host agent and the status page keep working), and **Require two-step sign-in** makes everyone with a Visionary account use an authenticator app. Each person sets theirs up under **Settings → Members & roles → Two-step sign-in**. Failed sign-ins to Visionary, secrets shown and role changes appear as findings, so alerts can tell you.",
+      },
+      {
+        title: "Export the audit log",
+        text: "Admins find **Audit export** at the bottom of the page: **Export the range shown** downloads a signed file where each line hashes the one before. **Check an export** says whether a file is intact, or which line was changed or removed.",
+      },
+      {
         title: "Tune or share",
-        text: "**Settings → Server → Security detectors** sets how sensitive each detector is and which IPs to ignore. **Report** makes a printable summary of the range.",
+        text: "**Settings → Server** has a group per area: **Security detectors**, **Account takeover**, **API abuse**, **Threat intelligence** and **Response**. **Route limits** there sets per-minute limits for routes such as `POST /api/export* 10`. **Report** makes a printable summary of the range.",
       },
     ],
   },
@@ -482,7 +510,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Bring in the team",
-        text: "**Members & roles** and **Sign-in** decide how people sign in and as what: viewers read, editors change alerts and dashboards, admins change everything.",
+        text: "**Members & roles** and **Sign-in** decide how people sign in and as what: viewers read, editors change alerts and dashboards, admins change everything. With Visionary accounts, each person can turn on **Two-step sign-in** there, and an admin can turn it off for someone who lost their phone.",
       },
       {
         title: "Create keys",
@@ -494,7 +522,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Configure the server",
-        text: "**Server** holds the AI analyst key, sessions, email (SMTP), how often alerts run, ingest keys and limits, security detectors, and other switches. Changes reach every server within 30 seconds; a few are marked **After restart**.",
+        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within 30 seconds; a few are marked **After restart**.",
       },
       {
         title: "Tidy the sidebar",

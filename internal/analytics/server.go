@@ -119,7 +119,7 @@ func (s *Server) Handler() http.Handler {
 		writeError(w, http.StatusNotFound, "not found")
 	})
 	mux.Handle("/", s.spa())
-	return securityHeaders(mux)
+	return securityHeaders(drainBodies(s.portalGuard(mux)))
 }
 
 type sessionKey struct{}
@@ -168,6 +168,10 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 			s.auth.clear(w, r)
 			s.logger.Info("session rejected", "user_id", sess.UserID, "reason", err.Error())
 			writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		if next.NoTwoStep && s.confBool("portal_require_2fa") && !twoStepAllowed(r.URL.Path) {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": "Set up two-step sign-in to keep using Visionary.", "two_step_setup": true})
 			return
 		}
 		if changed {
@@ -284,7 +288,7 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		s.completeShared(w, r, sg, body.Password)
 		return
 	case sg.cfg.Type == authbridge.TypeAccounts:
-		s.completeAccount(w, r, body.Identifier, body.Password)
+		s.completeAccount(w, r, body.Identifier, body.Password, body.Code)
 		return
 	}
 	cfg := &sg.cfg
@@ -370,6 +374,9 @@ func (s *Server) loginPreflight(w http.ResponseWriter, r *http.Request, dst any)
 		return false
 	}
 	if !s.auth.allowLogin(r) {
+		// Read the body anyway: answering before it is read makes some
+		// clients see a reset connection instead of the 429.
+		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 256<<10))
 		writeError(w, http.StatusTooManyRequests, "Too many attempts. Try again in a minute.")
 		return false
 	}
@@ -681,6 +688,19 @@ func (s *Server) spa() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(index)
+	})
+}
+
+// drainBodies reads what a handler left of a small request body. A client
+// that sent Connection: close would otherwise have its socket closed with
+// unread data, which Windows turns into a reset that can cut off the end of
+// the response.
+func drainBodies(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if r.Body != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 256<<10))
+		}
 	})
 }
 

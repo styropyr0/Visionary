@@ -105,12 +105,17 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The parsed error body, for answers that carry more than a message. */
+    public data?: Record<string, unknown>,
   ) {
     super(message);
   }
 }
 
 export const UNAUTHORIZED_EVENT = "va:unauthorized";
+
+/** Fired when the server wants two-step sign-in set up before anything else. */
+export const TWO_STEP_SETUP_EVENT = "va:two-step-setup";
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, headers, ...rest } = init;
@@ -136,10 +141,14 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   if (!res.ok) {
     const msg =
       body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : res.statusText;
+    const data = body && typeof body === "object" ? (body as Record<string, unknown>) : undefined;
     if (res.status === 401 && !path.startsWith("/api/auth/")) {
       window.dispatchEvent(new CustomEvent<string>(UNAUTHORIZED_EVENT, { detail: msg }));
     }
-    throw new ApiError(res.status, sentence(msg || `Request failed (${res.status})`));
+    if (res.status === 403 && data?.two_step_setup) {
+      window.dispatchEvent(new CustomEvent(TWO_STEP_SETUP_EVENT));
+    }
+    throw new ApiError(res.status, sentence(msg || `Request failed (${res.status})`), data);
   }
   return body as T;
 }
