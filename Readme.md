@@ -12,6 +12,7 @@
 [![Image on GHCR](https://img.shields.io/badge/image-ghcr.io%2Fstyropyr0%2Fvisionary-2496ED?logo=docker&logoColor=white)](https://github.com/styropyr0/Visionary/pkgs/container/visionary)
 [![Last commit](https://img.shields.io/github/last-commit/styropyr0/Visionary)](https://github.com/styropyr0/Visionary/commits/main)
 [![Stars](https://img.shields.io/github/stars/styropyr0/Visionary?style=flat)](https://github.com/styropyr0/Visionary/stargazers)
+[![License: VNCL v1.0](https://img.shields.io/badge/license-VNCL%20v1.0-orange)](LICENSE)
 
 API, server and frontend monitoring for your services, with alerts, uptime
 checks, error tracking and an AI analyst that answers *why*.
