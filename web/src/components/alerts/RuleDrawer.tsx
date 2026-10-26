@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronRight, Copy, History, Plus, Trash2, X } from "lucide-react";
 import { Drawer } from "../Modal";
 import { Select } from "../Select";
+import { DurationSelect } from "../DurationSelect";
 import { Combobox } from "../Combobox";
 import { useToast } from "../Toast";
 import {
@@ -400,10 +401,10 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
               <input className="input num" type="number" step="any" value={sp.threshold} onChange={(e) => setSpec({ threshold: Number(e.target.value) })} />
             </label>
             {!NO_WINDOW.includes(sp.metric) && (
-              <label className="field">
+              <div className="field">
                 <span>Window</span>
-                <input className="input" value={sp.window} placeholder="5m" onChange={(e) => setSpec({ window: e.target.value })} />
-              </label>
+                <DurationSelect label="Window" value={sp.window || "5m"} min={60} max={86400} onChange={(v) => setSpec({ window: v })} align="left" />
+              </div>
             )}
           </div>
         )}
@@ -435,10 +436,10 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
                 align="left"
               />
             </div>
-            <label className="field">
+            <div className="field">
               <span>Window</span>
-              <input className="input" value={sp.window} placeholder="15m" onChange={(e) => setSpec({ window: e.target.value })} />
-            </label>
+              <DurationSelect label="Window" value={sp.window || "15m"} min={300} max={7200} onChange={(v) => setSpec({ window: v })} align="left" />
+            </div>
           </div>
         )}
 
@@ -451,15 +452,15 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
 
         <div className="al-row">
           {form.kind !== "slo" && (
-            <label className="field">
+            <div className="field">
               <span>For</span>
-              <input className="input" value={sp.for} placeholder="0s" onChange={(e) => setSpec({ for: e.target.value })} />
-            </label>
+              <DurationSelect label="For" value={sp.for} empty="At once" max={86400} onChange={(v) => setSpec({ for: v || "0s" })} align="left" />
+            </div>
           )}
-          <label className="field">
+          <div className="field">
             <span>Re-notify every</span>
-            <input className="input" value={sp.repeat ?? ""} placeholder="Never" onChange={(e) => setSpec({ repeat: e.target.value })} />
-          </label>
+            <DurationSelect label="Re-notify every" value={sp.repeat} empty="Never" min={300} max={604800} onChange={(v) => setSpec({ repeat: v })} align="left" />
+          </div>
           <div className="field">
             <span>Severity</span>
             <div className="segmented" role="radiogroup" aria-label="Severity">
@@ -472,7 +473,7 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
           </div>
         </div>
         <p className="al-hint" style={{ marginTop: -6 }}>
-          Durations like 30s, 5m, 2h.{form.kind !== "slo" && ' "For" is how long the condition must hold before the rule fires.'} Re-notifying stops once someone acknowledges.
+          {form.kind !== "slo" && '"For" is how long the condition must hold before the rule fires. '}Re-notifying stops once someone acknowledges.
         </p>
 
         <section className="al-preview">
@@ -535,10 +536,10 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
             <p className="al-hint">A window with no requests or samples (a service that died, a host agent that stopped) is OK by default. Fire for rules that must catch a total outage.</p>
           </div>
           <div className="al-row">
-            <label className="field">
+            <div className="field">
               <span>Resolve after clear for</span>
-              <input className="input" value={sp.clear_for ?? ""} placeholder="At once" onChange={(e) => setSpec({ clear_for: e.target.value || undefined })} />
-            </label>
+              <DurationSelect label="Resolve after clear for" value={sp.clear_for} empty="At once" max={86400} onChange={(v) => setSpec({ clear_for: v || undefined })} align="left" />
+            </div>
             {form.kind === "threshold" && sp.metric !== "custom" && (
               <label className="field">
                 <span>Clear threshold</span>
@@ -569,10 +570,10 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
             <div key={i} className="al-step">
               <div className="al-step-head">
                 <span className="al-step-n">Step {i + 1}</span>
-                <label className="al-inline">
+                <div className="al-inline">
                   after
-                  <input className="input" style={{ width: 80 }} value={s.after} placeholder="15m" onChange={(e) => setStep(i, { after: e.target.value })} aria-label={`Step ${i + 1} wait`} />
-                </label>
+                  <DurationSelect label={`Step ${i + 1} wait`} value={s.after} min={60} max={604800} onChange={(v) => setStep(i, { after: v })} align="left" />
+                </div>
                 <button type="button" className="icon-btn" aria-label={`Remove step ${i + 1}`} onClick={() => setSpec({ escalation: steps.filter((_, j) => j !== i) })}>
                   <X size={14} />
                 </button>

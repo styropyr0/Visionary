@@ -5,6 +5,7 @@ import { formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { Select } from "../components/Select";
+import { DurationSelect, spanSeconds } from "../components/DurationSelect";
 import { useToast } from "../components/Toast";
 import { Card, Switch } from "./Settings.profiling";
 
@@ -20,6 +21,9 @@ interface ConfSetting {
   kind: Kind;
   default: string;
   choices?: string[];
+  /** Bounds for numbers, and for durations in seconds. */
+  min?: number;
+  max?: number;
   restart?: boolean;
   /** Secrets come back empty; set says whether one is stored. */
   value: string;
@@ -142,6 +146,18 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
         />
       );
       break;
+    case "duration":
+      control = (
+        <DurationSelect
+          label={s.label}
+          value={value}
+          min={s.min}
+          max={s.max}
+          onChange={(v) => onChange(spanSeconds(v) === spanSeconds(s.value) ? undefined : v)}
+          maxWidth={200}
+        />
+      );
+      break;
     case "long":
       control = <textarea className="textarea conf-long" rows={4} value={value} placeholder={s.default} onChange={(e) => set(e.target.value)} />;
       break;
@@ -163,7 +179,7 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
           className={`input conf-input ${s.kind === "text" ? "" : "conf-short"}`}
           inputMode={s.kind === "int" || s.kind === "float" ? "decimal" : undefined}
           value={value}
-          placeholder={s.kind === "duration" ? "e.g. 30s, 5m, 12h" : s.default}
+          placeholder={s.default}
           onChange={(e) => set(e.target.value)}
         />
       );
