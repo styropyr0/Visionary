@@ -2,7 +2,7 @@
   "name": "visionary-sdk",
   "version": "0.1.0",
   "description": "Visionary collector for Node.js: logs API requests, samples system metrics and records spans and errors into your database.",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "styropyr0",
   "homepage": "https://github.com/styropyr0/Visionary/tree/main/sdks/node#readme",
   "repository": {

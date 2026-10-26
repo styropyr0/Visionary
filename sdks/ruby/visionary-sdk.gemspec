@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
     SQLite or Cloudflare D1, on background threads.
   DESC
   spec.authors = ["styropyr0"]
-  spec.license = "Apache-2.0"
+  spec.license = "LicenseRef-VNCL-1.0"
   spec.homepage = "https://github.com/styropyr0/Visionary"
   spec.metadata = {
     "homepage_uri" => spec.homepage,

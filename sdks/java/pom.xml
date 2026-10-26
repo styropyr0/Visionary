@@ -15,8 +15,8 @@
 
     <licenses>
         <license>
-            <name>Apache-2.0</name>
-            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <name>Visionary Non-Commercial License (VNCL) v1.0</name>
+            <url>https://github.com/styropyr0/Visionary/blob/main/LICENSE</url>
             <distribution>repo</distribution>
         </license>
     </licenses>

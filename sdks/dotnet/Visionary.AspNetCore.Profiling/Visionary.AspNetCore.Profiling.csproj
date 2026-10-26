@@ -18,7 +18,7 @@
     <Copyright>Copyright styropyr0</Copyright>
     <Description>CPU profiles for Visionary.AspNetCore: samples the process with EventPipe when the Visionary dashboard turns profiling on, and stores folded stacks in the profiles table.</Description>
     <PackageTags>visionary;aspnetcore;profiling;cpu;flamegraph;apm</PackageTags>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/styropyr0/Visionary/tree/main/sdks/dotnet</PackageProjectUrl>
     <RepositoryUrl>https://github.com/styropyr0/Visionary.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

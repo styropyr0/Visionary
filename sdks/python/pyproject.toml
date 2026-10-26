@@ -7,7 +7,7 @@ name = "visionary-sdk"
 dynamic = ["version"]
 description = "Visionary collector: logs API requests, database and HTTP spans, errors and system metrics into your database."
 readme = "README.md"
-license = "Apache-2.0"
+license = "LicenseRef-VNCL-1.0"
 license-files = ["LICENSE"]
 authors = [{ name = "styropyr0" }]
 requires-python = ">=3.9"
