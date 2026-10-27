@@ -596,7 +596,7 @@ function FragmentKV({ k, v }: { k: string; v: unknown }) {
   );
 }
 
-function ChartPanel({ q, title, description, viz, span, empty }: { name: string; q: ReturnType<typeof useSecurityPanel>; title: string; description: string; viz: Viz; span: string; empty?: string }) {
+function ChartPanel({ name, q, title, description, viz, span, empty }: { name: string; q: ReturnType<typeof useSecurityPanel>; title: string; description: string; viz: Viz; span: string; empty?: string }) {
   const tokens = useChartTokens();
   const height = 220;
   return (
@@ -611,6 +611,7 @@ function ChartPanel({ q, title, description, viz, span, empty }: { name: string;
       note={vizNote(q.data, viz, tokens)}
       chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} empty={empty} />}
       table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
+      dashboard={{ kind: "builtin", ref: `security/panels/${name}`, viz }}
     />
   );
 }

@@ -74,10 +74,23 @@ export function dateFormat(opts: Intl.DateTimeFormatOptions): Intl.DateTimeForma
     const shown: Intl.DateTimeFormatOptions = { ...opts };
     if (utc && !opts.timeZone) shown.timeZone = "UTC";
     if (hour12 !== undefined && opts.hour && opts.hour12 === undefined) shown.hour12 = hour12;
-    f = new Intl.DateTimeFormat(undefined, shown);
+    f = upperDayPeriod(new Intl.DateTimeFormat(undefined, shown));
     formats.set(key, f);
   }
   return f;
+}
+
+/** Some locales write "2:15 pm"; the app always shows AM and PM. */
+function upperDayPeriod(f: Intl.DateTimeFormat): Intl.DateTimeFormat {
+  const parts = (d?: Date | number) => f.formatToParts(d).map((p) => (p.type === "dayPeriod" ? { ...p, value: p.value.toUpperCase() } : p));
+  // Intl methods only accept a real formatter as `this`, so the rest are bound to f.
+  return {
+    format: (d?: Date | number) => parts(d).map((p) => p.value).join(""),
+    formatToParts: parts,
+    formatRange: f.formatRange.bind(f),
+    formatRangeToParts: f.formatRangeToParts.bind(f),
+    resolvedOptions: f.resolvedOptions.bind(f),
+  };
 }
 
 export function formatDateTime(d: Date): string {

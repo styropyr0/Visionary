@@ -190,6 +190,7 @@ export function Performance({ meta }: { meta?: Meta }) {
             className="span-4"
             title="Latency distribution"
             description="How many requests fall in each latency band over the whole range."
+            src="performance/histogram"
             q={{ ...histogram, data: histResult }}
             viz={VIZ.histogram}
             height={280}
@@ -199,6 +200,7 @@ export function Performance({ meta }: { meta?: Meta }) {
             className="span-8"
             title="Latency percentiles"
             description="p50 is the typical request; p99 is the slowest 1%. A widening gap means a slow tail, not a slow service."
+            src="performance/percentiles"
             q={percentiles}
             viz={VIZ.percentiles}
             height={240}
@@ -207,6 +209,7 @@ export function Performance({ meta }: { meta?: Meta }) {
             className="span-4"
             title="Apdex over time"
             description={`1.0 means every request finished within ${formatMs(apdexMs)}.`}
+            src="performance/apdex"
             q={apdex}
             viz={VIZ.apdex}
             height={240}
@@ -216,6 +219,7 @@ export function Performance({ meta }: { meta?: Meta }) {
             className="span-12"
             title="p95 of the busiest routes"
             description="The five routes with the most traffic. A single line rising shows which endpoint degraded."
+            src="performance/route_p95"
             q={routeP95}
             viz={VIZ.routeP95}
             height={240}
@@ -225,10 +229,10 @@ export function Performance({ meta }: { meta?: Meta }) {
             title="Load and saturation"
             text="Latency next to what drives it, on the same time axis. When p95 climbs with requests or in-flight work, the service is saturating; when it climbs with database waits, the pool is the bottleneck."
           />
-          <ChartPanel className="span-3" title="Requests" q={saturation} viz={VIZ.satRequests} height={150} />
-          <ChartPanel className="span-3" title="p95 latency" q={saturation} viz={VIZ.satP95} height={150} />
-          <ChartPanel className="span-3" title="In flight (peak)" q={saturation} viz={VIZ.satInFlight} height={150} />
-          <ChartPanel className="span-3" title="Waiting for a DB connection" q={saturation} viz={VIZ.satDbWait} height={150} />
+          <ChartPanel className="span-3" title="Requests" src="performance/saturation" q={saturation} viz={VIZ.satRequests} height={150} />
+          <ChartPanel className="span-3" title="p95 latency" src="performance/saturation" q={saturation} viz={VIZ.satP95} height={150} />
+          <ChartPanel className="span-3" title="In flight (peak)" src="performance/saturation" q={saturation} viz={VIZ.satInFlight} height={150} />
+          <ChartPanel className="span-3" title="Waiting for a DB connection" src="performance/saturation" q={saturation} viz={VIZ.satDbWait} height={150} />
 
           <Panel
             className="span-12"
@@ -355,7 +359,8 @@ function HeatmapPanel({ q }: { q: Q }) {
   );
 }
 
-function ChartPanel({ q, viz, height, title, description, className }: { q: Q; viz: Viz; height: number; title: string; description?: string; className: string }) {
+/** src is the endpoint under /api, so a dashboard can show the chart too. */
+function ChartPanel({ src, q, viz, height, title, description, className }: { src: string; q: Q; viz: Viz; height: number; title: string; description?: string; className: string }) {
   const tokens = useChartTokens();
   return (
     <Panel
@@ -369,6 +374,7 @@ function ChartPanel({ q, viz, height, title, description, className }: { q: Q; v
       note={vizNote(q.data, viz, tokens)}
       chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} />}
       table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
+      dashboard={{ kind: "builtin", ref: src, viz }}
     />
   );
 }

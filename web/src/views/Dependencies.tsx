@@ -108,8 +108,8 @@ export function Dependencies() {
             loading={q.loading}
           />
 
-          <Panel className="span-6" title="p95 by host" description="The 95th percentile of each of the six busiest hosts, over time." result={q.data?.timeline} loading={q.loading} bodyHeight={220} chart={q.data && <VizView result={q.data.timeline} viz={P95} height={220} title="p95 by host" />} table={q.data && <DataTable result={q.data.timeline} maxHeight={220} />} />
-          <Panel className="span-6" title="Calls and failures" description="Outbound calls and the ones that failed, over time." result={q.data?.errors} loading={q.loading} bodyHeight={220} chart={q.data && <VizView result={q.data.errors} viz={CALLS} height={220} title="Outbound calls and failures" />} table={q.data && <DataTable result={q.data.errors} maxHeight={220} />} />
+          <Panel className="span-6" title="p95 by host" description="The 95th percentile of each of the six busiest hosts, over time." result={q.data?.timeline} loading={q.loading} bodyHeight={220} chart={q.data && <VizView result={q.data.timeline} viz={P95} height={220} title="p95 by host" />} table={q.data && <DataTable result={q.data.timeline} maxHeight={220} />} dashboard={{ kind: "builtin", ref: "insights/dependencies", field: "timeline", viz: P95 }} />
+          <Panel className="span-6" title="Calls and failures" description="Outbound calls and the ones that failed, over time." result={q.data?.errors} loading={q.loading} bodyHeight={220} chart={q.data && <VizView result={q.data.errors} viz={CALLS} height={220} title="Outbound calls and failures" />} table={q.data && <DataTable result={q.data.errors} maxHeight={220} />} dashboard={{ kind: "builtin", ref: "insights/dependencies", field: "errors", viz: CALLS }} />
 
           <Panel
             className="span-12"

@@ -98,6 +98,7 @@ export function Frontend() {
   const clsSeries = useMemo(() => filterSeries(vitalSeries.data, (s) => s === "CLS"), [vitalSeries.data]);
   const screenRows = useMemo(() => withScreenLabel(screens.data, app === ""), [screens.data, app]);
   const apiChart = useMemo(() => apiChartRows(apiLatency.data), [apiLatency.data]);
+  const appParam: Record<string, string> = app ? { app } : {};
   const breakdownRows = useMemo(() => withKey(breakdown.data, by), [breakdown.data, by]);
   const errorsByApp = useMemo(() => errorSeries.data && relabelColumn(errorSeries.data, "series", appLabel), [errorSeries.data]);
 
@@ -250,6 +251,7 @@ export function Frontend() {
                   title="Slowest screens, p75"
                   description="The 75th percentile of time to first draw per screen."
                   q={{ ...screens, data: screenRows }}
+                  src={{ ref: "rum/screens", params: appParam, viz: { ...VIZ.screens, x: "screen" } }}
                   viz={VIZ.screens}
                   height={260}
                   empty="No screen views in this range. They come from the Android and iOS SDKs."
@@ -301,7 +303,7 @@ export function Frontend() {
                 ))
               }
             />
-            <ChartPanel className="span-4" title="Errors by app" q={{ ...errorSeries, data: errorsByApp }} viz={VIZ.errors} height={200} empty="No client errors in this range." />
+            <ChartPanel className="span-4" title="Errors by app" q={{ ...errorSeries, data: errorsByApp }} src={{ ref: "rum/errors_series", params: appParam }} viz={VIZ.errors} height={200} empty="No client errors in this range." />
 
             <Section title="Sessions and users" />
             <ChartPanel
@@ -309,6 +311,7 @@ export function Frontend() {
               title="Sessions and users"
               description="Distinct sessions and signed-in users per interval."
               q={sessions}
+              src={{ ref: "rum/sessions", params: appParam }}
               viz={VIZ.sessions}
               height={260}
             />
@@ -317,6 +320,7 @@ export function Frontend() {
               title="Breakdown"
               description="Sessions per group. The table adds users, views, errors, the share of sessions with an error and the p75 page or screen load."
               q={{ ...breakdown, data: breakdownRows }}
+              src={{ ref: "rum/breakdown", params: { ...appParam, by }, viz: { ...VIZ.breakdown, x: by } }}
               viz={VIZ.breakdown}
               height={260}
               table={breakdown.data && <DataTable result={breakdown.data} columns={breakdownColumns(by)} maxHeight={260} />}
@@ -450,6 +454,7 @@ function ChartPanel({
   empty,
   table,
   actions,
+  src,
 }: {
   q: Q;
   viz: Viz;
@@ -460,6 +465,8 @@ function ChartPanel({
   empty?: string;
   table?: ReactNode;
   actions?: ReactNode;
+  /** Endpoint under /api and its parameters, so a dashboard can show the chart too; viz when the endpoint's columns differ from the chart's. */
+  src?: { ref: string; params: Record<string, string>; viz?: Viz };
 }) {
   const tokens = useChartTokens();
   return (
@@ -475,6 +482,7 @@ function ChartPanel({
       extraActions={actions}
       chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} empty={empty} />}
       table={table ?? (q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />)}
+      dashboard={src && { kind: "builtin", ref: src.ref, params: src.params, viz: src.viz ?? viz }}
     />
   );
 }

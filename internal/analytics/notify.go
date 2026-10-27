@@ -220,6 +220,14 @@ type notice struct {
 	Key string
 	// Mention starts the message (<!here>, @oncall).
 	Mention string
+	// Files go with email and Telegram (the digest's PDF); the other
+	// services take text only.
+	Files []attachment
+}
+
+type attachment struct {
+	Name, Type string
+	Data       []byte
 }
 
 func (n notice) color() int {
@@ -466,7 +474,7 @@ func (s *Server) sendNotice(ctx context.Context, c alertChannel, n notice) error
 		body["title"], body["text"] = n.Title, n.plain()
 		return postJSON(ctx, c.Config.URL, body, []byte(c.Config.Secret))
 	case "email":
-		return s.sendEmail(ctx, c.Config.To, n.Title, n.plain(), n.HTML)
+		return s.sendEmail(ctx, c.Config.To, n.Title, n.plain(), n.HTML, n.Files...)
 	case "teams":
 		return postJSON(ctx, c.Config.URL, teamsBody(n), nil)
 	case "google_chat":

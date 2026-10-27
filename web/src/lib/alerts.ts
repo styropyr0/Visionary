@@ -436,6 +436,7 @@ export const alertsApi = {
   digestSummary: () => api<{ summary: string }>("/api/alerts/digest/summary", { method: "POST", json: {} }),
   /** The email version, served sandboxed for an iframe. */
   digestEmailURL: "/api/alerts/digest/email",
+  digestPdfURL: "/api/alerts/digest/pdf",
 };
 
 export function formatAlertValue(v: number | null | undefined, unit: AlertUnit): string {

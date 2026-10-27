@@ -150,6 +150,12 @@ export interface DashPanel {
   /** Saved panel id, or "system/cpu" style built-in name. */
   ref: string;
   title?: string;
+  /** Charts added from other views: description, query parameters, the
+   * field of a composite response that holds the chart, and how to draw it. */
+  description?: string;
+  params?: Record<string, string>;
+  field?: string;
+  viz?: Viz;
   x: number;
   y: number;
   w: number;
@@ -183,6 +189,9 @@ export function saveDashboard(d: Pick<Dashboard, "name" | "description" | "layou
   const body = { name: d.name, description: d.description, layout: d.layout };
   return d.id ? api<Dashboard>(`/api/dashboards/${d.id}`, { method: "PUT", json: body }) : api<Dashboard>("/api/dashboards", { method: "POST", json: body });
 }
+
+/** What "Add to dashboard" puts on a dashboard, before it has a place. */
+export type DashSource = Omit<DashPanel, "id" | "x" | "y" | "w" | "h">;
 
 export function newPanelId(): string {
   return Math.random().toString(36).slice(2, 10);

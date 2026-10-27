@@ -116,7 +116,7 @@ func digestEmailData(app string, d *digestData, summary string) emailView {
 			v.Summary = append(v.Summary, l)
 		}
 	}
-	count := func(x float64) string { return fnum(x) }
+	count := groupNum
 	ms := func(x float64) string { return formatUnit(x, "ms") }
 	pct := func(x float64) string { return formatUnit(x, "percent") }
 	opt := func(p *float64) float64 {

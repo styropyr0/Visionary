@@ -1,12 +1,13 @@
-import { useMemo, type ReactNode } from "react";
-import { ArrowLeft, Printer } from "lucide-react";
-import type { Result } from "../lib/api";
+import { useEffect, useMemo, type ReactNode } from "react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileDown, Printer, ShieldAlert } from "lucide-react";
+import { api, rangeQuery, type Meta, type Result } from "../lib/api";
 import { formatCount, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatFull, formatLogTime } from "../lib/time";
+import { dateFormat, displayZone, formatFull, formatLogTime } from "../lib/time";
 import { auditLabel, kindLabel, rowObjects, sourceLabel, securityApi, useSecurityPanel } from "../lib/security";
 import { linkify } from "../components/ErrorNotice";
+import { BrandMark } from "../components/Sidebar";
 
 /** The range in the link (#/security/report?from=&to=), else the picker's. */
 function reportRange(fallback: { from: Date; to: Date }): { from: Date; to: Date } {
@@ -29,6 +30,8 @@ export function SecurityReport() {
   const range = useMemo(() => reportRange(resolved), []); // eslint-disable-line react-hooks/exhaustive-deps
   const { from, to } = range;
   const meta = useQuery("sec-report-meta", (signal) => securityApi.meta(signal));
+  const app = useQuery("meta", (signal) => api<Meta>("/api/meta", { signal }));
+  const appName = app.data?.app_name && app.data.app_name !== "the application" ? app.data.app_name : "";
   const summary = useSecurityPanel("summary", from, to);
   const byKind = useSecurityPanel("findings_by_kind", from, to);
   const findingIPs = useSecurityPanel("finding_ips", from, to);
@@ -46,6 +49,47 @@ export function SecurityReport() {
   const sshTotal = hostRows.reduce((a, h) => a + (toNumber(h.ssh_failures) ?? 0), 0);
   const back = "#/security";
   const loading = summary.loading || byKind.loading || hosts.loading;
+  const answered = rowObjects(paths.data).filter((p) => (toNumber(p.answered_2xx) ?? 0) > 0);
+  const topScanner = rowObjects(topIPs.data).sort((a, b) => (toNumber(b.probes) ?? 0) - (toNumber(a.probes) ?? 0))[0];
+
+  // The saved PDF is named after the page title.
+  useEffect(() => {
+    const before = document.title;
+    const day = dateFormat({ year: "numeric", month: "short", day: "numeric" });
+    document.title = `Security report${appName ? ` – ${appName}` : ""} – ${day.format(from)} to ${day.format(to)}`;
+    return () => {
+      document.title = before;
+    };
+  }, [appName, from, to]);
+
+  const posture: Posture | null = !summary.data
+    ? null
+    : n("critical") > 0 || answered.length > 0
+      ? { tone: "critical", title: "Action needed", text: n("critical") > 0 ? `${formatCount(n("critical"), false)} critical finding(s) in this period.` : "Probe paths were answered with a success response." }
+      : n("warning") > 0 || pendingHosts.length > 0
+        ? { tone: "warning", title: "Worth a look", text: "No critical findings, but there are warnings or pending security updates." }
+        : { tone: "ok", title: "All clear", text: "No critical or warning findings in this period." };
+
+  // What to do next, most urgent first, from the same numbers as the report.
+  const actions = useMemo(() => {
+    if (!summary.data) return [];
+    const list: string[] = [];
+    if (n("critical") > 0) list.push(`Review the ${formatCount(n("critical"), false)} critical finding(s) under Security → Findings and mark each one handled or a false positive.`);
+    if (answered.length > 0) {
+      const top = answered.slice(0, 3).map((p) => String(p.path)).join(", ");
+      list.push(`${answered.length} probed path(s) returned a success response (${top}). Make sure none of them expose files, admin pages or configuration.`);
+    }
+    if (pendingHosts.length > 0) list.push(`Apply security updates on ${pendingHosts.slice(0, 5).map((h) => String(h.host)).join(", ")}${pendingHosts.length > 5 ? " and others" : ""}.`);
+    if (sshTotal > 0) list.push(`${formatCount(sshTotal, false)} failed SSH login(s): allow key-only SSH and limit who can reach port 22.`);
+    if (topScanner && (toNumber(topScanner.probes) ?? 0) > 0) list.push(`Consider blocking ${String(topScanner.ip)}, behind ${formatCount(toNumber(topScanner.probes) ?? 0, false)} probe(s).`);
+    if (n("failed_logins") > 50) list.push(`${formatCount(n("failed_logins"), false)} failed logins: check that sign-in routes are rate limited.`);
+    if (n("hosts") === 0) list.push("Install the Visionary host agent on your servers to cover SSH, open ports and pending updates.");
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary.data, paths.data, hosts.data, topIPs.data]);
+
+  const stamp = dateFormat({ year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000));
 
   const headline = useMemo(() => {
     if (!summary.data) return [];
@@ -78,24 +122,59 @@ export function SecurityReport() {
           <ArrowLeft size={14} />
           Security
         </a>
-        <button type="button" className="btn primary" onClick={() => window.print()} disabled={loading}>
-          <Printer size={14} />
-          Print / Save as PDF
-        </button>
+        <div className="sec-report-actions">
+          <button type="button" className="btn" onClick={() => window.print()} disabled={loading}>
+            <Printer size={14} />
+            Print
+          </button>
+          {/* The server lays the same report out as an A4 PDF, in the viewer's time zone. */}
+          <a className="btn primary" href={`/api/security/report.pdf?${rangeQuery(from, to, { tz: displayZone() })}`} download>
+            <FileDown size={14} />
+            Download PDF
+          </a>
+        </div>
       </div>
       <article className="sec-paper">
         <header className="sec-paper-head">
+          <div className="sec-paper-brand">
+            <BrandMark />
+            <span>Visionary</span>
+            {appName && <span className="sec-paper-app">{appName}</span>}
+          </div>
           <h1>Security report</h1>
-          <p>
-            {formatFull(from)} to {formatFull(to)}
-            <span className="dim"> · generated {formatFull(new Date())}</span>
-          </p>
+          <dl className="sec-paper-meta">
+            <div>
+              <dt>Period</dt>
+              <dd>
+                {stamp.format(from)} – {stamp.format(to)}{" "}
+                <span className="dim">
+                  ({days === 1 ? "1 day" : `${days} days`}, {displayZone()})
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>Generated</dt>
+              <dd>{formatFull(new Date())}</dd>
+            </div>
+          </dl>
         </header>
         {summary.error && <div className="panel-state error">{linkify(summary.error.message)}</div>}
+
+        {posture && <PostureBox posture={posture} />}
 
         <ReportSection title="Executive summary">
           {headline.length === 0 ? <p className="dim">Loading…</p> : <ul className="sec-bullets">{headline.map((l) => <li key={l}>{l}</li>)}</ul>}
         </ReportSection>
+
+        {actions.length > 0 && (
+          <ReportSection title="Recommended actions">
+            <ol className="sec-actions">
+              {actions.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ol>
+          </ReportSection>
+        )}
 
         <ReportSection title="Findings by severity">
           <div className="sec-figures">
@@ -106,6 +185,7 @@ export function SecurityReport() {
             <Figure label="Scanner IPs" value={n("scanner_ips")} />
             <Figure label="SSH failures" value={n("ssh_failures")} />
           </div>
+          <SeverityBar critical={n("critical")} warning={n("warning")} info={n("info")} />
           <ReportTable
             result={byKind.data}
             empty="No findings."
@@ -219,7 +299,60 @@ export function SecurityReport() {
             </>
           )}
         </ReportSection>
+
+        <footer className="sec-paper-foot">
+          Findings come from Visionary's detectors over request logs{n("hosts") > 0 ? " and the host agent" : ""}, over the period above. Tables show the top rows only. This report contains IP addresses and account names: share it on a need-to-know basis.
+        </footer>
       </article>
+    </div>
+  );
+}
+
+interface Posture {
+  tone: "critical" | "warning" | "ok";
+  title: string;
+  text: string;
+}
+
+const POSTURE_ICON = { critical: ShieldAlert, warning: AlertTriangle, ok: CheckCircle2 };
+
+function PostureBox({ posture }: { posture: Posture }) {
+  const Icon = POSTURE_ICON[posture.tone];
+  return (
+    <div className={`sec-posture ${posture.tone}`}>
+      <Icon size={20} aria-hidden />
+      <div>
+        <div className="sec-posture-title">{posture.title}</div>
+        <div className="sec-posture-text">{posture.text}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Findings split by severity in one bar, with the counts under it. */
+function SeverityBar({ critical, warning, info }: { critical: number; warning: number; info: number }) {
+  const total = critical + warning + info;
+  if (total === 0) return null;
+  const parts = [
+    { key: "critical", label: "Critical", value: critical },
+    { key: "warning", label: "Warning", value: warning },
+    { key: "info", label: "Info", value: info },
+  ].filter((p) => p.value > 0);
+  return (
+    <div className="sec-sevbar-wrap">
+      <div className="sec-sevbar" role="img" aria-label={parts.map((p) => `${p.label} ${p.value}`).join(", ")}>
+        {parts.map((p) => (
+          <span key={p.key} className={p.key} style={{ flexGrow: p.value }} />
+        ))}
+      </div>
+      <div className="sec-sevbar-legend">
+        {parts.map((p) => (
+          <span key={p.key}>
+            <i className={p.key} aria-hidden />
+            {p.label} {formatCount(p.value, false)} ({formatPercent((100 * p.value) / total)})
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

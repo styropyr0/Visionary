@@ -204,6 +204,7 @@ func (s *Server) securityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/security/findings", s.authed(s.handleSecurityFindings))
 	mux.Handle("GET /api/security/findings/{id}", s.authed(s.handleSecurityFinding))
 	mux.Handle("GET /api/security/audit", s.authed(s.handleSecurityAudit))
+	mux.Handle("GET /api/security/report.pdf", s.authed(s.handleSecurityReportPDF))
 	mux.Handle("GET /api/security/panels/{panel}", s.authed(s.handleSecurityPanel))
 	s.securityTriageRoutes(mux)
 }

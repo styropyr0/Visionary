@@ -306,12 +306,18 @@
   margin-left: auto;
 }
 
+.tv-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
 .tv-clock {
-  min-width: 56px;
   color: var(--text-2);
-  font-size: 15px;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  white-space: nowrap;
 }
 
 .tv-body {

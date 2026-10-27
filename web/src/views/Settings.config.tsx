@@ -332,12 +332,13 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
         {s.help && <div className="dim pset-hint">{s.help}</div>}
       </div>
       <div className="conf-control">
-        {control}
+        {/* Reset sits before the control so controls stay flush right. */}
         {canReset && (
           <button type="button" className="icon-btn" title={s.kind === "secret" ? "Clear" : `Reset to ${s.default || "empty"}`} aria-label="Reset" onClick={() => onChange(null)}>
             <RotateCcw size={14} />
           </button>
         )}
+        {control}
       </div>
     </div>
   );

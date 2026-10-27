@@ -140,11 +140,11 @@ export function Overview() {
             loading={statsLoading}
           />
 
-          <ChartPanel className="span-8" title="Requests by status" description="Requests per interval, stacked by HTTP status class." q={traffic} viz={VIZ.traffic} height={260} />
-          <ChartPanel className="span-4" title="Status codes" description="Most frequent response codes in this range." q={statusCodes} viz={VIZ.statusCodes} height={260} />
+          <ChartPanel className="span-8" title="Requests by status" description="Requests per interval, stacked by HTTP status class." src="overview/traffic" q={traffic} viz={VIZ.traffic} height={260} />
+          <ChartPanel className="span-4" title="Status codes" description="Most frequent response codes in this range." src="overview/status_codes" q={statusCodes} viz={VIZ.statusCodes} height={260} />
 
-          <ChartPanel className="span-8" title="Latency percentiles" description="Server time per interval. p99 is the slowest 1% of requests." q={latency} viz={VIZ.latency} height={260} />
-          <ChartPanel className="span-4" title="Error rate" description="Percent of requests per interval that returned 5xx or 4xx." q={errorRate} viz={VIZ.errorRate} height={260} />
+          <ChartPanel className="span-8" title="Latency percentiles" description="Server time per interval. p99 is the slowest 1% of requests." src="overview/latency" q={latency} viz={VIZ.latency} height={260} />
+          <ChartPanel className="span-4" title="Error rate" description="Percent of requests per interval that returned 5xx or 4xx." src="overview/error_rate" q={errorRate} viz={VIZ.errorRate} height={260} />
 
           <Panel
             className="span-12"
@@ -187,6 +187,7 @@ export function Overview() {
 }
 
 function ChartPanel({
+  src,
   q,
   viz,
   height,
@@ -194,6 +195,8 @@ function ChartPanel({
   description,
   className,
 }: {
+  /** The endpoint under /api, so a dashboard can show the chart too. */
+  src: string;
   q: { data?: Result; loading: boolean; error?: Error };
   viz: Viz;
   height: number;
@@ -214,6 +217,7 @@ function ChartPanel({
       note={vizNote(q.data, viz, tokens)}
       chart={q.data && <VizView result={q.data} viz={viz} height={height} title={title} />}
       table={q.data && <DataTable result={q.data} maxHeight={height} defaultUnit={viz.unit} />}
+      dashboard={{ kind: "builtin", ref: src, viz }}
     />
   );
 }

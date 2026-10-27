@@ -19,6 +19,8 @@
   --radius-lg: 10px;
   --sidebar-w: 224px;
   --topbar-h: 52px;
+  /* Every button, icon button, select and input is this tall, so rows line up. */
+  --control-h: 32px;
   --good: #0ca30c;
   --warning: #fab219;
   --serious: #ec835a;
@@ -468,7 +470,7 @@ pre,
 }
 
 .about-platforms button {
-  height: 28px;
+  height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -737,7 +739,7 @@ pre,
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
+  height: var(--control-h);
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -791,7 +793,6 @@ pre,
 }
 
 .btn.sm {
-  height: 28px;
   padding: 0 10px;
   font-size: 12px;
 }
@@ -799,10 +800,11 @@ pre,
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--button-wash);
   color: var(--text-2);
   cursor: pointer;
@@ -836,7 +838,7 @@ pre,
 .input,
 .select,
 .textarea {
-  height: 32px;
+  height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -907,7 +909,8 @@ pre,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  /* Inside the 2px padding and 1px border, the group is --control-h tall. */
+  height: calc(var(--control-h) - 6px);
   padding: 0 10px;
   border: 0;
   border-radius: var(--radius-sm);
@@ -1436,7 +1439,8 @@ table.data th .sort {
 
 table.data td {
   height: 34px;
-  padding: 0 10px;
+  /* Text rows stay 34px; a row holding a button gets room around it. */
+  padding: 4px 10px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   max-width: 420px;

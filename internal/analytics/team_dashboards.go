@@ -34,15 +34,21 @@ type dashboardLayout struct {
 
 // dashPanel is a saved panel (Ref is its id) or a built-in one (Ref is
 // "overview/latency", "system/cpu" and so on), placed in grid units.
+// Charts added from other views also carry their query parameters, the
+// field of a composite response that holds the chart, and how to draw it.
 type dashPanel struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Ref   string `json:"ref"`
-	Title string `json:"title,omitempty"`
-	X     int    `json:"x"`
-	Y     int    `json:"y"`
-	W     int    `json:"w"`
-	H     int    `json:"h"`
+	ID          string            `json:"id"`
+	Kind        string            `json:"kind"`
+	Ref         string            `json:"ref"`
+	Title       string            `json:"title,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Params      map[string]string `json:"params,omitempty"`
+	Field       string            `json:"field,omitempty"`
+	Viz         json.RawMessage   `json:"viz,omitempty"`
+	X           int               `json:"x"`
+	Y           int               `json:"y"`
+	W           int               `json:"w"`
+	H           int               `json:"h"`
 }
 
 type dashVar struct {
@@ -67,6 +73,17 @@ const (
 var (
 	panelIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 	rangeKeys      = []string{"15m", "1h", "6h", "24h", "7d", "30d"}
+	// Chart endpoints outside the overview, performance and system groups
+	// that a dashboard can show.
+	chartRefs = []*regexp.Regexp{
+		regexp.MustCompile(`^(containers|security)/panels/[a-z0-9_]{1,40}$`),
+		regexp.MustCompile(`^rum/[a-z0-9_]{1,40}$`),
+		regexp.MustCompile(`^uptime/checks/[0-9]{1,18}/[a-z_]{1,40}$`),
+		regexp.MustCompile(`^(telemetry/errors|insights/dependencies)$`),
+	}
+	paramKey   = regexp.MustCompile(`^[a-z_]{1,32}$`)
+	fieldName  = regexp.MustCompile(`^[a-z_]{0,32}$`)
+	maxVizSize = 4096
 )
 
 // Dashboard variables. Values are checked against a strict pattern per
@@ -179,7 +196,7 @@ func (s *Server) validateDashboard(d *dashboard) error {
 				return errors.New("saved panel ref must be a panel id")
 			}
 		case "builtin":
-			if !s.builtinExists(p.Ref) {
+			if !s.builtinExists(p.Ref) && !slices.ContainsFunc(chartRefs, func(re *regexp.Regexp) bool { return re.MatchString(p.Ref) }) {
 				return fmt.Errorf("unknown built-in panel %q", p.Ref)
 			}
 		default:
@@ -187,6 +204,12 @@ func (s *Server) validateDashboard(d *dashboard) error {
 		}
 		if len(p.Title) > maxTitleLen {
 			return errors.New("panel title is too long")
+		}
+		if len(p.Description) > maxDashDescLen {
+			return errors.New("panel description is too long")
+		}
+		if err := validatePanelSource(p); err != nil {
+			return err
 		}
 		if p.W < 2 || p.W > dashCols || p.X < 0 || p.X+p.W > dashCols || p.H < 2 || p.H > 24 || p.Y < 0 || p.Y > 1000 {
 			return errors.New("panel position is outside the grid")
@@ -226,6 +249,24 @@ func (s *Server) validateDashboard(d *dashboard) error {
 	}
 	if l.Variables == nil {
 		l.Variables = []dashVar{}
+	}
+	return nil
+}
+
+func validatePanelSource(p *dashPanel) error {
+	if len(p.Params) > 8 {
+		return errors.New("a panel takes at most 8 parameters")
+	}
+	for k, v := range p.Params {
+		if !paramKey.MatchString(k) || k == "from" || k == "to" || len(v) > 256 || strings.ContainsFunc(v, func(r rune) bool { return r < 0x20 }) {
+			return fmt.Errorf("invalid panel parameter %q", k)
+		}
+	}
+	if !fieldName.MatchString(p.Field) {
+		return errors.New("invalid panel field")
+	}
+	if len(p.Viz) > maxVizSize {
+		return errors.New("panel chart settings are too large")
 	}
 	return nil
 }

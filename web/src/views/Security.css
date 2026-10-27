@@ -173,6 +173,11 @@
   margin: 0 auto 12px;
 }
 
+.sec-report-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .sec-paper {
   max-width: 920px;
   margin: 0 auto;
@@ -182,41 +187,184 @@
   background: var(--surface-1);
 }
 
-.sec-paper-head h1 {
-  margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: 650;
+.sec-paper-head {
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--text-1);
 }
 
-.sec-paper-head p {
-  margin: 0;
+.sec-paper-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
   color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sec-paper-brand .brand-mark {
+  width: 22px;
+  height: 22px;
+}
+
+.sec-paper-app {
+  padding-left: 8px;
+  border-left: 1px solid var(--border-strong);
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.sec-paper-head h1 {
+  margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sec-paper-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.sec-paper-meta dt {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sec-paper-meta dd {
+  margin: 2px 0 0;
+  color: var(--text-1);
+}
+
+/* The verdict at the top: a tinted box, icon on the title's line. */
+.sec-posture {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--tone-border);
+  border-radius: var(--radius);
+  background: var(--tone-wash);
+  color: var(--tone-text);
+  break-inside: avoid;
+}
+
+.sec-posture.critical { --tone-text: var(--critical-text); --tone-wash: color-mix(in srgb, var(--critical) 9%, transparent); --tone-border: color-mix(in srgb, var(--critical) 35%, transparent); }
+.sec-posture.warning { --tone-text: var(--warning-text); --tone-wash: color-mix(in srgb, var(--warning) 12%, transparent); --tone-border: color-mix(in srgb, var(--warning) 45%, transparent); }
+.sec-posture.ok { --tone-text: var(--good-text); --tone-wash: color-mix(in srgb, var(--good) 9%, transparent); --tone-border: color-mix(in srgb, var(--good) 35%, transparent); }
+
+.sec-posture > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.sec-posture-title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 22px;
+}
+
+.sec-posture-text {
+  color: var(--text-1);
+  font-size: 13px;
 }
 
 .sec-paper-section {
   margin-top: 28px;
-  break-inside: avoid-page;
 }
 
 .sec-paper-section h2 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 650;
+  /* A heading never ends a page alone. */
+  break-after: avoid;
 }
 
 .sec-paper-section h3 {
-  margin: 14px 0 6px;
+  margin: 16px 0 6px;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 600;
+  break-after: avoid;
 }
 
-.sec-bullets {
+.sec-bullets,
+.sec-actions {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 20px;
   line-height: 1.6;
+}
+
+.sec-actions li + li {
+  margin-top: 4px;
+}
+
+.sec-actions li::marker {
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.sec-sevbar-wrap {
+  margin-bottom: 16px;
+  break-inside: avoid;
+}
+
+.sec-sevbar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.sec-sevbar span,
+.sec-sevbar-legend i {
+  background: var(--text-3);
+}
+
+.sec-sevbar .critical,
+.sec-sevbar-legend i.critical { background: var(--critical); }
+.sec-sevbar .warning,
+.sec-sevbar-legend i.warning { background: var(--warning); }
+
+.sec-sevbar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.sec-sevbar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sec-sevbar-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.sec-paper-foot {
+  margin-top: 32px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .sec-figures {
@@ -250,9 +398,41 @@
   width: 100%;
 }
 
+/* A report shows whole values: long paths and targets wrap instead of being cut. */
+table.data.sec-print-table td {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+table.data.sec-print-table td.num {
+  white-space: nowrap;
+}
+
+.sec-print-table tbody tr:nth-child(even) td {
+  background: var(--surface-2);
+}
+
 @media (max-width: 700px) {
   .sec-paper { padding: 20px 16px; }
   .sec-figures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@page {
+  size: A4;
+  margin: 16mm 14mm 18mm;
+
+  @bottom-left {
+    content: "Visionary security report";
+    color: #777;
+    font-size: 9pt;
+  }
+
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    color: #777;
+    font-size: 9pt;
+  }
 }
 
 @media print {
@@ -267,6 +447,13 @@
     --border: #ccc;
     --critical-text: #b42c2c;
     --warning-text: #8a5a00;
+    --good-text: #17702a;
+  }
+  /* Keep severity colors, tints and zebra rows; browsers drop backgrounds by default. */
+  .sec-paper {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 10.5pt;
   }
   html,
   body,
@@ -297,6 +484,18 @@
     padding: 4px 6px;
   }
   .sec-print-table tr {
+    break-inside: avoid;
+  }
+  .sec-print-table th {
+    position: static;
+  }
+  .sec-print-table thead {
+    display: table-header-group;
+  }
+  .sec-print-table tbody tr:nth-child(even) td {
+    background: #f6f6f4;
+  }
+  .sec-figure {
     break-inside: avoid;
   }
 }

@@ -458,7 +458,7 @@ function DashPanelView({
   onRemove: () => void;
 }) {
   const builtin = item.kind === "builtin" ? BUILTIN_BY_REF.get(item.ref) : undefined;
-  const extra: Record<string, string> = {};
+  const extra: Record<string, string> = { ...item.params };
   if (item.kind === "saved") {
     for (const n of VAR_NAMES) if (vars[n]) extra[`var.${n}`] = vars[n]!;
   } else if (item.ref.startsWith("system/") && vars.instance) {
@@ -466,11 +466,15 @@ function DashPanelView({
   }
   const qs = rangeQuery(range.from, range.to, extra);
   const path = item.kind === "saved" ? `/api/dashboards/panels/${item.ref}/data` : `/api/${item.ref}`;
-  const q = useQuery(`${path}?${qs}#${tick}`, (signal) => api<Result>(`${path}?${qs}`, { signal }));
+  // A chart from a composite response (errors, dependencies) is one of its fields.
+  const q = useQuery(`${path}?${qs}#${tick}`, async (signal) => {
+    const res = await api<Result & Record<string, Result>>(`${path}?${qs}`, { signal });
+    return item.field ? res[item.field] : res;
+  });
 
   const missing = item.kind === "saved" && savedLoaded && !saved;
   const title = item.title || builtin?.title || saved?.title || (missing ? "Deleted panel" : "Saved panel");
-  const viz = builtin?.viz ?? saved?.viz ?? { type: "table" as const };
+  const viz = item.viz ?? builtin?.viz ?? saved?.viz ?? { type: "table" as const };
   const height = Math.max(60, size.height - CHROME_H);
   const isTable = viz.type === "table";
 
@@ -478,7 +482,7 @@ function DashPanelView({
     <Panel
       className="dash-fill"
       title={title}
-      description={builtin?.description ?? (saved?.description || saved?.prompt)}
+      description={item.description || builtin?.description || saved?.description || saved?.prompt}
       result={missing ? undefined : q.data}
       loading={q.loading}
       error={missing ? new Error("This saved panel was deleted; remove it from the dashboard.") : q.error}

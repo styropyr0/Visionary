@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Bookmark, LayoutGrid } from "lucide-react";
 import { api, rangeQuery, type Panel as SavedPanel, type Result } from "../lib/api";
-import { dashboardLink, newPanelId, placeAtBottom, saveDashboard, useSession, type Dashboard } from "../lib/team";
+import { useSession } from "../lib/team";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { DataTable } from "../components/DataTable";
 import { Modal } from "../components/Modal";
+import { AddToDashboard } from "../components/team/AddToDashboard";
 import { Panel } from "../components/Panel";
 import { useToast } from "../components/Toast";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
@@ -74,7 +75,7 @@ export function Saved() {
           ))}
         </div>
       </div>
-      {adding && <AddToDashboard panel={adding} onClose={() => setAdding(null)} />}
+      {adding && <AddToDashboard title={adding.title} source={{ kind: "saved", ref: String(adding.id), viz: adding.viz }} onClose={() => setAdding(null)} />}
       {confirm && (
         <Modal
           title="Delete panel"
@@ -129,50 +130,5 @@ function SavedPanelView({ panel, onDelete, onAddToDashboard }: { panel: SavedPan
         )
       }
     />
-  );
-}
-
-function AddToDashboard({ panel, onClose }: { panel: SavedPanel; onClose: () => void }) {
-  const toast = useToast();
-  const list = useQuery("dashboards-pick", (signal) => api<{ dashboards: Dashboard[] }>("/api/dashboards", { signal }));
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const dashboards = list.data?.dashboards ?? [];
-
-  const add = async (target: Dashboard | null) => {
-    setBusy(true);
-    try {
-      const base = target ?? { name: name.trim() || panel.title, description: "", layout: { panels: [], variables: [] } };
-      const size = panel.viz.type === "stat" ? { w: 3, h: 3 } : { w: 6, h: 6 };
-      const layout = { ...base.layout, panels: [...base.layout.panels, { id: newPanelId(), kind: "saved" as const, ref: String(panel.id), ...placeAtBottom(base.layout.panels, size.w, size.h) }] };
-      const saved = await saveDashboard({ ...base, layout });
-      toast("ok", `Added to “${saved.name}”`);
-      onClose();
-      window.location.hash = dashboardLink(saved.id);
-    } catch (e) {
-      toast("err", e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal title={`Add “${panel.title}” to a dashboard`} narrow onClose={onClose}>
-      {list.error && <ErrorNotice title="Could not load dashboards" error={list.error} />}
-      <div className="saved-dash-list">
-        {dashboards.map((d) => (
-          <button type="button" key={d.id} className="saved-dash-row" disabled={busy} onClick={() => add(d)}>
-            <span>{d.name}</span>
-            <span className="saved-dash-meta">{d.layout.panels.length} panels</span>
-          </button>
-        ))}
-        {list.data && dashboards.length === 0 && <p className="saved-dash-meta">No dashboards yet. Name a new one below.</p>}
-      </div>
-      <div className="saved-dash-new">
-        <input className="input" placeholder="New dashboard name" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
-        <button type="button" className="btn primary" disabled={busy} onClick={() => add(null)}>
-          Create and add
-        </button>
-      </div>
-    </Modal>
   );
 }

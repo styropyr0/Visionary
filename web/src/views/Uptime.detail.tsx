@@ -205,6 +205,7 @@ export function UptimeDetail({ id }: { id: number }) {
               note={vizNote(latency.data, LATENCY, tokens)}
               chart={latency.data && <VizView result={latency.data} viz={LATENCY} height={240} title="Response time" empty="No successful checks in this range." />}
               table={latency.data && <DataTable result={latency.data} maxHeight={240} defaultUnit="ms" />}
+              dashboard={{ kind: "builtin", ref: `uptime/checks/${id}/latency`, viz: LATENCY, title: s ? `${s.check.name} · Response time` : undefined }}
             />
             <Panel
               className="span-6"

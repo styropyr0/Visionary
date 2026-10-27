@@ -167,6 +167,7 @@ function IssueList({ q }: { q: Q<IssuesResponse> }) {
         note={vizNote(data?.timeline, TIMELINE, tokens)}
         chart={data && <VizView result={data.timeline} viz={TIMELINE} height={200} title="Errors over time" empty="No errors in this time range." />}
         table={data && <DataTable result={data.timeline} maxHeight={200} defaultUnit="count" />}
+        dashboard={{ kind: "builtin", ref: "telemetry/errors", field: "timeline", viz: TIMELINE }}
       />
 
       <div className="span-12 filter-row errors-filters" role="search">

@@ -172,6 +172,13 @@ func (s *Server) digestNotice(ctx context.Context, d *digestData) notice {
 	}
 	n.HTML = s.digestHTML(d, n.Note)
 	n.Payload = map[string]any{"event": "digest", "data": d, "summary": n.Note}
+	// The same digest as a PDF, to keep or forward; the text goes out without it if it fails.
+	if pdf, err := s.digestPDF(d, n.Note); err != nil {
+		s.logger.Warn("digest: pdf skipped", "err", err)
+	} else {
+		name := "visionary-digest-" + time.Now().In(s.digestTZ()).Format("2006-01-02") + ".pdf"
+		n.Files = append(n.Files, attachment{Name: name, Type: "application/pdf", Data: pdf})
+	}
 	return n
 }
 

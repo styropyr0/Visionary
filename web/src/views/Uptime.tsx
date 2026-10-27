@@ -137,13 +137,13 @@ function UptimeList() {
                     <tr>
                       <th style={{ width: 110 }}>State</th>
                       <th>Check</th>
-                      <th style={{ width: "32%" }}>Last 90 days</th>
+                      <th style={{ width: "26%" }}>Last 90 days</th>
                       <th className="num" style={{ width: 96 }}>
                         Uptime 24h
                       </th>
-                      <th style={{ width: 196 }}>Response time 24h</th>
-                      <th style={{ width: 96 }}>Last check</th>
-                      <th style={{ width: 118 }} aria-label="Actions" />
+                      <th style={{ width: 216 }}>Response time 24h</th>
+                      <th style={{ width: 132 }}>Last check</th>
+                      <th style={{ width: 128 }} aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>
@@ -153,7 +153,7 @@ function UptimeList() {
                           <StateBadge state={s.state} />
                         </td>
                         <td className="up-name">
-                          <a href={`#/uptime?check=${c.id}`} onClick={(e) => e.stopPropagation()}>
+                          <a href={`#/uptime?check=${c.id}`} title={c.name} onClick={(e) => e.stopPropagation()}>
                             {c.name}
                           </a>
                           <span className="mono dim" title={c.url}>

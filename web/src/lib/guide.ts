@@ -354,7 +354,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Tune or share",
-        text: "**Settings → Server** has a group per area: **Security detectors**, **Account takeover**, **API abuse**, **Threat intelligence** and **Response**. **Route limits** there sets per-minute limits for routes such as `POST /api/export* 10`. **Report** makes a printable summary of the range.",
+        text: "**Settings → Server** has a group per area: **Security detectors**, **Account takeover**, **API abuse**, **Threat intelligence** and **Response**. **Route limits** there sets per-minute limits for routes such as `POST /api/export* 10`. **Report** makes a printable summary of the range: a verdict, recommended actions and the top findings, IPs and paths. **Download PDF** saves it as an A4 report in your time zone; **Print** uses the browser instead.",
       },
     ],
   },
@@ -382,7 +382,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Keep a chart",
-        text: "The bookmark on a chart saves it to **Saved panels**, ready to add to a dashboard. Past analyses stay under **Recent**, in this browser.",
+        text: "The bookmark on a chart saves it to **Saved panels**; the grid icon saves it and puts it straight on a dashboard. Past analyses stay under **Recent**, in this browser.",
       },
     ],
   },
@@ -424,11 +424,11 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Add and arrange panels",
-        text: "In edit mode, **Add panel** offers your saved panels and the built-in ones from API overview, Performance and System. Drag a panel's header to move it and its corner to resize, then **Save**.",
+        text: "In edit mode, **Add panel** offers your saved panels and the built-in ones from API overview, Performance and System. Drag a panel's header to move it and its corner to resize, then **Save**. Charts elsewhere in Visionary have an **Add to dashboard** icon (the grid) that puts them on a dashboard with their filters.",
       },
       {
         title: "Share it",
-        text: "The link icon copies a link with the current range and selections. **TV** shows it full screen and can cycle through dashboards; press Esc to leave.",
+        text: "The link icon copies a link with the current range and selections. **TV** shows it full screen with a clock beside the title, refreshes on its own and can cycle through dashboards; press Esc to leave.",
       },
     ],
   },
@@ -492,7 +492,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Get a weekly digest",
-        text: "**Digest** previews this week's summary of traffic, latency, alerts, errors and uptime. Under **Delivery**, pick the channels, weekday and hour, or **Send now**.",
+        text: "**Digest** previews this week's summary of traffic, latency, alerts, errors and uptime. Under **Delivery**, pick the channels, weekday and hour, or **Send now**. Email and Telegram channels also get the digest as a PDF, and **PDF** downloads it.",
       },
     ],
   },

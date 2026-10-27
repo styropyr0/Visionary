@@ -1,11 +1,13 @@
 package analytics
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/url"
 	"regexp"
 	"strings"
@@ -149,11 +151,31 @@ func sendOpsgenie(ctx context.Context, c channelConfig, n notice) error {
 }
 
 func sendTelegram(ctx context.Context, c channelConfig, n notice) error {
-	return postJSON(ctx, telegramAPI+"/bot"+c.Secret+"/sendMessage", map[string]any{
+	if err := postJSON(ctx, telegramAPI+"/bot"+c.Secret+"/sendMessage", map[string]any{
 		"chat_id":                  c.ChatID,
 		"text":                     truncate(n.plain(), 4000),
 		"disable_web_page_preview": true,
-	}, nil)
+	}, nil); err != nil {
+		return err
+	}
+	// Files follow the message as documents (the digest's PDF).
+	for _, f := range n.Files {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		_ = mw.WriteField("chat_id", c.ChatID)
+		part, err := mw.CreateFormFile("document", f.Name)
+		if err != nil {
+			return err
+		}
+		_, _ = part.Write(f.Data)
+		if err := mw.Close(); err != nil {
+			return err
+		}
+		if err := post(ctx, telegramAPI+"/bot"+c.Secret+"/sendDocument", body.Bytes(), map[string]string{"Content-Type": mw.FormDataContentType()}); err != nil {
+			return fmt.Errorf("document: %w", err)
+		}
+	}
+	return nil
 }
 
 // sendSMS texts every number; it fails if any number fails, naming it, so a

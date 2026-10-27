@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Mail, Send, Sparkles } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, FileDown, Mail, Send, Sparkles } from "lucide-react";
 import { Select } from "../Select";
 import { useToast } from "../Toast";
 import { useQuery } from "../../lib/useQuery";
@@ -68,6 +68,11 @@ function ReportHead({ data, loading, llm }: { data: Data | undefined; loading: b
             <Mail size={14} />
             Preview email
           </button>
+          {/* Email and Telegram channels also get this PDF attached. */}
+          <a className="btn" href={alertsApi.digestPdfURL} download>
+            <FileDown size={14} />
+            PDF
+          </a>
           {llm && (
             <button type="button" className="btn primary" onClick={write} disabled={writing || !data}>
               <Sparkles size={14} />
@@ -100,7 +105,7 @@ function ReportHead({ data, loading, llm }: { data: Data | undefined; loading: b
       {email && (
         <Modal title="Digest email" onClose={() => setEmail(false)}>
           <p className="al-hint" style={{ marginTop: 0 }}>
-            Email channels get this version (the analyst's summary goes above the numbers); Slack, Discord and webhooks get the same numbers as text.
+            Email channels get this version (the analyst's summary goes above the numbers) with the digest attached as a PDF; Telegram gets the text and the PDF; Slack, Discord and webhooks get the same numbers as text.
           </p>
           <iframe className="dg-email" title="Digest email preview" src={alertsApi.digestEmailURL} sandbox="" />
         </Modal>

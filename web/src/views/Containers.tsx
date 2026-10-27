@@ -309,6 +309,7 @@ function ContainerChart({ path, params, title, description, viz, span, empty }: 
       note={vizNote(q.data, viz, tokens)}
       chart={q.data && <VizView result={q.data} viz={viz} height={220} title={title} empty={empty} />}
       table={q.data && <DataTable result={q.data} maxHeight={220} defaultUnit={viz.unit} />}
+      dashboard={{ kind: "builtin", ref: `containers/panels/${path}`, viz, params, title: params.container ? `${params.container} · ${title}` : undefined }}
     />
   );
 }

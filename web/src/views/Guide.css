@@ -35,9 +35,13 @@
   padding-left: 28px;
 }
 
+/* Sits inside the input, so it is smaller than a standalone control. */
 .guide-search .icon-btn {
   position: absolute;
-  right: 2px;
+  right: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
 }
 
 .guide-toc-group {

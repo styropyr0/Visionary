@@ -204,7 +204,7 @@ function RouteGroups({
             <th className="num" style={{ width: 80 }}>p95</th>
             <th className="num" style={{ width: 90 }}>Slowest</th>
             <th className="num" style={{ width: 60 }}>5xx</th>
-            <th style={{ width: 36 }} aria-label="Actions" />
+            <th style={{ width: 52 }} aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -315,7 +315,7 @@ function requestColumns(withRoute: boolean, onExclude?: (pattern: string) => voi
     { key: "response_size", label: "Size", align: "right", render: (v) => formatBytes(toNumber(v) ?? 0) },
   );
   if (onExclude) {
-    cols.push({ key: "id", label: "", width: 36, render: (_v, row) => <ExcludeButton pattern={`${String(row[2])} ${String(row[3])}`} onExclude={onExclude} /> });
+    cols.push({ key: "id", label: "", width: 52, render: (_v, row) => <ExcludeButton pattern={`${String(row[2])} ${String(row[3])}`} onExclude={onExclude} /> });
   }
   return cols;
 }

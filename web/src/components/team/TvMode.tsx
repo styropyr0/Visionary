@@ -100,7 +100,10 @@ export function TvMode({
     <div className="tv" role="dialog" aria-label={`${dash.name}, TV mode`}>
       <header className="tv-head">
         <div className="tv-title">
-          <h1>{dash.name}</h1>
+          <div className="tv-title-row">
+            <h1>{dash.name}</h1>
+            <span className="tv-clock">{clockFmt().format(now)}</span>
+          </div>
           <span className="dim">
             {rangeText}
             {prefs.cycle > 0 && position && ` · ${position}`}
@@ -110,7 +113,6 @@ export function TvMode({
         <div className="tv-actions">
           <Select label="Refresh" value={String(prefs.refresh)} options={REFRESH} onChange={(v) => update({ refresh: Number(v) })} />
           <Select label="Cycle" value={String(prefs.cycle)} options={CYCLE} onChange={(v) => update({ cycle: Number(v) })} />
-          <span className="tv-clock">{clockFmt().format(now)}</span>
           <button type="button" className="btn" onClick={onExit} title="Leave TV mode (Esc)">
             <Minimize2 size={14} />
             Exit

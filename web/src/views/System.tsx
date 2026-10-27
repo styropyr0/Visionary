@@ -418,6 +418,8 @@ export function SystemPanel({ name, title, description, viz, span, empty, runtim
   const height = span === "span-3" ? 180 : 220;
   const lang = runtime?.(words);
   const data = q.data && lang ? relabel(q.data, lang.labels) : q.data;
+  // Dashboards draw the endpoint's own columns, so they get the viz as defined.
+  const dashboard = { kind: "builtin" as const, ref: `system/${name}`, viz, params: instance ? { instance } : undefined };
   if (lang) viz = { ...viz, y: viz.y?.map((y) => lang.labels[y] ?? y) };
   return (
     <Panel
@@ -431,6 +433,7 @@ export function SystemPanel({ name, title, description, viz, span, empty, runtim
       note={vizNote(data, viz, tokens)}
       chart={data && <VizView result={data} viz={viz} height={height} title={title} empty={empty} />}
       table={data && <DataTable result={data} maxHeight={height} defaultUnit={viz.unit} />}
+      dashboard={dashboard}
     />
   );
 }

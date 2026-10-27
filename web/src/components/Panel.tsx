@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Code2, Table2, Trash2 } from "lucide-react";
+import { AlertTriangle, BarChart3, Code2, LayoutGrid, Table2, Trash2 } from "lucide-react";
 import type { Result } from "../lib/api";
+import { useSession, type DashSource } from "../lib/team";
+import { AddToDashboard } from "./team/AddToDashboard";
 import { InspectModal } from "./Modal";
 import { linkify } from "./ErrorNotice";
 import { InfoTip } from "./InfoTip";
@@ -19,6 +21,8 @@ interface Props {
   bodyHeight?: number;
   onDelete?: () => void;
   extraActions?: ReactNode;
+  /** Offers "Add to dashboard" to editors; title and description default to the panel's. */
+  dashboard?: DashSource | (() => Promise<DashSource>);
 }
 
 /**
@@ -38,6 +42,7 @@ export function Panel({
   bodyHeight,
   onDelete,
   extraActions,
+  dashboard,
 }: Props) {
   const [view, setView] = useState<"chart" | "table">("chart");
   const [inspect, setInspect] = useState(false);
@@ -72,6 +77,7 @@ export function Panel({
         )}
         <div className="panel-actions">
           {extraActions}
+          {dashboard && <AddButton title={title} description={description} source={dashboard} />}
           {chart && table && (
             <button type="button"
               className={`icon-btn ${view === "table" ? "on" : ""}`}
@@ -100,5 +106,20 @@ export function Panel({
       {note && result && !showTable && <div className="panel-note">{note}</div>}
       {inspect && result && <InspectModal title={title} result={result} onClose={() => setInspect(false)} />}
     </section>
+  );
+}
+
+function AddButton({ title, description, source }: { title: string; description?: string; source: DashSource | (() => Promise<DashSource>) }) {
+  const { can } = useSession();
+  const [open, setOpen] = useState(false);
+  if (!can("edit")) return null;
+  const full = typeof source === "function" ? source : { title, description, ...source };
+  return (
+    <>
+      <button type="button" className="icon-btn" title="Add to dashboard" aria-label="Add to dashboard" onClick={() => setOpen(true)}>
+        <LayoutGrid size={15} />
+      </button>
+      {open && <AddToDashboard title={title} source={full} onClose={() => setOpen(false)} />}
+    </>
   );
 }

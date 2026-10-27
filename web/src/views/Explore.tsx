@@ -17,7 +17,7 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import { api, ApiError, type Meta, type Result, type Viz } from "../lib/api";
+import { api, ApiError, type Meta, type Panel as SavedPanel, type Result, type Viz } from "../lib/api";
 import { formatCount } from "../lib/format";
 import { load, useApp } from "../lib/state";
 import { postStream } from "../lib/stream";
@@ -29,7 +29,7 @@ import { RichText } from "../components/RichText";
 import { useToast } from "../components/Toast";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
-import { useSession } from "../lib/team";
+import { useSession, type DashSource } from "../lib/team";
 
 interface Step {
   id: number;
@@ -492,8 +492,20 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const canEdit = useSession().can("edit");
+  const savedId = useRef<number | null>(null);
   const height = 260;
   const isTable = panel.viz.type === "table";
+  // A dashboard holds saved panels, so the answer is saved first (once).
+  const toDashboard = async (): Promise<DashSource> => {
+    if (savedId.current === null) {
+      const created = await api<SavedPanel>("/api/panels", {
+        method: "POST",
+        json: { title: panel.title, description: panel.description, prompt: question, query: panel.query, viz: panel.viz },
+      });
+      savedId.current = created.id;
+    }
+    return { kind: "saved", ref: String(savedId.current), viz: panel.viz };
+  };
   return (
     <>
       <Panel
@@ -504,6 +516,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         note={isTable ? undefined : vizNote(panel.result, panel.viz, tokens)}
         chart={isTable ? undefined : <VizView result={panel.result} viz={panel.viz} height={height} title={panel.title} />}
         table={<DataTable result={panel.result} maxHeight={height} defaultUnit={panel.viz.unit} />}
+        dashboard={toDashboard}
         extraActions={
           // Viewers can explore but not save.
           canEdit ? (

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -55,7 +56,7 @@ func isLoopback(host string) bool {
 
 // sendEmail sends body as plain text, with html as the formatted alternative
 // when it is set.
-func (s *Server) sendEmail(ctx context.Context, to []string, subject, body, html string) error {
+func (s *Server) sendEmail(ctx context.Context, to []string, subject, body, html string, files ...attachment) error {
 	cfg, ok := s.smtpSettings()
 	if !ok {
 		return errors.New("email needs an SMTP host and from address in Settings → Server → Email")
@@ -117,7 +118,7 @@ func (s *Server) sendEmail(ctx context.Context, to []string, subject, body, html
 	if err != nil {
 		return fmt.Errorf("smtp data: %w", err)
 	}
-	if _, err := w.Write(buildMessage(from.String(), to, subject, body, html)); err != nil {
+	if _, err := w.Write(buildMessage(from.String(), to, subject, body, html, files...)); err != nil {
 		return fmt.Errorf("smtp write: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -126,7 +127,7 @@ func (s *Server) sendEmail(ctx context.Context, to []string, subject, body, html
 	return c.Quit()
 }
 
-func buildMessage(from string, to []string, subject, body, html string) []byte {
+func buildMessage(from string, to []string, subject, body, html string, files ...attachment) []byte {
 	id := make([]byte, 12)
 	_, _ = rand.Read(id)
 	host := "visionary.local"
@@ -151,21 +152,44 @@ func buildMessage(from string, to []string, subject, body, html string) []byte {
 			b.WriteString(line + "\r\n")
 		}
 	}
+	// Attachments wrap the message in multipart/mixed: the text, then each file.
+	mixed := "visionary-mixed-" + hex.EncodeToString(id)
+	if len(files) > 0 {
+		b.WriteString("Content-Type: multipart/mixed; boundary=\"" + mixed + "\"\r\n\r\n")
+		b.WriteString("--" + mixed + "\r\n")
+	}
 	if html == "" {
 		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
 		b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
 		writeLines(body)
+	} else {
+		// Plain text first: clients show the last part they can render.
+		boundary := "visionary-" + hex.EncodeToString(id)
+		b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
+		for _, part := range []struct{ kind, text string }{{"text/plain", body}, {"text/html", html}} {
+			b.WriteString("--" + boundary + "\r\n")
+			b.WriteString("Content-Type: " + part.kind + "; charset=utf-8\r\n")
+			b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+			writeLines(part.text)
+		}
+		b.WriteString("--" + boundary + "--\r\n")
+	}
+	if len(files) == 0 {
 		return []byte(b.String())
 	}
-	// Plain text first: clients show the last part they can render.
-	boundary := "visionary-" + hex.EncodeToString(id)
-	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
-	for _, part := range []struct{ kind, text string }{{"text/plain", body}, {"text/html", html}} {
-		b.WriteString("--" + boundary + "\r\n")
-		b.WriteString("Content-Type: " + part.kind + "; charset=utf-8\r\n")
-		b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
-		writeLines(part.text)
+	for _, f := range files {
+		name := mime.QEncoding.Encode("utf-8", clean(f.Name))
+		b.WriteString("--" + mixed + "\r\n")
+		b.WriteString("Content-Type: " + clean(f.Type) + "; name=\"" + name + "\"\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"" + name + "\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		enc := base64.StdEncoding.EncodeToString(f.Data)
+		for len(enc) > 76 {
+			b.WriteString(enc[:76] + "\r\n")
+			enc = enc[76:]
+		}
+		b.WriteString(enc + "\r\n")
 	}
-	b.WriteString("--" + boundary + "--\r\n")
+	b.WriteString("--" + mixed + "--\r\n")
 	return []byte(b.String())
 }

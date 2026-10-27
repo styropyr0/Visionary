@@ -60,9 +60,11 @@
 .up-legend i.minor { background: var(--warning); }
 .up-legend i.major { background: var(--critical); }
 
+/* Fixed columns are sized to what they hold (three 32px buttons, a 120px
+   spark and its value); the check name gets what's left, at least ~240px. */
 table.data.up-table {
   table-layout: fixed;
-  min-width: 1060px;
+  min-width: 1240px;
 }
 table.data.up-table td {
   height: 56px;
