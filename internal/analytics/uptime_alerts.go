@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -159,6 +160,63 @@ func (s *Server) ensureDefaultUptimeRule(r *http.Request) (*alertRule, error) {
 	return &rule, nil
 }
 
+// useDefaultUptimeRule makes the rule for every check one that alerts
+// someone: created when missing, turned back on when switched off, and given
+// the channels and failures asked for. A rule without channels gets the
+// first one, since choosing it means someone should hear.
+func (s *Server) useDefaultUptimeRule(r *http.Request, in checkAlertInput) error {
+	ctx := r.Context()
+	if in.Failures != 0 && (in.Failures < 1 || in.Failures > 20) {
+		return badInput("alert after 1 to 20 failed checks in a row")
+	}
+	if _, err := s.ensureDefaultUptimeRule(r); err != nil {
+		return err
+	}
+	rules, err := s.listRules(ctx, false)
+	if err != nil {
+		return err
+	}
+	var def *alertRule
+	for i := range rules {
+		// An enabled one wins when there are several.
+		if isDefaultUptimeRule(rules[i]) && (def == nil || !def.Enabled && rules[i].Enabled) {
+			def = &rules[i]
+		}
+	}
+	if def == nil {
+		return nil
+	}
+	chans, err := s.listChannels(ctx)
+	if err != nil {
+		return err
+	}
+	old, rule := *def, *def
+	rule.Enabled = true
+	if len(in.Channels) > 0 {
+		for _, id := range in.Channels {
+			if !slices.ContainsFunc(chans, func(c alertChannel) bool { return c.ID == id }) {
+				return badInput("unknown channel " + strconv.FormatInt(id, 10))
+			}
+		}
+		rule.Channels = in.Channels
+	} else if len(rule.Channels) == 0 && len(chans) > 0 {
+		rule.Channels = []int64{chans[0].ID}
+	}
+	if in.Failures != 0 {
+		rule.Spec.Threshold = float64(in.Failures)
+	}
+	if rule.Enabled == old.Enabled && slices.Equal(rule.Channels, old.Channels) && rule.Spec.Threshold == old.Spec.Threshold {
+		return nil
+	}
+	if err := s.updateRule(ctx, &rule); err != nil {
+		return err
+	}
+	s.alertEngine().invalidate(rule.ID)
+	s.recordHistory(r, "update", &old, &rule)
+	s.audit(r, "alert.rule.update", rule.Name, map[string]any{"id": rule.ID, "default": true})
+	return nil
+}
+
 // setCheckAlert applies a check's alert settings.
 func (s *Server) setCheckAlert(r *http.Request, c UptimeCheck, in checkAlertInput) error {
 	ctx := r.Context()
@@ -187,8 +245,7 @@ func (s *Server) setCheckAlert(r *http.Request, c UptimeCheck, in checkAlertInpu
 			}
 		}
 		s.alertEngine().invalidate(0)
-		_, err := s.ensureDefaultUptimeRule(r)
-		return err
+		return s.useDefaultUptimeRule(r, in)
 	case "custom", "off":
 	default:
 		return badInput("alert mode must be default, custom or off")

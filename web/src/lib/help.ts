@@ -349,7 +349,7 @@ agent, err := visionary.New(cfg)`,
     title: "1. Create a client key",
     intro:
       "Web and mobile apps don't write to the database; they post to this server with a public client key. Client keys can only send events, so they are safe to ship in an app.",
-    any: { note: "Create one with the Client ingest scope in Settings → API keys (or list your own under Settings → Server → Ingest → Client keys). For a website, also add its origin to Settings → Server → Ingest → Allowed web origins, which applies after a restart (wildcards like `https://*.example.com` work; empty allows any)." },
+    any: { note: "Create one with the Client ingest scope in Settings → API keys (or list your own under Settings → Server → Ingest → Client keys). For a website, also add its origin to Settings → Server → Ingest → Allowed web origins (wildcards like `https://*.example.com` work; empty allows any)." },
   },
   browser: {
     id: "browser",
@@ -462,7 +462,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Total time (calls × average) ranks the statements worth tuning first. New marks a statement that did not run in the previous period.",
       "Queries per request well above its median on some requests usually means a loop issuing one query per item (N+1).",
       "Depth counts only spans that wrap other calls (custom and GraphQL spans); database and HTTP calls never nest.",
-      "A plan's warnings point at full scans of large tables and sorts an index would avoid. Explain in plain words asks the analyst.",
+      "A plan's warnings point at full scans of large tables and sorts an index would avoid, with the CREATE INDEX to copy when the filter is simple. Explain in plain words asks the analyst.",
     ],
     setup: ["db", "release", "graphql", "explain", "spans"],
   },

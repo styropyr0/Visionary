@@ -163,6 +163,7 @@ func otlpIsRequest(sp *otlpSpan) bool {
 // ancestor is still missing go back to pending until otlpHold has passed.
 // The caller holds o.mu.
 func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows *otlpRows) {
+	spansOn, threshold := o.spansOn(), o.thresholdMs()
 	reqs := map[string]*otlpReqInfo{}
 	for sid, sp := range group {
 		if otlpIsRequest(sp) {
@@ -228,8 +229,8 @@ func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows
 			}
 		}
 		status := otlpRequestStatus(sp)
-		r.keepSpans = o.spansOn
-		if !o.spansOn {
+		r.keepSpans = spansOn
+		if !spansOn {
 			rows.add(otlpRequestsTable, otlpRequestRow(sp, r, status, nil, nil, nil, nil))
 		} else {
 			rows.add(otlpRequestsTable, otlpRequestRow(sp, r, status, dbCount, otlpRound(dbMs), httpCount, otlpRound(httpMs)))
@@ -244,7 +245,7 @@ func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows
 		o.addChildren(rows, r, kids, expires)
 	}
 	for _, sp := range orphans {
-		if o.spansOn && otlpDurationMs(sp.sp) >= o.thresholdMs {
+		if spansOn && otlpDurationMs(sp.sp) >= threshold {
 			rows.add(otlpSpansTable, otlpSpanRow(sp, nil))
 		}
 		o.addErrors(rows, sp, nil)
@@ -255,8 +256,9 @@ func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows
 // their exceptions. The caller holds o.mu.
 func (o *otlpState) addChildren(rows *otlpRows, r *otlpReqInfo, kids []*otlpSpan, expires time.Time) {
 	sort.Slice(kids, func(i, j int) bool { return kids[i].sp.StartTimeUnixNano < kids[j].sp.StartTimeUnixNano })
+	spanMax := o.spanMax()
 	for _, c := range kids {
-		if r.keepSpans && r.stored < o.spanMax {
+		if r.keepSpans && r.stored < spanMax {
 			rows.add(otlpSpansTable, otlpSpanRow(c, r))
 			r.stored++
 		}
@@ -536,7 +538,7 @@ func otlpSpanRow(sp *otlpSpan, r *otlpReqInfo) []any {
 
 // addErrors stores the span's exception events. The caller holds o.mu.
 func (o *otlpState) addErrors(rows *otlpRows, sp *otlpSpan, r *otlpReqInfo) {
-	if !o.errorsOn {
+	if !o.errorsOn() {
 		return
 	}
 	for _, ev := range sp.sp.Events {

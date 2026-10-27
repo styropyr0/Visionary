@@ -47,6 +47,12 @@ func newUptimeRunner(s *Server, set uptimeSettings) *uptimeRunner {
 	return &uptimeRunner{s: s, set: set, wake: make(chan struct{}, 1), running: map[int64]bool{}}
 }
 
+// allowPrivate reads the setting on every check, so allowing private
+// addresses applies without a restart.
+func (u *uptimeRunner) allowPrivate() bool {
+	return u.set.allowPrivate || u.s.confBool("uptime_allow_private")
+}
+
 func runnerFor(s *Server) *uptimeRunner {
 	if v, ok := uptimeRunners.Load(s); ok {
 		return v.(*uptimeRunner)
@@ -280,7 +286,7 @@ func span(a, b time.Time) *float64 {
 func (u *uptimeRunner) client(c UptimeCheck) *http.Client {
 	timeout := time.Duration(c.TimeoutMs) * time.Millisecond
 	dialer := &net.Dialer{Timeout: timeout}
-	if !u.set.allowPrivate {
+	if !u.allowPrivate() {
 		dialer.Control = dialGuard
 	}
 	return &http.Client{
@@ -303,7 +309,7 @@ func (u *uptimeRunner) client(c UptimeCheck) *http.Client {
 			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 				return fmt.Errorf("redirect to unsupported scheme %q", req.URL.Scheme)
 			}
-			if !u.set.allowPrivate {
+			if !u.allowPrivate() {
 				return precheckURL(req.URL)
 			}
 			return nil
@@ -327,7 +333,7 @@ func (u *uptimeRunner) probe(ctx context.Context, c UptimeCheck) (res uptimeResu
 	if err != nil {
 		return fail(errors.New("invalid URL"))
 	}
-	if !u.set.allowPrivate {
+	if !u.allowPrivate() {
 		if err := precheckURL(target); err != nil {
 			return fail(err)
 		}

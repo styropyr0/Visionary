@@ -23,6 +23,7 @@ func (s *Server) telemetryRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/telemetry/spans/detail", s.authed(s.handleSpanDetail))
 	mux.Handle("GET /api/telemetry/nplusone", s.authed(s.handleNPlusOne))
 	mux.Handle("GET /api/telemetry/routes", s.authed(s.handleRouteCalls))
+	mux.Handle("GET /api/telemetry/routes/detail", s.authed(s.handleRouteDetail))
 	mux.Handle("GET /api/telemetry/releases", s.authed(s.handleReleases))
 	mux.Handle("GET /api/telemetry/versions", s.authed(s.handleVersions))
 	mux.Handle("GET /api/telemetry/compare", s.authed(s.handleCompareVersions))

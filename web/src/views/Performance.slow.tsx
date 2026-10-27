@@ -247,7 +247,7 @@ function RouteGroups({
   );
 }
 
-function GroupRequests({ method, route, excludes, openLog, onOpenLog }: { method: string; route: string; excludes: string[]; openLog: number | null; onOpenLog: (id: number | null) => void }) {
+export function GroupRequests({ method, route, excludes, openLog, onOpenLog }: { method: string; route: string; excludes: string[]; openLog: number | null; onOpenLog: (id: number | null) => void }) {
   const q = useSlow(excludes, { method, route });
   if (q.error) return <div className="panel-state error">{q.error.message}</div>;
   if (!q.data) return <div className="panel-state" style={{ height: 80 }} aria-busy />;

@@ -741,6 +741,26 @@
   line-height: 1.55;
 }
 
+.qp-review {
+  margin-top: 10px;
+}
+
+.qp-verdict {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.qp-verdict.warn svg {
+  color: var(--warning-text);
+}
+
+.qp-verdict.ok svg {
+  color: var(--good-text);
+}
+
 .qp-findings {
   display: flex;
   flex-direction: column;
@@ -752,22 +772,70 @@
   line-height: 1.5;
 }
 
-.qp-findings li {
+.qp-finding {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.qp-finding-head {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.qp-findings li svg {
+.qp-finding-head svg {
   flex: none;
-  margin-top: 3px;
 }
 
-.qp-findings li.warning svg {
+.qp-finding.warning .qp-finding-head svg {
   color: var(--warning-text);
 }
 
-.qp-findings li.info svg {
+.qp-finding.info .qp-finding-head svg {
   color: var(--text-3);
+}
+
+.qp-finding-head code,
+.qp-review .qp-note code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.qp-rows {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.qp-finding-detail {
+  margin: 3px 0 0 19px;
+  color: var(--text-2);
+}
+
+.qp-index {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0 19px;
+  padding: 4px 4px 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.qp-index code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.qp-approx {
+  color: var(--text-2);
+  font-weight: 600;
 }
 
 .qp-plan {
@@ -1242,4 +1310,28 @@
 .pv-row.labelled .pv-cost,
 .pv-row.labelled .pv-elbow {
   margin-top: 18px;
+}
+
+.wf-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+/* A route's example request: which one, then its waterfall. */
+.rw-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.rw-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

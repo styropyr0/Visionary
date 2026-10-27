@@ -77,6 +77,7 @@ func (s *Server) handleAgentReport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "too many concurrent reports")
 		return
 	}
+	syncLimit(h.limiter, s.confInt("agent_rate"))
 	if !h.limiter.Allow() {
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusTooManyRequests, "report rate exceeded")

@@ -92,15 +92,15 @@ var confDefs = []confDef{
 
 	{Key: "ingest_keys", Group: "ingest", Label: "Server keys", Help: "Comma-separated keys SDKs, OpenTelemetry and host agents may send with.", Kind: confSecret},
 	{Key: "client_keys", Group: "ingest", Label: "Client keys", Help: "Comma-separated keys for browser and mobile apps.", Kind: confSecret},
-	{Key: "client_origins", Group: "ingest", Label: "Allowed web origins", Help: "Comma-separated, e.g. https://app.example.com. Empty allows any.", Kind: confText, Restart: true},
-	{Key: "client_rate_per_ip", Group: "ingest", Label: "Frontend events per IP per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "120", Max: 1000000, Restart: true},
-	{Key: "client_rate_per_key", Group: "ingest", Label: "Frontend events per key per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "6000", Max: 10000000, Restart: true},
-	{Key: "otlp_rate", Group: "ingest", Label: "OpenTelemetry requests per second", Kind: confInt, Default: "50", Max: 100000, Restart: true},
-	{Key: "agent_rate", Group: "ingest", Label: "Host agent reports per second", Kind: confInt, Default: "50", Max: 100000, Restart: true},
-	{Key: "spans", Group: "ingest", Label: "Keep OpenTelemetry spans", Kind: confBool, Default: "true", Restart: true},
-	{Key: "errors", Group: "ingest", Label: "Keep OpenTelemetry errors", Kind: confBool, Default: "true", Restart: true},
-	{Key: "span_threshold_ms", Group: "ingest", Label: "Span threshold outside requests (ms)", Kind: confInt, Default: "100", Max: 600000, Restart: true},
-	{Key: "span_max", Group: "ingest", Label: "Spans kept per request", Kind: confInt, Default: "100", Max: 10000, Restart: true},
+	{Key: "client_origins", Group: "ingest", Label: "Allowed web origins", Help: "Comma-separated, e.g. https://app.example.com. Empty allows any.", Kind: confText},
+	{Key: "client_rate_per_ip", Group: "ingest", Label: "Frontend events per IP per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "120", Max: 1000000},
+	{Key: "client_rate_per_key", Group: "ingest", Label: "Frontend events per key per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "6000", Max: 10000000},
+	{Key: "otlp_rate", Group: "ingest", Label: "OpenTelemetry requests per second", Kind: confInt, Default: "50", Max: 100000},
+	{Key: "agent_rate", Group: "ingest", Label: "Host agent reports per second", Kind: confInt, Default: "50", Max: 100000},
+	{Key: "spans", Group: "ingest", Label: "Keep OpenTelemetry spans", Kind: confBool, Default: "true"},
+	{Key: "errors", Group: "ingest", Label: "Keep OpenTelemetry errors", Kind: confBool, Default: "true"},
+	{Key: "span_threshold_ms", Group: "ingest", Label: "Span threshold outside requests (ms)", Kind: confInt, Default: "100", Max: 600000},
+	{Key: "span_max", Group: "ingest", Label: "Spans kept per request", Kind: confInt, Default: "100", Max: 10000},
 
 	{Key: "security", Group: "security", Label: "Detectors on", Kind: confBool, Default: "true", Restart: true},
 	{Key: "security_interval", Group: "security", Label: "Scan every", Kind: confDuration, Default: "1m", Min: 10, Restart: true},
@@ -143,7 +143,7 @@ var confDefs = []confDef{
 	{Key: "security_action_secret", Group: "security_response", Label: "Webhook signing secret", Help: "Signs each call with HMAC-SHA256 in the X-Visionary-Signature header.", Kind: confSecret},
 
 	{Key: "rollups", Group: "other", Label: "Chart summaries", Help: "Pre-aggregate requests and system metrics so long ranges load fast.", Kind: confBool, Default: "true", Restart: true},
-	{Key: "uptime_allow_private", Group: "other", Label: "Uptime checks may reach private addresses", Kind: confBool, Default: "false", Restart: true},
+	{Key: "uptime_allow_private", Group: "other", Label: "Uptime checks may reach private addresses", Kind: confBool, Default: "false"},
 	{Key: "update_check", Group: "other", Label: "Check for new versions", Kind: confBool, Default: "true"},
 }
 
@@ -304,7 +304,7 @@ func (s *Server) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": confGroups, "settings": s.confView()})
+	writeJSON(w, http.StatusOK, map[string]any{"groups": confGroups, "settings": s.confView(), "restart_pending": s.restartPending()})
 }
 
 // handleRevealSecret shows one stored secret to an admin who asks for it. The

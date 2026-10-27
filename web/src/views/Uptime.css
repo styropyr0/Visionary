@@ -135,18 +135,20 @@ table.data.up-table td {
   white-space: nowrap;
 }
 .up-head-last { white-space: nowrap; }
+/* Icons beside text are centred on the first line, not on the block,
+   since the text can wrap. */
 .up-alert {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--critical);
+  border: 1px solid color-mix(in srgb, var(--critical) 35%, transparent);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--critical) 8%, var(--surface-2));
   color: var(--text-1);
+  line-height: 20px;
 }
-.up-alert svg { color: var(--critical-text); flex: none; }
+.up-alert svg { flex: none; margin-top: calc((20px - 15px) / 2); color: var(--critical-text); }
 .up-err {
   color: var(--text-2);
 }
@@ -196,37 +198,75 @@ table.data.up-table td {
 .up-cert-warn { color: var(--warning-text); }
 
 /* How a check is alerted on: a quiet line when someone hears about it, a
-   warning when nobody does. */
-.up-alert-ok,
-.up-alert-gap {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+   warning with a fix when nobody does. The text gives way before the button. */
+.up-alert-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
   max-width: 100%;
-  margin-top: 2px;
-  overflow: hidden;
+  margin-top: 4px;
+  color: var(--text-3);
   font-size: 11.5px;
+  line-height: 18px;
+}
+.up-alert-line > svg { flex: none; margin-top: calc((18px - 12px) / 2); }
+.up-alert-text {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.up-alert-ok { color: var(--text-3); }
-.up-alert-gap {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--warning-text);
+.up-alert-line.gap { color: var(--warning-text); }
+.up-alert-fix {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  line-height: 1;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-1);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
 }
-.up-alert-gap:hover { text-decoration: underline; }
-.up-alert-gap.static { cursor: default; }
-.up-alert-gap.static:hover { text-decoration: none; }
+.up-alert-fix:hover { background: var(--hover-wash); border-color: var(--accent); }
 
 .up-coverage {
   align-items: center;
+  gap: 12px;
 }
-.up-coverage > span { flex: 1; }
+/* With the headline, not the middle of both lines. */
+.up-coverage > svg { align-self: flex-start; margin-top: calc((1.45em - 16px) / 2); }
+.up-coverage-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.45;
+}
+.up-coverage-text strong { color: var(--text-1); font-weight: 600; }
+.up-coverage .btn { flex: none; }
+.up-coverage .btn svg { color: inherit; margin-top: 0; }
+@media (max-width: 640px) {
+  .up-coverage { flex-wrap: wrap; }
+  .up-coverage .btn { margin-left: 26px; }
+}
+
+/* The setup dialog when there is nowhere to send an alert. */
+.up-no-channels {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+.up-no-channels > svg { flex: none; margin-top: 1px; color: var(--text-3); }
+.up-no-channels p { margin: 4px 0 10px; line-height: 1.5; }
 
 .up-alerts {
   display: flex;

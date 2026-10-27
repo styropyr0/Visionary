@@ -57,6 +57,8 @@ func (s *Server) Start(ctx context.Context) {
 		go s.retrySchema(ctx)
 	}
 	s.liveStart(ctx)
+	// After the settings load, before anything reads its restart-only ones.
+	s.noteStartConfig()
 	s.releasesStart()
 	s.alertsStart(ctx)
 	s.uptimeStart(ctx)

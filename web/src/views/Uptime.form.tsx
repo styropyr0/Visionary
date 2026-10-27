@@ -3,7 +3,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
-import { deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type CheckInput, type UptimeCheck } from "../lib/uptime";
+import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type CheckInput, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
 
@@ -56,7 +56,12 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
-      const { check: saved, alert_error } = await saveCheck({ ...form, headers: h, alert: touched ? alert : undefined }, check?.id);
+      // The rule for every check is shared, so choosing it sends none of this
+      // form's channels or failures; the server turns it on if it was off. It
+      // is sent untouched too when nobody would hear, so saving fixes that.
+      const shared = alert.mode === "default";
+      const send = touched || !check || (shared && !!alertGap(current.data?.alert));
+      const { check: saved, alert_error } = await saveCheck({ ...form, headers: h, alert: send ? (shared ? { mode: "default" } : alert) : undefined }, check?.id);
       if (alert_error) toast("err", `Saved, but its alert was not: ${alert_error}`);
       else toast("ok", check ? `Saved “${saved.name}”` : `Created “${saved.name}”`);
       onSaved(saved);

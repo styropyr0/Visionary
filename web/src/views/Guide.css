@@ -274,8 +274,11 @@
   position: absolute;
   top: 14px;
   right: 14px;
+  /* Over the dimmed screenshot in either theme. */
+  background: rgba(0, 0, 0, 0.45);
   color: #f0efec;
 }
+.guide-zoom .icon-btn:hover { background: rgba(0, 0, 0, 0.65); }
 
 @media (max-width: 860px) {
   .content.guide {

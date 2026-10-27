@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ConnectCard } from "../components/ConnectCard";
 import { useConnected } from "../lib/meta";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
@@ -15,6 +15,7 @@ import { Select } from "../components/Select";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { logIdFor } from "../components/telemetry/PerfPanels";
 import { SpanDetailDrawer } from "../components/telemetry/SpanDetail";
+import { statementFromHash } from "../components/telemetry/QueryViewerLink";
 import { KIND_COLOR } from "../components/telemetry/Waterfall";
 import { LogDetail } from "./Logs";
 import "../components/telemetry/telemetry.css";
@@ -62,7 +63,25 @@ export function Queries() {
     setTabState(t);
     save(TAB_KEY, t);
   };
-  const [open, setOpen] = useState<Open | null>(null);
+  // "#/queries?name=…&detail=…" (Open in Query Viewer) opens that statement.
+  const fromLink = (): Open | null => {
+    const st = statementFromHash();
+    return st && { kind: "db", name: st.name, detail: st.detail || undefined };
+  };
+  const [open, setOpenState] = useState<Open | null>(fromLink);
+  useEffect(() => {
+    const onHash = () => {
+      const o = fromLink();
+      if (o) setOpenState(o);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const setOpen = (o: Open | null) => {
+    setOpenState(o);
+    // Closing drops the statement from the address, so a reload shows the list.
+    if (!o && statementFromHash()) history.replaceState(null, "", "#/queries");
+  };
   const [openLog, setOpenLog] = useState<number | null>(null);
   const openRequest = (requestId: string) => {
     logIdFor(requestId)
@@ -103,7 +122,7 @@ export function Queries() {
           <ConnectCard title="Connect your API to see its queries" text="Every statement your services run against their databases, how often and for how long, with the requests that ran them and their query plans." />
         )}
       </div>
-      {open && <SpanDetailDrawer kind={open.kind} name={open.name} detail={open.detail} onClose={() => setOpen(null)} onOpenRequest={openRequest} />}
+      {open && <SpanDetailDrawer kind={open.kind} name={open.name} detail={open.detail} inQueryViewer onClose={() => setOpen(null)} onOpenRequest={openRequest} />}
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}
     </>
   );

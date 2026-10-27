@@ -95,7 +95,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Rank the routes",
-        text: "**Routes by server time** puts the routes where speeding up pays most at the top. **Regressions** lists routes slower than in the previous period.",
+        text: "**Routes by server time** puts the routes where speeding up pays most at the top; open one for its latency over time, a request of it call by call, its status codes and slowest requests. **Regressions** lists routes slower than in the previous period.",
       },
       {
         title: "Open a slow request",
@@ -137,7 +137,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Ask for a plan",
-        text: "Open a statement and look at its **Query plan**: your SDK runs EXPLAIN, Visionary points out full scans and missing indexes, and **Explain in plain words** asks the analyst. This needs the explainer hook; see **Help** on this page.",
+        text: "Open a statement and look at its **Query plan**: your SDK runs EXPLAIN, Visionary points out full scans and suggests the index to add, and **Explain in plain words** asks the analyst. This needs the explainer hook; see **Help** on this page. Anywhere else a statement appears (a request's calls, a route), **Open in Query Viewer** brings you here with it open.",
       },
     ],
   },
@@ -522,7 +522,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Configure the server",
-        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within 30 seconds; a few are marked **After restart**.",
+        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within 30 seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
       },
       {
         title: "Tidy the sidebar",

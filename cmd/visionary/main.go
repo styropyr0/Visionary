@@ -68,10 +68,24 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	restart := false
+	select {
+	case <-ctx.Done():
+	case <-srv.RestartRequested():
+		restart = true
+	}
+	// Background work stops with the context.
+	stop()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", "err", err)
+	}
+	if restart {
+		logger.Info("restarting")
+		if err := relaunch(); err != nil {
+			logger.Error("restart failed; start Visionary again by hand", "err", err)
+			os.Exit(1)
+		}
 	}
 }

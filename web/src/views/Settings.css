@@ -622,6 +622,32 @@
 
 /* ---------- Server and Sign-in ---------- */
 
+.settings-intro-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.settings-intro-row .settings-intro { flex: 1; }
+.settings-intro-row .btn { flex: none; }
+
+/* Saved settings waiting for a restart; the icon sits with the headline. */
+.restart-notice { align-items: center; gap: 12px; }
+.restart-notice > svg { align-self: flex-start; margin-top: calc((1.45em - 16px) / 2); }
+.restart-notice-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.45;
+}
+.restart-notice-text strong { color: var(--text-1); font-weight: 600; }
+.restart-notice .btn { flex: none; }
+.restart-notice .btn svg { color: inherit; margin-top: 0; }
+@media (max-width: 640px) {
+  .settings-intro-row, .restart-notice { flex-wrap: wrap; }
+}
+
 .settings-intro {
   margin: 0;
   font-size: 12.5px;

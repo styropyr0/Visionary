@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
@@ -18,7 +19,8 @@ import (
 // rumState is the feature's runtime state. The Server struct is shared by
 // every feature, so the state hangs off it through rumStates instead.
 type rumState struct {
-	origins []string // allowed browser origins; empty allows any
+	s       *Server
+	origins atomic.Pointer[rumOrigins] // parsed client_origins, kept until it changes
 	limits  *rumLimiter
 	writer  *rumWriter
 }
@@ -30,8 +32,8 @@ func (s *Server) rum() *rumState {
 		return st.(*rumState)
 	}
 	st := &rumState{
-		origins: parseOrigins(s.conf("client_origins")),
-		limits:  newRUMLimiter(s.confInt("client_rate_per_ip"), s.confInt("client_rate_per_key")),
+		s:       s,
+		limits:  newRUMLimiter(s),
 		writer:  newRUMWriter(s),
 	}
 	actual, _ := rumStates.LoadOrStore(s, st)

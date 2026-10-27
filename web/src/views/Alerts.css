@@ -979,9 +979,10 @@ table.al-rules tr.selected td {
   gap: 6px;
 }
 
+/* The icon sits beside the title, not halfway down the hint. */
 .al-kind-opt {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -1009,7 +1010,13 @@ table.al-rules tr.selected td {
   min-width: 0;
 }
 
+.al-kind-opt > svg {
+  flex: none;
+  margin-top: calc((20px - 15px) / 2);
+}
+
 .al-kind-opt strong {
+  line-height: 20px;
   font-weight: 500;
   color: var(--text-1);
 }

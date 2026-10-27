@@ -106,6 +106,7 @@ func (s *Server) otlpHandler(rejectedField string, ingest func(*otlpState, *otlp
 			req.fail(w, http.StatusTooManyRequests, "too many concurrent exports")
 			return
 		}
+		syncLimit(o.limiter, o.s.confInt("otlp_rate"))
 		if !o.limiter.Allow() {
 			w.Header().Set("Retry-After", "1")
 			req.fail(w, http.StatusTooManyRequests, "export rate exceeded")

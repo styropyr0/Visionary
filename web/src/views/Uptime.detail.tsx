@@ -11,7 +11,7 @@ import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
 import { formatDuration, formatInterval, formatUptime, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
-import { CheckAlertLine } from "./Uptime.alerts";
+import { CheckAlertLine, DefaultRuleModal } from "./Uptime.alerts";
 import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, StateBadge } from "./Uptime.parts";
@@ -31,6 +31,7 @@ export function UptimeDetail({ id }: { id: number }) {
   const tokens = useChartTokens();
   const [version, setVersion] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [running, setRunning] = useState(false);
   const reload = () => setVersion((v) => v + 1);
   const key = `${id}#${resolved.from.toISOString()}#${resolved.to.toISOString()}#${tick}#${version}`;
@@ -126,7 +127,7 @@ export function UptimeDetail({ id }: { id: number }) {
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
                   </div>
-                  {alert.data && c.enabled && <CheckAlertLine alert={alert.data.alert} canEdit={!!s.can_edit} onFix={() => setEditing(true)} />}
+                  {alert.data && c.enabled && <CheckAlertLine alert={alert.data.alert} canEdit={!!s.can_edit} onFix={() => setFixing(true)} />}
                 </div>
                 <div className="up-head-last dim">
                   {st.last_at ? (
@@ -250,6 +251,16 @@ export function UptimeDetail({ id }: { id: number }) {
           </div>
         )}
       </div>
+      {fixing && c && alert.data && (
+        <DefaultRuleModal
+          checks={[{ check: c, alert: alert.data.alert }]}
+          onClose={() => setFixing(false)}
+          onDone={() => {
+            setFixing(false);
+            reload();
+          }}
+        />
+      )}
       {editing && c && (
         <CheckDrawer
           check={c}

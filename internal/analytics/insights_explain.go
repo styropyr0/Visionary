@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,9 @@ type explainFinding struct {
 	Severity string `json:"severity"` // "warning" or "info"
 	Title    string `json:"title"`
 	Detail   string `json:"detail"`
+	Table    string `json:"table,omitempty"`
+	Rows     int    `json:"rows,omitempty"`  // the planner's estimate, when it gives one
+	Index    string `json:"index,omitempty"` // a CREATE INDEX that would serve the filter
 }
 
 func (s *Server) latestExplain(ctx context.Context, target, statement string) (*explainRequest, error) {
@@ -163,7 +167,39 @@ var (
 	pgFilter    = regexp.MustCompile(`^\s*Filter: (.+)$`)
 	pgSort      = regexp.MustCompile(`^\s*(?:->\s*)?Sort\s+\(cost=[\d.]+\.\.[\d.]+ rows=(\d+)`)
 	sqliteScan  = regexp.MustCompile(`^\s*SCAN (?:TABLE )?(\S+)(.*)$`)
+	pgHash      = regexp.MustCompile(`^\s*(?:->\s*)?Hash\s+\(cost=`)
+	// "(status = 'paid'::text)", "(user_id = $1)": a bare column compared
+	// with a value, the kind of condition a plain index serves.
+	pgEquality = regexp.MustCompile(`\(?\b([a-z_][a-z0-9_]*)\s*(?:=|<=|>=|<|>)\s*(?:\$\d+|'[^']*'|[\d.]+|NULL)`)
 )
+
+// filterColumns are the columns a plain index would serve in a scan's filter:
+// equality and range tests of a bare column, in order, at most three. A
+// filter with LIKE, functions or OR gets none, since a plain index on its
+// columns may not help.
+func filterColumns(filter string) []string {
+	if strings.Contains(filter, "~~") || strings.Contains(filter, " OR ") || strings.Contains(filter, "SubPlan") {
+		return nil
+	}
+	var cols []string
+	for _, m := range pgEquality.FindAllStringSubmatch(filter, -1) {
+		if c := m[1]; !slices.Contains(cols, c) && len(cols) < 3 {
+			cols = append(cols, c)
+		}
+	}
+	return cols
+}
+
+// underHash tells whether the node on line i feeds a Hash node, i.e. the
+// table is read to build one side of a hash join.
+func underHash(lines []string, i int) bool {
+	for j := i - 1; j >= 0 && j >= i-2; j-- {
+		if pgHash.MatchString(lines[j]) {
+			return true
+		}
+	}
+	return false
+}
 
 // planFindings points out what usually makes a statement slow: full table
 // scans of big tables (with the filter an index could serve), large sorts
@@ -186,19 +222,31 @@ func planFindings(target, plan string) []explainFinding {
 				// The scan's own cost tells a big table from a small one; a
 				// filtered scan of a few pages is cheaper than using an index.
 				cost, _ := strconv.ParseFloat(m[2], 64)
-				sev, why := "info", "Reads the whole table; fine while it stays small."
+				table := m[1]
+				f := explainFinding{Severity: "info", Title: "Small table read in full", Table: table, Rows: rows,
+					Detail: "Cheaper than an index at this size; worth a look only if " + table + " grows."}
 				if rows >= 1000 || (filter != "" && cost >= 1000) {
-					sev = "warning"
-					why = "Reads every row of " + m[1] + " to find the ones it needs (the planner expects " + strconv.Itoa(rows) + ")."
-					if filter != "" {
-						why += " An index on the columns in " + filter + " would let it read only the matching rows."
+					f.Severity, f.Title = "warning", "Full scan of "+table
+					switch {
+					case filter != "":
+						f.Detail = "Reads every row of " + table + " and keeps those matching " + filter + "."
+						if cols := filterColumns(filter); len(cols) > 0 {
+							f.Index = "CREATE INDEX ON " + table + " (" + strings.Join(cols, ", ") + ");"
+							f.Detail += " An index on " + strings.Join(cols, ", ") + " lets it read only the matching rows."
+						} else {
+							f.Detail += " An index on the columns in that filter would let it read only the matching rows."
+						}
+					case underHash(lines, i):
+						f.Detail = "Reads all of " + table + " to build a hash table for a join. That is right when the join needs most of its rows; when it needs a few, an index on the join column lets it look them up instead."
+					default:
+						f.Detail = "Reads all of " + table + " with no filter. Fine when the query needs every row; otherwise add a WHERE clause or a LIMIT."
 					}
 				}
-				out = append(out, explainFinding{sev, "Full scan of " + m[1], why})
+				out = append(out, f)
 			}
 			if m := pgSort.FindStringSubmatch(l); m != nil {
 				if rows, _ := strconv.Atoi(m[1]); rows >= 10000 {
-					out = append(out, explainFinding{"warning", "Large sort", "Sorts about " + m[1] + " rows; an index matching the ORDER BY avoids the sort."})
+					out = append(out, explainFinding{Severity: "warning", Title: "Large sort", Rows: rows, Detail: "Sorts about " + m[1] + " rows in memory or on disk; an index matching the ORDER BY returns them already sorted."})
 				}
 			}
 		}
@@ -214,14 +262,14 @@ func planFindings(target, plan string) []explainFinding {
 				table = v
 			case "type":
 				if v == "ALL" {
-					out = append(out, explainFinding{"warning", "Full scan of " + table, "MySQL reads every row of " + table + "; an index on the columns in the WHERE clause would avoid it."})
+					out = append(out, explainFinding{Severity: "warning", Title: "Full scan of " + table, Table: table, Detail: "MySQL reads every row of " + table + "; an index on the columns in the WHERE clause would avoid it."})
 				}
 			case "Extra":
 				if strings.Contains(v, "Using filesort") {
-					out = append(out, explainFinding{"warning", "Sort without an index", "Rows of " + table + " are sorted after reading; an index matching the ORDER BY avoids it."})
+					out = append(out, explainFinding{Severity: "warning", Title: "Sort without an index", Table: table, Detail: "Rows of " + table + " are sorted after reading; an index matching the ORDER BY avoids it."})
 				}
 				if strings.Contains(v, "Using temporary") {
-					out = append(out, explainFinding{"warning", "Temporary table", "MySQL builds a temporary table for " + table + " (usually GROUP BY or DISTINCT)."})
+					out = append(out, explainFinding{Severity: "warning", Title: "Temporary table", Table: table, Detail: "MySQL builds a temporary table for " + table + " (usually GROUP BY or DISTINCT)."})
 				}
 			}
 		}
@@ -229,10 +277,10 @@ func planFindings(target, plan string) []explainFinding {
 		for _, l := range lines {
 			t := strings.TrimSpace(l)
 			if m := sqliteScan.FindStringSubmatch(t); m != nil && !strings.Contains(m[2], "USING") && !strings.Contains(m[2], "INDEX") {
-				out = append(out, explainFinding{"warning", "Full scan of " + m[1], "SQLite reads every row of " + m[1] + "; an index on the columns in the WHERE clause would avoid it."})
+				out = append(out, explainFinding{Severity: "warning", Title: "Full scan of " + m[1], Table: m[1], Detail: "SQLite reads every row of " + m[1] + "; an index on the columns in the WHERE clause would avoid it."})
 			}
 			if strings.Contains(t, "USE TEMP B-TREE") {
-				out = append(out, explainFinding{"warning", "Temporary sort", t + ": an index matching it avoids the extra sort."})
+				out = append(out, explainFinding{Severity: "warning", Title: "Temporary sort", Detail: t + ": an index matching it avoids the extra sort."})
 			}
 		}
 	}

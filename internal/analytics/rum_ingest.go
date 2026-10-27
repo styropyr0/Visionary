@@ -161,12 +161,30 @@ func clientKey(r *http.Request) string {
 	return r.URL.Query().Get("key")
 }
 
+// rumOrigins is the allowed browser origins setting, raw and parsed.
+type rumOrigins struct {
+	raw  string
+	list []string // empty allows any
+}
+
+// allowedOrigins follows Settings → Server, parsing only when it changed.
+func (st *rumState) allowedOrigins() []string {
+	raw := st.s.conf("client_origins")
+	if p := st.origins.Load(); p != nil && p.raw == raw {
+		return p.list
+	}
+	p := &rumOrigins{raw: raw, list: parseOrigins(raw)}
+	st.origins.Store(p)
+	return p.list
+}
+
 func (st *rumState) originAllowed(origin string) bool {
-	if len(st.origins) == 0 {
+	origins := st.allowedOrigins()
+	if len(origins) == 0 {
 		return true
 	}
 	origin = strings.ToLower(strings.TrimRight(origin, "/"))
-	for _, o := range st.origins {
+	for _, o := range origins {
 		if o == "*" || o == origin {
 			return true
 		}
@@ -464,9 +482,11 @@ func normalizeURLPath(u string) string {
 
 // rumLimiter is a token bucket per client IP and per key, in requests per
 // minute; 0 turns a limit off.
+// rumLimiter limits events per IP and per key, at the rates in Settings →
+// Server, read on each event so a change applies without a restart.
 type rumLimiter struct {
-	perIP, perKey int
-	mu            sync.Mutex
+	s         *Server
+	mu        sync.Mutex
 	ips, keys     map[string]*seenLimiter
 }
 
@@ -475,16 +495,16 @@ type seenLimiter struct {
 	seen time.Time
 }
 
-func newRUMLimiter(perIP, perKey int) *rumLimiter {
-	return &rumLimiter{perIP: perIP, perKey: perKey, ips: map[string]*seenLimiter{}, keys: map[string]*seenLimiter{}}
+func newRUMLimiter(s *Server) *rumLimiter {
+	return &rumLimiter{s: s, ips: map[string]*seenLimiter{}, keys: map[string]*seenLimiter{}}
 }
 
-func (l *rumLimiter) allowIP(ip string) bool { return l.allow(l.ips, ip, l.perIP) }
+func (l *rumLimiter) allowIP(ip string) bool { return l.allow(l.ips, ip, l.s.confInt("client_rate_per_ip")) }
 
 // allowKey limits by the key's hash, so the map never holds keys themselves.
 func (l *rumLimiter) allowKey(key string) bool {
 	sum := sha256.Sum256([]byte(key))
-	return l.allow(l.keys, hex.EncodeToString(sum[:8]), l.perKey)
+	return l.allow(l.keys, hex.EncodeToString(sum[:8]), l.s.confInt("client_rate_per_key"))
 }
 
 func (l *rumLimiter) allow(m map[string]*seenLimiter, id string, perMinute int) bool {
@@ -498,6 +518,9 @@ func (l *rumLimiter) allow(m map[string]*seenLimiter, id string, perMinute int) 
 		// A burst of half a minute's allowance absorbs page-unload flushes.
 		e = &seenLimiter{lim: rate.NewLimiter(rate.Limit(float64(perMinute)/60), max(1, perMinute/2))}
 		m[id] = e
+	} else if r := rate.Limit(float64(perMinute) / 60); e.lim.Limit() != r {
+		e.lim.SetLimit(r)
+		e.lim.SetBurst(max(1, perMinute/2))
 	}
 	e.seen = time.Now()
 	return e.lim.Allow()

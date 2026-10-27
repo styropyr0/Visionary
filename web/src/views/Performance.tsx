@@ -20,6 +20,7 @@ import { useTelemetry } from "../lib/telemetry";
 import { CompareVersionsPanel, logIdFor, NPlusOnePanel, SpanGroupsPanel } from "../components/telemetry/PerfPanels";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SlowRequestsPanel } from "./Performance.slow";
+import { RouteDetailDrawer } from "./Performance.route";
 import { BreakdownPanel } from "../components/telemetry/Breakdown";
 import "./Insights.css";
 
@@ -59,6 +60,7 @@ export function Performance({ meta }: { meta?: Meta }) {
   const saturation = usePerf("saturation");
   const calls = useTelemetry("routes");
   const [openLog, setOpenLog] = useState<number | null>(null);
+  const [openRoute, setOpenRoute] = useState<{ method: string; route: string } | null>(null);
   const openRequest = (requestId: string) => {
     logIdFor(requestId)
       .then((id) => id !== null && setOpenLog(id))
@@ -231,12 +233,23 @@ export function Performance({ meta }: { meta?: Meta }) {
           <Panel
             className="span-12"
             title="Routes by server time"
-            description="Busy time is the sum of request durations: where the server spends its time, and so where optimizing pays off most. p95 change compares with the previous period of the same length. DB time is the share of request time spent in database calls, from SDKs that measure it."
+            description="Busy time is the sum of request durations: where the server spends its time, and so where optimizing pays off most. p95 change compares with the previous period of the same length. DB time is the share of request time spent in database calls, from SDKs that measure it. Open a route for its latency over time, a request of it call by call, its status codes and slowest requests."
             result={routeRows}
             loading={routes.loading}
             error={routes.error}
             bodyHeight={200}
-            table={routeRows && <DataTable result={routeRows} columns={routeColumns(routeRows, apdexMs)} maxHeight={460} />}
+            table={
+              routeRows && (
+                <DataTable
+                  result={routeRows}
+                  columns={routeColumns(routeRows, apdexMs)}
+                  maxHeight={460}
+                  onRowClick={(row) => setOpenRoute({ method: String(row[routeRows.columns.indexOf("method")]), route: String(row[routeRows.columns.indexOf("route")]) })}
+                  rowKey={(row) => routeKey(row, routeRows.columns)}
+                  selectedKey={openRoute ? `${openRoute.method} ${openRoute.route}` : undefined}
+                />
+              )
+            }
           />
 
           <Panel
@@ -298,6 +311,17 @@ export function Performance({ meta }: { meta?: Meta }) {
           <ConnectCard title="Connect your API to see its performance" text="Latency percentiles, Apdex, the slowest requests and what each one spent its time on, once a service with the Visionary SDK serves requests." />
         )}
       </div>
+      {openRoute && (
+        <RouteDetailDrawer
+          method={openRoute.method}
+          route={openRoute.route}
+          apdexMs={apdexMs}
+          openLog={openLog}
+          onOpenLog={setOpenLog}
+          // Escape closes the request on top first, not both drawers.
+          onClose={() => openLog === null && setOpenRoute(null)}
+        />
+      )}
       {openLog !== null && <LogDetail id={openLog} onClose={() => setOpenLog(null)} />}
     </>
   );

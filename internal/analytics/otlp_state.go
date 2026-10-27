@@ -24,10 +24,6 @@ type otlpState struct {
 	inflight chan struct{}
 	limiter  *rate.Limiter
 
-	spansOn, errorsOn bool
-	thresholdMs       float64
-	spanMax           int
-
 	mu       sync.Mutex
 	pending  map[string]*otlpPendingTrace // by trace id
 	nPending int
@@ -76,6 +72,21 @@ func (s *Server) otlp() *otlpState {
 	return o
 }
 
+// What to keep, read on each export so a change in Settings → Server
+// applies to the next one.
+func (o *otlpState) spansOn() bool        { return o.s.confBool("spans") }
+func (o *otlpState) errorsOn() bool       { return o.s.confBool("errors") }
+func (o *otlpState) thresholdMs() float64 { return float64(o.s.confInt("span_threshold_ms")) }
+func (o *otlpState) spanMax() int         { return o.s.confInt("span_max") }
+
+// syncLimit sets a limiter to the per-second rate in Settings → Server, so
+// a change applies without a restart.
+func syncLimit(l *rate.Limiter, perSecond int) {
+	if r := rate.Limit(perSecond); l.Limit() != r {
+		l.SetLimit(r)
+	}
+}
+
 // otlpStart runs the background flush until ctx ends. Ingestion also starts
 // it on the first export, so it works before this hook is wired.
 func (s *Server) otlpStart(ctx context.Context) { s.otlp().start(ctx) }
@@ -85,10 +96,6 @@ func (s *Server) newOTLPState() *otlpState {
 		s:           s,
 		inflight:    make(chan struct{}, otlpMaxInFlight),
 		limiter:     rate.NewLimiter(rate.Limit(s.confInt("otlp_rate")), 100),
-		spansOn:     s.confBool("spans"),
-		errorsOn:    s.confBool("errors"),
-		thresholdMs: float64(s.confInt("span_threshold_ms")),
-		spanMax:     s.confInt("span_max"),
 		pending:     map[string]*otlpPendingTrace{},
 		recent:      map[string]*otlpRecent{},
 		series:      map[string]otlpPoint{},

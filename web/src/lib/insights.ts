@@ -35,6 +35,11 @@ export interface ExplainFinding {
   severity: "warning" | "info";
   title: string;
   detail: string;
+  table?: string;
+  /** The planner's row estimate, when it gives one. */
+  rows?: number;
+  /** A CREATE INDEX that would serve the scan's filter. */
+  index?: string;
 }
 
 export interface ExplainRequest {

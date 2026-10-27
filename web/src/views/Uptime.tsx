@@ -11,7 +11,7 @@ import { useQuery } from "../lib/useQuery";
 import { UptimeDetail } from "./Uptime.detail";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
-import { CheckAlertLine, CoverageBanner } from "./Uptime.alerts";
+import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -43,6 +43,7 @@ function UptimeList() {
   const [version, setVersion] = useState(0);
   const list = useQuery(`uptime-list#${tick}#${version}`, (signal) => listChecks(signal));
   const [editing, setEditing] = useState<UptimeCheck | "new" | null>(null);
+  const [fixing, setFixing] = useState<CheckList["checks"][number] | null>(null);
   const [running, setRunning] = useState<number | null>(null);
   const reload = () => setVersion((v) => v + 1);
 
@@ -158,7 +159,7 @@ function UptimeList() {
                           <span className="mono dim" title={c.url}>
                             {c.method} {c.url}
                           </span>
-                          {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setEditing(c)} />}
+                          {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>
                         <td>
                           <DayBars days={s.days} />
@@ -198,6 +199,16 @@ function UptimeList() {
           </div>
         )}
       </div>
+      {fixing && (
+        <DefaultRuleModal
+          checks={[fixing]}
+          onClose={() => setFixing(null)}
+          onDone={() => {
+            setFixing(null);
+            reload();
+          }}
+        />
+      )}
       {editing && (
         <CheckDrawer
           check={editing === "new" ? undefined : editing}

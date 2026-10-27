@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Info, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, RefreshCw, Sparkles } from "lucide-react";
 import { api } from "../../lib/api";
-import type { ExplainRequest } from "../../lib/insights";
+import type { ExplainFinding, ExplainRequest } from "../../lib/insights";
 import { formatLogTime } from "../../lib/time";
+import { CopyButton } from "../Modal";
 import { RichText } from "../RichText";
 import { PlanView } from "./PlanView";
 
@@ -129,18 +130,7 @@ export function QueryPlan({ target, statement }: { target: string; statement: st
               <RichText text={summary} />
             </div>
           )}
-          {(req.findings?.length ?? 0) > 0 && (
-            <ul className="qp-findings">
-              {req.findings!.map((f, i) => (
-                <li key={i} className={f.severity}>
-                  {f.severity === "warning" ? <AlertTriangle size={13} aria-hidden /> : <Info size={13} aria-hidden />}
-                  <span>
-                    <strong>{f.title}.</strong> {f.detail}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Findings findings={req.findings ?? []} />
           <PlanText plan={req.plan || ""} />
         </>
       )}
@@ -148,15 +138,91 @@ export function QueryPlan({ target, statement }: { target: string; statement: st
   );
 }
 
-/** SDKs start an approximate plan with a "-- Planned with ..." line; it reads better as a note. */
+/** "Full scan of search_listings" with the table set as code. */
+function FindingTitle({ f }: { f: ExplainFinding }) {
+  if (!f.table || !f.title.endsWith(f.table)) return <>{f.title}</>;
+  return (
+    <>
+      {f.title.slice(0, -f.table.length)}
+      <code>{f.table}</code>
+    </>
+  );
+}
+
+/**
+ * What the plan says about speed: a verdict, then each problem with what to
+ * do about it (an index to add, when the filter is simple enough to name
+ * one). Small tables read in full cost nothing worth fixing, so they share
+ * one line.
+ */
+function Findings({ findings }: { findings: ExplainFinding[] }) {
+  const small = findings.filter((f) => f.severity === "info" && f.table);
+  const rest = findings.filter((f) => !small.includes(f));
+  const warnings = rest.filter((f) => f.severity === "warning").length;
+  return (
+    <div className="qp-review">
+      <div className={`qp-verdict ${warnings ? "warn" : "ok"}`}>
+        {warnings ? <AlertTriangle size={14} aria-hidden /> : <CheckCircle2 size={14} aria-hidden />}
+        {warnings ? `${warnings} ${warnings === 1 ? "thing" : "things"} worth a look` : "Nothing in this plan stands out"}
+      </div>
+      {rest.length > 0 && (
+        <ul className="qp-findings">
+          {rest.map((f, i) => (
+            <li key={i} className={`qp-finding ${f.severity}`}>
+              <div className="qp-finding-head">
+                {f.severity === "warning" ? <AlertTriangle size={13} aria-hidden /> : <Info size={13} aria-hidden />}
+                <strong>
+                  <FindingTitle f={f} />
+                </strong>
+                {f.rows ? <span className="pill qp-rows" title="The planner's estimate of the rows this step returns">~{f.rows.toLocaleString()} rows</span> : null}
+              </div>
+              <p className="qp-finding-detail">{f.detail}</p>
+              {f.index && (
+                <div className="qp-index">
+                  <code className="mono">{f.index}</code>
+                  <CopyButton text={f.index} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {small.length > 0 && (
+        <p className="dim qp-note qp-icon-note">
+          <Info size={13} aria-hidden />
+          <span>
+            Read in full but small enough that an index would not help:{" "}
+            {small.map((f, i) => (
+              <span key={f.table}>
+                {i > 0 && ", "}
+                <code>{f.table}</code>
+                {f.rows ? ` (~${f.rows.toLocaleString()} rows)` : ""}
+              </span>
+            ))}
+            .
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** SDKs start an approximate plan with a "-- Planned with ..., so it is approximate." line; it reads better as a note. */
 function PlanText({ plan }: { plan: string }) {
   const m = /^-- (Planned with [^\n]*)\n/.exec(plan);
+  // "values used in arithmetic set to 1" → "Values used in arithmetic were set to 1"
+  const how = m && /^Planned with (.+?) set to (.+?),? so it is approximate\.?$/.exec(m[1]);
   return (
     <>
       {m && (
         <p className="dim qp-note qp-icon-note">
           <Info size={13} aria-hidden />
-          <span>{m[1]} The removed values were guessed, so row estimates can differ from real calls.</span>
+          <span>
+            <strong className="qp-approx">Approximate plan.</strong>{" "}
+            {how
+              ? `${how[1].charAt(0).toUpperCase()}${how[1].slice(1)} were set to ${how[2]} in place of the real ones, so row estimates can differ from real calls.`
+              : `${m[1]} Row estimates can differ from real calls.`}
+          </span>
         </p>
       )}
       <PlanView plan={m ? plan.slice(m[0].length) : plan} />

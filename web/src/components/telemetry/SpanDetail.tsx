@@ -9,6 +9,7 @@ import { InfoTip } from "../InfoTip";
 import { CopyButton, Drawer } from "../Modal";
 import { VizView } from "../VizView";
 import { QueryPlan } from "./QueryPlan";
+import { QueryViewerLink } from "./QueryViewerLink";
 import { SqlView } from "./SqlView";
 import { KIND_COLOR } from "./Waterfall";
 import "./telemetry.css";
@@ -45,6 +46,7 @@ export function SpanDetailDrawer({
   kind,
   name,
   detail,
+  inQueryViewer = false,
   onClose,
   onOpenRequest,
 }: {
@@ -52,6 +54,8 @@ export function SpanDetailDrawer({
   name: string;
   /** One statement (or URL) of the name only, as the query catalogue lists them. */
   detail?: string;
+  /** Shown by the Queries view itself, so it needs no link back to it. */
+  inQueryViewer?: boolean;
   onClose: () => void;
   onOpenRequest: (requestId: string) => void;
 }) {
@@ -105,7 +109,7 @@ export function SpanDetailDrawer({
 
           <section className="sd-section">
             <h3 className="rt-title">{isDB ? (detail === undefined ? "Statements" : "Statement") : detail === undefined ? "URLs" : "URL"}</h3>
-            <Variants result={d.variants} isDB={isDB} openFirst={detail !== undefined} />
+            <Variants result={d.variants} isDB={isDB} openFirst={detail !== undefined} viewerName={isDB && !inQueryViewer ? name : undefined} />
           </section>
 
           <section className="sd-section">
@@ -193,7 +197,7 @@ function Stats({ cur, prev, isDB }: { cur: Record<string, unknown>; prev?: Recor
 }
 
 /** The statements (or URLs) under the name, each expandable to its full text. */
-function Variants({ result, isDB, openFirst }: { result: Result; isDB: boolean; openFirst: boolean }) {
+function Variants({ result, isDB, openFirst, viewerName }: { result: Result; isDB: boolean; openFirst: boolean; viewerName?: string }) {
   const [open, setOpen] = useState<Set<number>>(() => new Set(openFirst ? [0] : []));
   const rows = useMemo(() => records(result), [result]);
   const max = Math.max(1, ...rows.map((r) => toNumber(r.total_ms) ?? 0));
@@ -244,6 +248,11 @@ function Variants({ result, isDB, openFirst }: { result: Result; isDB: boolean; 
                   avg {ms(r.avg_ms)} · max {ms(r.max_ms)}
                   {isDB && r.avg_rows != null && <> · {formatCount(toNumber(r.avg_rows) ?? 0)} rows avg</>}
                   {r.target ? <> · {String(r.target)}</> : null}
+                  {viewerName && (
+                    <span style={{ marginLeft: "auto" }}>
+                      <QueryViewerLink name={viewerName} detail={String(r.detail)} />
+                    </span>
+                  )}
                   {!isDB && (
                     <span style={{ marginLeft: "auto" }}>
                       <CopyButton text={String(r.detail)} />

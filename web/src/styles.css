@@ -45,6 +45,9 @@
   --accent-strong: #5598e7;
   --accent-wash: rgba(57, 135, 229, 0.14);
   --hover-wash: rgba(255, 255, 255, 0.04);
+  /* Quiet buttons (ghost and icon): a fill at rest, stronger on hover. */
+  --button-wash: rgba(255, 255, 255, 0.07);
+  --button-wash-hover: rgba(255, 255, 255, 0.12);
   --good-text: #3fbf3f;
   --critical-text: #f07c7c;
   --warning-text: #fab219;
@@ -88,6 +91,8 @@
   --accent-strong: #1c5cab;
   --accent-wash: rgba(42, 120, 214, 0.1);
   --hover-wash: rgba(11, 11, 11, 0.035);
+  --button-wash: rgba(11, 11, 11, 0.055);
+  --button-wash-hover: rgba(11, 11, 11, 0.1);
   --good-text: #006300;
   --critical-text: #b42c2c;
   --warning-text: #8a5a00;
@@ -776,12 +781,12 @@ pre,
 
 .btn.ghost {
   border-color: transparent;
-  background: transparent;
+  background: var(--button-wash);
   color: var(--text-2);
 }
 
 .btn.ghost:hover:not(:disabled) {
-  background: var(--hover-wash);
+  background: var(--button-wash-hover);
   color: var(--text-1);
 }
 
@@ -798,13 +803,13 @@ pre,
   height: 28px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-3);
+  background: var(--button-wash);
+  color: var(--text-2);
   cursor: pointer;
 }
 
 .icon-btn:hover {
-  background: var(--hover-wash);
+  background: var(--button-wash-hover);
   color: var(--text-1);
 }
 

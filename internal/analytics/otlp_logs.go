@@ -13,7 +13,7 @@ import (
 // Visionary is not a log store.
 
 func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) (int64, error) {
-	if !o.errorsOn {
+	if !o.errorsOn() {
 		return 0, nil
 	}
 	now := time.Now()

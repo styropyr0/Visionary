@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, RotateCw, ShieldOff, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { DurationSelect, spanSeconds } from "../components/DurationSelect";
 import { useToast } from "../components/Toast";
@@ -34,11 +35,16 @@ interface ConfSetting {
 interface ConfView {
   groups: { Key: string; Label: string; Help: string }[];
   settings: ConfSetting[];
+  /** Restart-only settings saved since the server started. */
+  restart_pending?: string[];
 }
 
 const getConfig = () => api<ConfView>("/api/settings/config");
 /** null resets a setting to its default; a secret left out stays as it is. */
 const saveConfig = (values: Record<string, string | null>) => api<ConfView>("/api/settings/config", { method: "PUT", json: values });
+/** Asks the server to restart itself. */
+const restartServer = () => api<{ restarting: boolean }>("/api/settings/restart", { method: "POST", json: {} });
+
 /** Fetches one stored secret; the server audits each reveal. */
 const revealSecret = (key: string) => api<{ value: string }>(`/api/settings/config/${encodeURIComponent(key)}/reveal`, { method: "POST", json: {} });
 
@@ -55,10 +61,14 @@ export function ServerTab() {
   if (!view) return <div className="settings-empty">Loading…</div>;
   return (
     <div className="settings-stack">
-      <p className="dim settings-intro">
-        The server reads these from the database, so they're the same on every instance and need no redeploy. Only the database connection, <code>VISIONARY_ADDR</code> and{" "}
-        <code>VISIONARY_ENABLE_AUTH</code> stay in the environment.
-      </p>
+      <div className="settings-intro-row">
+        <p className="dim settings-intro">
+          The server reads these from the database, so they're the same on every instance and need no redeploy. Only the database connection, <code>VISIONARY_ADDR</code> and{" "}
+          <code>VISIONARY_ENABLE_AUTH</code> stay in the environment.
+        </p>
+        <RestartButton pending={view.restart_pending ?? []} labels={view.settings} />
+      </div>
+      {(view.restart_pending?.length ?? 0) > 0 && <RestartNotice pending={view.restart_pending!} labels={view.settings} />}
       {view.groups.map((g) => (
         <ConfGroup
           key={g.Key}
@@ -75,6 +85,103 @@ export function ServerTab() {
   );
 }
 
+const labelOf = (key: string, settings: ConfSetting[]) => settings.find((s) => s.key === key)?.label ?? key;
+
+/** Saved settings that wait for a restart, with the button that does it. */
+function RestartNotice({ pending, labels }: { pending: string[]; labels: ConfSetting[] }) {
+  return (
+    <div className="notice restart-notice" role="status">
+      <AlertTriangle size={16} aria-hidden />
+      <div className="restart-notice-text">
+        <strong>
+          {pending.length === 1 ? "1 saved setting applies" : `${pending.length} saved settings apply`} after a restart
+        </strong>
+        <span className="dim">
+          {pending
+            .slice(0, 4)
+            .map((k) => labelOf(k, labels))
+            .join(", ")}
+          {pending.length > 4 ? ` and ${pending.length - 4} more` : ""}.
+        </span>
+      </div>
+      <RestartButton pending={pending} labels={labels} primary />
+    </div>
+  );
+}
+
+/**
+ * Restarts the server: it finishes requests in flight, starts again with the
+ * same command, and the page reloads once it answers. Takes a few seconds.
+ */
+function RestartButton({ pending, labels, primary }: { pending: string[]; labels: ConfSetting[]; primary?: boolean }) {
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const [state, setState] = useState<"idle" | "asking" | "waiting">("idle");
+
+  const restart = async () => {
+    setState("asking");
+    try {
+      await restartServer();
+    } catch (e) {
+      setState("idle");
+      toast("err", e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setConfirm(false);
+    setState("waiting");
+    // The old process answers until it stops, so give it a moment, then wait
+    // for the new one.
+    const until = Date.now() + 90_000;
+    await new Promise((r) => setTimeout(r, 1500));
+    while (Date.now() < until) {
+      try {
+        await getConfig();
+        window.location.reload();
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    setState("idle");
+    toast("err", "The server hasn't come back after 90 seconds. Check its logs; it may need starting by hand.");
+  };
+
+  return (
+    <>
+      <button type="button" className={`btn sm ${primary ? "primary" : ""}`} onClick={() => setConfirm(true)} disabled={state !== "idle"}>
+        <RotateCw size={13} className={state === "waiting" ? "spin" : undefined} aria-hidden /> {state === "waiting" ? "Restarting…" : primary ? "Restart now" : "Restart server"}
+      </button>
+      {confirm && (
+        <Modal
+          title="Restart Visionary?"
+          narrow
+          onClose={() => state === "idle" && setConfirm(false)}
+          footer={
+            <>
+              <button type="button" className="btn ghost" onClick={() => setConfirm(false)} disabled={state !== "idle"}>
+                Cancel
+              </button>
+              <button type="button" className="btn primary" onClick={() => void restart()} disabled={state !== "idle"}>
+                {state === "asking" ? "Restarting…" : "Restart"}
+              </button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, lineHeight: 1.55 }}>
+            It finishes the requests it's handling, then starts again with the same command. The dashboard and ingestion are unavailable for a few seconds; SDKs retry what they
+            couldn't send.
+          </p>
+          {pending.length > 0 && (
+            <p className="dim" style={{ margin: "10px 0 0", lineHeight: 1.55 }}>
+              Applies: {pending.map((k) => labelOf(k, labels)).join(", ")}.
+            </p>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function ConfGroup({ title, help, settings, onSaved }: { title: string; help: string; settings: ConfSetting[]; onSaved: (v: ConfView) => void }) {
   const toast = useToast();
   const [draft, setDraft] = useState<Record<string, string | null>>({});
@@ -87,7 +194,7 @@ function ConfGroup({ title, help, settings, onSaved }: { title: string; help: st
     setBusy(true);
     try {
       const v = await saveConfig(draft);
-      toast("ok", restart ? `${title} saved. Some of it applies after the server restarts.` : `${title} saved.`);
+      toast("ok", restart ? `${title} saved. Some of it applies after a restart; use Restart now at the top.` : `${title} saved.`);
       onSaved(v);
     } catch (e) {
       toast("err", e instanceof Error ? e.message : String(e));

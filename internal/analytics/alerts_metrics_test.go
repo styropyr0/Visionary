@@ -126,3 +126,49 @@ func TestDropChannelFromRules(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// Choosing the rule for every check makes it one that alerts someone, even
+// when it was switched off and had no channels.
+func TestDefaultUptimeRuleRevived(t *testing.T) {
+	s := openTestDB(t)
+	ctx := context.Background()
+	req := httptest.NewRequest("PUT", "/api/uptime/checks/1/alert", nil)
+	c := UptimeCheck{Name: "API", URL: "https://api.example.com/health", Method: "GET", ExpectStatus: "200-299", IntervalS: 60, TimeoutMs: 1000, Enabled: true, Headers: map[string]string{}}
+	if err := s.saveUptimeCheck(ctx, &c); err != nil {
+		t.Fatal(err)
+	}
+	def, err := s.ensureDefaultUptimeRule(req)
+	if err != nil || def == nil {
+		t.Fatalf("default rule: %v %v", def, err)
+	}
+	def.Enabled, def.Channels = false, []int64{}
+	if err := s.updateRule(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	ch := alertChannel{Name: "Ops", Kind: "webhook"}
+	if err := s.saveChannel(ctx, &ch); err != nil {
+		t.Fatal(err)
+	}
+	if views, _ := s.uptimeAlertViews(ctx, []UptimeCheck{c}); views[c.ID].Mode != "none" {
+		t.Fatalf("with the rule off: %+v", views[c.ID])
+	}
+	if err := s.setCheckAlert(req, c, checkAlertInput{Mode: "default", Failures: 3}); err != nil {
+		t.Fatal(err)
+	}
+	v := mustViews(t, s, c)[c.ID]
+	if v.Mode != "default" || len(v.ChannelIDs) != 1 || v.ChannelIDs[0] != ch.ID || v.Failures != 3 {
+		t.Fatalf("after choosing the default rule: %+v", v)
+	}
+	if err := s.setCheckAlert(req, c, checkAlertInput{Mode: "default", Channels: []int64{ch.ID + 99}}); err == nil {
+		t.Fatal("an unknown channel was accepted")
+	}
+}
+
+func mustViews(t *testing.T, s *Server, checks ...UptimeCheck) map[int64]checkAlertView {
+	t.Helper()
+	views, err := s.uptimeAlertViews(context.Background(), checks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return views
+}
