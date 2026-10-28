@@ -754,3 +754,50 @@
   max-height: 360px;
   overflow: auto;
 }
+
+/* Search fills the window: the query, filters and chart stay put, and the
+   fields and the lines scroll on their own. Narrow screens scroll the page. */
+@media (min-width: 901px) {
+  .main:has(.lg-search) {
+    height: 100vh;
+    overflow: hidden;
+  }
+  .main:has(.lg-search) > .topbar {
+    flex: none;
+  }
+  .main:has(.lg-search) .content.lg-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .lg-search {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .lg-search > * {
+    flex: none;
+  }
+  .lg-search > .lg-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .lg-explain {
+    max-height: 30vh;
+    overflow: auto;
+  }
+  .lg-body > .lg-fields {
+    position: static;
+    max-height: none;
+    min-height: 0;
+    overflow: auto;
+  }
+  .lg-body > .lg-table-panel {
+    min-height: 0;
+    overflow: auto;
+  }
+  /* The panel scrolls, so the header sticks to it. */
+  .lg-table-panel > .lg-table {
+    overflow: visible;
+  }
+}
