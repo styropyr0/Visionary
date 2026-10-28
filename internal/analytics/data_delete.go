@@ -75,15 +75,25 @@ type dataRequest struct {
 	Service *string  `json:"service"`
 }
 
+// dataTimeColumns names the first and last time of rows that span a period
+// instead of having a created_at; a row is in the range when all of it is.
+var dataTimeColumns = map[string][2]string{
+	"log_patterns": {"first_seen", "last_seen"},
+}
+
 // where is the condition shared by every table of a kind, with its args.
 func (d dataRequest) where(t dataTable) (string, []any, bool) {
 	var conds []string
 	var args []any
+	first, last := "created_at", "created_at"
+	if cols, ok := dataTimeColumns[t.name]; ok {
+		first, last = cols[0], cols[1]
+	}
 	if d.From != "" {
-		conds, args = append(conds, "created_at >= ?"), append(args, d.From)
+		conds, args = append(conds, first+" >= ?"), append(args, d.From)
 	}
 	if d.To != "" {
-		conds, args = append(conds, "created_at < ?"), append(args, d.To)
+		conds, args = append(conds, last+" < ?"), append(args, d.To)
 	}
 	if d.Service != nil {
 		if !t.service {

@@ -27,7 +27,7 @@ const (
 
 // The pages that can be hidden from the sidebar; Settings always shows, so
 // nobody can lock the team out of undoing it.
-var hideablePages = []string{"overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts"}
+var hideablePages = []string{"overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "dashboards", "saved", "alerts"}
 
 func (s *Server) settingsSchema() []string { return []string{s.q.settingsTable()} }
 
