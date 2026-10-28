@@ -291,6 +291,25 @@ export const logSettingsApi = {
     }),
 };
 
+export interface ArchiveInfo {
+  configured: boolean;
+  bucket: string;
+  endpoint: string;
+  prefix: string;
+  last_run?: string;
+  last_error: string;
+  hours: Result | [];
+}
+
+export const archiveApi = {
+  get: () => api<ArchiveInfo>("/api/applogs/archives"),
+  rehydrate: (from: Date, to: Date) =>
+    api<{ lines: number; hours: { hour: string; lines: number; skipped?: string }[] }>("/api/applogs/archives/rehydrate", {
+      method: "POST",
+      json: { from: from.toISOString().replace(/\.\d{3}Z$/, "Z"), to: to.toISOString().replace(/\.\d{3}Z$/, "Z") },
+    }),
+};
+
 /** Creates an alert rule from a search: "alert me when this happens again". */
 export function alertFromSearch(name: string, query: string, service?: string) {
   return api<{ id: number }>("/api/alerts/rules", {

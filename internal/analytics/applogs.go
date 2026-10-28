@@ -36,6 +36,7 @@ func (s *Server) applogsRoutes(mux *http.ServeMux) {
 	s.applogsAnalysisRoutes(mux)
 	s.applogsAIRoutes(mux)
 	s.applogsSessionRoutes(mux)
+	s.applogsArchiveRoutes(mux)
 }
 
 func (s *Server) applogsSchema() []string {
@@ -101,6 +102,7 @@ CREATE TABLE IF NOT EXISTS log_archives (
 func (s *Server) applogsStart(ctx context.Context) {
 	s.syslogStart(ctx)
 	s.applogsPatternsStart(ctx)
+	s.applogsArchiveStart(ctx)
 	if s.q.d != sdk.Postgres {
 		return
 	}

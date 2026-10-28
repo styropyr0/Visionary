@@ -61,6 +61,7 @@ var confGroups = []struct {
 	{"security_abuse", "API abuse", "Scraping, guessing IDs, injection attempts, per-route limits, and sign-up or code-sending floods."},
 	{"security_intel", "Threat intelligence", "Where IP addresses are, who runs them, and whether a blocklist names them."},
 	{"security_response", "Response", "Where Block IP and End sessions on a finding are sent."},
+	{"logs_archive", "Log archive", "An S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Backblaze B2) that keeps every finished hour of logs as gzipped NDJSON, so they outlive retention. Archived hours can be loaded back from Settings → Logs."},
 	{"other", "Other", ""},
 }
 
@@ -142,6 +143,12 @@ var confDefs = []confDef{
 	{Key: "security_action_webhook", Group: "security_response", Label: "Action webhook", Help: "Block IP and End sessions on a finding POST JSON here, for your firewall, API gateway or app to act on.", Kind: confText},
 	{Key: "security_action_secret", Group: "security_response", Label: "Webhook signing secret", Help: "Signs each call with HMAC-SHA256 in the X-Visionary-Signature header.", Kind: confSecret},
 
+	{Key: "logs_archive_endpoint", Group: "logs_archive", Label: "Endpoint", Help: "e.g. https://s3.us-east-1.amazonaws.com, https://<account>.r2.cloudflarestorage.com, http://minio:9000. Empty turns the archive off.", Kind: confText},
+	{Key: "logs_archive_bucket", Group: "logs_archive", Label: "Bucket", Kind: confText},
+	{Key: "logs_archive_region", Group: "logs_archive", Label: "Region", Help: "auto for R2; the bucket's region for S3.", Kind: confText, Default: "auto"},
+	{Key: "logs_archive_access_key", Group: "logs_archive", Label: "Access key ID", Kind: confText},
+	{Key: "logs_archive_secret_key", Group: "logs_archive", Label: "Secret access key", Kind: confSecret},
+	{Key: "logs_archive_prefix", Group: "logs_archive", Label: "Folder", Help: "Objects are written under it, as <folder>/2026/10/28/11.ndjson.gz.", Kind: confText, Default: "visionary-logs"},
 	{Key: "rollups", Group: "other", Label: "Chart summaries", Help: "Pre-aggregate requests and system metrics so long ranges load fast.", Kind: confBool, Default: "true", Restart: true},
 	{Key: "uptime_allow_private", Group: "other", Label: "Uptime checks may reach private addresses", Kind: confBool, Default: "false"},
 	{Key: "update_check", Group: "other", Label: "Check for new versions", Kind: confBool, Default: "true"},

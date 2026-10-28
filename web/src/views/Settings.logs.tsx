@@ -5,7 +5,8 @@ import { formatFull, formatRelative } from "../lib/time";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { ErrorNotice } from "../components/ErrorNotice";
-import { LEVELS, LEVEL_LABEL, logSettingsApi, type LogSettings, type LogSettingsResponse, type ParseRule } from "../lib/applogs";
+import { LEVELS, LEVEL_LABEL, archiveApi, logSettingsApi, type LogSettings, type LogSettingsResponse, type ParseRule } from "../lib/applogs";
+import { formatBytes, formatCount } from "../lib/format";
 import { Card, Switch } from "./Settings.profiling";
 
 const LEVEL_OPTIONS = LEVELS.map((l) => ({ value: l, label: LEVEL_LABEL[l] }));
@@ -214,7 +215,101 @@ export function LogsTab() {
           {saveBar}
         </div>
       </Card>
+
+      <ArchiveCard admin={admin} />
     </div>
+  );
+}
+
+/** The log archive: its state, the latest hours, and loading a range back. */
+function ArchiveCard({ admin }: { admin: boolean }) {
+  const toast = useToast();
+  const [run, setRun] = useState(0);
+  const info = useQuery(`log-archive#${run}`, () => archiveApi.get());
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [loading, setLoading] = useState(false);
+  const d = info.data;
+  const hours = d && !Array.isArray(d.hours) ? d.hours : null;
+  const load = async () => {
+    setLoading(true);
+    try {
+      const out = await archiveApi.rehydrate(new Date(from), new Date(to));
+      const skipped = out.hours.filter((h) => h.skipped).length;
+      toast("ok", `Loaded ${formatCount(out.lines)} lines back${skipped ? `; ${skipped} hours were skipped` : ""}. Search them in Logs.`);
+      setRun((n) => n + 1);
+    } catch (e) {
+      toast("err", e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <Card
+      title="Archive"
+      description={
+        <>
+          Every finished hour of logs is written to a bucket as gzipped NDJSON, so logs outlive retention. Set the bucket in{" "}
+          <a href="#/settings?tab=server">Settings → Server → Log archive</a>.
+        </>
+      }
+    >
+      <div className="settings-body pset">
+        {info.error ? (
+          <ErrorNotice title="Could not load the archive" error={info.error} />
+        ) : !d ? (
+          <div className="dim">Loading…</div>
+        ) : !d.configured ? (
+          <div className="dim">Off: no bucket is set.</div>
+        ) : (
+          <>
+            <div className="dim">
+              Writing to <span className="mono">{d.bucket}/{d.prefix}</span> at <span className="mono">{d.endpoint}</span>
+              {d.last_run && <> · last run {formatRelative(d.last_run)}</>}
+            </div>
+            {d.last_error && <div className="lgs-err">The last run failed: {d.last_error}</div>}
+            {hours && hours.rows.length > 0 ? (
+              <div className="table-wrap" style={{ maxHeight: 220 }}>
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Hour</th>
+                      <th className="num">Lines</th>
+                      <th className="num">Size</th>
+                      <th>Object</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hours.rows.slice(0, 48).map((r) => (
+                      <tr key={String(r[0])}>
+                        <td>{formatFull(new Date(String(r[0])))}</td>
+                        <td className="num">{formatCount(Number(r[2]))}</td>
+                        <td className="num">{formatBytes(Number(r[3]))}</td>
+                        <td className="mono dim">{String(r[1])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="dim">No hour archived yet. Hours are written within ten minutes of ending.</div>
+            )}
+            {admin && (
+              <div className="lgs-add">
+                <span>Load back from</span>
+                <input className="input" type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From" />
+                <span>to</span>
+                <input className="input" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To" />
+                <button type="button" className="btn" disabled={!from || !to || loading} onClick={load}>
+                  {loading ? "Loading…" : "Load back"}
+                </button>
+                <span className="dim">At most 72 hours at a time; hours still stored are skipped.</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
