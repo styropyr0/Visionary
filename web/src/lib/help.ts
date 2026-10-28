@@ -637,6 +637,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Drag across the chart to zoom the time range.",
       "Debug a service or a user for 15 minutes from a line, without a redeploy; alert when a line happens again; reduce a chatty line from Volume.",
       "Secrets in lines are scrubbed before they are stored; anything that slips through is redacted and reported in Security.",
+      "Searching words in messages stays fast at millions of lines on PostgreSQL, which gets a text index for it. On MySQL, SQLite and D1 it reads every line in the time range, so keep the range short or log less there.",
     ],
     setup: ["logs", "logship"],
   },
