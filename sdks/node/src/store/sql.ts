@@ -94,7 +94,13 @@ export const RELEASE_COLUMNS = ["created_at", "service", "instance", "version", 
 
 export const PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"];
 
-export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles";
+export const LOG_COLUMNS = [
+  "created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",
+  "message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line",
+  "code_func", "size",
+];
+
+export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles" | "app_logs";
 
 export const TABLE_COLUMNS: Record<Table, string[]> = {
   api_logs: REQUEST_COLUMNS,
@@ -103,6 +109,7 @@ export const TABLE_COLUMNS: Record<Table, string[]> = {
   errors: ERROR_COLUMNS,
   releases: RELEASE_COLUMNS,
   profiles: PROFILE_COLUMNS,
+  app_logs: LOG_COLUMNS,
 };
 
 /** A typed value: string, number or null. */

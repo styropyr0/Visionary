@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { User } from "./config.js";
+import type { HeldLogs } from "./logs/pipeline.js";
 import type { SpanRow } from "./telemetry/spans.js";
 
 /** For the CPU profiler: requests started so far, and while a profile runs,
@@ -28,6 +29,12 @@ export class RequestState {
   done = false;
   /** Spans of background work stored after the request was logged. */
   late = 0;
+  /** The W3C trace the request belongs to (traceparent), for its log lines. */
+  traceId = "";
+  /** An error was captured while the request ran, so it counts as failed. */
+  failed = false;
+  /** Log lines below the level, held until the request ends. */
+  heldLogs?: HeldLogs;
   /** The integration's route lookup (Express req.route, Fastify routeOptions). */
   routeOf?: () => string | undefined;
   /** The framework's signed-in user, used when setUser was not called. */

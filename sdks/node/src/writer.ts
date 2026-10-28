@@ -3,6 +3,7 @@ import type { Entry } from "./entry.js";
 import { requestValues } from "./entry.js";
 import type { Logger } from "./log.js";
 import { errMessage } from "./log.js";
+import type { LogRecord } from "./logs/pipeline.js";
 import { Redactor } from "./redact.js";
 import type { Stmt, Table, Value } from "./store/sql.js";
 import { PURGE_CHUNK, TABLE_COLUMNS, insertSQL, purgeSQL } from "./store/sql.js";
@@ -13,12 +14,21 @@ const QUEUE_SIZE = 5000;
 const BATCH_SIZE = 50;
 const FLUSH_MS = 3000;
 
-export type Item = { entry: Entry } | { table: Table; args: Value[] };
+export type Item = { entry: Entry } | { table: Table; args: Value[] } | { log: LogRecord };
+
+export interface WriterOptions {
+  /** Rows waiting at most (default 5000); past it they are dropped and counted. */
+  queueSize?: number;
+  /** Builds an app_logs row from a captured line, on the writer. */
+  logRow?: (r: LogRecord) => Value[];
+}
 
 /**
- * The single background writer: api_logs, spans, errors and releases rows
- * are queued without blocking and written in batches of up to 50, every 3 s
- * or as soon as 50 are waiting. A full queue drops rows and counts them.
+ * A background writer: api_logs, spans, errors and releases rows are queued
+ * without blocking and written in batches of up to 50, every 3 s or as soon
+ * as 50 are waiting. A full queue drops rows and counts them. Application
+ * logs have a writer of their own, so a flood of lines never crowds out
+ * request rows.
  */
 export class Writer {
   private queue: Item[] = [];
@@ -28,13 +38,16 @@ export class Writer {
   private closed = false;
   private readonly redact: Redactor;
   private readonly inserts: Record<Table, string>;
+  private readonly queueSize: number;
 
   constructor(
     private readonly cfg: Config,
     private readonly store: Store,
     private readonly ready: () => Promise<boolean>,
     private readonly logger: Logger,
+    private readonly opts: WriterOptions = {},
   ) {
+    this.queueSize = opts.queueSize ?? QUEUE_SIZE;
     this.redact = new Redactor(cfg.redactHeaders, cfg.redactFields, cfg.redactRequestFields);
     const tables = Object.keys(TABLE_COLUMNS) as Table[];
     this.inserts = Object.fromEntries(tables.map((t) => [t, insertSQL(t, store.stringParams)])) as Record<Table, string>;
@@ -51,7 +64,7 @@ export class Writer {
   /** Enqueues without blocking; a full queue drops the item. */
   push(item: Item): void {
     if (this.closed) return;
-    if (this.queue.length >= QUEUE_SIZE) {
+    if (this.queue.length >= this.queueSize) {
       this.dropped++;
       return;
     }
@@ -124,6 +137,7 @@ export class Writer {
       if ("entry" in item) {
         return { sql: this.inserts.api_logs, args: requestValues(item.entry, this.cfg, this.redact, users) };
       }
+      if ("log" in item) return { sql: this.inserts.app_logs, args: this.opts.logRow!(item.log) };
       return { sql: this.inserts[item.table], args: item.args };
     });
   }

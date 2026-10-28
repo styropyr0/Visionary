@@ -1,7 +1,7 @@
 export const REDACTED = "[REDACTED]";
 
 const DEFAULT_REDACT_HEADERS = ["Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie", "X-Api-Key", "X-Auth-Token"];
-const DEFAULT_REDACT_FIELDS = [
+export const DEFAULT_REDACT_FIELDS = [
   "password", "passwd", "secret", "client_secret", "token", "access_token", "refresh_token", "id_token",
   "api_key", "apikey", "otp", "pin", "card_number", "cvv", "private_key",
 ];

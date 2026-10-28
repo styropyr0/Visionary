@@ -1,7 +1,8 @@
 /**
  * Visionary collector for Node.js. It writes one row per HTTP request
  * (api_logs), periodic host/process/runtime samples (system_metrics), and the
- * spans, errors and releases of the service, in batches off the request path.
+ * spans, errors, releases and application logs of the service, in batches
+ * off the request path.
  *
  *     import visionary from "visionary-sdk";
  *     visionary.init();
@@ -14,6 +15,7 @@ import { fastify } from "./integrations/fastify.js";
 import { koa } from "./integrations/koa.js";
 import { VisionaryInterceptor, VisionaryModule } from "./integrations/nest.js";
 import { wrap } from "./integrations/node-http.js";
+import { captureConsole, pinoStream, winstonTransport } from "./logs/hooks.js";
 import { mysqlPoolStats, pgPoolStats } from "./system/pool.js";
 import { instrumentMysql2, instrumentPg, instrumentSqlite, prismaExtension } from "./telemetry/db.js";
 import { explainWith } from "./telemetry/explain.js";
@@ -23,6 +25,7 @@ import { background, span } from "./telemetry/spans.js";
 export { Agent, SDK_VERSION } from "./agent.js";
 export type { Dialect, LookupResult, Options, User } from "./config.js";
 export type { Logger } from "./log.js";
+export type { PinoStream, VisionaryTransport } from "./logs/hooks.js";
 export type { DbStats } from "./system/recorder.js";
 export type { SpanKind } from "./telemetry/spans.js";
 export type { Explainer } from "./telemetry/explain.js";
@@ -33,6 +36,7 @@ export {
   VisionaryModule,
   apolloPlugin,
   background,
+  captureConsole,
   captureException,
   close,
   express,
@@ -49,10 +53,12 @@ export {
   loginAttempt,
   mysqlPoolStats,
   pgPoolStats,
+  pinoStream,
   prismaExtension,
   setRoute,
   setUser,
   span,
+  winstonTransport,
   wrap,
 };
 
@@ -64,6 +70,9 @@ const visionary = {
   setRoute,
   loginAttempt,
   captureException,
+  captureConsole,
+  pinoStream,
+  winstonTransport,
   span,
   background,
   graphqlOperation,

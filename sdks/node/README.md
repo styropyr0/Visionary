@@ -319,6 +319,48 @@ same way when they crash the process; if your app already listens for
 cannot wait for a network write, so that last row is only guaranteed on
 SQLite. Turn this off with `init({ captureUncaught: false })`.
 
+## Logs
+
+Your application's own log lines can go to **Logs** too, linked to the
+request they were logged in (its request id, the trace id from a
+`traceparent` header, and the signed-in user). Route them to the SDK once,
+after `init()`; what your service prints does not change:
+
+```js
+visionary.captureConsole();                                     // console.log/info/warn/error/debug/trace
+
+const log = pino(visionary.pinoStream());                       // pino: still prints to stdout
+
+const logger = winston.createLogger({                           // winston: an extra transport
+  level: "debug",
+  transports: [new winston.transports.Console({ level: "info" }), visionary.winstonTransport()],
+});
+```
+
+By default info and above are kept. Debug lines are held in their request
+and kept only when it fails (a 5xx or a recorded exception) or takes at
+least a second, so every failure comes with the lines that led to it; the
+rest are dropped. So it pays to give the SDK your debug lines while printing
+only info, as the winston example does; with pino, use a multistream:
+
+```js
+const log = pino({ level: "debug" }, pino.multistream([
+  { level: "info", stream: process.stdout },
+  { level: "debug", stream: visionary.pinoStream(null) },  // null: capture only, print nothing
+]));
+```
+
+`console.log` lines are info unless they start with a level (`ERROR ...`,
+`[warn] ...`, `level=debug`); `console.debug`, `warn` and `error` keep theirs.
+
+**Settings → Logs** in the dashboard changes this live, checked every 30
+seconds: the level, the buffer for failed and slow requests, a louder or
+quieter level for one route or user for a while, rules that drop noisy
+lines, and a cap of lines a minute (6000 by default). Passwords, tokens,
+keys and JWTs are scrubbed from messages and fields before anything is
+stored. `VISIONARY_LOGS=false` turns capture off; `VISIONARY_LOG_LEVEL` is the
+level until the dashboard's setting has been read.
+
 ## Query plans
 
 On **Queries**, **Explain** asks for a statement's plan. Visionary never
@@ -431,7 +473,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `redactRequestFields` | | Keys redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `errorCodeField` | `error.code` | Where error responses keep their code (dotted JSON path). |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `errorKeyField` | `error.key` | The same, for the error key. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `retentionDays` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors and profiles older than this. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `retentionDays` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles and app_logs older than this. |
 | `VISIONARY_SYSTEM_METRICS` | `systemMetrics` | `true` | System samples on or off. |
 | `VISIONARY_SYSTEM_INTERVAL` | `systemInterval` (seconds) | `15s` | Time between samples: `15`, `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `systemRetentionDays` | `0` (off) | The same as the log retention, for system_metrics. |
@@ -441,6 +483,8 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_ERRORS` | `errors` | `true` | Error capture on or off. |
 | `VISIONARY_EXPLAIN` | (`explain` takes the explainers) | `true` | `false` ignores the explainers passed to `init`. |
 | `VISIONARY_PROFILE` | `profile` | `true` (follow the dashboard) | `false` never profiles. |
+| `VISIONARY_LOGS` | `logs` | `true` | Application log capture, where you route logs to the SDK ([Logs](#logs)). |
+| `VISIONARY_LOG_LEVEL` | `logLevel` | `info` | Lowest log level kept until **Settings → Logs** is read. |
 | | `instrumentHttp` | `true` | Record outbound `fetch`/`undici`/`http`/`https` calls. |
 | | `captureUncaught` | `true` | Record uncaught exceptions and crashing rejections. |
 | | `explain` | `[]` | Explainers for query plans (`explainWith(pool)`). |
@@ -468,6 +512,7 @@ truncated bodies.
 | `VisionaryModule.forRoot(options?)`, `VisionaryInterceptor` | NestJS. |
 | `setUser({ id, handle?, role? })`, `setRoute(pattern)`, `loginAttempt(account)` | Annotate the current request. |
 | `captureException(err)` | Record a handled error. |
+| `captureConsole()`, `pinoStream(next?)`, `winstonTransport()` | Send application logs to **Logs**. `captureConsole` returns a function that undoes it. |
 | `span(kind, name, fn, { target?, detail? })`, `background(name, fn)` | Custom spans. |
 | `instrumentPg`, `instrumentMysql2`, `instrumentSqlite`, `prismaExtension()` | Database hooks. |
 | `apolloPlugin()`, `graphqlOperation(type, name, source, fn)` | GraphQL. |
@@ -498,6 +543,7 @@ truncated bodies.
 npm install
 npm run build      # tsup: dist/index.js (ESM), dist/index.cjs, types
 npm run typecheck
+npm test           # node:test, against a bundle of the tests in test-dist/
 ```
 
 Every Visionary SDK follows the same contract: [`sdks/SPEC.md`](../SPEC.md).

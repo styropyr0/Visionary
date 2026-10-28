@@ -1,10 +1,13 @@
 import type { Dialect } from "../config.js";
+import mysqlLogs from "../../schema/mysql/logs.sql";
 import mysqlRequests from "../../schema/mysql/requests.sql";
 import mysqlSystem from "../../schema/mysql/system.sql";
 import mysqlTelemetry from "../../schema/mysql/telemetry.sql";
+import postgresLogs from "../../schema/postgres/logs.sql";
 import postgresRequests from "../../schema/postgres/requests.sql";
 import postgresSystem from "../../schema/postgres/system.sql";
 import postgresTelemetry from "../../schema/postgres/telemetry.sql";
+import sqliteLogs from "../../schema/sqlite/logs.sql";
 import sqliteRequests from "../../schema/sqlite/requests.sql";
 import sqliteSystem from "../../schema/sqlite/system.sql";
 import sqliteTelemetry from "../../schema/sqlite/telemetry.sql";
@@ -39,12 +42,12 @@ export interface Store {
   close(): Promise<void>;
 }
 
-export type Schema = "requests" | "system" | "telemetry";
+export type Schema = "requests" | "system" | "telemetry" | "logs";
 
 const SCHEMAS: Record<Dialect, Record<Schema, string>> = {
-  sqlite: { requests: sqliteRequests, system: sqliteSystem, telemetry: sqliteTelemetry },
-  postgres: { requests: postgresRequests, system: postgresSystem, telemetry: postgresTelemetry },
-  mysql: { requests: mysqlRequests, system: mysqlSystem, telemetry: mysqlTelemetry },
+  sqlite: { requests: sqliteRequests, system: sqliteSystem, telemetry: sqliteTelemetry, logs: sqliteLogs },
+  postgres: { requests: postgresRequests, system: postgresSystem, telemetry: postgresTelemetry, logs: postgresLogs },
+  mysql: { requests: mysqlRequests, system: mysqlSystem, telemetry: mysqlTelemetry, logs: mysqlLogs },
 };
 
 const MIGRATIONS: Partial<Record<Schema, [Table, [string, Kind][]]>> = {

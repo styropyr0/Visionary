@@ -39,7 +39,7 @@ export interface Options {
   pathPrefix?: string;
   captureBodies?: boolean;
   maxBodyBytes?: number;
-  /** Days of api_logs, spans, errors and profiles the SDK keeps (VISIONARY_LOG_RETENTION_DAYS).
+  /** Days of api_logs, spans, errors, profiles and app_logs the SDK keeps (VISIONARY_LOG_RETENTION_DAYS).
    * 0, the default, deletes nothing: the Visionary server applies Settings → Retention. */
   retentionDays?: number;
   redactHeaders?: string[];
@@ -76,6 +76,15 @@ export interface Options {
    * Profiling). Default true; false never profiles, whatever the dashboard says.
    */
   profile?: boolean;
+  /**
+   * Capture application logs where the app routes them to the SDK
+   * (captureConsole, pinoStream, winstonTransport). Default true
+   * (VISIONARY_LOGS).
+   */
+  logs?: boolean;
+  /** The lowest level kept until Settings → Logs has been read
+   * (VISIONARY_LOG_LEVEL, default info). */
+  logLevel?: string;
 }
 
 export type LookupResult = { handle?: string; role?: string } | null | undefined;
@@ -112,6 +121,8 @@ export interface Config {
   captureUncaught: boolean;
   explain: Explainer[];
   profile: boolean;
+  logs: boolean;
+  logLevel: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -156,6 +167,8 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     captureUncaught: opts.captureUncaught ?? true,
     explain: parseBool(s("VISIONARY_EXPLAIN"), true) ? (opts.explain ?? []) : [],
     profile: opts.profile ?? parseBool(s("VISIONARY_PROFILE"), true),
+    logs: opts.logs ?? parseBool(s("VISIONARY_LOGS"), true),
+    logLevel: opts.logLevel ?? s("VISIONARY_LOG_LEVEL", "info"),
   };
 }
 

@@ -7,6 +7,8 @@ import { currentRequest } from "./context.js";
 import type { Entry } from "./entry.js";
 import type { Logger } from "./log.js";
 import { consoleLogger, errMessage } from "./log.js";
+import { LogPipeline, activeLogs, logValues, setActiveLogs } from "./logs/pipeline.js";
+import { parseLevel, secretKeys } from "./logs/rules.js";
 import { openStore } from "./store/open.js";
 import type { Table, Value } from "./store/sql.js";
 import { insertSQL } from "./store/sql.js";
@@ -25,7 +27,8 @@ import { Retention, Writer } from "./writer.js";
 export const SDK_VERSION: string = typeof __SDK_VERSION__ === "string" ? __SDK_VERSION__ : "0.0.0";
 
 /**
- * Runs request logging, system metrics, spans and errors for one process.
+ * Runs request logging, system metrics, spans, errors and application logs
+ * for one process.
  * With no database configured it logs one warning and every method is a
  * no-op; it never throws into the application once constructed.
  */
@@ -40,6 +43,10 @@ export class Agent {
   private retention?: Retention;
   private profiler?: Profiler;
   private explainer?: ExplainWorker;
+  /** Application logs, through their own writer so a flood of lines never
+   * crowds out request rows; undefined when logs are off. */
+  private logs?: LogPipeline;
+  private logWriter?: Writer;
   private readonly schemas = new Map<Schema, Promise<boolean> | true>();
   private readonly schemaReported = new Set<Schema>();
   private readonly limiter = new ErrorLimiter();
@@ -84,16 +91,32 @@ export class Agent {
         this.logger,
       );
     }
+    if (cfg.logs) {
+      const store = this.store;
+      const ident = { service: cfg.service, instance: this.instance, version: cfg.version };
+      const secrets = secretKeys(cfg.redactFields);
+      this.logWriter = new Writer(cfg, store, () => this.ready("logs"), this.logger, {
+        queueSize: 10_000,
+        logRow: (r) => logValues(r, ident, secrets),
+      });
+      this.logs = new LogPipeline(
+        cfg.service,
+        parseLevel(cfg.logLevel),
+        () => store.rows(`SELECT name, value FROM visionary_settings WHERE name LIKE 'logs.%'`, []),
+        (log) => this.logWriter?.push({ log }),
+      );
+    }
     const tables: [Table, number][] = [];
     if (this.writer) tables.push(["api_logs", cfg.retentionDays], ["spans", cfg.retentionDays], ["errors", cfg.retentionDays]);
     if (this.writer && cfg.profile) tables.push(["profiles", cfg.retentionDays]);
     if (this.recorder) tables.push(["system_metrics", cfg.systemRetentionDays]);
+    if (this.logWriter) tables.push(["app_logs", cfg.retentionDays]);
     this.retention = new Retention(this.store, tables, this.logger);
   }
 
   /** True when anything is collected (a database and at least one feature). */
   get active(): boolean {
-    return !!this.writer || !!this.recorder;
+    return !!this.writer || !!this.recorder || !!this.logWriter;
   }
 
   /** Whether a request to path gets an api_logs row. */
@@ -143,6 +166,12 @@ export class Agent {
         this.profiler.start();
       }
     }
+    if (this.logWriter && this.logs) {
+      this.logWriter.start();
+      void this.ready("logs");
+      this.logs.start();
+      setActiveLogs(this.logs);
+    }
     if (this.store && cfg.explain.length > 0) {
       this.explainer = new ExplainWorker(cfg.explain, this.store, this.instance, this.logger);
       this.explainer.start();
@@ -166,9 +195,11 @@ export class Agent {
       this.retention?.stop();
       this.profiler?.stop();
       this.explainer?.stop();
+      this.logs?.stop();
+      if (this.logs && activeLogs() === this.logs) setActiveLogs(undefined);
       if (this.started) {
         const deadline = Date.now() + timeoutMs;
-        await Promise.all([this.writer?.close(timeoutMs), this.recorder?.close()]);
+        await Promise.all([this.writer?.close(timeoutMs), this.logWriter?.close(timeoutMs), this.recorder?.close()]);
         if (Date.now() > deadline) this.logger.warn("visionary: close took longer than its timeout");
       }
       await this.store?.close().catch(() => undefined);
@@ -207,8 +238,10 @@ export class Agent {
     return requests && telemetry;
   }
 
-  /** Queues a finished request and, when it was slow or failed, its spans. */
+  /** Queues a finished request and, when it was slow or failed, its spans,
+   * and decides the log lines it held back. */
   finishRequest(state: RequestState, entry: Entry): void {
+    this.logs?.finish(state, entry.route, entry.status >= 500 || state.failed, entry.durationMs);
     if (!this.writer) return;
     const cfg = this.config;
     const seen = visibility();
@@ -234,6 +267,7 @@ export class Agent {
 
   /** Records an error; inside a request it links to it. */
   recordError(err: unknown, handled: boolean, state: RequestState | undefined = currentRequest()): void {
+    if (state && !state.done) state.failed = true;
     const row = this.errorRow(err, handled, state);
     if (row) this.writer?.push({ table: "errors", args: row });
   }

@@ -43,6 +43,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit -p .",
+    "test": "tsup --config tsup.test.config.ts --silent && node --test test-dist/*.test.js",
     "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE','LICENSE')\"",
     "prepublishOnly": "npm run build"
   },

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "./agent.js";
 import { RequestState, requestTally, runInRequest } from "./context.js";
+import { traceParentId } from "./logs/pipeline.js";
 
 const TRACKED = Symbol.for("visionary.request");
 
@@ -139,6 +140,7 @@ export function observeRequest(
   const state = new RequestState(requestId, Date.now(), startHr, req.method ?? "GET", path);
   state.routeOf = routeOf;
   state.userOf = userOf;
+  state.traceId = traceParentId(header(req.headers.traceparent));
   marked[TRACKED] = state;
   requestTally.started++;
 
