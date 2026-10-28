@@ -41,7 +41,7 @@ import (
 // portalOpenPaths are never behind the allow list.
 func portalOpen(path string) bool {
 	switch {
-	case path == agentapi.Path, path == "/api/healthz", strings.HasPrefix(path, "/v1/"), strings.HasPrefix(path, "/api/ingest/"),
+	case path == agentapi.Path, path == "/api/healthz", strings.HasPrefix(path, "/v1/"), strings.HasPrefix(path, "/api/ingest/"), path == "/loki/api/v1/push",
 		path == "/status", path == "/status.json", path == "/status.js":
 		return true
 	}

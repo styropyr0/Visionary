@@ -49,6 +49,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.insightsRoutes(mux)
 	s.settingsRoutes(mux)
 	s.dataRoutes(mux)
+	s.applogsRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work

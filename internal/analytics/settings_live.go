@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
 // The settings the server itself runs on (thresholds, retention, the status
@@ -101,6 +103,10 @@ type liveSettings struct {
 	// Config holds the stored config.* values by key (Settings → Server);
 	// never sent as is, since some are secrets.
 	Config map[string]string `json:"-"`
+	// Logs is Settings → Logs as the SDKs read it (logs.*); LogServer the
+	// options only the server uses (logserver.*).
+	Logs      *logrules.Settings `json:"-"`
+	LogServer *logServerSettings `json:"-"`
 }
 
 const (
@@ -159,6 +165,7 @@ func (s *Server) refreshLive(ctx context.Context) error {
 			l.Retention[k.Key] = n
 		}
 	}
+	l.Logs, l.LogServer = parseLogSettings(m)
 	l.StatusPage = m[settingStatusPage][0] == "true"
 	l.StatusTitle = m[settingStatusTitle][0]
 	for name, v := range m {

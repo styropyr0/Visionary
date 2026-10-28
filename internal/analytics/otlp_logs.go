@@ -4,26 +4,37 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
+
+	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// Logs: only records at ERROR or above that carry exception.* attributes are
-// kept, as errors rows (a logged exception, so handled = 1), linked to the
-// request whose span was active. Everything else is accepted and dropped;
-// Visionary is not a log store.
+// Logs: every record is stored in app_logs (see applogs_ingest.go). Records
+// at ERROR or above that carry exception.* attributes are also kept as
+// errors rows (a logged exception, so handled = 1), linked to the request
+// whose span was active.
 
 func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) (int64, error) {
-	if !o.errorsOn() {
-		return 0, nil
-	}
 	now := time.Now()
 	rows := &otlpRows{}
+	var lines []*logLine
+	errorsOn := o.errorsOn()
 	o.mu.Lock()
 	for _, rl := range rls {
+		resAttrs := otlpAttrMap(rl.GetResource().GetAttributes())
 		res := otlpResourceOf(rl.GetResource().GetAttributes())
 		for _, sl := range rl.GetScopeLogs() {
 			for _, lr := range sl.GetLogRecords() {
-				if lr.GetSeverityNumber() < logspb.SeverityNumber_SEVERITY_NUMBER_ERROR {
+				at := lr.GetTimeUnixNano()
+				if at == 0 {
+					at = lr.GetObservedTimeUnixNano()
+				}
+				if at == 0 {
+					at = uint64(now.UnixNano())
+				}
+				lines = append(lines, otlpLogLine(res, resAttrs, sl.GetScope().GetName(), lr, at))
+				if !errorsOn || lr.GetSeverityNumber() < logspb.SeverityNumber_SEVERITY_NUMBER_ERROR {
 					continue
 				}
 				a := otlpAttrMap(lr.GetAttributes())
@@ -36,13 +47,6 @@ func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) 
 					}
 				}
 				sid := otlpHexID(lr.GetSpanId())
-				at := lr.GetTimeUnixNano()
-				if at == 0 {
-					at = lr.GetObservedTimeUnixNano()
-				}
-				if at == 0 {
-					at = uint64(now.UnixNano())
-				}
 				o.noteRelease(rows, res, at)
 				rc := o.recent[sid]
 				switch {
@@ -60,7 +64,84 @@ func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) 
 		}
 	}
 	o.mu.Unlock()
-	return 0, o.store(ctx, rows)
+	if err := o.store(ctx, rows); err != nil {
+		return 0, err
+	}
+	_, err := o.s.ingestLogLines(ctx, lines)
+	return 0, err
+}
+
+// otlpLogLine maps a log record: severity number (1-4 trace, 5-8 debug,
+// 9-12 info, 13-16 warn, 17-20 error, 21-24 fatal) or text, the body as the
+// message (a map body gives its fields), attributes as fields, the scope as
+// the logger and code.* attributes as the code location.
+func otlpLogLine(res *otlpResource, resAttrs otlpAttrs, scope string, lr *logspb.LogRecord, at uint64) *logLine {
+	l := &logLine{
+		at:       time.Unix(0, int64(at)),
+		service:  res.service,
+		instance: res.instance,
+		version:  res.version,
+		source:   "otlp",
+		host:     resAttrs.str("host.name", "host.id"),
+		ctr:      resAttrs.str("container.name", "k8s.container.name"),
+		logger:   scope,
+		traceID:  otlpHexID(lr.GetTraceId()),
+		spanID:   otlpHexID(lr.GetSpanId()),
+		attrs:    map[string]any{},
+	}
+	if n := int(lr.GetSeverityNumber()); n > 0 {
+		l.sev = logrules.Clamp((n-1)/4 + 1)
+	} else {
+		l.sev = logrules.ParseLevel(lr.GetSeverityText())
+	}
+	fields := map[string]any{}
+	for _, kv := range lr.GetAttributes() {
+		flatten(fields, kv.GetKey()+".", otlpValue(kv.GetValue()))
+	}
+	switch b := otlpValue(lr.GetBody()).(type) {
+	case map[string]any:
+		flatten(fields, "", b)
+	case nil:
+	default:
+		l.message = fieldString(b)
+	}
+	for _, k := range []string{"k8s.namespace.name", "k8s.pod.name", "deployment.environment"} {
+		if v := resAttrs.str(k); v != "" {
+			fields[k] = v
+		}
+	}
+	takeLogFields(l, fields)
+	return l
+}
+
+// otlpValue turns an attribute value into plain Go values: maps for
+// key-value lists, JSON text for arrays.
+func otlpValue(v *commonpb.AnyValue) any {
+	switch t := v.GetValue().(type) {
+	case *commonpb.AnyValue_StringValue:
+		return t.StringValue
+	case *commonpb.AnyValue_IntValue:
+		return t.IntValue
+	case *commonpb.AnyValue_DoubleValue:
+		return t.DoubleValue
+	case *commonpb.AnyValue_BoolValue:
+		return t.BoolValue
+	case *commonpb.AnyValue_BytesValue:
+		return otlpHexID(t.BytesValue)
+	case *commonpb.AnyValue_KvlistValue:
+		m := map[string]any{}
+		for _, kv := range t.KvlistValue.GetValues() {
+			m[kv.GetKey()] = otlpValue(kv.GetValue())
+		}
+		return m
+	case *commonpb.AnyValue_ArrayValue:
+		var out []any
+		for _, x := range t.ArrayValue.GetValues() {
+			out = append(out, otlpValue(x))
+		}
+		return out
+	}
+	return nil
 }
 
 const otlpMaxPendingLogs = 5000

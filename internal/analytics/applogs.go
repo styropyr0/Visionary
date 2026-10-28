@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
@@ -24,6 +25,10 @@ func init() {
 	for _, t := range []string{"APP_LOGS", "LOG_PATTERNS"} {
 		allowedTables[t] = true
 	}
+}
+
+func (s *Server) applogsRoutes(mux *http.ServeMux) {
+	s.applogsIngestRoutes(mux)
 }
 
 func (s *Server) applogsSchema() []string {
@@ -82,10 +87,11 @@ CREATE TABLE IF NOT EXISTS log_archives (
 	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{tail}", tail, "{index}", index).Replace(ddl)
 }
 
-// applogsStart adds the trigram index that makes text search fast on
-// PostgreSQL, when the extension can be created; without it searches scan
-// the time range.
+// applogsStart runs the syslog receiver and, on PostgreSQL, adds the
+// trigram index that makes text search fast when the extension can be
+// created; without it searches scan the time range.
 func (s *Server) applogsStart(ctx context.Context) {
+	s.syslogStart(ctx)
 	if s.q.d != sdk.Postgres {
 		return
 	}
