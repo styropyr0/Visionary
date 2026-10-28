@@ -22,8 +22,11 @@ type writer struct {
 	logger   *slog.Logger
 	redact   *redactor
 	requests bool // api_logs is written (and purged)
+	// logsOnly marks the writer of app_logs, which purges only that table.
+	logsOnly   bool
+	logSecrets map[string]bool
 
-	insertRequest, insertSpan, insertError string
+	insertRequest, insertSpan, insertError, insertLog string
 
 	// queue holds *entry, *spanRecord and *errorRecord values.
 	queue   chan any
@@ -63,6 +66,7 @@ func newWriter(cfg RequestsConfig, requests bool, ident identity, db store, logg
 		insertRequest: insertSQL("api_logs", requestColumns, sp),
 		insertSpan:    insertSQL("spans", spanColumns, sp),
 		insertError:   insertSQL("errors", errorColumns, sp),
+		insertLog:     insertSQL("app_logs", logColumns, sp),
 		queue:         make(chan any, cfg.QueueSize),
 		stop:          make(chan struct{}),
 		done:          make(chan struct{}),
@@ -74,7 +78,7 @@ func (w *writer) start(ctx context.Context) {
 	if w.cfg.RetentionDays > 0 {
 		go w.runRetention(ctx)
 	}
-	if w.requests {
+	if w.requests && !w.logsOnly {
 		w.logger.Info("visionary: logging requests", "path_prefix", w.cfg.PathPrefix, "bodies", w.cfg.CaptureBodies,
 			"retention_days", w.cfg.RetentionDays)
 	}
@@ -159,6 +163,8 @@ func (w *writer) write(batch []any) {
 			stmts = append(stmts, stmt{sql: w.insertSpan, args: w.spanParams(r)})
 		case *errorRecord:
 			stmts = append(stmts, stmt{sql: w.insertError, args: w.errorParams(r)})
+		case *logRecord:
+			stmts = append(stmts, stmt{sql: w.insertLog, args: w.logParams(r)})
 		}
 	}
 	// A request's spans can push a batch past one call's limit; send it in
@@ -195,6 +201,9 @@ func (w *writer) runRetention(ctx context.Context) {
 	tables := []string{"spans", "errors"}
 	if w.requests {
 		tables = append(tables, "api_logs")
+	}
+	if w.logsOnly {
+		tables = []string{"app_logs"}
 	}
 	runDaily(ctx, func() {
 		for _, t := range tables {

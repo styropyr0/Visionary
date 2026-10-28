@@ -65,6 +65,9 @@ type retentionKind struct {
 	Description string `json:"description"`
 	DefaultDays int    `json:"default_days"`
 	tables      []string
+	// where narrows the rows of the tables this kind covers, for a table
+	// split between kinds; a constant of this package, never input.
+	where string
 }
 
 var retentionKinds = []retentionKind{
@@ -75,6 +78,8 @@ var retentionKinds = []retentionKind{
 	{Key: "containers", Label: "Container metrics", Description: "Per-container samples, restarts, kills and health changes.", DefaultDays: 30, tables: []string{"container_metrics", "container_events"}},
 	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services and containers the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers"}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled flame graphs.", DefaultDays: 30, tables: []string{"profiles"}},
+	{Key: "logs", Label: "Logs: trace to info", Description: "Application log lines below warn.", DefaultDays: 7, tables: []string{"app_logs"}, where: "severity <= 3"},
+	{Key: "logs_important", Label: "Logs: warn and above", Description: "Application log lines at warn, error and fatal.", DefaultDays: 30, tables: []string{"app_logs"}, where: "severity >= 4"},
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.", DefaultDays: 30, tables: []string{"client_events"}},
 	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results"}},
 	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}},
@@ -210,7 +215,7 @@ func (s *Server) retentionLoop(ctx context.Context) {
 				continue
 			}
 			for _, t := range k.tables {
-				s.purgeOld(ctx, t, "", days)
+				s.purgeOld(ctx, t, k.where, days)
 			}
 		}
 		timer.Reset(6 * time.Hour)
@@ -224,7 +229,11 @@ func (s *Server) retentionUsage(ctx context.Context) map[string]map[string]any {
 		var rows int64
 		oldest := ""
 		for _, t := range k.tables {
-			res, err := s.db.Query(ctx, `SELECT COUNT(*), MIN(created_at) FROM `+t)
+			q := `SELECT COUNT(*), MIN(created_at) FROM ` + t
+			if k.where != "" {
+				q += ` WHERE ` + k.where
+			}
+			res, err := s.db.Query(ctx, q)
 			if err != nil || len(res.Rows) == 0 {
 				continue
 			}

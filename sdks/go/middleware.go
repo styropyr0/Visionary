@@ -28,6 +28,9 @@ type annotations struct {
 	requestID string
 	method    string
 	path      string
+	// traceID is the W3C trace the request belongs to (traceparent), for
+	// the log lines it writes.
+	traceID string
 
 	mu    sync.Mutex
 	user  User
@@ -37,6 +40,8 @@ type annotations struct {
 	// errs are errors captured during the request, written when it ends so
 	// they carry its final route and user.
 	errs []*errorRecord
+	// logs are lines below the level, held until the request ends.
+	logs *heldLogs
 	done bool
 }
 
@@ -97,7 +102,7 @@ type httpCounters struct {
 // it always did. Mounted outside the recovery it never sees panics, only the
 // 500 they become.
 func (a *Agent) Middleware(next http.Handler) http.Handler {
-	if a == nil || (a.writer == nil && a.system == nil && a.profiler == nil) {
+	if a == nil || (a.writer == nil && a.system == nil && a.profiler == nil && a.logs == nil) {
 		return next
 	}
 	counters := a.counters()
@@ -110,7 +115,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 		}
 
 		start := time.Now()
-		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path}
+		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path, traceID: traceParentID(r.Header.Get("traceparent"))}
 		logIt := a.cfg.Requests.Enabled && a.writer != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix)
 		if logIt {
 			ann.requestID = r.Header.Get(requestIDHeader)
@@ -148,7 +153,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 			ann.errs = nil
 			ann.mu.Unlock()
 			route := ""
-			if logIt || len(errs) > 0 {
+			if logIt || len(errs) > 0 || ann.logs != nil {
 				route = a.route(r, ann)
 				ann.mu.Lock()
 				ann.route = route // for errors captured by goroutines still running
@@ -199,6 +204,9 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 			}
 			for _, e := range errs {
 				a.enqueueError(e, ann, route)
+			}
+			if a.logs != nil {
+				a.logs.finish(ann, route, rec.status >= 500 || len(errs) > 0, time.Since(start))
 			}
 		}
 
@@ -258,6 +266,21 @@ func (c *httpCounters) observe(status int) {
 	if status >= 500 {
 		c.errors.Add(1)
 	}
+}
+
+// traceParentID is the trace id of a W3C traceparent header
+// ("00-<32 hex>-<16 hex>-<2 hex>"), or "" when there is none.
+func traceParentID(h string) string {
+	parts := strings.Split(strings.TrimSpace(h), "-")
+	if len(parts) < 4 || len(parts[1]) != 32 || strings.Trim(parts[1], "0") == "" {
+		return ""
+	}
+	for _, c := range parts[1] {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return ""
+		}
+	}
+	return parts[1]
 }
 
 func newRequestID() string {

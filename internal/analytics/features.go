@@ -24,12 +24,13 @@ import (
 //	insights.go  queries, dependencies, endpoint breakdown, EXPLAIN, GraphQL, CPU profiles
 //	settings.go  team-wide settings: profiling, which pages show
 //	data_delete.go deleting collected data by kind, range and service
+//	applogs.go   application logs: ingest, search, patterns, archive
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -69,12 +70,13 @@ func (s *Server) Start(ctx context.Context) {
 	s.otlpStart(ctx)
 	s.hostsStart(ctx)
 	s.securityStart(ctx)
+	s.applogsStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.
 func (s *Server) featurePrompt() string {
 	var parts []string
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt()} {
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt()} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}

@@ -106,6 +106,21 @@ type Config struct {
 
 	Requests RequestsConfig
 	System   SystemConfig
+	Logs     LogsConfig
+}
+
+// LogsConfig captures application logs into app_logs. Capture starts once
+// the application routes its logs here: LogHandler for slog, CaptureStdLog
+// for the log package. Which lines are kept follows the dashboard (Settings
+// → Logs); Level is the default until it has been read.
+type LogsConfig struct {
+	Enabled bool
+	// Level is the lowest level kept before the dashboard's setting is
+	// read (VISIONARY_LOG_LEVEL, default info).
+	Level string
+	// QueueSize bounds the lines waiting for the database (default 10000);
+	// past it, lines are dropped and counted.
+	QueueSize int
 }
 
 type D1Config struct {
@@ -195,6 +210,8 @@ type SystemConfig struct {
 //	VISIONARY_EXPLAIN=true|false         (default true; needs Config.Explain)
 //	VISIONARY_ERRORS=true|false          (default true)
 //	VISIONARY_PROFILE=false              (never profile; default: follow the dashboard)
+//	VISIONARY_LOGS=true|false            (default true; see LogHandler and CaptureStdLog)
+//	VISIONARY_LOG_LEVEL                  (default info, until Settings → Logs is read)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -231,6 +248,10 @@ func FromEnv() Config {
 			Interval:      envDuration("VISIONARY_SYSTEM_INTERVAL", 15*time.Second),
 			RetentionDays: envInt("VISIONARY_SYSTEM_RETENTION_DAYS", 0),
 		},
+		Logs: LogsConfig{
+			Enabled: envBool("VISIONARY_LOGS", true),
+			Level:   env("VISIONARY_LOG_LEVEL", "info"),
+		},
 	}
 }
 
@@ -247,6 +268,9 @@ type Agent struct {
 	// VISIONARY_PROFILE=false.
 	profiler *profiler
 	limiter  errLimiter
+	// logs captures application logs, through its own writer so a flood of
+	// lines never crowds out request rows; nil when logs are off.
+	logs *logger
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -299,6 +323,17 @@ func New(cfg Config) (*Agent, error) {
 	if !cfg.ProfileOff {
 		a.profiler = newProfiler(a.ident, db, cfg.Logger, cfg.Requests.RetentionDays)
 	}
+	if cfg.Logs.Enabled {
+		lc := cfg.Requests
+		lc.QueueSize = cfg.Logs.QueueSize
+		if lc.QueueSize <= 0 {
+			lc.QueueSize = 10000
+		}
+		w := newWriter(lc, false, a.ident, db, cfg.Logger)
+		w.logsOnly = true
+		w.logSecrets = secretKeys(cfg.Requests.RedactFields)
+		a.logs = newLogger(a, w, ParseLevel(cfg.Logs.Level))
+	}
 	return a, nil
 }
 
@@ -349,6 +384,14 @@ func (a *Agent) Start(ctx context.Context) {
 	if a.profiler != nil {
 		a.profiler.start(ctx)
 	}
+	if a.logs != nil {
+		if err := a.db.execScript(schemaCtx, d.LogsSchema()); err != nil {
+			a.cfg.Logger.Error("visionary: create app_logs failed", "err", err)
+		}
+		a.logs.w.start(ctx)
+		a.logs.start(ctx)
+		active.Store(a)
+	}
 }
 
 // Close flushes queued rows and buffered samples, waiting until ctx ends at
@@ -363,6 +406,10 @@ func (a *Agent) Close(ctx context.Context) {
 	}
 	if a.writer != nil {
 		a.writer.close(ctx)
+	}
+	if a.logs != nil {
+		a.logs.close()
+		a.logs.w.close(ctx)
 	}
 	if a.system != nil {
 		a.system.close(ctx)

@@ -42,6 +42,8 @@ var dataKinds = []dataKind{
 		tables: []dataTable{{"profiles", true}}},
 	{Key: "releases", Label: "Deploys", Description: "Version starts: the deploy marks on charts.", Service: true,
 		tables: []dataTable{{"releases", true}}},
+	{Key: "logs", Label: "Logs", Description: "Application log lines and their patterns.", Service: true,
+		tables: []dataTable{{"app_logs", true}, {"log_patterns", true}}},
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.",
 		tables: []dataTable{{"client_events", false}}},
 	{Key: "uptime", Label: "Uptime results", Description: "Check results and their timings. The checks themselves stay.",

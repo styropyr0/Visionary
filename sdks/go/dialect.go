@@ -25,6 +25,9 @@ func (d Dialect) RequestsSchema() string { return d.schema("requests.sql") }
 // TelemetrySchema returns the CREATE statements for spans, errors and releases.
 func (d Dialect) TelemetrySchema() string { return d.schema("telemetry.sql") }
 
+// LogsSchema returns the CREATE statements for app_logs in d.
+func (d Dialect) LogsSchema() string { return d.schema("logs.sql") }
+
 // SystemSchema returns the CREATE statements for system_metrics in d.
 func (d Dialect) SystemSchema() string { return d.schema("system.sql") }
 

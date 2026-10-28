@@ -548,6 +548,152 @@ stays off) and nothing is written. Profiles follow Settings → Retention, and
 - At most 20 rows per fingerprint per minute per process; drop the rest.
 - `VISIONARY_ERRORS=false` turns error capture off.
 
+## Application logs (`app_logs`)
+
+Lines the application logs through its usual logger, linked to the request
+whose context they were logged in. Created at startup from
+`sdks/go/schema/<dialect>/logs.sql` (copy it like the other schemas).
+`VISIONARY_LOGS=false` turns capture off. The Go SDK is the reference
+(`sdks/go/logs.go`, `logs_slog.go`).
+
+### Hooks
+
+Capture starts only where the application routes its logs to the SDK; it
+never changes what the application prints:
+
+| SDK | Hook |
+|---|---|
+| Go | `visionary.LogHandler(next slog.Handler)` (forwards to `next` unchanged), `agent.CaptureStdLog()` (tees the `log` package) |
+| Node | `visionary.captureConsole()` (wraps `console.*`, still prints), `visionary.pinoStream()` / `visionary.winstonTransport()` |
+| Python | `visionary.LogHandler` (a `logging.Handler`), `visionary.capture_logging(level=None)` adds it to the root logger |
+| Ruby | `Visionary.logger(inner = nil)` (a `Logger` that also forwards), `Visionary.capture_rails_logger` (broadcasts `Rails.logger`) |
+| Java | `io.github.styropyr0.visionary.VisionaryLogbackAppender`, added to the root logger by the Spring Boot starter when Logback is present |
+| .NET | `ILoggerProvider` added by `AddVisionary()` (`builder.Logging.AddVisionary()` when used alone) |
+
+### Columns
+
+Insert, columns in this order (same placeholder rules as requests):
+
+```sql
+INSERT INTO app_logs (
+	created_at, service, instance, version, source, host, container, level, severity, logger,
+	message, attrs, request_id, trace_id, span_id, user_id, session_id, code_file, code_line,
+	code_func, size
+) VALUES (21 placeholders)
+```
+
+| Column | Value |
+|---|---|
+| `created_at` | when the line was logged, same format as everywhere |
+| `service`, `instance`, `version` | as on every row |
+| `source` | the SDK: `go`, `node`, `python`, `ruby`, `java`, `dotnet` |
+| `host` | the machine's hostname; `container` NULL (the agent fills it for container output) |
+| `level` | `trace`, `debug`, `info`, `warn`, `error` or `fatal` |
+| `severity` | 1 trace, 2 debug, 3 info, 4 warn, 5 error, 6 fatal (integer) |
+| `logger` | logger/category name (Python `record.name`, Java logger name, .NET category), or an attribute named `logger`; NULL when none |
+| `message` | the formatted message, secrets scrubbed (below), at most 8 KB (UTF-8, cut on a character boundary) |
+| `attrs` | the line's structured fields as one flat JSON object: nested groups become dotted keys (`user.id`); values are strings, numbers or booleans (anything else as its string form; times RFC 3339); secrets redacted; at most 16 KB: when larger, cut each string value to 1024 bytes plus `…`, and if still larger keep keys in sorted order while they fit, with `"_truncated": true`. NULL when there are none |
+| `request_id` | the request's `request_id` when logged inside a logged request (or an attribute `request_id`) |
+| `trace_id`, `span_id` | the W3C trace id from the request's `traceparent` header (`00-<32 hex>-<16 hex>-<2 hex>`, all-zero ids are none), or the active OpenTelemetry span, or attributes `trace_id`/`span_id` |
+| `user_id` | the request's user (`set_user`), or attribute `user_id` |
+| `session_id` | attribute `session_id` |
+| `code_file`, `code_line`, `code_func` | where the line was logged, when the logger records it cheaply (Go slog PC, Python `pathname`/`lineno`/`funcName`, Logback caller data when enabled, Ruby `caller_locations(…, 1)`); `code_file` is named like CPU profile frames (application files relative to the project, `lib:`/`std:` otherwise). NULL otherwise |
+| `size` | bytes of `message` plus `attrs` as stored |
+
+The attributes `request_id`, `trace_id`, `span_id`, `user_id`,
+`session_id` and `logger` move to their columns and are not repeated in
+`attrs`. `pattern` is left NULL: the Visionary server fills it.
+
+Level mapping: names as `trace trc finest finer verbose` → trace,
+`debug dbg fine config` → debug, `info inf information informational notice log` → info,
+`warn warning wrn` → warn, `error err severe` → error,
+`fatal critical crit alert emerg emergency panic` → fatal. Numeric levels:
+Go slog `< -4` trace, `< 0` debug, `< 4` info, `< 8` warn, `< 12` error,
+else fatal; Python `< 10` trace, `< 20` debug, `< 30` info, `< 40` warn,
+`< 50` error, else fatal.
+
+Plain text with no level of its own (`console.log`, the Go `log` package,
+`puts`) is info unless it states one at its start: a `level=`/`lvl=`/`severity=`
+field in the first 200 bytes, or one of the first four whitespace-separated
+words (after words that are only a date or time, `^[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?$`)
+is a level name that is upper case, or bracketed (`[warn]`, `<error>`), or
+followed by `:` or `|`. A bare lower-case word is not a level
+(`error rate is low` is info). When the line starts with the upper-case
+level word followed by text (`INFO started`, `WARNING: disk`), that word is
+removed from the message.
+
+### Secrets
+
+Before writing, values of attributes whose last dotted key is one of the
+redacted field names (the request redaction defaults plus
+`VISIONARY_LOG_REDACT_FIELDS`, case-insensitive) become `"[REDACTED]"`, and
+these patterns are replaced in the message and in every string attribute,
+in this order:
+
+| Pattern | Replacement |
+|---|---|
+| `-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----\|$)` | `[REDACTED:private-key]` |
+| `\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}` | `[REDACTED:jwt]` |
+| `(?i)\b(bearer\|basic)\s+[A-Za-z0-9._~+/=-]{8,}` | `$1 [REDACTED]` |
+| `\b(AKIA\|ASIA)[0-9A-Z]{16}\b` | `[REDACTED:aws-key]` |
+| `(?i)\b(password\|passwd\|pwd\|secret\|token\|api[_-]?key\|access[_-]?token\|refresh[_-]?token\|client[_-]?secret)\b(["']?\s*[=:]\s*)("[^"]*"\|'[^']*'\|[^\s,;&"']+)` | `$1$2[REDACTED]` |
+
+The SDK's own messages (starting `visionary: `) are never captured, so a
+failed write is not queued behind itself.
+
+### What is kept (Settings → Logs)
+
+The dashboard keeps these in `visionary_settings`; the SDK reads
+`SELECT name, value FROM visionary_settings WHERE name LIKE 'logs.%'` at
+start and every 30 seconds, off the request path, keeping its previous
+values (at first the defaults) when the read fails:
+
+| `name` | `value` | Missing means |
+|---|---|---|
+| `logs.enabled` | `true`/`false` | `true` |
+| `logs.level` | the lowest level kept | `VISIONARY_LOG_LEVEL`, else `info` |
+| `logs.buffer` | keep a failed or slow request's lower lines | `true` |
+| `logs.buffer_level` | the lowest level the buffer keeps | `debug` |
+| `logs.slow_ms` | a request at least this slow counts as slow | `1000` |
+| `logs.rate` | lines per minute per process, 0 for no cap | `6000` |
+| `logs.overrides` | JSON `[{"service","route","user","level","until"}]` | none |
+| `logs.drop` | JSON `[{"service","logger","contains","level"}]` | none |
+
+- **Overrides** change the level for part of the traffic, until `until`
+  (a timestamp; empty is no end; expired ones are ignored). Empty fields
+  match anything; `service` must equal `VISIONARY_SERVICE`; `route` is a
+  route pattern, or a prefix ending in `*`; `user` is a `user_id`. For a
+  line, the level is `logs.level`, replaced by the last matching override
+  with neither route nor user, then by the last matching one with a route,
+  then by the last matching one with a user (most specific wins).
+- **Drop rules** drop matching lines: every non-empty field must match
+  (`logger` equal, `contains` a substring of the message, `level` drops
+  lines at or below it).
+- **Inside a request**, a line is written at once when its level is at least
+  the highest level any service-wide override or route/user override could
+  give this request (`logs.level` when there are none). Otherwise it is held
+  in the request (at most 500 lines; past that the oldest are dropped). When
+  the request ends, each held line is written when it reaches the level for
+  the request's final route and user, or, when `logs.buffer` is on and the
+  request failed (status ≥ 500, a panic/exception, or an error captured in
+  it) or took at least `logs.slow_ms`, when it reaches `logs.buffer_level`.
+  The rest are dropped. Lines logged by work the request left running, after
+  it ended, are decided at once with its route and user.
+- **Outside requests**, a line is kept when it reaches the level (overrides
+  without route and user apply).
+- **Rate:** count lines per wall-clock minute per process. Past `logs.rate`,
+  lines below error are dropped; error and fatal are dropped only past ten
+  times the rate. When a minute had drops, write one `warn` line with
+  `logger` = `visionary`: `visionary: N log lines dropped over the cap of R a
+  minute (Settings → Logs)`.
+
+### Writer
+
+A separate background worker from the requests writer, so a flood of lines
+never crowds out request rows: the same batching (50 rows or 3 s, retries),
+with a queue of 10000 lines, dropped and counted when full. With
+`VISIONARY_LOG_RETENTION_DAYS` set it also purges `app_logs` the same way.
+
 ## Client ingest API (browser and mobile)
 
 Browser and mobile SDKs do not write to the database; they post to the
@@ -636,6 +782,8 @@ for errors.
 | `VISIONARY_ERRORS` | `true` |
 | `VISIONARY_EXPLAIN` | `true` (only with an explainer given in code) |
 | `VISIONARY_PROFILE` | follow the dashboard; `false` never profiles |
+| `VISIONARY_LOGS` | `true` (capture where the app routes its logs; see Application logs) |
+| `VISIONARY_LOG_LEVEL` | `info` (until Settings → Logs is read) |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the
