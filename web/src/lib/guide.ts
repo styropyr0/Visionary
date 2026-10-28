@@ -387,6 +387,50 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "applogs",
+    group: "Investigate",
+    title: "Logs",
+    route: "applogs",
+    intro: "Every line your services log, from the SDKs, OpenTelemetry, shippers, syslog and the host agent, linked to the request that wrote it.",
+    shot: "applogs",
+    steps: [
+      {
+        title: "Send logs",
+        text: "In an SDK, route your logger to Visionary (the **Help** button on the page has each language's line); or point OpenTelemetry, Fluent Bit, Vector, Filebeat, Logstash or Promtail at this server with a server key; or set `VISIONARY_AGENT_LOGS` on the host agent. Info and above is kept; a failed or slow request also keeps its debug lines.",
+      },
+      {
+        title: "Search",
+        text: "Type words to match the message, `field:value` for a column or a field (`service:api`, `order_id:42`), `level:error+` for errors and worse, `route:/checkout` or `status:5xx` for lines of those requests, `-word` to leave out, `OR` between alternatives and `/regex/`. The **?** lists it all. With the analyst on, **Ask** turns a question into a search and **Explain** reads the lines for you.",
+      },
+      {
+        title: "Narrow it down",
+        text: "Drag across the chart to zoom into a moment. Open a field on the left for its top values, then **+** to keep one or **−** to leave it out; the column icon shows the field as a column. **Live tail** streams new lines as they arrive.",
+      },
+      {
+        title: "Open a line",
+        text: "Click a line for all its fields, **Lines around it** from the same source, **Open its request** with its calls on a timeline, and **Lines like this**. Editors can **Alert when it happens again**, or keep a service's or a user's debug lines for 15 minutes without a redeploy.",
+        shot: "applogs-line",
+        caption: "One line: its pattern, the release it first appeared in, and every field.",
+      },
+      {
+        title: "See the patterns",
+        text: "**Patterns** groups lines by message with numbers and ids taken out, busiest first, with a trend and the release each first appeared in. **Releases** compares two releases: what one logs that the other doesn't.",
+        shot: "applogs-patterns",
+        caption: "Lines grouped into messages; New marks those first seen in the range.",
+      },
+      {
+        title: "Keep it lean",
+        text: "**Volume** shows where storage goes, by service, source, level and the code line that logs it, and the busy messages nobody reads. **Reduce** adds a drop rule for a chatty line. **Hidden failures** lists errors logged in requests that still answered 2xx.",
+        shot: "applogs-volume",
+        caption: "Where log volume comes from, down to the line of code.",
+      },
+      {
+        title: "Set what is kept",
+        text: "**Settings → Logs** sets the level, the buffer for failed and slow requests, caps, level overrides, drop rules, parse rules for plain text, extra redaction, what viewers may see, the syslog receiver and the archive; services follow it within 30 seconds.",
+      },
+    ],
+  },
+  {
     id: "logs",
     group: "Investigate",
     title: "Request logs",

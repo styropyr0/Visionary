@@ -678,8 +678,8 @@ export const HELP: Record<Route, PageHelp> = {
   },
   settings: {
     title: "Settings",
-    tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, CPU profiling, which pages show, the status page and the audit log.",
-    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
+    tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
+    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
     read: [
       "Changes reach every server sharing the database within 30 seconds; no restart or environment variable is needed.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",

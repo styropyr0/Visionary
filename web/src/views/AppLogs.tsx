@@ -206,6 +206,16 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
 
   useEffect(() => setDraft(q), [q]);
 
+  // A link to a line while the page is open.
+  useEffect(() => {
+    const on = () => {
+      const id = Number(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("line"));
+      if (id > 0) setSelected({ id } as LogLine);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+
   // The search sent: the typed query plus the quick filters.
   const full = useMemo(() => [q, level, service ? fieldTerm("service", service) : ""].filter(Boolean).join(" "), [q, level, service]);
   const key = `${resolved.from.getTime()}-${resolved.to.getTime()}-${tick}-${full}`;

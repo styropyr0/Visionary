@@ -63,6 +63,14 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   limits, throttling and OOM kills.
 - **Errors:** exceptions and panics grouped into issues, with stacks, the
   versions they appear in, new and regressed issues, and links to the request.
+- **Logs:** every line your services log, from the SDKs, OpenTelemetry,
+  Fluent Bit, Vector, Filebeat, Logstash, Promtail, syslog and the host agent
+  (journald, files, container output), searched with a query language,
+  streamed live, grouped into patterns and alerted on. Each line links to the
+  request that wrote it, and sits on that request's timeline; debug lines are
+  kept for failed and slow requests only, and can be turned on for a service,
+  route or user for a while without a redeploy. Secrets are scrubbed, and any
+  that slip through are reported in Security. Old hours go to an S3 bucket.
 - **Request logs** with a waterfall of every query and outbound call.
 - **Frontend:** Web Vitals, page loads, client-side API latency next to
   server-side latency, JS and mobile crashes, sessions, devices and countries.
@@ -284,6 +292,8 @@ Help drawer on each page shows it too.
   database (Go and Node); see [Query plans](#query-plans).
 - **CPU profiles:** no code. Turn them on in Settings → Profiling, for all
   services or chosen ones.
+- **Logs:** route the app's logger to the SDK (one line; see [Logs](#logs)),
+  or point OpenTelemetry or a log shipper at the server.
 - **Alerts:** add a channel and a rule under Alerts. Slack, Discord, Teams,
   Google Chat and webhooks need only their URL; PagerDuty, Opsgenie, Telegram
   and Twilio need their key; email needs an SMTP server in Settings → Server →
@@ -500,6 +510,58 @@ alerts get a short explanation from the same data.
 
 Query results go to the model provider so it can reason about them. Columns
 holding IPs, user agents, headers and request/response bodies are masked first.
+
+## Logs
+
+Logs (in the sidebar) stores the lines your services log in `app_logs`, in
+the same database. Nothing is captured until you send them.
+
+**From an SDK**, with the request linked to each line it logs:
+
+| SDK | Turn it on |
+|---|---|
+| Go | `slog.New(visionary.LogHandler(yourHandler))` for slog, `agent.CaptureStdLog()` for `log` |
+| Node | `visionary.captureConsole()`, `pino({}, visionary.pinoStream())` or `visionary.winstonTransport()` |
+| Python | `visionary.capture_logging()` after logging is configured |
+| Ruby | `Visionary.capture_rails_logger`, or `Visionary.logger(Logger.new($stdout))` |
+| Java | `VISIONARY_LOG_CAPTURE=true`, or the `VisionaryLogbackAppender` in `logback-spring.xml` |
+| .NET | `builder.Logging.AddVisionary()` |
+| Browser, Android, iOS | `captureConsole: true` / `Visionary.log(...)`, linked to the session |
+
+What the app prints does not change. Info and above is stored; lines below it
+are held while a request runs and stored only when it fails or is slow
+(Settings → Logs). Overrides lower or raise the level for a service, a route
+or a user for a while, and drop rules and a per-minute cap keep chatty code
+in check; every SDK reads these within 30 seconds.
+
+**From anything else**, with a server ingest key:
+
+| Sender | Where |
+|---|---|
+| OpenTelemetry | `/v1/logs` (every record; exceptions also become Errors) |
+| Fluent Bit, Vector, Filebeat, Logstash (Elasticsearch output) | `https://visionary.example.com/api/ingest/logs` as the Elasticsearch URL |
+| Promtail, Grafana Alloy, Fluent Bit or Vector (Loki output) | `/loki/api/v1/push` (JSON) |
+| curl, scripts, functions | `POST /api/ingest/logs`: a JSON array, NDJSON or plain text |
+| Routers, firewalls, anything syslog | the syslog receiver, on the address in Settings → Logs |
+| A machine's journal, files and containers | the host agent with `VISIONARY_AGENT_LOGS` |
+
+The key goes in `Authorization` (Bearer, ApiKey or Basic with the key as the
+password), `x-visionary-key`, or `?key=`. JSON, logfmt and nginx/Apache
+access lines are read into fields; parse rules in Settings → Logs read other
+plain text.
+
+**Searching:** words match the message; `field:value` matches a column or a
+field (`service:api`, `order_id:42`); `level:error+`, `route:/checkout`,
+`status:5xx`, `-word`, `OR`, `(…)` and `/regex/` work as you would expect.
+Lines carry `request_id`, `trace_id` and `user_id`, so a request's detail, an
+error's page and a session's timeline show their lines. Explore can query
+`app_logs` and `log_patterns` in SQL, and join your own tables when an admin
+lists them under Settings → Server → AI analyst.
+
+**Retention and archive:** debug and info lines are kept 7 days and warn and
+above 30 days by default (Settings → Data). With a bucket in Settings →
+Server → Log archive (S3, R2, MinIO, B2), every finished hour is also written
+there as gzipped NDJSON and can be loaded back from Settings → Logs.
 
 ## Host agent
 

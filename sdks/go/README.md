@@ -407,6 +407,28 @@ while one runs, the usual `pprof` overhead (a few percent of one CPU).
 `VISIONARY_PROFILE=false` makes a service ignore the dashboard and never
 profile.
 
+### Logs
+
+Route your logs through the agent and they show up in Logs, each linked to
+the request it was logged in. What the service prints does not change.
+
+```go
+// slog: wrap the handler you already use; log with the request's context.
+slog.SetDefault(slog.New(visionary.LogHandler(slog.NewJSONHandler(os.Stdout, nil))))
+slog.InfoContext(r.Context(), "order placed", "order_id", id)
+
+// the log package (and slog's default handler, which writes through it)
+defer agent.CaptureStdLog()()
+```
+
+Info and above is stored. Lines below it are held while the request runs and
+written only when it fails (5xx, a panic, `CaptureError`) or is slow, so a
+failure comes with its debug lines. Settings → Logs changes the level, turns
+debug on for a service, route or user for a while, drops chatty lines and
+caps lines per minute; the agent reads it every 30 seconds. Lines carry their
+file and line, secrets are scrubbed before they are stored, and the SDK's own
+messages are never captured. `VISIONARY_LOGS=false` turns capture off.
+
 ### System metrics
 
 On by default, every 15 seconds: host CPU, memory, disk, network and load;
