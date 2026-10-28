@@ -23,6 +23,7 @@ func TestTemplateOf(t *testing.T) {
 		"connected to Postgres":                                               "connected to Postgres",
 		"2026-10-28T10:00:00Z worker started":                                 "<*> worker started",
 		"hash 0xdeadbeefcafe and sha a3f9c2b18e7d6f50":                        "hash <*> and sha <*>",
+		`192.0.2.7 - - "GET /static/app.3.js HTTP/1.1" 200 512`:            `<*> - - "GET /static/app.<*>.js HTTP/<*>" <*>`,
 	} {
 		if got := templateOf(in); got != want {
 			t.Errorf("%q:\n got %q\nwant %q", in, got, want)
@@ -74,6 +75,11 @@ func TestPatternJobAndAnalysis(t *testing.T) {
 	res, _ = s.db.Query(ctx, `SELECT message FROM app_logs WHERE code_file = 'pay.go'`)
 	if !strings.Contains(toString(res.Rows[0][0]), "[REDACTED:card-number]") {
 		t.Fatalf("card not redacted: %v", res.Rows)
+	}
+	// The pattern and its sample were made from the redacted line.
+	res, _ = s.db.Query(ctx, `SELECT template, sample FROM log_patterns WHERE code_file = 'pay.go'`)
+	if len(res.Rows) != 1 || strings.Contains(toString(res.Rows[0][1]), "4111") || !strings.Contains(toString(res.Rows[0][1]), "[REDACTED:card-number]") {
+		t.Fatalf("pattern kept the secret: %+v", res.Rows)
 	}
 	res, _ = s.db.Query(ctx, `SELECT source, kind, service, target, count, detail FROM security_events`)
 	if len(res.Rows) != 1 || res.Rows[0][0] != "logs" || res.Rows[0][1] != "secret_in_logs" || res.Rows[0][3] != "pay.go:77" || !strings.Contains(toString(res.Rows[0][5]), "card number") {

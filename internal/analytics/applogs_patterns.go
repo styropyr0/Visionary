@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
@@ -58,7 +59,28 @@ func templateOf(msg string) string {
 	if len(msg) > 2000 {
 		msg = msg[:2000]
 	}
-	t := tplQuoted.ReplaceAllString(msg, "<*>")
+	t := reduceTemplate(msg, true)
+	if !strings.ContainsFunc(strings.ReplaceAll(t, "<*>", ""), unicode.IsLetter) {
+		// Nothing but values (an access-log line is mostly quoted text):
+		// keep the words inside the quotes rather than one placeholder.
+		t = reduceTemplate(msg, false)
+	}
+	if len(t) > maxTemplateLen {
+		t = strings.TrimSpace(t[:maxTemplateLen]) + " …"
+	}
+	if t == "" {
+		t = "<*>"
+	}
+	return t
+}
+
+// reduceTemplate replaces the variable parts of msg with <*>; quoted text
+// counts as one variable part when quoted is set.
+func reduceTemplate(msg string, quoted bool) string {
+	t := msg
+	if quoted {
+		t = tplQuoted.ReplaceAllString(t, "<*>")
+	}
 	t = tplURL.ReplaceAllString(t, "$1/<*>")
 	for _, re := range []*regexp.Regexp{tplUUID, tplEmail, tplTime, tplIP, tplHex} {
 		t = re.ReplaceAllString(t, "<*>")
@@ -72,14 +94,7 @@ func templateOf(msg string) string {
 		return "<*>"
 	})
 	t = tplStars.ReplaceAllString(t, "<*>")
-	t = strings.TrimSpace(tplSpace.ReplaceAllString(t, " "))
-	if len(t) > maxTemplateLen {
-		t = strings.TrimSpace(t[:maxTemplateLen]) + " …"
-	}
-	if t == "" {
-		t = "<*>"
-	}
-	return t
+	return strings.TrimSpace(tplSpace.ReplaceAllString(t, " "))
 }
 
 // patternID names a template within a service.
@@ -141,6 +156,9 @@ func (s *Server) patternPass(ctx context.Context) (int, error) {
 	if len(rows.Rows) == 0 {
 		return 0, nil
 	}
+	// Secrets first: the scanner redacts the rows in place, so templates
+	// and samples are made from what is stored, never from a credential.
+	s.scanSecrets(ctx, rows)
 	aggs := map[string]*patternAgg{}
 	var order []string
 	for _, r := range rows.Rows {
@@ -167,7 +185,6 @@ func (s *Server) patternPass(ctx context.Context) (int, error) {
 		a.bytes += toInt(r[9])
 		a.ids = append(a.ids, toInt(r[0]))
 	}
-	s.scanSecrets(ctx, rows)
 	for _, id := range order {
 		a := aggs[id]
 		if err := s.upsertPattern(ctx, a); err != nil {
