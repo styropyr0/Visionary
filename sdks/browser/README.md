@@ -151,7 +151,21 @@ Visionary.init({ ..., ignoreUrls: ["/health", /\/analytics\//] });
 ```
 
 Compared with the server's own time for the same route, the difference is
-network and client time.
+network and client time. When the response carries `X-Request-ID` (every
+Visionary server SDK sets it), the call is linked to the server's request and
+its logs: open a session under Frontend → Recent sessions to see both sides
+on one timeline. For calls to another origin, the API must list
+`X-Request-ID` in `Access-Control-Expose-Headers`.
+
+### Logs
+
+Send the console's lines to Logs, with the session, user and page (they
+still print as before; at most 120 lines a minute are sent):
+
+```js
+Visionary.init({ ..., captureConsole: true, logLevel: "warn" }); // logLevel defaults to "info"
+Visionary.log("error", "checkout button did nothing", { step: "pay" });
+```
 
 ### Releases
 
@@ -219,6 +233,8 @@ offline.
 | `sampleRate` | `1` | Share of sessions (browser tabs) that report, 0 to 1. |
 | `ignoreUrls` | `[]` | fetch/XHR URLs to skip, as substrings or regular expressions. |
 | `app` | `"web"` | App name on every event. |
+| `captureConsole` | `false` | Sends console lines to Logs. |
+| `logLevel` | `"info"` | The lowest console level sent: `debug`, `info`, `warn` or `error`. |
 
 ## API
 
@@ -228,6 +244,7 @@ offline.
 | `setUser(id \| null)` | Attaches a user id to the events from now on. |
 | `track(name, value?, attrs?)` | Records a custom event. |
 | `captureException(error, attrs?)` | Records a handled error. |
+| `log(level, message, attrs?)` | Sends a line to Logs with this session. |
 | `flush()` | Sends what is queued now. |
 
 ## Server settings

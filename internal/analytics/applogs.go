@@ -20,6 +20,8 @@ import (
 //   - log_patterns: one row per message template per service.
 //   - log_views: saved searches.
 //   - log_archives: hours of app_logs written to the archive bucket.
+//
+// It also indexes client_events by session, for a session's timeline.
 
 func init() {
 	for _, t := range []string{"APP_LOGS", "LOG_PATTERNS"} {
@@ -33,6 +35,7 @@ func (s *Server) applogsRoutes(mux *http.ServeMux) {
 	s.applogsSettingsRoutes(mux)
 	s.applogsAnalysisRoutes(mux)
 	s.applogsAIRoutes(mux)
+	s.applogsSessionRoutes(mux)
 }
 
 func (s *Server) applogsSchema() []string {
@@ -83,7 +86,8 @@ CREATE TABLE IF NOT EXISTS log_archives (
     bytes      BIGINT NOT NULL DEFAULT 0,
     created_at {ts} NOT NULL
 ){tail};
-{index} idx_log_archives_hour ON log_archives (hour)`
+{index} idx_log_archives_hour ON log_archives (hour);
+{index} idx_client_events_session ON client_events (session_id, created_at)`
 	if q.d == sdk.MySQL {
 		// MySQL cannot index TEXT without a length; the pattern key is short.
 		ddl = strings.Replace(ddl, "id            {key} NOT NULL PRIMARY KEY", "id            VARCHAR(16) NOT NULL PRIMARY KEY", 1)

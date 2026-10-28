@@ -102,7 +102,10 @@ func (s *Server) handleClientIngest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !st.writer.enqueue(rows) {
+	// Log lines go to app_logs with the server's other logs.
+	rows, lines := clientLogLines(rows)
+	s.ingestClientLogs(lines)
+	if len(rows) > 0 && !st.writer.enqueue(rows) {
 		w.Header().Set("Retry-After", "30")
 		writeError(w, http.StatusServiceUnavailable, "ingest queue full")
 		return
@@ -248,7 +251,7 @@ type clientEvent struct {
 }
 
 var (
-	clientKinds = map[string]bool{"page_load": true, "web_vital": true, "screen": true, "api": true, "error": true, "custom": true}
+	clientKinds = map[string]bool{"page_load": true, "web_vital": true, "screen": true, "api": true, "error": true, "custom": true, "log": true}
 	appName     = regexp.MustCompile(`^[a-z0-9._-]{1,32}$`)
 	methodName  = regexp.MustCompile(`^[A-Z]{1,16}$`)
 )
@@ -313,6 +316,9 @@ func (base clientRow) withEvent(e clientEvent, now time.Time) clientRow {
 	row.DurationMs = boundedFloat(e.DurationMs, 0, 24*3600*1000)
 	row.Value = boundedFloat(e.Value, -1e12, 1e12)
 	row.Message = clip(e.Message, 1000)
+	if e.Kind == "log" {
+		row.Message = clip(e.Message, 8<<10)
+	}
 	row.Stack = clip(e.Stack, 16<<10)
 	row.Attrs = flatAttrs(e.Attrs)
 	switch e.Kind {

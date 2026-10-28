@@ -30,6 +30,7 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { ErrorNotice, linkify } from "../components/ErrorNotice";
 import { InfoTip } from "../components/InfoTip";
+import { SessionsPanel } from "./Frontend.sessions";
 import "./Frontend.css";
 import { SetupCard, SetupCommand, SetupHelpButton, SetupOption } from "../components/SetupCard";
 
@@ -326,6 +327,7 @@ export function Frontend() {
               table={breakdown.data && <DataTable result={breakdown.data} columns={breakdownColumns(by)} maxHeight={260} />}
               actions={<Select label="Breakdown" value={by} onChange={setBy} options={BREAKDOWNS} maxWidth={170} />}
             />
+            <SessionsPanel app={app} />
           </div>
         )}
       </div>

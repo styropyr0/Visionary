@@ -144,3 +144,58 @@
   margin-bottom: 20px !important;
   font-size: 12px;
 }
+
+/* Recent sessions and a session's timeline */
+.fe-sessions-note {
+  font-size: 12px;
+  margin-left: 8px;
+}
+tr.clickable {
+  cursor: pointer;
+}
+.fe-bad {
+  color: var(--critical-text);
+}
+.fe-timeline {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fe-tl-item {
+  display: grid;
+  grid-template-columns: 76px 20px 86px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.fe-tl-item.side-server {
+  background: var(--surface-2);
+}
+.fe-tl-item.clickable:hover {
+  background: var(--hover-wash);
+  cursor: pointer;
+}
+.fe-tl-item.bad .fe-tl-kind {
+  color: var(--critical-text);
+}
+.fe-tl-side {
+  color: var(--text-3);
+  display: inline-flex;
+}
+.fe-tl-kind {
+  color: var(--text-2);
+}
+.fe-tl-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  word-break: break-word;
+}
+.fe-tl-at {
+  text-align: right;
+}

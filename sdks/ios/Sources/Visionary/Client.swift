@@ -87,6 +87,13 @@ final class Client {
         enqueue(e)
     }
 
+    /// A log line; the server stores it with the session's other logs.
+    func logLine(_ level: String, message: String, attrs: [(String, AttributeValue)]) {
+        let e = event("log", level)
+        e.string("message", String(message.prefix(8192))).attrs("attrs", attrs)
+        enqueue(e)
+    }
+
     func screen(_ name: String, durationMs: Double, attrs: [(String, AttributeValue)] = []) {
         let e = event("screen", name)
         e.number("duration_ms", Client.round(durationMs)).attrs("attrs", attrs)

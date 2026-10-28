@@ -1,13 +1,14 @@
 import { describeDevice } from "./device";
 import { errorEvent, trackErrors } from "./errors";
 import { trackPageLoad, trackRouteChanges } from "./navigation";
+import { captureConsole, makeLogger } from "./logs";
 import { trackNetwork } from "./network";
 import { Transport } from "./transport";
-import type { Attrs, ClientEvent, InitOptions, Report } from "./types";
+import type { Attrs, ClientEvent, InitOptions, LogLevel, Report } from "./types";
 import { bareUrl, onHidden, randomId, safe } from "./util";
 import { startVitals } from "./vitals";
 
-export type { Attrs, InitOptions } from "./types";
+export type { Attrs, InitOptions, LogLevel } from "./types";
 
 let transport: Transport | null = null;
 let started = false;
@@ -15,6 +16,8 @@ let started = false;
 const report: Report = (e) => {
   transport?.push({ ts: new Date().toISOString(), ...e } as ClientEvent);
 };
+
+const sendLog = makeLogger(report);
 
 function sessionId(): string {
   try {
@@ -76,6 +79,7 @@ export function init(options: InitOptions): void {
       return abs === own || ignore.some((p) => (typeof p === "string" ? u.includes(p) : p.test(u)));
     });
     trackErrors(report);
+    if (options.captureConsole) captureConsole(sendLog, options.logLevel ?? "info");
     trackPageLoad(report);
     trackRouteChanges(report);
     startVitals(report, bareUrl(location.href));
@@ -102,10 +106,15 @@ export function captureException(err: unknown, attrs?: Attrs): void {
   if (e) report(e);
 }
 
+/** Sends a line to Logs, with this session and page, e.g. log("warn", "cart total mismatch", { cart: id }). */
+export function log(level: LogLevel, message: string, attrs?: Attrs): void {
+  sendLog(level, String(message), attrs);
+}
+
 /** Sends what is queued now. */
 export function flush(): void {
   transport?.flush();
 }
 
-const Visionary = { init, setUser, track, captureException, flush };
+const Visionary = { init, setUser, track, captureException, log, flush };
 export default Visionary;

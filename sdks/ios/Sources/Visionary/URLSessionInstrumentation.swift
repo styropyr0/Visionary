@@ -28,6 +28,10 @@ extension Visionary {
             attrs.append(("reused", .number(last.isReusedConnection ? 1 : 0)))
         }
         if metrics.redirectCount > 0 { attrs.append(("redirects", .number(Double(metrics.redirectCount)))) }
+        // The server's X-Request-ID links the call to its request and logs.
+        if let id = (task.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "X-Request-ID"), !id.isEmpty {
+            attrs.append(("request_id", .string(String(id.prefix(128)))))
+        }
         client.api(
             method: request.httpMethod ?? "GET",
             url: url,

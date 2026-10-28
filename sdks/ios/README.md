@@ -294,6 +294,18 @@ Records a `custom` event with `name`, optional `value`, optional `duration_ms` a
 float literals work directly). The server keeps at most 32 attributes per event, keys up to 64
 characters and string values up to 256 characters.
 
+### Logs
+
+Send a line to Logs with this session and user:
+
+```swift
+Visionary.log(.warn, "cart total mismatch", attributes: ["cart": .string(cart.id)])
+```
+
+Levels are `.debug`, `.info`, `.warn` and `.error`. API calls recorded through the session
+delegate also carry the response's `X-Request-ID`, which links them to the server's request and
+its logs: open the session under Frontend → Recent sessions.
+
 ### Sessions
 
 There is nothing to call. Each app launch gets a random `session_id`; every event of that launch

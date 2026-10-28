@@ -305,6 +305,18 @@ Attribute values should be strings or numbers; booleans become `"true"`/`"false"
 their `toString()`, and `null` values are skipped. The server keeps at most 32 attributes per
 event, keys up to 64 characters and string values up to 256 characters.
 
+### Logs
+
+Send a line to Logs with this session and user:
+
+```kotlin
+Visionary.log("warn", "cart total mismatch", mapOf("cart" to cart.id))
+```
+
+Levels are `"debug"`, `"info"`, `"warn"` and `"error"`. Calls through the OkHttp interceptor also
+carry the response's `X-Request-ID`, which links them to the server's request and its logs: open
+the session under Frontend → Recent sessions.
+
 ### Sessions
 
 There is nothing to call. Each process launch gets a random `session_id`; every event of that

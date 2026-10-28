@@ -753,9 +753,10 @@ At most 100 events per request. Kinds:
 | `page_load` | path, e.g. `/checkout` | `duration_ms` (navigation start to load), `attrs`: `ttfb`, `fcp`, `dom_interactive` |
 | `web_vital` | `LCP`, `INP`, `CLS`, `FCP` or `TTFB` | `value` (ms, CLS unitless), `url`, `attrs.rating`: `good`/`needs-improvement`/`poor` |
 | `screen` | screen or activity name | `duration_ms`: time to first draw (mobile) |
-| `api` | `METHOD /path` with ids replaced by `:id` | `url` (no query string), `method`, `status` (0 on network failure), `duration_ms` |
+| `api` | `METHOD /path` with ids replaced by `:id` | `url` (no query string), `method`, `status` (0 on network failure), `duration_ms`, `attrs.request_id`: the response's `X-Request-ID` when it has one, which links the call to the server's request and logs |
 | `error` | error type | `message`, `stack`, `url` |
 | `custom` | any | `value`, `duration_ms`, `attrs` |
+| `log` | the level: `debug`, `info`, `warn` or `error` | `message` (at most 8 KB), `url`, `attrs`; stored in `app_logs` with the session and user, not in `client_events` |
 
 The server stores one `client_events` row per event and computes `fingerprint`
 for errors.

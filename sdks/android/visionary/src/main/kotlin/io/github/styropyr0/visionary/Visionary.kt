@@ -58,6 +58,17 @@ public object Visionary {
         client?.track(name, value, durationMs, attrs)
     }
 
+    /**
+     * Sends a log line to Logs with this session: level is "debug", "info", "warn" or "error",
+     * e.g. `Visionary.log("warn", "cart total mismatch", mapOf("cart" to id))`.
+     */
+    @JvmStatic
+    @JvmOverloads
+    @AnyThread
+    public fun log(level: String, message: String, attrs: Map<String, Any?> = emptyMap()) {
+        client?.logLine(level.lowercase(java.util.Locale.ROOT), message, attrs)
+    }
+
     /** Records a handled exception (`attrs.handled = 1`). */
     @JvmStatic
     @JvmOverloads

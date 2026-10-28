@@ -60,14 +60,21 @@ internal class Client(
         enqueue(event("screen", name).number("duration_ms", round(durationMs)).attrs("attrs", attrs))
     }
 
-    fun api(method: String, url: String, path: String, status: Int, durationMs: Double) {
+    fun api(method: String, url: String, path: String, status: Int, durationMs: Double, requestId: String? = null) {
         val m = method.uppercase(Locale.ROOT)
         val e = event("api", "$m ${Paths.normalize(path)}")
             .string("url", url)
             .string("method", m)
             .number("status", status)
             .number("duration_ms", round(durationMs))
+        // The server's X-Request-ID links the call to its request and logs.
+        requestId?.trim()?.take(128)?.takeIf { it.isNotEmpty() }?.let { e.attrs("attrs", mapOf("request_id" to it)) }
         enqueue(e)
+    }
+
+    /** A log line; the server stores it with the session's other logs. */
+    fun logLine(level: String, message: String, attrs: Map<String, Any?>) {
+        enqueue(event("log", level).string("message", message.take(8192)).attrs("attrs", attrs))
     }
 
     fun error(t: Throwable, handled: Boolean, attrs: Map<String, Any?>) {

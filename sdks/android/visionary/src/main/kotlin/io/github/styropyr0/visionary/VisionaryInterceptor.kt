@@ -25,20 +25,20 @@ public class VisionaryInterceptor : Interceptor {
         val response = try {
             chain.proceed(request)
         } catch (e: IOException) {
-            record(request.method, url, 0, start)
+            record(request.method, url, 0, start, null)
             throw e
         }
-        record(request.method, url, response.code, start)
+        record(request.method, url, response.code, start, response.header("X-Request-ID"))
         return response
     }
 
-    private fun record(method: String, url: HttpUrl, status: Int, start: Long) {
+    private fun record(method: String, url: HttpUrl, status: Int, start: Long, requestId: String?) {
         val client = Visionary.client ?: return
         if (url.encodedPath.endsWith(Transport.INGEST_PATH)) return
         val ms = (System.nanoTime() - start) / 1_000_000.0
         val port = if (url.port == HttpUrl.defaultPort(url.scheme)) "" else ":${url.port}"
         // No query string or credentials: they often carry tokens and personal data.
         val clean = "${url.scheme}://${url.host}$port${url.encodedPath}"
-        client.api(method, clean, url.encodedPath, status, ms)
+        client.api(method, clean, url.encodedPath, status, ms, requestId)
     }
 }

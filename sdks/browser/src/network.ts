@@ -7,7 +7,7 @@ import { normalizePath, now, round, safe } from "./util";
  * Aborted calls are not reported.
  */
 export function trackNetwork(report: Report, skip: (url: string) => boolean) {
-  const done = safe((method: string, raw: string, status: number, t0: number) => {
+  const done = safe((method: string, raw: string, status: number, t0: number, requestId?: string | null) => {
     const u = new URL(raw, location.href);
     if (!/^https?:$/.test(u.protocol)) return;
     method = method.toUpperCase();
@@ -18,6 +18,8 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean) {
       method,
       status,
       duration_ms: round(now() - t0),
+      // The server's X-Request-ID links the call to its request and logs.
+      ...(requestId ? { attrs: { request_id: requestId.slice(0, 128) } } : {}),
     });
   });
 
@@ -36,7 +38,7 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean) {
       const t0 = now();
       return originalFetch.call(this, input, init).then(
         (res) => {
-          done(method, url, res.status, t0);
+          done(method, url, res.status, t0, res.headers?.get("x-request-id"));
           return res;
         },
         (err) => {
@@ -62,9 +64,23 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean) {
       let aborted = false;
       this.addEventListener("abort", () => (aborted = true));
       this.addEventListener("loadend", () => {
-        if (!aborted) done(v.m, v.u, this.status, t0);
+        if (!aborted) done(v.m, v.u, this.status, t0, xhrRequestId(this));
       });
     }
     return send.call(this, body);
   };
+}
+
+/**
+ * The X-Request-ID of an XHR response. getAllResponseHeaders lists only
+ * headers the page may read, without the console error getResponseHeader
+ * logs for the rest.
+ */
+function xhrRequestId(x: XMLHttpRequest): string | null {
+  try {
+    const m = /^x-request-id:\s*(.+)$/im.exec(x.getAllResponseHeaders());
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
 }

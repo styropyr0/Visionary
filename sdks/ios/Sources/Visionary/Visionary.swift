@@ -44,6 +44,12 @@ public enum Visionary {
         client?.track(name, value: value, durationMs: durationMs, attrs: sorted(attributes))
     }
 
+    /// Sends a log line to Logs with this session, e.g.
+    /// `Visionary.log(.warn, "cart total mismatch", attributes: ["cart": .string(id)])`.
+    public static func log(_ level: LogLevel, _ message: String, attributes: [String: AttributeValue] = [:]) {
+        client?.logLine(level.rawValue, message: message, attrs: sorted(attributes))
+    }
+
     /// Records a handled error (`attrs.handled = 1`) with the current call stack.
     public static func captureError(_ error: Error, attributes: [String: AttributeValue] = [:]) {
         client?.error(error, attrs: sorted(attributes))
@@ -68,4 +74,9 @@ public enum Visionary {
     private static func sorted(_ attrs: [String: AttributeValue]) -> [(String, AttributeValue)] {
         attrs.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
+}
+
+/// The level of a line sent with `Visionary.log`.
+public enum LogLevel: String, Sendable {
+    case debug, info, warn, error
 }
