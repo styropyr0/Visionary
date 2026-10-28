@@ -567,8 +567,11 @@ never changes what the application prints:
 | Node | `visionary.captureConsole()` (wraps `console.*`, still prints), `visionary.pinoStream()` / `visionary.winstonTransport()` |
 | Python | `visionary.LogHandler` (a `logging.Handler`), `visionary.capture_logging(level=None)` adds it to the root logger |
 | Ruby | `Visionary.logger(inner = nil)` (a `Logger` that also forwards), `Visionary.capture_rails_logger` (broadcasts `Rails.logger`) |
-| Java | `io.github.styropyr0.visionary.VisionaryLogbackAppender`, added to the root logger by the Spring Boot starter when Logback is present |
-| .NET | `ILoggerProvider` added by `AddVisionary()` (`builder.Logging.AddVisionary()` when used alone) |
+| Java | `io.github.styropyr0.visionary.VisionaryLogbackAppender`, declared in `logback-spring.xml`, or added to the root logger by the Spring Boot starter when `VISIONARY_LOG_CAPTURE=true` |
+| .NET | `builder.Logging.AddVisionary()` (an `ILoggerProvider`); `services.AddVisionary()` alone captures nothing |
+
+No SDK captures logs until the application opts in like this, so upgrading
+an SDK never starts writing lines nobody asked for.
 
 ### Columns
 
