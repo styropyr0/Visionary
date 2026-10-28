@@ -59,6 +59,8 @@ type logServerSettings struct {
 	Syslog string `json:"syslog"`
 	// SyslogService names lines whose sender gives no app name.
 	SyslogService string `json:"syslog_service"`
+	// Access limits what viewers see.
+	Access logAccessSettings `json:"access"`
 }
 
 const (

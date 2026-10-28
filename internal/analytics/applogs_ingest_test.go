@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,13 +24,25 @@ import (
 // and the given Settings → Logs values (logs.* and logserver.config).
 func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "logs.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	// VISIONARY_TEST_DATABASE_URL runs the log tests on PostgreSQL or MySQL
+	// instead; the log tables there are emptied first.
+	dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "sqlite:///" + filepath.ToSlash(filepath.Join(t.TempDir(), "logs.db"))
+	}
+	s, err := New(Config{DatabaseURL: dsn}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Init(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" {
+		for _, table := range []string{"app_logs", "log_patterns", "log_views", "errors"} {
+			if err := s.db.Exec(context.Background(), "DELETE FROM "+table); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	t.Cleanup(func() { _ = s.db.Close() })
 	// Ingestion writes through the OTLP state's own pool; close it first
