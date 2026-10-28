@@ -30,6 +30,8 @@ func init() {
 func (s *Server) applogsRoutes(mux *http.ServeMux) {
 	s.applogsIngestRoutes(mux)
 	s.applogsAPIRoutes(mux)
+	s.applogsSettingsRoutes(mux)
+	s.applogsAnalysisRoutes(mux)
 }
 
 func (s *Server) applogsSchema() []string {
@@ -93,6 +95,7 @@ CREATE TABLE IF NOT EXISTS log_archives (
 // created; without it searches scan the time range.
 func (s *Server) applogsStart(ctx context.Context) {
 	s.syslogStart(ctx)
+	s.applogsPatternsStart(ctx)
 	if s.q.d != sdk.Postgres {
 		return
 	}

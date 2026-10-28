@@ -21,6 +21,8 @@ import (
 // behind a firewall. Lines are batched for a second before they are stored.
 
 type syslogRunner struct {
+	// ctx is the server's, which the listeners live on.
+	ctx   context.Context
 	mu    sync.Mutex
 	addr  string
 	stop  func()
@@ -39,6 +41,9 @@ func (s *Server) syslog() *syslogRunner {
 // and flushes received lines every second.
 func (s *Server) syslogStart(ctx context.Context) {
 	rn := s.syslog()
+	rn.mu.Lock()
+	rn.ctx = ctx
+	rn.mu.Unlock()
 	go func() {
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
@@ -113,6 +118,18 @@ func (s *Server) syslogApply(ctx context.Context, addr string) {
 	s.logger.Info("syslog: listening", "addr", addr)
 	go s.syslogUDP(pc)
 	go s.syslogTCP(lctx, ln)
+}
+
+// syslogReapply applies a changed address at once rather than within 30
+// seconds; before the receiver has started it does nothing.
+func (s *Server) syslogReapply() {
+	rn := s.syslog()
+	rn.mu.Lock()
+	ctx := rn.ctx
+	rn.mu.Unlock()
+	if ctx != nil {
+		s.syslogApply(ctx, strings.TrimSpace(s.logServer().Syslog))
+	}
 }
 
 // syslogStatus is what Settings shows: the address bound and any error.
