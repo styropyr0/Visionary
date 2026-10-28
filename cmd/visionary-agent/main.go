@@ -52,6 +52,9 @@ type config struct {
 	disks    []string
 	authLog  string // a log file, "journald", "off", or "" to pick one
 	docker   string // the engine's socket, "off", or "" to find one
+	// logs are the log sources to collect: journald, docker, file globs.
+	logs     []string
+	stateDir string
 
 	// Security collectors that run when security is on.
 	sshKeys        bool
@@ -97,6 +100,8 @@ func loadConfig(args []string) (config, error) {
 	fs.BoolVar(&c.processChecks, "process-checks", envBool("VISIONARY_AGENT_PROCESS_CHECKS", true), "report miners, reverse shells and programs run from /tmp (VISIONARY_AGENT_PROCESS_CHECKS)")
 	fs.BoolVar(&c.containerRisks, "container-risks", envBool("VISIONARY_AGENT_CONTAINER_RISKS", true), "report privileged, root and new-image containers (VISIONARY_AGENT_CONTAINER_RISKS)")
 	fs.StringVar(&c.docker, "docker", os.Getenv("VISIONARY_AGENT_DOCKER"), `container engine socket: a path, "off", or empty to find Docker or Podman (VISIONARY_AGENT_DOCKER)`)
+	logs := fs.String("logs", os.Getenv("VISIONARY_AGENT_LOGS"), `comma-separated log sources to send: journald, docker, and file globs such as /var/log/nginx/*.log (VISIONARY_AGENT_LOGS, default none)`)
+	fs.StringVar(&c.stateDir, "state", envStr("VISIONARY_AGENT_STATE", "/var/lib/visionary-agent"), "directory for where log sources got to (VISIONARY_AGENT_STATE)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -105,7 +110,7 @@ func loadConfig(args []string) (config, error) {
 		fmt.Println("visionary-agent", version)
 		return c, flag.ErrHelp
 	}
-	c.units, c.disks = splitList(*units), splitList(*disks)
+	c.units, c.disks, c.logs = splitList(*units), splitList(*disks), splitList(*logs)
 	c.url = strings.TrimRight(strings.TrimSpace(c.url), "/")
 	u, err := url.Parse(c.url)
 	if c.url == "" || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -139,11 +144,15 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	a := newAgent(cfg, logger)
 	snd := newSender(cfg, logger)
 	go snd.run(ctx)
+	if len(cfg.logs) > 0 {
+		go newLogShipper(cfg, logger, a.docker).run(ctx)
+	}
 	if cfg.security {
 		go a.updates.run(ctx)
 	}
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
-		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"))
+		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"),
+		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"))
 
 	sampleT := time.NewTicker(cfg.interval)
 	defer sampleT.Stop()
@@ -235,6 +244,13 @@ func envDuration(key string, def time.Duration) time.Duration {
 	}
 	if n, err := strconv.Atoi(v); err == nil && n > 0 {
 		return time.Duration(n) * time.Second // plain seconds
+	}
+	return def
+}
+
+func envStr(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
 	}
 	return def
 }

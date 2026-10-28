@@ -72,6 +72,28 @@ none runs when `VISIONARY_AGENT_SECURITY` is off):
 | `VISIONARY_AGENT_PROCESS_CHECKS=off` | `-process-checks=false` | suspicious processes |
 | `VISIONARY_AGENT_CONTAINER_RISKS=off` | `-container-risks=false` | privileged, root and new-image containers |
 
+## Logs
+
+The agent sends the machine's logs to Logs when you name the sources. It
+sends none by default:
+
+```sh
+VISIONARY_AGENT_LOGS=journald,docker,/var/log/nginx/*.log
+```
+
+| Source | What it sends |
+|---|---|
+| `journald` | the systemd journal, with each entry's unit, priority as the level, and identifier as the service |
+| `docker` | the output of every running Docker or Podman container (stdout and stderr), named by its compose service or name |
+| a file glob | lines appended to matching files, following rotation (rename or truncate); the service is the file's directory, or its name under `/var/log` |
+
+Lines are sent in gzipped batches every 2 seconds to `/api/ingest/logs` with
+the server key; the server reads JSON, logfmt and access-log lines, scrubs
+secrets and applies Settings → Logs. Where each source got to is kept in
+`VISIONARY_AGENT_STATE` (default `/var/lib/visionary-agent`), so a restart
+neither repeats nor loses lines; a source seen for the first time starts at
+its end.
+
 ## Build
 
 ```sh
