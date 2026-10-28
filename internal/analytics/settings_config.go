@@ -69,6 +69,7 @@ var confDefs = []confDef{
 	{Key: "openai_api_key", Group: "analyst", Label: "OpenAI API key", Help: "Turns the analyst on. Any OpenAI-compatible API works with its base URL below.", Kind: confSecret},
 	{Key: "openai_api_base", Group: "analyst", Label: "API base URL", Kind: confText, Default: "https://api.openai.com/v1"},
 	{Key: "model", Group: "analyst", Label: "Model", Kind: confText, Default: "gpt-4.1"},
+	{Key: "explore_tables", Group: "analyst", Label: "Your tables Explore may read", Help: "Comma-separated tables of your application in this database, e.g. users, orders. Explore and the analyst can then join them with logs and requests, read-only; their rows are sent to the model like any result. Visionary's own tables with secrets are never readable.", Kind: confText},
 	{Key: "reasoning", Group: "analyst", Label: "Reasoning effort", Help: "For reasoning models; leave empty for others.", Kind: confChoice, Choices: []string{"", "low", "medium", "high"}},
 	{Key: "app_name", Group: "analyst", Label: "Product name", Help: "The product whose API is analysed, used in answers.", Kind: confText, Default: "the application"},
 	{Key: "data_notes", Group: "analyst", Label: "Notes about your data", Help: "Anything the analyst should know, such as what each user_role means.", Kind: confLong},
@@ -383,6 +384,7 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 // applyConfig rebuilds what is made from settings rather than read at each
 // use: the analyst's client.
 func (s *Server) applyConfig() {
+	setOwnTables(s.conf("explore_tables"))
 	next := s.newLLM()
 	prev := s.llmP.Load()
 	if prev != nil && next != nil && *prev == *next {

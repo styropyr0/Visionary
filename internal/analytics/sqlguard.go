@@ -168,7 +168,7 @@ func checkTables(toks []token) error {
 					if !tableFunctions[t.text] {
 						return fmt.Errorf("%s cannot be used as a table", strings.ToLower(t.text))
 					}
-				} else if !allowedTables[t.text] && !ctes[t.text] {
+				} else if !allowedTables[t.text] && !ctes[t.text] && !ownTable(t.text) {
 					return fmt.Errorf("unknown table %s: only Visionary's own tables can be queried", strings.ToLower(t.text))
 				}
 			default:

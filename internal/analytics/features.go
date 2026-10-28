@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Features plug in here. Each one lives in its own files and fills in its
@@ -77,7 +78,9 @@ func (s *Server) Start(ctx context.Context) {
 // featurePrompt describes the features' tables to the analyst.
 func (s *Server) featurePrompt() string {
 	var parts []string
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt()} {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt(), s.ownTablesPrompt(ctx)} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}
