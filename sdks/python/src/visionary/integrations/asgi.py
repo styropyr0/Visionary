@@ -62,7 +62,7 @@ class VisionaryASGIMiddleware:
                     await send(message)
 
                 t0 = time.perf_counter()
-                ann, token = _context.begin(None, _info(scope, None))
+                ann, token = _context.begin(None, _info(scope, None), _traceparent(scope))
                 try:
                     await self.app(scope, receive, send_status)
                 except BaseException as e:
@@ -70,7 +70,9 @@ class VisionaryASGIMiddleware:
                     raise
                 finally:
                     _context.end(token)
-                    finish_unlogged(scope.get("method", ""), ann.route or _route(scope) or scope.get("path", ""), t0)
+                    route = ann.route or _route(scope)
+                    finish_unlogged(scope.get("method", ""), route or scope.get("path", ""), t0, agent, ann,
+                                    status[0], route)
         finally:
             agent.http.finished(status[0])
 
@@ -114,7 +116,7 @@ class VisionaryASGIMiddleware:
             await send(message)
 
         trace = agent.new_trace(e.request_id, t0)
-        ann, token = _context.begin(trace, _info(scope, e.request_id))
+        ann, token = _context.begin(trace, _info(scope, e.request_id), lookup.get("traceparent"))
         try:
             await self.app(scope, tee_receive, tee_send)
         except BaseException as exc:
@@ -137,7 +139,7 @@ class VisionaryASGIMiddleware:
                 e.request_size = max(parse_content_length(lookup.get("content-length")), req.size)
                 e.response_body, e.response_truncated = resp.data, resp.truncated
                 e.response_size = max(state["declared"], resp.size)
-                finish(agent, e, t0, status[0], trace)
+                finish(agent, e, t0, status[0], trace, ann)
             except Exception:
                 logger.exception("visionary: request capture failed")
 
@@ -148,6 +150,13 @@ def _info(scope: Scope, rid: Optional[str]) -> _context.RequestInfo:
 
 def _headers(scope: Scope) -> List[Tuple[str, str]]:
     return [(k.decode("latin-1"), v.decode("latin-1")) for k, v in scope.get("headers", [])]
+
+
+def _traceparent(scope: Scope) -> Optional[str]:
+    for k, v in scope.get("headers", []):
+        if k.lower() == b"traceparent":
+            return v.decode("latin-1")
+    return None
 
 
 def _route(scope: Scope) -> str:

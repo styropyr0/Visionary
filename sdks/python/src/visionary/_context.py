@@ -13,9 +13,10 @@ class Annotations:
     set_user works from wherever the request's code runs.
     """
 
-    __slots__ = ("_lock", "user_id", "user_handle", "user_role", "login_account", "route", "trace", "request")
+    __slots__ = ("_lock", "user_id", "user_handle", "user_role", "login_account", "route", "trace", "request",
+                 "trace_id", "failed", "logs", "done")
 
-    def __init__(self, trace: Any = None, request: Optional["RequestInfo"] = None) -> None:
+    def __init__(self, trace: Any = None, request: Optional["RequestInfo"] = None, trace_id: str = "") -> None:
         self._lock = threading.Lock()
         self.user_id = ""
         self.user_handle = ""
@@ -24,6 +25,15 @@ class Annotations:
         self.route = ""
         self.trace = trace  # _spans.Trace, or None when spans are off
         self.request = request
+        # The W3C trace the request belongs to (traceparent), for its log lines.
+        self.trace_id = trace_id
+        # An exception escaped or was captured in the request (its held log
+        # lines are then kept down to logs.buffer_level).
+        self.failed = False
+        # Log lines below the level, held until the request ends (_logs.Held).
+        self.logs: Any = None
+        # The request has ended: lines logged after it are decided at once.
+        self.done = False
 
     def set_user(self, id: Any, handle: Optional[str], role: Optional[str]) -> None:
         with self._lock:
@@ -70,8 +80,8 @@ class RequestInfo:
 _current: ContextVar[Optional[Annotations]] = ContextVar("visionary_request", default=None)
 
 
-def begin(trace: Any = None, request: Optional[RequestInfo] = None) -> tuple:
-    ann = Annotations(trace, request)
+def begin(trace: Any = None, request: Optional[RequestInfo] = None, traceparent: Optional[str] = None) -> tuple:
+    ann = Annotations(trace, request, trace_parent_id(traceparent))
     return ann, _current.set(ann)
 
 
@@ -86,6 +96,28 @@ def end(token: Token) -> None:
 
 def current() -> Optional[Annotations]:
     return _current.get()
+
+
+def mark_failed() -> None:
+    """The current request had an error (an exception escaped or was
+    captured), whatever its status."""
+    ann = _current.get()
+    if ann is not None:
+        ann.failed = True
+
+
+_HEX = frozenset("0123456789abcdef")
+
+
+def trace_parent_id(header: Optional[str]) -> str:
+    """The trace id of a W3C traceparent header ("00-<32 hex>-<16 hex>-<2 hex>"),
+    or "" when there is none."""
+    if not header:
+        return ""
+    parts = header.strip().split("-")
+    if len(parts) < 4 or len(parts[1]) != 32 or not parts[1].strip("0") or not set(parts[1]) <= _HEX:
+        return ""
+    return parts[1]
 
 
 def set_user(id: Any, handle: Optional[str] = None, role: Optional[str] = None) -> None:

@@ -113,7 +113,7 @@ class VisionaryMiddleware:
                 e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
             rid = e.request_id if e is not None else None
             trace = self.agent.new_trace(rid, t0) if e is not None else None
-            ann, token = _context.begin(trace, _request_info(request, rid))
+            ann, token = _context.begin(trace, _request_info(request, rid), request.headers.get("traceparent"))
             return _State(e, t0, ann, token)
         except Exception:
             logger.exception("visionary: request capture failed")
@@ -127,7 +127,9 @@ class VisionaryMiddleware:
             self.agent.http.finished(status)
             if state is not None:
                 try:
-                    finish_unlogged(request.method, state.ann.route or _route(request) or request.path, state.t0)
+                    route = state.ann.route or _route(request)
+                    finish_unlogged(request.method, route or request.path, state.t0, self.agent, state.ann,
+                                    status, route)
                 except Exception:
                     pass
             return response
@@ -138,7 +140,7 @@ class VisionaryMiddleware:
             streamed = False
         if not streamed:
             self.agent.http.finished(status)
-            finish(self.agent, state.entry, state.t0, status, state.ann.trace)
+            finish(self.agent, state.entry, state.t0, status, state.ann.trace, state.ann)
         return response
 
     def _fill(self, request: Any, response: Any, state: _State) -> bool:
@@ -188,7 +190,7 @@ class VisionaryMiddleware:
             e.response_body, e.response_truncated = resp.data, resp.truncated
             e.response_size = max(declared, resp.size)
             self.agent.http.finished(status)
-            finish(self.agent, e, state.t0, status, state.ann.trace)
+            finish(self.agent, e, state.t0, status, state.ann.trace, state.ann)
 
         if getattr(response, "is_async", False):
             response.streaming_content = _acount(response.streaming_content, resp, done)

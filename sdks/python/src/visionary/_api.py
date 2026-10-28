@@ -7,7 +7,7 @@ import sys
 import threading
 from typing import Any, Callable, Optional
 
-from . import _agent, _spans
+from . import _agent, _context, _spans
 
 
 class span:
@@ -105,6 +105,7 @@ def capture_exception(exc: Optional[BaseException] = None) -> None:
         exc = sys.exc_info()[1]
     if exc is None:
         return
+    _context.mark_failed()
     agent = _spans.active() or _agent.get_agent()
     if agent is not None:
         agent.capture_error(exc, True)

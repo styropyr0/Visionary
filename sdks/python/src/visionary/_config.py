@@ -70,6 +70,13 @@ class Config:
     # it and never profiles (VISIONARY_PROFILE=false).
     profile: bool = True
 
+    # Application logs (SPEC "Application logs"): captured once the app routes
+    # its logging here (visionary.capture_logging() or visionary.LogHandler).
+    # log_level is the lowest level kept until Settings -> Logs is read.
+    logs: bool = True
+    log_level: str = "info"
+    log_queue_size: int = 10000
+
 
 def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
     """Build a Config from environment variables (see SPEC.md "Environment")."""
@@ -107,6 +114,8 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         errors=parse_bool(s("VISIONARY_ERRORS"), True),
         instrument_http=parse_bool(s("VISIONARY_INSTRUMENT_HTTP"), False),
         profile=parse_bool(s("VISIONARY_PROFILE"), True),
+        logs=parse_bool(s("VISIONARY_LOGS"), True),
+        log_level=s("VISIONARY_LOG_LEVEL", "info"),
     )
 
 

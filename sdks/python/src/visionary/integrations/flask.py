@@ -121,15 +121,16 @@ class Visionary:
         st.t0 = time.perf_counter()
         try:
             req = request._get_current_object()
+            traceparent = request.headers.get("traceparent")
             if not agent.should_log(request.path):
-                st.ann, st.token = _context.begin(None, _info(req, None))
+                st.ann, st.token = _context.begin(None, _info(req, None), traceparent)
                 return
             e = Entry()
             e.started_at = now()
             e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
             st.entry, st.t0 = e, time.perf_counter()
             trace = agent.new_trace(e.request_id, st.t0)
-            st.ann, st.token = _context.begin(trace, _info(req, e.request_id))
+            st.ann, st.token = _context.begin(trace, _info(req, e.request_id), traceparent)
             cfg = agent.config
             ct = environ.get("CONTENT_TYPE", "")
             if cfg.capture_bodies and capturable(ct):
@@ -150,7 +151,7 @@ class Visionary:
         status = response.status_code
         if st.entry is None:
             self.agent.http.finished(status)
-            self._finish_unlogged(st)
+            self._finish_unlogged(st, status)
             return response
         try:
             if self._fill(st, response):
@@ -158,7 +159,7 @@ class Visionary:
         except Exception:
             logger.exception("visionary: request capture failed")
         self.agent.http.finished(status)
-        finish(self.agent, st.entry, st.t0, status, st.ann.trace)
+        finish(self.agent, st.entry, st.t0, status, st.ann.trace, st.ann)
         return response
 
     def _teardown(self, exc: Optional[BaseException]) -> None:
@@ -178,19 +179,19 @@ class Visionary:
         st.done = True
         self.agent.http.finished(500)
         if st.entry is None:
-            self._finish_unlogged(st)
+            self._finish_unlogged(st, 500)
         else:
             try:
                 self._fill(st, None)
             except Exception:
                 logger.exception("visionary: request capture failed")
-            finish(self.agent, st.entry, st.t0, 500, st.ann.trace if st.ann is not None else None)
+            finish(self.agent, st.entry, st.t0, 500, st.ann.trace if st.ann is not None else None, st.ann)
 
-    def _finish_unlogged(self, st: _State) -> None:
+    def _finish_unlogged(self, st: _State, status: int) -> None:
         try:
             rule = request.url_rule
             route = (st.ann.route if st.ann is not None else "") or (rule.rule if rule is not None else "")
-            finish_unlogged(request.method, route or request.path, st.t0)
+            finish_unlogged(request.method, route or request.path, st.t0, self.agent, st.ann, status, route)
         except Exception:
             pass
 
@@ -243,7 +244,7 @@ class Visionary:
             e.response_body, e.response_truncated = resp.data, resp.truncated
             e.response_size = max(declared, resp.size)
             self.agent.http.finished(status)
-            finish(self.agent, e, st.t0, status, st.ann.trace)
+            finish(self.agent, e, st.t0, status, st.ann.trace, st.ann)
 
         response.response = CountingIterator(response.response, resp, done)
         return True

@@ -300,6 +300,43 @@ yours, the 5 innermost frames are used; with no frames, the message with
 digit runs replaced by `0`. At most 20 rows per fingerprint per minute are
 kept.
 
+## Logs
+
+What your service logs through `logging` can show up on **Logs**, each line
+linked to the request it was logged in (request id, trace id from
+`traceparent`, user). Turn it on once logging is configured:
+
+```python
+import logging
+import visionary
+
+logging.basicConfig(level=logging.INFO)   # or dictConfig / Django's LOGGING: first
+visionary.capture_logging()
+```
+
+This adds a `visionary.LogHandler` to the root logger. What your app prints
+does not change: to let debug lines reach Visionary it lowers the root
+logger to DEBUG, and gives the handlers that exist at that moment a filter
+so they keep printing exactly what they printed before. Call it after
+`basicConfig`/`dictConfig`, which replace or skip the root logger's handlers;
+handlers added later need a level of their own. You can also attach
+`visionary.LogHandler()` to any logger yourself.
+
+By default info and above are kept. Debug lines are held in the request and
+kept only when it fails (5xx, an exception, `capture_exception`) or is slow
+(1 s or more), so a failure comes with the lines that led to it. Extra fields
+(`log.info("paid", extra={"order": {"id": 7}})`) are stored as attributes
+(`order.id`), exception tracebacks are added to the message, and passwords,
+tokens, keys and the redacted field names are scrubbed before writing.
+
+**Settings → Logs** controls the rest live, read every 30 seconds: the level,
+the buffer, the slow threshold, a per-minute cap (6000 lines by default),
+lower or higher levels for a route or a user until a time, and drop rules.
+`VISIONARY_LOG_LEVEL` is the level until those are read; `VISIONARY_LOGS=false`
+turns capture off. Lines go through a queue of their own (10 000), so a flood
+of them never delays request rows. For trace-level overrides capture below
+DEBUG: `visionary.capture_logging(level=5)`.
+
 ## Query plans
 
 Not supported in the Python SDK yet. **Explain** on **Queries** is answered
@@ -432,7 +469,7 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `redact_request_fields` | | Keys redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error_code_field` | `error.code` | Where error responses keep their code (dotted JSON path). |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error_key_field` | `error.key` | The same, for the error key. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors and profiles older than this. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles and app_logs older than this. |
 | `VISIONARY_SYSTEM_METRICS` | `system_metrics` | `true` | System samples on or off. |
 | `VISIONARY_SYSTEM_INTERVAL` | `system_interval` (seconds) | `15s` | Time between samples: `15`, `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `system_retention_days` | `0` (off) | The same as the log retention, for system_metrics. |
@@ -442,6 +479,9 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_ERRORS` | `errors` | `true` | Error capture on or off. |
 | `VISIONARY_INSTRUMENT_HTTP` | `instrument_http` | `false` | Call `instrument_http()` at start. |
 | `VISIONARY_PROFILE` | `profile` | `true` (follow the dashboard) | `false` never profiles. |
+| `VISIONARY_LOGS` | `logs` | `true` | Capture of what the app logs (see [Logs](#logs)). |
+| `VISIONARY_LOG_LEVEL` | `log_level` | `info` | Lowest level kept until **Settings → Logs** is read. |
+| | `log_queue_size` | `10000` | Log line queue; when full, new lines are dropped and logged. |
 | | `queue_size` | `5000` | Request queue entries; when full, new entries are dropped and logged. |
 | | `batch_size` | `50` | Rows per write. |
 | | `flush_interval` | `3.0` | Seconds between writes. |
@@ -489,6 +529,7 @@ time and kept (up to an hour) while the database is unreachable.
 | `VisionaryMiddleware` (Django), `Visionary` (Flask), `VisionaryASGIMiddleware` | Framework integrations, in `visionary.integrations.*`. |
 | `set_user(id, handle=None, role=None)`, `set_route(pattern)`, `login_attempt(account)` | Annotate the current request. |
 | `capture_exception(exc=None)` | Record a handled error. |
+| `capture_logging(level=None)`, `LogHandler(level=NOTSET, agent=None)` | Send `logging` records to **Logs**. |
 | `span(kind, name, target=None, detail=None)` | Custom span (`with` / `async with`). |
 | `background(name, fn, *args, **kwargs)`, `background_span(name)` | Work after the response. |
 | `instrument_http()` | Hook requests, httpx and urllib3. |

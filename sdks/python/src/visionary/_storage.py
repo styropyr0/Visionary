@@ -69,10 +69,16 @@ ERROR_COLUMNS = [
     "created_at", "service", "instance", "version", "request_id", "method", "route", "path", "user_id",
     "type", "message", "stack", "fingerprint", "handled", "runtime",
 ]
+# Application logs (SPEC "Application logs").
+LOG_COLUMNS = [
+    "created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",
+    "message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line",
+    "code_func", "size",
+]
 RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"]
 # CPU profiles; the Visionary server creates the table, never the SDK.
 PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"]
-SETTINGS_SQL = "SELECT name, value FROM visionary_settings WHERE name LIKE 'profile.%'"
+SETTINGS_SQL = "SELECT name, value FROM visionary_settings WHERE name LIKE '%s.%%'"
 
 TABLES = {
     "requests": ("api_logs", REQUEST_COLUMNS),
@@ -81,16 +87,21 @@ TABLES = {
     "errors": ("errors", ERROR_COLUMNS),
     "releases": ("releases", RELEASE_COLUMNS),
     "profiles": ("profiles", PROFILE_COLUMNS),
+    "logs": ("app_logs", LOG_COLUMNS),
 }
 
 # Schema file per group, and the columns older tables of that group may lack.
-_SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql"}
+_SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql", "logs": "logs.sql"}
 _MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS)}
 
-# NOT NULL columns in api_logs; on D1 they are bound as-is, like the Go SDK.
+# NOT NULL columns in api_logs and app_logs; on D1 they are bound as-is, like
+# the Go SDK (an empty log message must not become NULL).
 _D1_REQUIRED = {
-    "request_id", "created_at", "method", "path", "status", "duration_ms",
-    "request_body_truncated", "request_size", "response_body_truncated", "response_size",
+    "requests": {
+        "request_id", "created_at", "method", "path", "status", "duration_ms",
+        "request_body_truncated", "request_size", "response_body_truncated", "response_size",
+    },
+    "logs": {"created_at", "source", "level", "severity", "message", "size"},
 }
 
 PURGE_CHUNK = 5000
@@ -104,11 +115,13 @@ _MYSQL_CHARS = {
     "error_code": 128, "error_key": 255, "instance": 128,
     "service": 255, "version": 255, "kind": 255, "name": 255, "target": 255, "type": 255,
     "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255, "login_account": 255,
+    "source": 32, "host": 255, "container": 255, "level": 8, "logger": 255, "trace_id": 64, "span_id": 32,
+    "session_id": 255, "code_file": 512, "code_func": 255,
 }
 _MYSQL_BYTES = {
     "path": 65535, "query": 65535, "user_agent": 65535, "request_headers": 65535,
     "request_body": 16777215, "response_body": 16777215,
-    "detail": 65535, "error": 65535, "message": 65535, "stack": 16777215,
+    "detail": 65535, "error": 65535, "message": 65535, "stack": 16777215, "attrs": 16777215,
 }
 
 
@@ -167,7 +180,7 @@ class Backend:
     dialect = ""
 
     def create_schema(self, table: str) -> None:
-        """Create a schema group ("requests", "system" or "telemetry"): its
+        """Create a schema group ("requests", "system", "telemetry" or "logs"): its
         tables and indexes, then the columns an older table is missing."""
         raise NotImplementedError
 
@@ -201,9 +214,9 @@ class Backend:
         """Delete one chunk of rows older than cutoff; returns rows deleted."""
         raise NotImplementedError
 
-    def read_settings(self) -> List[Tuple[str, str]]:
-        """The dashboard's profile.* settings as (name, value) rows. Raises
-        when visionary_settings doesn't exist yet."""
+    def read_settings(self, prefix: str = "profile") -> List[Tuple[str, str]]:
+        """The dashboard's ``<prefix>.*`` settings (profile, logs) as (name,
+        value) rows. Raises when visionary_settings doesn't exist yet."""
         raise NotImplementedError
 
     def close(self) -> None:
@@ -231,7 +244,8 @@ class D1Backend(Backend):
         self._client = client
         self._sql: Dict[str, str] = {}
         for table, (name, cols) in TABLES.items():
-            ph = ["?" if table == "requests" and c in _D1_REQUIRED else "NULLIF(?, '')" for c in cols]
+            required = _D1_REQUIRED.get(table, set())
+            ph = ["?" if c in required else "NULLIF(?, '')" for c in cols]
             self._sql[table] = "INSERT INTO %s (%s) VALUES (%s)" % (name, ", ".join(cols), ", ".join(ph))
 
     def create_schema(self, table: str) -> None:
@@ -252,8 +266,9 @@ class D1Backend(Backend):
     def purge(self, table: str, cutoff: str) -> int:
         return self._client.changes(_purge_sql("d1", table, "?"), [cutoff])
 
-    def read_settings(self) -> List[Tuple[str, str]]:
-        return [(str(r[0]), "" if r[1] is None else str(r[1])) for r in self._client.rows(SETTINGS_SQL) if len(r) >= 2]
+    def read_settings(self, prefix: str = "profile") -> List[Tuple[str, str]]:
+        return [(str(r[0]), "" if r[1] is None else str(r[1]))
+                for r in self._client.rows(SETTINGS_SQL % prefix) if len(r) >= 2]
 
 
 class SQLBackend(Backend):
@@ -385,11 +400,13 @@ class SQLBackend(Backend):
 
         return self._run(delete)
 
-    def read_settings(self) -> List[Tuple[str, str]]:
+    def read_settings(self, prefix: str = "profile") -> List[Tuple[str, str]]:
+        sql = SETTINGS_SQL % prefix
+
         def read(conn: Any) -> List[Tuple[str, str]]:
             cur = conn.cursor()
             try:
-                cur.execute(SETTINGS_SQL)  # no parameters: "%" stays literal for every driver
+                cur.execute(sql)  # no parameters: "%" stays literal for every driver
                 return [(str(r[0]), "" if r[1] is None else str(r[1])) for r in cur.fetchall()]
             finally:
                 cur.close()

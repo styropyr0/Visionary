@@ -56,6 +56,10 @@ class RequestWriter:
     """One background thread that batches api_logs rows and the telemetry
     rows (spans, errors, releases) next to them."""
 
+    # The thread's name and the rows' name in its messages (LogWriter: app_logs).
+    _THREAD = "visionary-requests"
+    _WHAT = "request"
+
     def __init__(self, cfg: Any, backend: Backend, logger: logging.Logger, instance: str,
                  runtime: str = "") -> None:
         self._cfg = cfg
@@ -84,7 +88,7 @@ class RequestWriter:
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, name="visionary-requests", daemon=True)
+        self._thread = threading.Thread(target=self._run, name=self._THREAD, daemon=True)
         self._thread.start()
 
     def restart_after_fork(self) -> None:
@@ -110,7 +114,7 @@ class RequestWriter:
         if self._thread is not None:
             self._thread.join(timeout)
             if self._thread.is_alive():
-                self._logger.warning("visionary: request log flush timed out; %d pending", self._queue.qsize())
+                self._logger.warning("visionary: %s log flush timed out; %d pending", self._WHAT, self._queue.qsize())
                 return False
         return True
 
@@ -163,7 +167,7 @@ class RequestWriter:
         with self._dropped_lock:
             n, self._dropped = self._dropped, 0
         if n:
-            self._logger.warning("visionary: request queue full; %d entries dropped", n)
+            self._logger.warning("visionary: %s queue full; %d entries dropped", self._WHAT, n)
 
     def _write(self, batch: List[Any]) -> None:
         profiles = [p for p in batch if isinstance(p, Profile)]
@@ -177,7 +181,7 @@ class RequestWriter:
         try:
             groups = self._rows(batch)
         except Exception:
-            self._logger.exception("visionary: building request rows failed; %d entries dropped", len(batch))
+            self._logger.exception("visionary: building %s rows failed; %d entries dropped", self._WHAT, len(batch))
             return
         err: Optional[Exception] = None
         for attempt in (1, 2, 3):
@@ -189,7 +193,7 @@ class RequestWriter:
                 err = e
             if attempt < 3:
                 time.sleep(attempt)
-        self._logger.error("visionary: request batch write failed; %d entries dropped: %s", len(batch), err)
+        self._logger.error("visionary: %s batch write failed; %d entries dropped: %s", self._WHAT, len(batch), err)
 
     def _write_profiles(self, profiles: List[Profile]) -> None:
         try:

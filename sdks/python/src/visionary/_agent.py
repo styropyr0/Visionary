@@ -9,7 +9,7 @@ import time
 import weakref
 from typing import Callable, Optional
 
-from . import _errors, _spans
+from . import _context, _errors, _logs, _spans
 from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
@@ -39,6 +39,9 @@ class Agent:
         self._system: Optional[Recorder] = None
         self._retention: Optional[Retention] = None
         self._profiler: Optional[Profiler] = None
+        # Application logs, through a writer of their own so a flood of lines
+        # never crowds out request rows; None when logs are off.
+        self._logs: Optional[_logs.LogPipeline] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False
         self.errors_on = False
@@ -65,6 +68,10 @@ class Agent:
         if self._requests is not None and cfg.profile:
             self._profiler = Profiler(self._backend, self._requests.log, logger, cfg.service,
                                       cfg.log_retention_days)
+        if cfg.logs:
+            writer = _logs.LogWriter(cfg, self._backend, logger, instance, cfg.log_queue_size)
+            self._logs = _logs.LogPipeline(self._backend, writer, logger, cfg.service,
+                                           _logs.parse_level(cfg.log_level) or _logs.INFO)
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
@@ -74,6 +81,8 @@ class Agent:
             retention["spans"] = cfg.log_retention_days
         if self.errors_on:
             retention["errors"] = cfg.log_retention_days
+        if self._logs is not None:
+            retention["logs"] = cfg.log_retention_days
         if self._system is not None:
             retention["system"] = cfg.system_retention_days
         self._retention = Retention(self._backend, logger, retention)
@@ -81,7 +90,12 @@ class Agent:
     @property
     def enabled(self) -> bool:
         """True when anything is collected (a database and at least one feature)."""
-        return self._requests is not None or self._system is not None
+        return self._requests is not None or self._system is not None or self._logs is not None
+
+    @property
+    def logs(self) -> Optional[_logs.LogPipeline]:
+        """The log pipeline LogHandler captures into, or None when logs are off."""
+        return self._logs
 
     @property
     def logging_requests(self) -> bool:
@@ -113,6 +127,19 @@ class Agent:
             entry.db_count, entry.db_ms = trace.db_count, trace.db_ms
         if _spans.http_visible:
             entry.http_count, entry.http_ms = trace.http_count, trace.http_ms
+
+    def finish_logs(self, ann: Optional[_context.Annotations], route: str, status: int, seconds: float,
+                    user: str = "") -> None:
+        """Decide the log lines a request held back, once it has ended
+        (integration API). route is its route pattern, "" when none."""
+        if self._logs is None or ann is None:
+            return
+        try:
+            if not user and not ann.user_id and ann.logs is not None and ann.request is not None:
+                user = ann.request.user_id(ann)
+            self._logs.finish(ann, route, status >= 500 or ann.failed, seconds, user)
+        except Exception:
+            logger.exception("visionary: deciding a request's log lines failed")
 
     def record_span(self, span: _spans.Span) -> None:
         """Queue a span recorded outside a request, or one that ended after
@@ -160,6 +187,10 @@ class Agent:
                 instrument_http()
         if self._profiler is not None:
             self._profiler.start()
+        if self._logs is not None:
+            self._logs.writer.start()
+            self._logs.start()
+            _logs.set_active(self._logs)
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -177,6 +208,8 @@ class Agent:
             self._closed = True
             started = self._started
         _spans.clear_active(self)
+        if self._logs is not None:
+            _logs.clear_active(self._logs)
         idle = True
         if started:
             deadline = _Deadline(timeout)
@@ -186,6 +219,9 @@ class Agent:
                 self._retention.close()
             if self._requests is not None:
                 idle = self._requests.close(deadline.left()) and idle
+            if self._logs is not None:
+                self._logs.close()
+                idle = self._logs.writer.close(deadline.left()) and idle
             if self._system is not None:
                 idle = self._system.close(deadline.left()) and idle
         # A worker still busy (e.g. stuck connecting) keeps its connection;
@@ -214,6 +250,9 @@ class Agent:
             self._retention.restart_after_fork()
         if self._profiler is not None:
             self._profiler.restart_after_fork()
+        if self._logs is not None:
+            self._logs.writer.restart_after_fork()
+            self._logs.restart_after_fork()
 
     def __enter__(self) -> "Agent":
         return self.start()
@@ -265,7 +304,7 @@ def init(config: Optional[Config] = None) -> Agent:
             agent.start()
         except Exception:
             logger.exception("visionary: init failed; collection is off")
-            agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False),
+            agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False, logs=False),
                           backend=_NoBackend())
         atexit.register(agent.close)
         _default = agent
