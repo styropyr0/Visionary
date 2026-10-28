@@ -83,7 +83,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     items: [
       { route: "explore", label: "Explore", icon: Sparkles },
       { route: "applogs", label: "Logs", icon: Logs },
-      { route: "logs", label: "Request logs", icon: ScrollText },
+      { route: "logs", label: "Requests", icon: ScrollText },
       { route: "dashboards", label: "Dashboards", icon: LayoutGrid },
       { route: "saved", label: "Saved panels", icon: Bookmark },
     ],

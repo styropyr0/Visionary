@@ -85,7 +85,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
   return (
     <>
       <TopBar
-        title="Request logs"
+        title="Requests"
         section="API"
         actions={
           <>

@@ -917,7 +917,7 @@ export function LogLineDrawer({
     try {
       const t = await api<{ log_id: number | null }>(`/api/telemetry/requests/${encodeURIComponent(String(line?.request_id))}`);
       if (t.log_id) setRequest(Number(t.log_id));
-      else toast("err", "The request this line belongs to isn't in the request logs (it may be outside VISIONARY_LOG_PATH_PREFIX).");
+      else toast("err", "The request this line belongs to isn't in Requests (it may be outside VISIONARY_LOG_PATH_PREFIX).");
     } catch (e) {
       toast("err", e instanceof Error ? e.message : String(e));
     }

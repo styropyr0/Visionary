@@ -59,7 +59,7 @@ visionary: logging requests (path_prefix="", bodies=true, retention_days=0)
 visionary: recording system metrics every 15s (instance my-host)
 ```
 
-Send a request. It shows up on **API overview** and **Request logs** within
+Send a request. It shows up on **API overview** and **Requests** within
 a few seconds, and the process shows up on **System**. If you see
 `visionary: no database configured ...; collection is off` instead, step 2
 did not reach the process.

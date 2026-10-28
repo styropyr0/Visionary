@@ -73,7 +73,7 @@ type retentionKind struct {
 }
 
 var retentionKinds = []retentionKind{
-	{Key: "requests", Label: "Request logs", Description: "Every request with headers and bodies.", DefaultDays: 30, tables: []string{"api_logs"}},
+	{Key: "requests", Label: "Requests", Description: "Every request with headers and bodies.", DefaultDays: 30, tables: []string{"api_logs"}},
 	{Key: "spans", Label: "Calls inside requests", Description: "Queries, outbound calls and custom spans.", DefaultDays: 30, tables: []string{"spans"}},
 	{Key: "errors", Label: "Errors", Description: "Captured exceptions and panics.", DefaultDays: 30, tables: []string{"errors"}},
 	{Key: "system", Label: "System metrics", Description: "CPU, memory and runtime samples from SDKs and host agents.", DefaultDays: 30, tables: []string{"system_metrics"}},

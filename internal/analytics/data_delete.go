@@ -30,7 +30,7 @@ type dataKind struct {
 }
 
 var dataKinds = []dataKind{
-	{Key: "requests", Label: "Request logs", Description: "Every request with its headers and bodies, and the request charts' rollups.", Service: true,
+	{Key: "requests", Label: "Requests", Description: "Every request with its headers and bodies, and the request charts' rollups.", Service: true,
 		tables: []dataTable{{"api_logs", true}}},
 	{Key: "spans", Label: "Calls inside requests", Description: "Database queries, outbound calls and custom spans.", Service: true,
 		tables: []dataTable{{"spans", true}}},

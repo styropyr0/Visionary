@@ -2578,7 +2578,7 @@ pre.code {
   white-space: nowrap;
 }
 
-/* Request logs: the table fills the rest of the window and scrolls inside. */
+/* Requests: the table fills the rest of the window and scrolls inside. */
 .content.logs-content {
   display: flex;
   flex-direction: column;

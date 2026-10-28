@@ -77,7 +77,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Find where",
-        text: "**Routes**, **Top errors** and **Most active users** rank what was busiest and what failed. Then open the route in **Performance** or its requests in **Request logs**.",
+        text: "**Routes**, **Top errors** and **Most active users** rank what was busiest and what failed. Then open the route in **Performance** or its requests in **Requests**.",
       },
     ],
   },
@@ -324,7 +324,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Open and triage a finding",
-        text: "Click a finding for the requests behind it. Mark it **Acknowledged**, **Resolved** or **False positive** and add a note, so the team knows who looked at it. **Request logs for this IP** shows everything the address sent; **Investigate** asks the analyst.",
+        text: "Click a finding for the requests behind it. Mark it **Acknowledged**, **Resolved** or **False positive** and add a note, so the team knows who looked at it. **Requests from this IP** shows everything the address sent; **Investigate** asks the analyst.",
         shot: "security-finding",
         caption: "A scanner probing for secrets, with the requests it sent.",
       },
@@ -433,7 +433,7 @@ export const GUIDE: GuideSection[] = [
   {
     id: "logs",
     group: "Investigate",
-    title: "Request logs",
+    title: "Requests",
     route: "logs",
     intro: "Every request your services served, searchable, with its headers, bodies and calls.",
     shot: "logs",

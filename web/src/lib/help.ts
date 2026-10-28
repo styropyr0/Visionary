@@ -135,7 +135,7 @@ VISIONARY_SERVICE=my-api                                          # any name; te
     id: "verify",
     title: "3. Check that data arrives",
     intro:
-      "Deploy or restart the service and send it one request. It shows up on the API overview and in Request logs within a few seconds, and the service appears in the service picker. Open Performance → Slowest requests and open one: time no call accounts for shows as Untracked, which points at a database or HTTP client that still needs its hook.",
+      "Deploy or restart the service and send it one request. It shows up on the API overview and in Requests within a few seconds, and the service appears in the service picker. Open Performance → Slowest requests and open one: time no call accounts for shows as Untracked, which points at a database or HTTP client that still needs its hook.",
     any: {
       note: "Nothing yet? Look at the service's log. `no database configured … collection is off` means `VISIONARY_DATABASE_URL` (or the `D1_*` variables) is not set in that process. A connection error means the URL is wrong or unreachable from there. No message and still no data: check the service writes to the same database (and schema, or SQLite file) this server reads. `visionary: queue full` means the database can't keep up; SQLite and D1 suit modest traffic, PostgreSQL and MySQL the rest.",
     },
@@ -143,7 +143,7 @@ VISIONARY_SERVICE=my-api                                          # any name; te
   user: {
     id: "user",
     title: "Say who made each request",
-    intro: "Attach the signed-in user once authentication has run, and Request logs, Security and the analyst can name them.",
+    intro: "Attach the signed-in user once authentication has run, and Requests, Security and the analyst can name them.",
     langs: {
       go: { code: `visionary.SetUser(r.Context(), visionary.User{ID: "42", Handle: "ada", Role: "ADMIN"})` },
       node: { code: `visionary.setUser({ id: user.id, handle: user.email, role: user.role });` },
@@ -503,7 +503,7 @@ export const HELP: Record<Route, PageHelp> = {
     read: [
       "Each tile compares with the previous period of the same length; the arrow is green when the change is good.",
       "Deploy marks on the charts show when a new version started, so a step in a line can be matched to a release.",
-      "Click a route or a user to open their requests in Request logs.",
+      "Click a route or a user to open their requests in Requests.",
     ],
     setup: ["sdk", "connect", "verify", "user", "release", "otlp"],
   },
@@ -642,7 +642,7 @@ export const HELP: Record<Route, PageHelp> = {
     setup: ["logs", "logship"],
   },
   logs: {
-    title: "Request logs",
+    title: "Requests",
     tip: "Every request with its route, status, duration, user, headers and bodies, searchable and filterable.",
     what: "The raw log of requests your services served. Filter by route, status, user or text, and open one for its headers, redacted bodies, error and the timeline of its calls.",
     read: [

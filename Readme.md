@@ -71,7 +71,7 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   kept for failed and slow requests only, and can be turned on for a service,
   route or user for a while without a redeploy. Secrets are scrubbed, and any
   that slip through are reported in Security. Old hours go to an S3 bucket.
-- **Request logs** with a waterfall of every query and outbound call.
+- **Requests** with a waterfall of every query and outbound call.
 - **Frontend:** Web Vitals, page loads, client-side API latency next to
   server-side latency, JS and mobile crashes, sessions, devices and countries.
 - **Uptime:** HTTP checks with timing phases, incidents, certificate expiry,
@@ -258,7 +258,7 @@ curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/age
 
 Restart or deploy the service and send it one request.
 
-- It shows up on **API overview** and **Request logs** within a few seconds,
+- It shows up on **API overview** and **Requests** within a few seconds,
   with its route, status, time, user and any error. The service appears in
   the service picker.
 - The service's log has no `visionary:` warning. Java and .NET print one line
@@ -819,7 +819,7 @@ shows open findings, failed logins, scanner IPs, the blocked/forbidden rate,
 SSH failures and hosts with pending updates; a findings table with filters
 (source, kind, severity, status, host, IP) and a detail drawer (triage, the
 actions below, the IP's or account's requests around the finding, what is
-known about the IP, a link to Request logs, and **Investigate** for the
+known about the IP, a link to Requests, and **Investigate** for the
 analyst); an account timeline (sign-ins with place and device, findings,
 and what the account signed in from before); the "not flagged" rules and
 the threat-intelligence status; charts of failed logins, auth errors, top

@@ -287,7 +287,7 @@ function SecurityPage() {
   );
 }
 
-/** Opens Request logs on one IP, over the range shown (or the one given). */
+/** Opens Requests on one IP, over the range shown (or the one given). */
 function openLogs(ip: string, from?: string, to?: string, setRange?: (r: { kind: "absolute"; from: string; to: string }) => void) {
   if (from && to && setRange) setRange({ kind: "absolute", from, to });
   window.location.hash = `#/logs?ip=${encodeURIComponent(ip)}`;
@@ -494,7 +494,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
         {f.ip && (
           <button type="button" className="btn" onClick={() => openLogs(f.ip, q.data?.from, q.data?.to, setRange)}>
             <ScrollText size={14} />
-            Request logs for this IP
+            Requests from this IP
           </button>
         )}
         {f.kind === "secret_in_logs" && (

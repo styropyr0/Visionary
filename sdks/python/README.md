@@ -59,7 +59,7 @@ visionary: logging requests (path_prefix='', bodies=True, retention_days=0)
 visionary: recording system metrics every 15.0s
 ```
 
-Send a request. It shows up on **API overview** and **Request logs** within
+Send a request. It shows up on **API overview** and **Requests** within
 a few seconds, and the process shows up on **System**. If the log says
 `visionary: no database configured (set VISIONARY_DATABASE_URL or D1_*);
 collection is off`, step 2 did not reach the process.
