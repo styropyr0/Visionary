@@ -27,7 +27,7 @@ module Visionary
   # no database configured it logs one warning and every call is a no-op; it
   # never raises into the app once built.
   class Agent
-    attr_reader :config, :http, :telemetry, :logger, :instance
+    attr_reader :config, :http, :telemetry, :logger, :instance, :logs
 
     def initialize(cfg)
       @config = cfg
@@ -46,6 +46,8 @@ module Visionary
       end
       @profiler = Profiler.new(cfg, @instance, @store, @writer, @logger) if cfg.profile && @writer
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
+      # Application logs go through a writer of their own (see Logs::LogWriter).
+      @logs = Logs::Pipeline.new(cfg, @instance, @store, @schemas, @logger) if cfg.logs
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)
       end
@@ -57,10 +59,11 @@ module Visionary
       end
       tables["system_metrics"] = cfg.system_retention_days if @system
       tables["profiles"] = cfg.log_retention_days if @profiler
+      tables["app_logs"] = cfg.log_retention_days if @logs
       @retention = Retention.new(@store, @logger, tables)
     end
 
-    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil?)
+    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil?)
 
     def log_path?(path) = @config.log_requests && !@writer.nil? && path.start_with?(@config.path_prefix.to_s)
 
@@ -94,6 +97,7 @@ module Visionary
         @system.start
         @logger.info("visionary: recording system metrics every #{@config.system_interval}s as #{@instance}")
       end
+      @logs&.start
       @retention.start
       @profiler&.start
       install_hooks
@@ -112,6 +116,7 @@ module Visionary
       @retention&.close
       @profiler&.close
       idle = @writer ? @writer.close(timeout) : true
+      idle = @logs.close([deadline - mono, 0].max) && idle if @logs
       idle = @system.close([deadline - mono, 0].max) && idle if @system
       @store.close if idle && @store
     rescue StandardError => e
@@ -130,6 +135,7 @@ module Visionary
       @system&.http = @http
       @system&.after_fork
       @writer&.after_fork
+      @logs&.after_fork
       @retention&.after_fork if @retention&.needed?
       @profiler&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")

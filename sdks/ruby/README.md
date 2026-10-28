@@ -3,8 +3,8 @@
 Add one gem to a Rails or Rack app and every request shows up in the
 [Visionary](../../Readme.md) dashboard: route, status, time, user, redacted
 bodies, the database and HTTP calls it made, and any exception. You also get
-host and process metrics, and CPU profiles when you turn them on in the
-dashboard.
+the app's own log lines linked to their request, host and process metrics,
+and CPU profiles when you turn them on in the dashboard.
 
 - [Quick start](#quick-start)
 - [Integration recipes](#integration-recipes)
@@ -288,6 +288,49 @@ your own code (not gems, the standard library or this SDK), as `method@path`
 relative to the working directory, so the group stays the same across deploys
 and line changes. At most 20 rows per fingerprint per minute are written.
 
+### Logs
+
+**When:** you want the app's log lines in the dashboard, next to the request
+that logged them. Route your logs through the SDK; what your app prints does
+not change.
+
+```ruby
+# Rails: config/initializers/visionary.rb
+Visionary.capture_rails_logger
+```
+
+```ruby
+# Any app: wrap the logger you already use
+logger = Visionary.logger(Logger.new($stdout))
+logger.info("charged card")                      # printed as before, and captured
+logger.debug { "cart: #{cart.inspect}" }         # kept when the request fails
+logger.warn(message: "slow upstream", ms: 912)   # a Hash: message plus attrs
+```
+
+`capture_rails_logger` broadcasts `Rails.logger` to a capturing logger (Rails
+7.1+ `broadcast_to`, older `ActiveSupport::Logger.broadcast`); tags from
+`Rails.logger.tagged` become the `tags` attribute. `Visionary.logger(inner)`
+forwards every call to `inner` unchanged and evaluates a block once. With no
+`inner` it only captures. Lines are captured once the agent has started (on
+the first request, or at boot with `Visionary.start`).
+
+What is kept follows **Settings → Logs** in the dashboard, read every 30 s:
+the lowest level (`VISIONARY_LOG_LEVEL` until then, default `info`), overrides
+for a route or a user, drop rules, and a cap of lines per minute. Lines below
+the level logged during a request are held until it ends, and kept when it
+failed (5xx, an exception, `capture_exception`) or was slow, so a failure
+comes with its debug lines. Because of that the capturing logger reports
+`debug?` as true while debug lines may be kept; with Rails 7.1+ that makes
+`Rails.logger.level` read as debug, though Rails still prints at its own level.
+
+**Records:** an `app_logs` row per kept line: level, message (secrets such as
+passwords, bearer tokens, JWTs and AWS keys replaced), attrs (nested keys
+dotted, redacted fields `[REDACTED]`), the request's `request_id`, `user_id`
+and W3C `trace_id` (from `traceparent`), and where it was logged
+(`code_file`, `code_line`, `code_func`). Exceptions are logged as
+`Class: message` and the backtrace. The SDK's own `visionary: ` lines are
+never captured. `VISIONARY_LOGS=false` turns capture off.
+
 ### Error codes from JSON responses
 
 **When:** your API answers errors with a JSON body like
@@ -412,7 +455,7 @@ Notes:
   errors.
 - For D1, `D1_API_BASE` replaces `https://api.cloudflare.com/client/v4`, for
   a proxy.
-- The tables (`api_logs`, `system_metrics`, `spans`, `errors`, `releases`)
+- The tables (`api_logs`, `system_metrics`, `spans`, `errors`, `releases`, `app_logs`)
   are created on first use, and tables from older versions gain the newer
   columns. `profiles` and `visionary_settings` are created by the Visionary
   server.
@@ -442,7 +485,7 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `redact_request_fields` | empty | Comma list of keys to redact in request bodies only |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error_code_field` | `error.code` | Dotted path to the error code in JSON error bodies |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error_key_field` | `error.key` | Dotted path to the error key |
-| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors` and `profiles` rows |
+| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows |
 | `VISIONARY_SYSTEM_METRICS` | `system_metrics` | `true` | Write `system_metrics` samples |
 | `VISIONARY_SYSTEM_INTERVAL` | `system_interval` (seconds) | `15s` | Sample interval: `15`, `15s`, `500ms`, `1m`, `1h` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `system_retention_days` | `0` (off) | Above 0, the SDK also deletes older `system_metrics` rows |
@@ -451,6 +494,8 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_SPAN_MAX` | `span_max` | `100` | Span rows stored per request |
 | `VISIONARY_ERRORS` | `errors` | `true` | Record exceptions |
 | `VISIONARY_PROFILE` | `profile` | `true` | Follow the dashboard's Profiling setting; `false` never profiles |
+| `VISIONARY_LOGS` | `logs` | `true` | Capture log lines the app routes to the SDK (see [Logs](#logs)) |
+| `VISIONARY_LOG_LEVEL` | `log_level` | `info` | Lowest level kept until Settings → Logs has been read |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
@@ -472,6 +517,7 @@ Options only available in code:
 | `db_stats` | the ActiveRecord pool | `-> { { total:, idle:, in_use:, max: } }`, pool metrics |
 | `disk_path` | working directory | Filesystem whose usage is reported |
 | `queue_size` | `5000` | Rows queued before new ones are dropped |
+| `log_queue_size` | `10000` | Log lines queued (on their own writer) before new ones are dropped |
 | `batch_size` | `50` | Rows per write (1 to 50) |
 | `flush_interval` | `3.0` | Seconds between writes when the batch isn't full |
 
@@ -499,6 +545,8 @@ Always redacted: the headers `Authorization`, `Proxy-Authorization`,
 | `visionary: queue full; N entries dropped` | Writes can't keep up with traffic (common on SQLite and D1) | Use PostgreSQL or MySQL, or log fewer paths or no bodies |
 | Rows lost on shutdown, or `visionary: log flush timed out; N pending` | The process was killed before the queue was flushed | Let the process exit normally (`at_exit` calls `Visionary.close`). In Puma, add `on_worker_shutdown { Visionary.close }`. In scripts, call `Visionary.close` before exiting |
 | Nothing from Puma or Unicorn workers | The agent started in the master before `fork`, and the restart failed | Look for `visionary: restart after fork failed`. Add `on_worker_boot { Visionary.after_fork }` |
+| No `app_logs` rows | The app's logger isn't routed to the SDK, the agent hasn't started yet, or Settings → Logs keeps a higher level | Call `Visionary.capture_rails_logger` or log through `Visionary.logger(...)`; send a request or call `Visionary.start`; check the level in Settings → Logs |
+| `visionary: N log lines dropped over the cap of R a minute (Settings → Logs)` | The app logged more than the per-minute cap | Raise the rate in Settings → Logs, or add a drop rule for the noisy lines |
 | A request body is empty in the log | Bodies are captured as the app reads them; the app never read it | Expected. The size is still stored, from `Content-Length` |
 
 ## How it works
@@ -521,6 +569,8 @@ Visionary SDK follows the same contract,
 - `releases`: one row per process start, when the release is known.
 - `system_metrics`: a sample every `VISIONARY_SYSTEM_INTERVAL`.
 - `profiles`: CPU profiles, only while they are on in the dashboard.
+- `app_logs`: the log lines the app routes to the SDK, written by a writer
+  thread of their own so a flood of lines never delays request rows.
 
 Request bodies are captured as the app reads them. Multipart, image, video,
 audio, octet-stream, zip and PDF bodies are not captured.
@@ -598,6 +648,8 @@ Visionary.login_attempt(params[:email])          # the account a sign-in request
 Visionary.span(name, kind: "custom", target: nil, detail: nil) { ... }   # a manual span
 Visionary.background(name) { ... }               # a thread that stays with the request
 Visionary.capture_exception(e)                   # a handled error (handled = 1)
+Visionary.logger(inner = nil)                    # a Logger that also writes app_logs
+Visionary.capture_rails_logger                   # copy Rails.logger to app_logs
 Visionary.configure { |c| ... }                  # options and hooks, before the first request
 Visionary.start                                  # start now instead of on the first request
 Visionary.after_fork                             # restart threads in a forked worker

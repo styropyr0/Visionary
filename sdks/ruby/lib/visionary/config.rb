@@ -22,7 +22,7 @@ module Visionary
                   :error_code_field, :error_key_field,
                   :system_metrics, :system_interval, :system_retention_days, :disk_path,
                   :service, :version, :spans, :span_threshold_ms, :span_max, :errors,
-                  :profile
+                  :profile, :logs, :log_level, :log_queue_size
 
     # Runs on the writer thread, once per distinct user per batch, for users
     # missing a handle or role: ->(id) { [handle, role] } or nil.
@@ -66,6 +66,11 @@ module Visionary
       @errors = true
       # false: never profile, whatever the dashboard says.
       @profile = true
+      # false: never capture application logs (VISIONARY_LOGS).
+      @logs = true
+      # The lowest level kept until Settings → Logs has been read.
+      @log_level = "info"
+      @log_queue_size = 10_000
     end
 
     def self.from_env(env = ENV)
@@ -97,6 +102,8 @@ module Visionary
       c.span_max = parse_int(s.("VISIONARY_SPAN_MAX"), 100)
       c.errors = parse_bool(s.("VISIONARY_ERRORS"), true)
       c.profile = parse_bool(s.("VISIONARY_PROFILE"), true)
+      c.logs = parse_bool(s.("VISIONARY_LOGS"), true)
+      c.log_level = s.("VISIONARY_LOG_LEVEL").then { |v| Logs.parse_level(v).positive? ? v.downcase : "info" }
       c
     end
 

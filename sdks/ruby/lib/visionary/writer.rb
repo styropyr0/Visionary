@@ -15,7 +15,9 @@ module Visionary
   # releases rows, and CPU profiles. Queue items are [:request, Entry],
   # [:span, row], [:error, row], [:release, row] or [:profile, row].
   class Writer
-    INSERTS = { request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles" }.freeze
+    INSERTS = {
+      request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles", log: "app_logs"
+    }.freeze
 
     def initialize(cfg, store, schemas, logger)
       @cfg = cfg
@@ -35,7 +37,7 @@ module Visionary
 
     def start
       @thread = Thread.new { run }
-      @thread.name = "visionary-writer" if @thread.respond_to?(:name=)
+      @thread.name = thread_name if @thread.respond_to?(:name=)
       self
     end
 
@@ -62,6 +64,11 @@ module Visionary
 
     private
 
+    def thread_name = "visionary-writer"
+
+    # Runs on the writer thread before each wait for rows; see LogWriter.
+    def tick; end
+
     def reset
       @queue = BoundedQueue.new(@queue_size)
       @thread = nil
@@ -73,6 +80,7 @@ module Visionary
       next_flush = mono + @flush_interval
       batch = []
       loop do
+        tick
         items = @queue.take(@batch_size - batch.size, next_flush)
         batch.concat(items)
         closed = @queue.closed? && @queue.size.zero?

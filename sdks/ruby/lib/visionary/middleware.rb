@@ -106,7 +106,8 @@ module Visionary
 
       ctx = RequestContext.new(
         request_id: request_id, method: env["REQUEST_METHOD"].to_s, path: path, started_at: started_at,
-        started_mono: t0, span_max: cfg.span_max.to_i, db_visible: Telemetry::ActiveRecordHook.installed?
+        started_mono: t0, span_max: cfg.span_max.to_i, db_visible: Telemetry::ActiveRecordHook.installed?,
+        trace_id: Logs.trace_parent_id(env["HTTP_TRACEPARENT"])
       )
       agent.http.started
       Profiler::Tally.started!
@@ -115,6 +116,7 @@ module Visionary
       begin
         status, res_headers, body = @app.call(env)
       rescue Exception => e # re-raised below; the app's handling is unchanged
+        ctx.failed!
         agent.telemetry&.exception(e, handled: false, ctx: ctx)
         finish(agent, env, ctx, headers, req_capture, 500, nil, Capture.new(0, false), t0)
         raise
@@ -145,6 +147,8 @@ module Visionary
       duration = (Telemetry.now_ms - t0).round(3)
       route = ctx.route
       route = agent.route_for(env) if route.empty?
+      ctx.route = route # for log lines from work the request left running
+      agent.logs&.finish(ctx, route, status >= 500 || ctx.failed?, duration)
       Profiler::Tally.finished(ctx.method, route.empty? ? ctx.path : route, duration)
       user_id, handle, role = ctx.user
       tel = agent.telemetry

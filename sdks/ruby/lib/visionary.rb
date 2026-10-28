@@ -9,6 +9,7 @@ require_relative "visionary/redactor"
 require_relative "visionary/context"
 require_relative "visionary/queue"
 require_relative "visionary/writer"
+require_relative "visionary/logs"
 require_relative "visionary/retention"
 require_relative "visionary/system/sources"
 require_relative "visionary/system/cgroup"
@@ -23,7 +24,8 @@ require_relative "visionary/fork"
 
 # Visionary collects what the Visionary server analyses, straight from a Ruby
 # service: one api_logs row per HTTP request, spans for database and outbound
-# HTTP calls, errors, deploy markers and periodic system_metrics samples.
+# HTTP calls, errors, deploy markers, periodic system_metrics samples and the
+# app's own log lines (app_logs).
 #
 #   # config.ru (Sinatra, Roda, Hanami, any Rack app)
 #   require "visionary"
@@ -61,7 +63,7 @@ module Visionary
           Agent.new(config).start
         rescue StandardError => e
           warn("visionary: start failed (#{e.class}: #{e.message}); collection is off")
-          Agent.new(Config.new.tap { |c| c.log_requests = c.system_metrics = c.spans = c.errors = false })
+          Agent.new(Config.new.tap { |c| c.log_requests = c.system_metrics = c.spans = c.errors = c.logs = false })
         end
         at_exit { agent.close }
         @agent = agent
@@ -70,6 +72,41 @@ module Visionary
 
     # The running agent, started on first use.
     def agent = @agent || start
+
+    # The agent if it has started, without starting it.
+    def running_agent = @agent
+
+    # A Logger that copies every line to app_logs, linked to the request it
+    # was logged in, and forwards every call to inner (any ::Logger) unchanged.
+    # What is kept follows Settings → Logs in the dashboard.
+    #
+    #   logger = Visionary.logger(Logger.new($stdout))
+    #   logger.info("charged card")                 # inner prints it as before
+    #   logger.debug { "cart: #{cart.inspect}" }   # kept when the request fails
+    def logger(inner = nil)
+      Logs::Logger.new(inner)
+    end
+
+    # Copies Rails.logger to app_logs without changing what Rails prints:
+    # broadcasts it to a Visionary.logger (Rails 7.1+ broadcast_to, older
+    # ActiveSupport::Logger.broadcast). TaggedLogging tags become the "tags"
+    # attribute. Call it once, in an initializer; later calls return the same
+    # logger. nil when Rails.logger is not set.
+    def capture_rails_logger
+      return @rails_capture if @rails_capture
+      rails = defined?(::Rails) && ::Rails.respond_to?(:logger) ? ::Rails.logger : nil
+      return nil unless rails
+
+      capture = Logs::Logger.new(nil, tags_from: rails)
+      if rails.respond_to?(:broadcast_to)
+        rails.broadcast_to(capture)
+      elsif defined?(::ActiveSupport::Logger) && ::ActiveSupport::Logger.respond_to?(:broadcast)
+        rails.extend(::ActiveSupport::Logger.broadcast(capture))
+      else
+        return nil
+      end
+      @rails_capture = capture
+    end
 
     # The agent's span and error recorder, or nil when collection is off.
     def telemetry = @agent&.telemetry
@@ -160,6 +197,7 @@ module Visionary
     #   rescue PaymentError => e
     #     Visionary.capture_exception(e)
     def capture_exception(exception = $!)
+      RequestContext.current&.failed!
       telemetry&.exception(exception, handled: true)
       nil
     end

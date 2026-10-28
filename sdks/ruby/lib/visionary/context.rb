@@ -2,7 +2,8 @@
 
 module Visionary
   # What the request being handled has said about itself: the user, the route
-  # pattern, and the spans and errors recorded while it ran.
+  # pattern, the spans and errors recorded while it ran, and the log lines
+  # held back until it ends.
   #
   # The middleware puts one object in fiber storage (Ruby 3.2+, inherited by
   # child fibers and threads, so it works under Falcon and in Async tasks) or a
@@ -11,10 +12,11 @@ module Visionary
   class RequestContext
     KEY = :visionary_request
 
-    attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible
+    attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible, :trace_id
 
-    def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:)
+    def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:, trace_id: nil)
       @request_id = request_id
+      @trace_id = trace_id
       @method = method
       @path = path
       @started_at = started_at
@@ -31,6 +33,8 @@ module Visionary
       @db_ms = @http_ms = 0.0
       @logged = false
       @late = 0
+      @failed = false
+      @held = nil
     end
 
     def set_user(id, handle, role)
@@ -89,6 +93,36 @@ module Visionary
 
     def add_error(row)
       @mutex.synchronize { @errors << row }
+    end
+
+    # An exception escaped the app or was captured during the request: its
+    # held log lines are kept down to logs.buffer_level.
+    def failed!
+      @mutex.synchronize { @failed = true }
+    end
+
+    def failed? = @mutex.synchronize { @failed || !@errors.empty? }
+
+    # Holds a log line until the request ends, at most max of them (the
+    # oldest go first). False once the request has been logged: the caller
+    # decides the line itself.
+    def hold_log(record, max)
+      @mutex.synchronize do
+        return false if @logged
+        @held ||= []
+        @held.shift if @held.size >= max
+        @held << record
+        true
+      end
+    end
+
+    # The held lines, once; [] when there are none.
+    def take_held_logs
+      @mutex.synchronize do
+        out = @held || []
+        @held = nil
+        out
+      end
     end
 
     # [db_count, db_ms, http_count, http_ms]; database totals are NULL when no

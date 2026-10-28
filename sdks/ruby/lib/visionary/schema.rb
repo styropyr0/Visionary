@@ -68,20 +68,28 @@ module Visionary
     # Created by the Visionary server, never by the SDK.
     PROFILE_COLUMNS = %w[created_at service instance version sdk duration_ms samples routes folded].freeze
 
+    LOG_COLUMNS = %w[
+      created_at service instance version source host container level severity logger
+      message attrs request_id trace_id span_id user_id session_id code_file code_line
+      code_func size
+    ].freeze
+
     TABLES = {
       "api_logs" => REQUEST_COLUMNS + ADDED_REQUEST_COLUMNS.map(&:first),
       "system_metrics" => SYSTEM_BASE_COLUMNS + ADDED_SYSTEM_COLUMNS.map(&:first),
       "spans" => SPAN_COLUMNS,
       "errors" => ERROR_COLUMNS,
       "releases" => RELEASE_COLUMNS,
-      "profiles" => PROFILE_COLUMNS
+      "profiles" => PROFILE_COLUMNS,
+      "app_logs" => LOG_COLUMNS
     }.freeze
 
     # Which script creates a table, and the columns older copies may lack.
     GROUPS = {
       requests: { file: "requests.sql", table: "api_logs", added: ADDED_REQUEST_COLUMNS },
       system: { file: "system.sql", table: "system_metrics", added: ADDED_SYSTEM_COLUMNS },
-      telemetry: { file: "telemetry.sql", table: nil, added: [] }
+      telemetry: { file: "telemetry.sql", table: nil, added: [] },
+      logs: { file: "logs.sql", table: "app_logs", added: [] }
     }.freeze
 
     PURGE_CHUNK = 5000
