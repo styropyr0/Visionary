@@ -634,7 +634,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Lines below the level in Settings → Logs (info by default) are kept only for requests that failed or were slow, so every failure comes with its debug lines.",
       "Search: words match the message, field:value matches a column or a field, level:error+ means error or worse, -term leaves out, OR between alternatives, /regex/ for a pattern. The ? button lists the syntax.",
       "Click a field's value to add it to the search; click + or − on a line's field to keep or leave it out.",
-      "Drag across the chart to zoom the time range.",
+      "Drag across the chart to zoom the time range; Zoom out goes back one step at a time, then doubles the range.",
       "Debug a service or a user for 15 minutes from a line, without a redeploy; alert when a line happens again; reduce a chatty line from Volume.",
       "Secrets in lines are scrubbed before they are stored; anything that slips through is redacted and reported in Security.",
       "Searching words in messages stays fast at millions of lines on PostgreSQL, which gets a text index for it. On MySQL, SQLite and D1 it reads every line in the time range, so keep the range short or log less there.",

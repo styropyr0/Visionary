@@ -19,6 +19,7 @@ import {
   Sparkles,
   Trash2,
   X,
+  ZoomOut,
 } from "lucide-react";
 import { ConnectCard } from "../components/ConnectCard";
 import { useConnected } from "../lib/meta";
@@ -26,7 +27,7 @@ import { api, type Result } from "../lib/api";
 import { formatBytes, formatCount } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { formatFull, formatLogTime } from "../lib/time";
+import { formatFull, formatLogTime, type TimeRange } from "../lib/time";
 import { Select } from "../components/Select";
 import { CopyButton, Drawer, Modal } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
@@ -181,7 +182,7 @@ export function AppLogs() {
 // ── Search ────────────────────────────────────────────────────────────────
 
 function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
-  const { resolved, tick, setRange } = useApp();
+  const { range, resolved, tick, setRange } = useApp();
   const meta = useMeta();
   const toast = useToast();
   const { can } = useSession();
@@ -299,7 +300,25 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
   };
 
   const filterBy = (field: string, value: unknown, exclude = false) => onSearch(addTerm(q, fieldTerm(field, value, exclude)));
-  const zoom = (from: Date, to: Date) => setRange({ kind: "absolute", from: from.toISOString(), to: to.toISOString() });
+  // Each zoom remembers the range it came from, so Zoom out steps back
+  // through them; past the first, or after picking a range, it doubles the span.
+  const zooms = useRef<{ from: TimeRange; to: TimeRange }[]>([]);
+  const zoom = (from: Date, to: Date) => {
+    const next: TimeRange = { kind: "absolute", from: from.toISOString(), to: to.toISOString() };
+    zooms.current.push({ from: range, to: next });
+    setRange(next);
+  };
+  const zoomOut = () => {
+    const last = zooms.current.pop();
+    if (last && last.to === range) {
+      setRange(last.from);
+      return;
+    }
+    zooms.current = [];
+    const span = resolved.to.getTime() - resolved.from.getTime();
+    const end = Math.min(Date.now(), resolved.to.getTime() + span / 2);
+    setRange({ kind: "absolute", from: new Date(end - 2 * span).toISOString(), to: new Date(end).toISOString() });
+  };
   const total = useMemo(() => (hist.data?.rows ?? []).reduce((a, r) => a + Number(r[2] ?? 0), 0), [hist.data]);
 
   return (
@@ -418,6 +437,9 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
           </span>
           <span className="lg-hist-actions">
             <span className="dim lg-hist-hint">Drag across the chart to zoom in</span>
+            <button type="button" className="btn sm" onClick={zoomOut}>
+              <ZoomOut size={14} /> Zoom out
+            </button>
             {can("edit") && (
               <button type="button" className="icon-btn" title="Add to dashboard" aria-label="Add to dashboard" onClick={() => setAdding(true)}>
                 <LayoutGrid size={15} />

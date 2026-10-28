@@ -404,7 +404,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Narrow it down",
-        text: "Drag across the chart to zoom into a moment. Open a field on the left for its top values, then **+** to keep one or **−** to leave it out; the column icon shows the field as a column. **Live tail** streams new lines as they arrive.",
+        text: "Drag across the chart to zoom into a moment; **Zoom out** steps back. Open a field on the left for its top values, then **+** to keep one or **−** to leave it out; the column icon shows the field as a column. **Live tail** streams new lines as they arrive.",
       },
       {
         title: "Open a line",
