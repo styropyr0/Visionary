@@ -269,6 +269,23 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
           </div>
         )}
 
+        {(sp.metric === "log_matches" || sp.metric === "log_absent") && form.kind === "threshold" && (
+          <label className="field">
+            <span>Log search</span>
+            <input
+              className="input mono"
+              value={sp.query ?? ""}
+              onChange={(e) => setSpec({ query: e.target.value })}
+              placeholder={sp.metric === "log_absent" ? '"backup finished" service:cron' : "level:error+ service:checkout timeout"}
+              spellCheck={false}
+            />
+            <p className="al-hint">
+              The same search as the Logs page: words, <code>field:value</code>, <code>level:error+</code>, <code>-term</code>, <code>OR</code>.{" "}
+              {sp.metric === "log_absent" ? "Keep the threshold at < 1 to alert when nothing matches over the window." : "The rule counts matching lines over its window."}
+            </p>
+          </label>
+        )}
+
         {sp.metric === "custom" && form.kind === "threshold" && (
           <label className="field">
             <span>SQL</span>

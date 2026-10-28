@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { logsHref } from "../lib/applogs";
 import { AlertTriangle, ArrowLeft, Pause, Pencil, Play, RotateCw, ShieldCheck } from "lucide-react";
 import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
@@ -236,7 +237,7 @@ export function UptimeDetail({ id }: { id: number }) {
               loading={incidents.loading}
               error={incidents.error}
               bodyHeight={80}
-              table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={INCIDENT_COLS} maxHeight={320} sortable={false} />)}
+              table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS, incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
             />
 
             <Panel
@@ -324,6 +325,24 @@ const INCIDENT_COLS: Column[] = [
   { key: "status", label: "Status", align: "right", render: (v) => (toNumber(v) ? String(v) : <span className="dim">No response</span>) },
   { key: "error", label: "Reason", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
 ];
+
+/** A link to what services logged around when an incident started. */
+function incidentLogsColumn(startedAt: number): Column {
+  return {
+    key: "_logs",
+    label: "",
+    align: "right",
+    render: (_, row) => {
+      const at = new Date(String(row[startedAt])).getTime();
+      if (!Number.isFinite(at)) return null;
+      return (
+        <a className="btn sm" href={logsHref("level:warn+", { from: new Date(at - 5 * 60_000), to: new Date(at + 5 * 60_000) })} title="Warnings and errors your services logged around when it started">
+          Logs
+        </a>
+      );
+    },
+  };
+}
 
 const RESULT_COLS: Column[] = [
   { key: "created_at", label: "Time", width: 190, render: (v) => <span className="mono">{formatLogTime(String(v))}</span> },

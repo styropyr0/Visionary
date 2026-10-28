@@ -1335,3 +1335,65 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Log lines on the waterfall */
+.wf-log-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+.wf-loglevel {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-3);
+  min-width: 34px;
+}
+.wf-loglevel.lv-info { color: var(--series-1); }
+.wf-loglevel.lv-warn { color: var(--warning-text); }
+.wf-loglevel.lv-error,
+.wf-loglevel.lv-fatal { color: var(--critical-text); }
+.wf-logmark {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: var(--text-3);
+  box-shadow: 0 0 0 2px var(--surface-1);
+}
+.lv-mark-info { background: var(--series-1); }
+.lv-mark-debug { background: var(--series-6); }
+.lv-mark-warn { background: var(--warning); }
+.lv-mark-error,
+.lv-mark-fatal { background: var(--critical); }
+.wf-logrow .wf-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-loglines {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.rt-loglines li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.rt-logs-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}

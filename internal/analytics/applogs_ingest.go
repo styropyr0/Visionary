@@ -218,6 +218,7 @@ func normalizeLogLine(l *logLine, rules []parseRule, now time.Time) {
 	case parseAccessLog(l):
 	case parseLogfmt(l):
 	}
+	stripLeadingTime(l)
 	if l.sev == 0 {
 		if sev := logrules.TextLevel(l.message); sev > 0 {
 			l.sev, l.message = sev, logrules.StripLevelWord(l.message, sev)
@@ -241,6 +242,35 @@ func normalizeLogLine(l *logLine, rules []parseRule, now time.Time) {
 			}
 		}
 	}
+}
+
+// leadingTime matches the timestamp plain-text loggers print first:
+// "2026-10-28 11:00:01,123", "2026-10-28T11:00:01Z", "[2026-10-28 11:00:01]",
+// "2026/10/28 11:00:01.123456".
+var leadingTime = regexp.MustCompile(`^\[?(\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]?\s+`)
+
+var trailingZone = regexp.MustCompile(`[+-]\d{2}:?\d{2}$`)
+
+// stripLeadingTime takes a leading timestamp out of a plain-text message.
+// With a zone it becomes the line's time when the source gave none; a
+// timestamp without a zone can't be placed, so it is kept as logged_at and
+// the time the line arrived stands.
+func stripLeadingTime(l *logLine) {
+	m := leadingTime.FindStringSubmatch(l.message)
+	if m == nil || len(m[0]) >= len(l.message) {
+		return
+	}
+	raw := m[1]
+	text := strings.Replace(strings.Replace(raw, "/", "-", 2), ",", ".", 1)
+	zoned := strings.HasSuffix(text, "Z") || trailingZone.MatchString(text)
+	if zoned {
+		if t, ok := timeOf(strings.Replace(text, " ", "T", 1)); ok && l.at.IsZero() {
+			l.at = t
+		}
+	} else {
+		l.attrs["logged_at"] = raw
+	}
+	l.message = l.message[len(m[0]):]
 }
 
 // takeLogFields moves well-known fields of a structured line to the line's

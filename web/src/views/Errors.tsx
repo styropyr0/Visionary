@@ -16,6 +16,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { IssueStatusBadge, MiniSpark, VersionPills } from "../components/telemetry/bits";
 import { StackTrace } from "../components/telemetry/StackTrace";
 import { LogDetail } from "./Logs";
+import { LogsAround } from "./AppLogs";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { InfoTip } from "../components/InfoTip";
 import "./Errors.css";
@@ -421,6 +422,32 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
             {latest?.stack ? <StackTrace stack={String(latest.stack)} /> : <div className="panel-state">{d ? "This occurrence has no stack trace." : ""}</div>}
           </div>
         </section>
+
+        {latest && (
+          <section className="panel span-12 issue-logs">
+            <div className="panel-body">
+              {latest.request_id ? (
+                <LogsAround
+                  title="What its request logged"
+                  at={String(latest.created_at)}
+                  beforeS={600}
+                  afterS={600}
+                  scope={{ request_id: String(latest.request_id) }}
+                  empty="The request logged nothing. Turn on log capture in the SDK to see a failed request's lines here."
+                />
+              ) : (
+                <LogsAround
+                  title="Logged just before it"
+                  at={String(latest.created_at)}
+                  beforeS={120}
+                  afterS={10}
+                  scope={{ service: String(latest.service ?? ""), instance: String(latest.instance ?? "") }}
+                  empty="Nothing was logged around it."
+                />
+              )}
+            </div>
+          </section>
+        )}
 
         <Panel
           className="span-6"

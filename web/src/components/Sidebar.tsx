@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   LogOut,
+  Logs,
   MonitorSmartphone,
   Moon,
   PanelLeftClose,
@@ -50,6 +51,7 @@ export type Route =
   | "uptime"
   | "security"
   | "explore"
+  | "applogs"
   | "logs"
   | "dashboards"
   | "saved"
@@ -57,7 +59,7 @@ export type Route =
   | "settings"
   | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "logs", "dashboards", "saved", "alerts", "settings", "guide"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "dashboards", "saved", "alerts", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -80,6 +82,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     group: "Investigate",
     items: [
       { route: "explore", label: "Explore", icon: Sparkles },
+      { route: "applogs", label: "Logs", icon: Logs },
       { route: "logs", label: "Request logs", icon: ScrollText },
       { route: "dashboards", label: "Dashboards", icon: LayoutGrid },
       { route: "saved", label: "Saved panels", icon: Bookmark },

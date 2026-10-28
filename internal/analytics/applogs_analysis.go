@@ -12,6 +12,28 @@ func (s *Server) applogsAnalysisRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/applogs/compare", s.authed(s.handleLogCompare))
 	mux.Handle("GET /api/applogs/volume", s.authed(s.handleLogVolume))
 	mux.Handle("GET /api/applogs/hidden-failures", s.authed(s.handleHiddenFailures))
+	mux.Handle("GET /api/applogs/versions", s.authed(s.handleLogVersions))
+}
+
+// handleLogVersions lists the releases that logged in the range, by
+// service, newest first: what the Releases tab compares.
+func (s *Server) handleLogVersions(w http.ResponseWriter, r *http.Request) {
+	ls, err := s.logSearchOf(r)
+	if err != nil {
+		s.logFail(w, err)
+		return
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT service, version, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS lines
+FROM app_logs WHERE `+ls.sql()+` AND version IS NOT NULL GROUP BY service, version ORDER BY first_seen DESC LIMIT 200`, ls.args...)
+	if err != nil {
+		s.logFail(w, dbErr(err))
+		return
+	}
+	out := []map[string]any{}
+	for _, row := range rows.Rows {
+		out = append(out, map[string]any{"service": toString(row[0]), "version": row[1], "first_seen": row[2], "last_seen": row[3], "lines": toInt(row[4])})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"versions": out})
 }
 
 // handleLogVolume says where log volume comes from: by service, source and

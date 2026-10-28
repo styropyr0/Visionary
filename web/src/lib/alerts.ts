@@ -6,7 +6,7 @@ export type Severity = "info" | "warning" | "critical";
 export type RuleKind = "threshold" | "anomaly" | "slo";
 export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 
-export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container";
+export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs";
 
 export const GROUP_LABEL: Record<MetricGroup, string> = {
   request: "Requests",
@@ -18,6 +18,7 @@ export const GROUP_LABEL: Record<MetricGroup, string> = {
   dependency: "Dependencies",
   security: "Security",
   container: "Containers",
+  logs: "Logs",
 };
 
 export interface MetricDef {
@@ -77,6 +78,8 @@ export interface EscalationStep {
 export interface RuleSpec {
   metric: string;
   sql?: string;
+  /** The Logs search of log_matches and log_absent rules. */
+  query?: string;
   scope: Scope;
   op?: string;
   threshold: number;

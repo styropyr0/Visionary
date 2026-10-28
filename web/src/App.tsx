@@ -12,6 +12,7 @@ import { clearSession, refreshSession } from "./lib/team";
 import { Explore } from "./views/Explore";
 import { Login } from "./views/Login";
 import { Logs } from "./views/Logs";
+import { AppLogs } from "./views/AppLogs";
 import { Overview } from "./views/Overview";
 import { Performance } from "./views/Performance";
 import { Queries } from "./views/Queries";
@@ -201,6 +202,7 @@ export function App() {
             {route === "settings" && <Settings user={user} />}
             {route === "explore" && <Explore meta={meta.data} />}
             {route === "saved" && <Saved />}
+            {route === "applogs" && <AppLogs />}
             {route === "logs" && <Logs meta={meta.data} />}
             {route === "guide" && <Guide />}
             </>

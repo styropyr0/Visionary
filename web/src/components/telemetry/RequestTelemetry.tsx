@@ -5,7 +5,8 @@ import { formatCount, formatMs, formatPercent, toNumber } from "../../lib/format
 import { records, type RequestTelemetry as Telemetry } from "../../lib/telemetry";
 import { useQuery } from "../../lib/useQuery";
 import { InfoTip } from "../InfoTip";
-import { afterResponse, repeatedNames, toSpans, untracked, Waterfall } from "./Waterfall";
+import { afterResponse, repeatedNames, toSpans, untracked, Waterfall, type LogMark } from "./Waterfall";
+import { logsHref } from "../../lib/applogs";
 import "./telemetry.css";
 
 function Totals({ label, count, ms, requestMs }: { label: string; count: number | null; ms: number | null; requestMs: number }) {
@@ -40,11 +41,26 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
   const requestMs = toNumber(rec.duration_ms) ?? 0;
   const untrackedMs = useMemo(() => untracked(spans, requestMs).ms, [spans, requestMs]);
   const after = useMemo(() => afterResponse(spans, requestMs), [spans, requestMs]);
+  // The lines it logged, placed from the request's start.
+  const logs = useMemo<LogMark[]>(() => {
+    const start = new Date(String(rec.created_at ?? "")).getTime();
+    return records(q.data?.logs).map((l) => ({
+      id: Number(l.id),
+      offset: Number.isFinite(start) ? Math.max(0, new Date(String(l.created_at)).getTime() - start) : 0,
+      level: String(l.level ?? "info"),
+      message: String(l.message ?? ""),
+    }));
+  }, [q.data, rec.created_at]);
+  const logsLink = logsHref(`request:${rid}`, {
+    from: new Date(new Date(String(rec.created_at ?? Date.now())).getTime() - 60_000),
+    to: new Date(new Date(String(rec.created_at ?? Date.now())).getTime() + Math.max(requestMs, 0) + 15 * 60_000),
+  });
+  const openLog = () => (window.location.hash = logsLink);
 
   const dbCount = toNumber(rec.db_count);
   const httpCount = toNumber(rec.http_count);
   const hasTotals = dbCount !== null || httpCount !== null;
-  if (!hasTotals && spans.length === 0 && errors.length === 0) {
+  if (!hasTotals && spans.length === 0 && errors.length === 0 && logs.length === 0) {
     if (q.loading) return null;
     return (
       <p className="dim rt-note">
@@ -148,9 +164,38 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
         </section>
       )}
 
+      {spans.length === 0 && logs.length > 0 && (
+        <section className="rt-section">
+          <h3 className="rt-title">
+            Lines it logged{" "}
+            <a className="btn sm" href={logsLink} style={{ marginLeft: 8 }}>
+              Open in Logs
+            </a>
+          </h3>
+          <ul className="rt-loglines">
+            {logs.map((l) => (
+              <li key={l.id}>
+                <span className="mono dim">+{formatMs(l.offset)}</span>
+                <span className={`wf-loglevel lv-${l.level}`}>{l.level}</span>
+                <span className="mono">{l.message.split("\n")[0]}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {spans.length > 0 ? (
         <section className="rt-section">
-          <Waterfall spans={spans} requestMs={requestMs} />
+          {logs.length > 0 && (
+            <div className="rt-logs-note">
+              <span className="dim">
+                {formatCount(logs.length)} {logs.length === 1 ? "line" : "lines"} logged, shown on the timeline.
+              </span>
+              <a className="btn sm" href={logsLink}>
+                Open in Logs
+              </a>
+            </div>
+          )}
+          <Waterfall spans={spans} requestMs={requestMs} logs={logs} onOpenLog={openLog} />
         </section>
       ) : (
         hasTotals &&

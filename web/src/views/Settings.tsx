@@ -27,9 +27,10 @@ import { DataTab } from "./Settings.data";
 import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
 import { TwoStepCard } from "../components/TwoStep";
+import { LogsTab } from "./Settings.logs";
 import "./Settings.css";
 
-type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "profiling" | "pages" | "status" | "audit" | "about";
+type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "logs" | "profiling" | "pages" | "status" | "audit" | "about";
 
 const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "preferences", label: "Preferences", admin: false },
@@ -39,6 +40,7 @@ const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "keys", label: "API keys", admin: true },
   { key: "thresholds", label: "Thresholds", admin: false },
   { key: "data", label: "Data", admin: false },
+  { key: "logs", label: "Logs", admin: false },
   { key: "profiling", label: "Profiling", admin: false },
   { key: "pages", label: "Pages", admin: false },
   { key: "status", label: "Status page", admin: false },
@@ -93,6 +95,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {current === "server" && <ServerTab />}
         {current === "keys" && <KeysTab />}
         {current === "profiling" && <ProfilingTab />}
+        {current === "logs" && <LogsTab />}
         {current === "pages" && <PagesTab />}
         {current === "data" && (
           <div className="settings-stack">

@@ -1,4 +1,5 @@
 import { api, ApiError, type Result } from "../lib/api";
+import { fieldTerm, logsHref } from "../lib/applogs";
 import { formatBytes, formatCount, titleCase, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatDateTime, formatFull, formatRelative } from "../lib/time";
@@ -91,7 +92,8 @@ export function MachineHead({ host, machines, onPick }: { host: string; machines
       badge={<StatusBadge status={h.status} />}
       meta={
         <span title={`Watched since ${formatFull(new Date(h.first_seen))}`}>
-          Reported {formatRelative(h.last_seen)} · every {formatCount(h.report_s)}s
+          Reported {formatRelative(h.last_seen)} · every {formatCount(h.report_s)}s ·{" "}
+          <a href={logsHref(fieldTerm("host", h.host))}>Logs</a>
         </span>
       }
       facts={[

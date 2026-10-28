@@ -119,21 +119,33 @@ function ticks(total: number): number[] {
   return [0, 0.25, 0.5, 0.75, 1].map((f) => f * total);
 }
 
+/** A line the request logged, placed on its time axis. */
+export interface LogMark {
+  id: number;
+  offset: number;
+  level: string;
+  message: string;
+}
+
 /**
  * The calls a request made, on the request's own time axis: where each one
  * started (offset) and how long it took. Click a row for the statement or URL.
+ * Lines the request logged sit between them at the moment they were logged.
  */
-export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: number }) {
+export function Waterfall({ spans, requestMs, logs = [], onOpenLog }: { spans: SpanRow[]; requestMs: number; logs?: LogMark[]; onOpenLog?: (id: number) => void }) {
   const [open, setOpen] = useState<Set<number>>(new Set());
-  const total = useMemo(() => Math.max(requestMs, ...spans.map((s) => s.offset + s.duration), 1), [spans, requestMs]);
+  const total = useMemo(() => Math.max(requestMs, ...spans.map((s) => s.offset + s.duration), ...logs.map((l) => l.offset), 1), [spans, requestMs, logs]);
   const kinds = useMemo(() => [...new Set(spans.map((s) => s.kind))].sort((a, b) => Object.keys(KIND_COLOR).indexOf(a) - Object.keys(KIND_COLOR).indexOf(b)), [spans]);
   const repeated = useMemo(() => new Set(repeatedNames(spans).map((r) => r.name)), [spans]);
   // Calls and untracked stretches on one timeline, in start order.
   const rows = useMemo(() => {
-    const items: ({ span: SpanRow; gap?: undefined } | { gap: Gap; span?: undefined })[] = spans.map((span) => ({ span }));
+    const items: ({ span: SpanRow; gap?: undefined; log?: undefined } | { gap: Gap; span?: undefined; log?: undefined } | { log: LogMark; span?: undefined; gap?: undefined })[] =
+      spans.map((span) => ({ span }));
     for (const gap of untracked(spans, requestMs).gaps) items.push({ gap });
-    return items.sort((a, b) => (a.span ?? a.gap!).offset - (b.span ?? b.gap!).offset || (a.gap ? -1 : 1));
-  }, [spans, requestMs]);
+    for (const log of logs) items.push({ log });
+    const at = (r: (typeof items)[number]) => (r.span ?? r.gap ?? r.log)!.offset;
+    return items.sort((a, b) => at(a) - at(b) || (a.gap ? -1 : b.gap ? 1 : a.log ? -1 : 1));
+  }, [spans, requestMs, logs]);
   const hasGaps = rows.some((r) => r.gap);
   // Work that outlived the response: mark where the response was sent.
   const responseAt = total > requestMs + 0.5 && requestMs > 0 ? (100 * requestMs) / total : null;
@@ -162,6 +174,12 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
             Untracked
           </span>
         )}
+        {logs.length > 0 && (
+          <span className="wf-legend-item">
+            <span className="wf-log-swatch" aria-hidden />
+            Log line
+          </span>
+        )}
         {responseAt !== null && (
           <span className="wf-legend-item">
             <span className="wf-response-swatch" aria-hidden />
@@ -186,6 +204,7 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
       <div className="wf-rows" role="list">
         {rows.map((r, i) => {
           if (r.gap) return <GapRow key={`gap-${r.gap.offset}`} gap={r.gap} total={total} open={open.has(i)} onToggle={() => toggle(i)} />;
+          if (r.log) return <LogRow key={`log-${r.log.id}`} log={r.log} total={total} open={open.has(i)} onToggle={() => toggle(i)} onOpen={onOpenLog} />;
           const s = r.span;
           const left = (100 * s.offset) / total;
           const width = Math.max((100 * s.duration) / total, 0.25);
@@ -266,6 +285,40 @@ export function Waterfall({ spans, requestMs }: { spans: SpanRow[]; requestMs: n
         })}
       </div>
     </div>
+  );
+}
+
+function LogRow({ log, total, open, onToggle, onOpen }: { log: LogMark; total: number; open: boolean; onToggle: () => void; onOpen?: (id: number) => void }) {
+  const first = log.message.split("\n")[0];
+  return (
+    <>
+      <button type="button" className={`wf-grid wf-row wf-logrow ${open ? "open" : ""}`} role="listitem" onClick={onToggle} aria-expanded={open}>
+        <span className="wf-name" title={log.message}>
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <span className={`wf-loglevel lv-${log.level}`}>{log.level}</span>
+          <span className="wf-label mono">{first}</span>
+        </span>
+        <span className="wf-track">
+          {[25, 50, 75].map((g) => (
+            <span key={g} className="wf-gridline" style={{ left: `${g}%` }} />
+          ))}
+          <span className={`wf-logmark lv-mark-${log.level}`} style={{ left: `${Math.min((100 * log.offset) / total, 99.5)}%` }} />
+        </span>
+        <span className="wf-dur dim">+{formatMs(log.offset)}</span>
+      </button>
+      {open && (
+        <div className="wf-detail">
+          <pre className="code mono wf-sql">{log.message}</pre>
+          {onOpen && (
+            <div className="wf-actions">
+              <button type="button" className="btn sm" onClick={() => onOpen(log.id)}>
+                Open the line
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

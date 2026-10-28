@@ -136,12 +136,17 @@ func lexValue(s string) (qtok, int, error) {
 		}
 		return qtok{}, 0, &logQueryError{"a quoted phrase is missing its closing \""}
 	case '/':
+		// /…/ is a regular expression when the closing slash ends the term;
+		// otherwise it is a path such as /orders/* or /pay.
 		for i := 1; i < len(s); i++ {
 			if s[i] == '\\' {
 				i++
 				continue
 			}
 			if s[i] == '/' {
+				if i+1 < len(s) && !unicode.IsSpace(rune(s[i+1])) && s[i+1] != ')' {
+					break
+				}
 				re := s[1:i]
 				if _, err := regexp.Compile(re); err != nil {
 					return qtok{}, 0, &logQueryError{"not a valid regular expression: " + re}
@@ -149,7 +154,6 @@ func lexValue(s string) (qtok, int, error) {
 				return qtok{kind: 'r', text: re}, i + 1, nil
 			}
 		}
-		return qtok{}, 0, &logQueryError{"a regular expression is missing its closing /"}
 	}
 	n := 0
 	for n < len(s) && !unicode.IsSpace(rune(s[n])) && s[n] != '(' && s[n] != ')' {
@@ -168,6 +172,9 @@ type queryParser struct {
 	depth int
 	// noRegex is set on Cloudflare D1, where SQLite has no REGEXP.
 	noRegex bool
+	// from and to bound the requests route: and status: look up; empty
+	// leaves them unbounded (alert rules add their window themselves).
+	from, to string
 }
 
 const maxQueryTerms = 60
@@ -175,6 +182,12 @@ const maxQueryTerms = 60
 // compileLogQuery turns a search into a condition on app_logs; an empty
 // search is "1=1". noRegex refuses regular expressions (Cloudflare D1).
 func compileLogQuery(q string, d sqlDialect, noRegex bool) (*logQuery, error) {
+	return compileLogQueryIn(q, d, noRegex, nil)
+}
+
+// compileLogQueryIn is compileLogQuery with the range the search covers,
+// which bounds the request lookups of route: and status:.
+func compileLogQueryIn(q string, d sqlDialect, noRegex bool, tr *timeRange) (*logQuery, error) {
 	if len(q) > 2000 {
 		return nil, &logQueryError{"the search is longer than 2000 characters"}
 	}
@@ -189,6 +202,9 @@ func compileLogQuery(q string, d sqlDialect, noRegex bool) (*logQuery, error) {
 		return &logQuery{where: "1=1"}, nil
 	}
 	p := &queryParser{toks: toks, d: d, noRegex: noRegex}
+	if tr != nil {
+		p.from, p.to = tr.From.Add(-joinLead).Format(tsLayout), tr.To.Format(tsLayout)
+	}
 	where, err := p.or()
 	if err != nil {
 		return nil, err
@@ -358,6 +374,9 @@ func (p *queryParser) term(t *qtok) (string, error) {
 	if field == "level" || field == "severity" {
 		return p.level(t)
 	}
+	if field == "route" || field == "status" || field == "method" {
+		return p.requestField(field, t)
+	}
 	col, isCol := logColumns[field]
 	expr, key := col, ""
 	if !isCol {
@@ -420,6 +439,47 @@ func (p *queryParser) term(t *qtok) (string, error) {
 		}
 	}
 	return expr + " = " + p.arg(t.text), nil
+}
+
+// requestField matches lines by the request they were logged in:
+// route:/orders/{id}, route:/admin/*, status:>=500, method:POST.
+func (p *queryParser) requestField(field string, t *qtok) (string, error) {
+	// The range comes first in the SQL, so its arguments are bound first.
+	window := ""
+	if p.from != "" {
+		window = "created_at >= " + p.arg(p.from) + " AND created_at < " + p.arg(p.to) + " AND "
+	}
+	var cond string
+	switch field {
+	case "status":
+		op := strings.TrimPrefix(t.op, ":")
+		if op == "" {
+			op = "="
+		}
+		text := strings.ToLower(t.text)
+		if len(text) == 3 && strings.HasSuffix(text, "xx") && text[0] >= '1' && text[0] <= '5' {
+			lo := int(text[0]-'0') * 100
+			cond = "status >= " + p.arg(lo) + " AND status < " + p.arg(lo+100)
+			break
+		}
+		n, err := strconv.Atoi(t.text)
+		if err != nil || n < 100 || n > 599 {
+			return "", &logQueryError{"status takes a code like 500 or a class like 5xx"}
+		}
+		cond = "status " + op + " " + p.arg(n)
+	case "method":
+		cond = "method = " + p.arg(strings.ToUpper(t.text))
+	default:
+		if t.op != ":" {
+			return "", &logQueryError{"route takes a route pattern, e.g. route:/orders/{id}"}
+		}
+		if strings.Contains(t.text, "*") {
+			cond = "route LIKE " + p.arg(wildcard(t.text, false)) + " ESCAPE '!'"
+		} else {
+			cond = "route = " + p.arg(t.text)
+		}
+	}
+	return "request_id IN (SELECT request_id FROM api_logs WHERE " + window + cond + ")", nil
 }
 
 // level reads level:error, level:warn+, level:>=warn and severity numbers.

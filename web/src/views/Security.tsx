@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { logsHref } from "../lib/applogs";
 import { FileText, Globe, ScrollText, Search, ShieldAlert, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatPercent, humanize, relabelColumn, titleCase, toNumber, yesNo } from "../lib/format";
@@ -496,6 +497,18 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
             Request logs for this IP
           </button>
         )}
+        {f.kind === "secret_in_logs" && (
+          <a
+            className="btn"
+            href={logsHref(
+              [f.service ? `service:${f.service}` : "", "REDACTED"].filter(Boolean).join(" "),
+              { from: new Date(new Date(f.created_at).getTime() - 3_600_000), to: new Date(new Date(f.created_at).getTime() + 86_400_000) },
+            )}
+          >
+            <ScrollText size={14} />
+            The redacted lines
+          </a>
+        )}
       </div>
       <dl className="kv">
         <dt>Kind</dt>
@@ -504,7 +517,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
           {KINDS[f.kind] && <div className="dim">{KINDS[f.kind].text}</div>}
         </dd>
         <dt>Source</dt>
-        <dd>{f.source === "api" ? "API detectors" : f.source === "host" ? "Host agent" : f.source === "audit" ? "Visionary's audit log" : f.source}</dd>
+        <dd>{f.source === "api" ? "API detectors" : f.source === "host" ? "Host agent" : f.source === "audit" ? "Visionary's audit log" : f.source === "logs" ? "Log scanner" : f.source}</dd>
         <dt>First seen</dt>
         <dd>{formatFull(new Date(f.created_at))}</dd>
         <dt>Occurrences</dt>

@@ -72,7 +72,7 @@ func (s *Server) logSearchOf(r *http.Request) (*logSearch, error) {
 }
 
 func (s *Server) logSearchFor(r *http.Request, tr timeRange, q string) (*logSearch, error) {
-	cq, err := compileLogQuery(q, s.q, s.onD1())
+	cq, err := compileLogQueryIn(q, s.q, s.onD1(), &tr)
 	if err != nil {
 		return nil, err
 	}

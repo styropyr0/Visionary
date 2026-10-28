@@ -57,6 +57,8 @@ export interface RequestTelemetry {
   log_id: number | null;
   spans: Result;
   errors: Result;
+  /** The lines the request logged (app_logs), oldest first. */
+  logs?: Result;
 }
 
 export interface Release {

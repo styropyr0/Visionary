@@ -158,7 +158,7 @@ func TestIngestTextAndNDJSON(t *testing.T) {
 		// debug is below the default level and dropped.
 		t.Fatalf("%d rows: %+v", len(rows), rows)
 	}
-	if rows[0]["level"] != "error" || toString(rows[0]["message"]) != "2026-10-27 10:00:01 ERROR payment failed token=[REDACTED]" {
+	if rows[0]["level"] != "error" || toString(rows[0]["message"]) != "payment failed token=[REDACTED]" || attrsOf(t, rows[0])["logged_at"] != "2026-10-27 10:00:01" {
 		t.Fatalf("text %+v", rows[0])
 	}
 	if rows[1]["level"] != "warn" || rows[1]["message"] != "disk almost full" || attrsOf(t, rows[1])["pct"] != "93" {
@@ -376,16 +376,30 @@ func TestSyslogListener(t *testing.T) {
 	s := logsTestServer(t, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Find a free port, then let the receiver bind it.
-	probe, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	// Find a port free for TCP, then let the receiver bind it for both. On
+	// Windows some UDP ports are reserved even when TCP is free; a refused
+	// bind is reported in the status, so try another port.
+	addr := ""
+	for attempt := 0; attempt < 20 && addr == ""; attempt++ {
+		probe, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		try := probe.Addr().String()
+		probe.Close()
+		s.syslogApply(ctx, try)
+		got, errText := s.syslogStatus()
+		if got == try && errText == "" {
+			addr = try
+			break
+		}
+		if errText == "" {
+			t.Fatalf("status %q, no error", got)
+		}
+		s.syslogApply(ctx, "")
 	}
-	addr := probe.Addr().String()
-	probe.Close()
-	s.syslogApply(ctx, addr)
-	if got, errText := s.syslogStatus(); got != addr || errText != "" {
-		t.Fatalf("status %q %q", got, errText)
+	if addr == "" {
+		t.Fatal("no port could be bound for both UDP and TCP")
 	}
 	u, err := net.Dial("udp", addr)
 	if err != nil {
@@ -427,4 +441,25 @@ func TestLogSettingsFromLive(t *testing.T) {
 		t.Fatalf("disabled: %d %v", n, err)
 	}
 	var _ http.Handler = s.Handler()
+}
+
+func TestStripLeadingTime(t *testing.T) {
+	for in, want := range map[string][3]string{
+		"2026-10-27T10:00:01Z worker started":        {"worker started", "", "2026-10-27T10:00:01.000Z"},
+		"[2026-10-27 10:00:01,250] WARNING: low disk": {"low disk", "2026-10-27 10:00:01,250", ""},
+		"2026/10/27 10:00:01.123456 plain":           {"plain", "2026/10/27 10:00:01.123456", ""},
+		"2026-10-27 10:00:01+05:30 zoned":            {"zoned", "", "2026-10-27T04:30:01.000Z"},
+		"no time here":                               {"no time here", "", ""},
+		"2026-10-27T10:00:01Z":                       {"2026-10-27T10:00:01Z", "", ""},
+	} {
+		l := &logLine{message: in}
+		normalizeLogLine(l, nil, time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC))
+		at := ""
+		if !l.at.Equal(time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)) {
+			at = l.at.UTC().Format(tsLayout)
+		}
+		if l.message != want[0] || toString(l.attrs["logged_at"]) != want[1] || at != want[2] {
+			t.Errorf("%q: %q %q %q", in, l.message, l.attrs["logged_at"], at)
+		}
+	}
 }

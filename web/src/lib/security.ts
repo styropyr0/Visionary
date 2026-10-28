@@ -160,7 +160,12 @@ export const securityApi = {
 };
 
 /** What each finding kind means, for labels and the filter. */
-export const KINDS: Record<string, { label: string; source: "api" | "host" | "audit"; text: string }> = {
+export const KINDS: Record<string, { label: string; source: "api" | "host" | "audit" | "logs"; text: string }> = {
+  secret_in_logs: {
+    label: "Secret in logs",
+    source: "logs",
+    text: "A credential or card number reached the stored logs. It was redacted there; fix the code that logs it, and rotate the credential if it is real.",
+  },
   auth_bruteforce: { label: "Brute force", source: "api", text: "Many failed sign-ins from one IP." },
   credential_stuffing: { label: "Credential stuffing", source: "api", text: "One IP failing to sign in as many different accounts." },
   account_targeted: { label: "Account targeted", source: "api", text: "Many IPs failing to sign in as one account." },
@@ -219,7 +224,7 @@ export function kindLabel(kind: string): string {
 
 /** Where a finding came from, as a short label. */
 export function sourceLabel(source: string): string {
-  return source === "api" ? "API" : source === "audit" ? "Visionary" : titleCase(source);
+  return source === "api" ? "API" : source === "audit" ? "Visionary" : source === "logs" ? "Logs" : titleCase(source);
 }
 
 /** Readable names for Visionary's own audit actions. */

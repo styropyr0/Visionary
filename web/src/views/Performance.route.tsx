@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { logsHref } from "../lib/applogs";
 import type { Result, Viz } from "../lib/api";
 import { formatBytes, formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
 import { records, useTelemetry } from "../lib/telemetry";
@@ -72,6 +73,11 @@ export function RouteDetailDrawer({
           <span className="method">{method}</span>
           <span className="mono">{route}</span>
         </span>
+      }
+      actions={
+        <a className="btn sm" href={logsHref(`route:${route} method:${method}`)} title="Lines logged by this route's requests">
+          Logs
+        </a>
       }
       onClose={onClose}
     >

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Logs as LogsIcon } from "lucide-react";
+import { fieldTerm, logsHref } from "../lib/applogs";
 import { ArrowLeft, Box, Boxes, ExternalLink, Search, Server } from "lucide-react";
 import { api, rangeQuery, type Result, type Viz } from "../lib/api";
 import { formatBytes, formatCount, titleCase, toNumber } from "../lib/format";
@@ -371,6 +373,10 @@ function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk:
             <a className="btn ghost" href={`#/system?instance=${encodeURIComponent(host)}`}>
               <ExternalLink size={14} />
               {sdk ? "Instance in System" : "Machine in System"}
+            </a>
+            <a className="btn ghost" href={logsHref(sdk ? fieldTerm("instance", host) : fieldTerm("container", name))}>
+              <LogsIcon size={14} />
+              Logs
             </a>
             <TimeRangePicker />
             <RefreshControl busy={list.loading} />

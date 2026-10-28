@@ -428,6 +428,71 @@ OTEL_SERVICE_NAME=my-api`,
       "A rule watches a metric or a query and notifies its channels. Slack, Discord, Teams, Google Chat and webhooks need only their URL; PagerDuty, Opsgenie, Telegram and SMS (Twilio) need their key. Add channels under Alerts → Channels.",
     any: { note: "Email needs an SMTP server: an admin fills in host, port, user, password and from address in Settings → Server → Email. Then add a rule, or start from a preset, and pick the channels it notifies." },
   },
+  logs: {
+    id: "logs",
+    title: "Send your application's logs",
+    intro:
+      "Route your logger to the SDK and every line lands in Logs, linked to the request it was logged in. What the app prints doesn't change. Info and above is kept; debug lines are kept for requests that fail or are slow. Settings → Logs changes this for all services, without a redeploy.",
+    langs: {
+      go: {
+        note: "Wrap your slog handler, and log with the request's context so lines link to it. CaptureStdLog copies the log package (and slog's default handler).",
+        code: `slog.SetDefault(slog.New(visionary.LogHandler(slog.NewJSONHandler(os.Stdout, nil))))
+defer agent.CaptureStdLog()()
+
+slog.InfoContext(r.Context(), "order placed", "order_id", id)`,
+      },
+      node: {
+        note: "console, pino or winston:",
+        code: `visionary.captureConsole();
+
+const logger = pino({}, visionary.pinoStream());
+const logger = winston.createLogger({ transports: [new winston.transports.Console(), visionary.winstonTransport()] });`,
+      },
+      python: {
+        note: "Adds a handler to the root logger, after logging is configured (basicConfig, dictConfig, Django LOGGING). Existing handlers print what they printed before.",
+        code: `visionary.capture_logging()
+
+logging.getLogger(__name__).info("order placed", extra={"order_id": order.id})`,
+      },
+      ruby: {
+        note: "In Rails, from an initializer; elsewhere, wrap the logger you use.",
+        code: `Visionary.capture_rails_logger
+
+logger = Visionary.logger(Logger.new($stdout))`,
+      },
+      java: {
+        note: "Logback: turn it on for the root logger, or declare the appender in logback-spring.xml. Debug lines are captured for loggers set to DEBUG.",
+        code: `VISIONARY_LOG_CAPTURE=true
+
+<appender name="VISIONARY" class="io.github.styropyr0.visionary.VisionaryLogbackAppender"/>
+<root level="INFO"><appender-ref ref="VISIONARY"/></root>`,
+      },
+      dotnet: { code: `builder.Logging.AddVisionary();` },
+    },
+  },
+  logship: {
+    id: "logship",
+    title: "Send logs from shippers, OpenTelemetry and syslog",
+    intro:
+      "Anything that ships logs can send them here with a server ingest key (Settings → API keys): the key goes in Authorization (Bearer, ApiKey, or Basic with the key as the password), x-visionary-key, or ?key=.",
+    any: {
+      label: "Endpoints",
+      code: `# OpenTelemetry: every log record
+OTEL_EXPORTER_OTLP_ENDPOINT=${origin}
+
+# Elasticsearch bulk: Fluent Bit (es), Vector (elasticsearch), Filebeat, Logstash
+${origin}/api/ingest/logs          # the Elasticsearch URL; bulk goes to /_bulk
+
+# Loki push (JSON): Promtail, Grafana Alloy, Fluent Bit (loki), Vector (loki)
+${origin}/loki/api/v1/push
+
+# Anything: a JSON array, NDJSON or plain text, one line each
+curl -H "Authorization: Bearer <server key>" --data-binary @app.log \\
+  "${origin}/api/ingest/logs?service=billing"
+
+# Syslog (UDP and TCP): set an address in Settings → Logs, e.g. :5514`,
+    },
+  },
 };
 
 export const HELP: Record<Route, PageHelp> = {
@@ -560,6 +625,20 @@ export const HELP: Record<Route, PageHelp> = {
       "Check the SQL it wrote when a number looks off, and refine the question.",
     ],
     setup: ["analyst"],
+  },
+  applogs: {
+    title: "Logs",
+    tip: "Every line your services log: search, live tail, patterns, volume and alerts, each line linked to the request that wrote it.",
+    what: "The lines your services log, from the SDKs' logging hooks, OpenTelemetry, shippers (Fluent Bit, Vector, Filebeat, Logstash, Promtail), syslog and the host agent. Search with a query language, watch new lines live, open a line for its fields, the lines around it and its request. Patterns groups lines by message; Volume shows where storage goes; Hidden failures finds errors behind successful responses; Releases shows what a deploy changed in the logs.",
+    read: [
+      "Lines below the level in Settings → Logs (info by default) are kept only for requests that failed or were slow, so every failure comes with its debug lines.",
+      "Search: words match the message, field:value matches a column or a field, level:error+ means error or worse, -term leaves out, OR between alternatives, /regex/ for a pattern. The ? button lists the syntax.",
+      "Click a field's value to add it to the search; click + or − on a line's field to keep or leave it out.",
+      "Drag across the chart to zoom the time range.",
+      "Debug a service or a user for 15 minutes from a line, without a redeploy; alert when a line happens again; reduce a chatty line from Volume.",
+      "Secrets in lines are scrubbed before they are stored; anything that slips through is redacted and reported in Security.",
+    ],
+    setup: ["logs", "logship"],
   },
   logs: {
     title: "Request logs",

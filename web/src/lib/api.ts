@@ -58,7 +58,7 @@ export interface Meta {
   /** SLO: target percent of requests that succeed within T. */
   slo_target: number;
   /** Which kinds of SDK data have ever been written. */
-  sources?: { requests: boolean; spans: boolean; system: boolean; errors: boolean; profiles: boolean };
+  sources?: { requests: boolean; spans: boolean; system: boolean; errors: boolean; profiles: boolean; logs: boolean };
   /** Why sign-in is off ("" while it is on): VISIONARY_ENABLE_AUTH=false, or not set up yet. */
   sign_in_open?: "" | "disabled" | "unconfigured";
 }

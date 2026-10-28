@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BellOff, BellRing, CheckCheck, Download, Play, Plus, Search, Siren, Upload, X } from "lucide-react";
 import { useToast } from "../Toast";
 import { Modal } from "../Modal";
@@ -45,6 +45,19 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [imported, setImported] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // #/alerts?rule=12 opens that rule, e.g. right after Logs created it.
+  const linked = useRef(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("rule"));
+  useEffect(() => {
+    const id = Number(linked.current);
+    if (!id) return;
+    const r = rules.find((x) => x.id === id);
+    if (r) {
+      linked.current = null;
+      setEditing({ rule: r });
+      window.history.replaceState(null, "", "#/alerts");
+    }
+  }, [rules]);
 
   const allLabels = useMemo(() => [...new Set(rules.flatMap((r) => labelPairs(r.spec.labels)))].sort(), [rules]);
   const shown = useMemo(() => {

@@ -802,3 +802,59 @@
     width: 100%;
   }
 }
+
+/* Settings → Logs */
+.lgs-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lgs-num {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.lgs-num .input {
+  width: 110px;
+}
+.lgs-addr {
+  width: 200px;
+}
+.lgs-list {
+  width: 320px;
+}
+.lgs-err {
+  color: var(--critical-text);
+}
+.lgs-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.lgs-add .input {
+  width: 190px;
+}
+.lgs-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.lgs-rule-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 6px;
+}
+.lgs-test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.lgs-hint {
+  font-size: 11.5px;
+}

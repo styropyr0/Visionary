@@ -63,9 +63,11 @@ func TestCompileLogQuery(t *testing.T) {
 	for q, want := range map[string]string{
 		`"open`:               "closing",
 		`/[/`:                 "regular expression",
+		`/(/`:                 "regular expression",
 		`level:loud`:          "level is one of",
 		`service:>=3`:         "isn't a number",
-		`status:>=x`:          "needs a number",
+		`status:>=x`:          "status takes a code",
+		`http.status:>=x`:     "needs a number",
 		`(a OR b`:             "missing its )",
 		`a)`:                  "unexpected )",
 		`OR`:                  "both sides",
@@ -372,5 +374,40 @@ func TestLogsAroundAndRequestLogs(t *testing.T) {
 	s.handleRequestTelemetry(w, r)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"payment timeout after 30s"`) || !strings.Contains(w.Body.String(), `"logs":{"columns":["id","created_at","level"`) {
 		t.Fatalf("request telemetry %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequestFieldsInSearch(t *testing.T) {
+	s := logsTestServer(t, nil)
+	base := seedLogs(t, s)
+	ctx := context.Background()
+	for _, r := range []struct {
+		id, route, method string
+		status            int
+	}{{"r1", "/orders/{id}", "GET", 200}, {"r2", "/pay", "POST", 504}} {
+		if err := s.db.Exec(ctx, `INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms) VALUES (?, ?, ?, ?, ?, ?, 5)`,
+			r.id, base.Format(tsLayout), r.method, r.route, r.route, r.status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for q, want := range map[string]int{
+		"route:/pay":            1,
+		"route:/orders/*":       1,
+		"status:5xx":            1,
+		"status:>=200":          2,
+		"method:get":            1,
+		"-route:/pay service:api": 2,
+	} {
+		w := getAs(t, s, "admin", "/api/applogs?"+rangeQS(base, q))
+		var res struct {
+			Rows [][]any `json:"rows"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &res)
+		if w.Code != 200 || len(res.Rows) != want {
+			t.Errorf("%q: %d rows (%d %s), want %d", q, len(res.Rows), w.Code, w.Body.String(), want)
+		}
+	}
+	if _, err := compileLogQuery("status:999", sqlDialect{s.q.d}, false); err == nil {
+		t.Fatal("status 999 accepted")
 	}
 }
