@@ -198,7 +198,7 @@ func bearerKey(r *http.Request) (string, bool) {
 }
 
 // readPosts are the POST endpoints that only read: read keys may call them.
-var readPosts = []string{"/api/query", "/api/analyst"}
+var readPosts = []string{"/api/query", "/api/analyst", "/api/applogs/ask", "/api/applogs/explain", "/api/settings/logs/rules/test"}
 
 // keyAuthed serves a request made with a read key as a viewer. Keys never
 // write, whatever the handler would allow.

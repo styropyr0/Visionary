@@ -32,6 +32,7 @@ func (s *Server) applogsRoutes(mux *http.ServeMux) {
 	s.applogsAPIRoutes(mux)
 	s.applogsSettingsRoutes(mux)
 	s.applogsAnalysisRoutes(mux)
+	s.applogsAIRoutes(mux)
 }
 
 func (s *Server) applogsSchema() []string {
