@@ -46,6 +46,14 @@ internal sealed class VisionaryMiddleware
         tally.Start();
         var started = Stopwatch.GetTimestamp();
         var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
+        // Every request holds its log lines below the level until it ends, logged or not.
+        RequestLogs? logs = null;
+        if (_agent.Logs is not null)
+        {
+            logs = new RequestLogs(ctx, LogText.TraceParentId(ctx.Request.Headers["traceparent"].ToString()));
+            logs.Enter();
+        }
+        var threw = false;
         try
         {
             if (!o.LogRequests || !path.StartsWith(o.PathPrefix, StringComparison.Ordinal))
@@ -53,11 +61,20 @@ internal sealed class VisionaryMiddleware
                 await PassThrough(ctx).ConfigureAwait(false);
                 return;
             }
-            await Logged(ctx, path).ConfigureAwait(false);
+            await Logged(ctx, path, logs).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            threw = true;
+            throw;
         }
         finally
         {
             Interlocked.Decrement(ref counters.InFlight);
+            if (logs is not null)
+            {
+                FinishLogs(ctx, logs, threw, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
             if (tally.Collecting)
             {
                 // Only while a CPU profile runs: the time each route's requests took.
@@ -89,7 +106,7 @@ internal sealed class VisionaryMiddleware
         HandledByFramework(ctx);
     }
 
-    private async Task Logged(HttpContext ctx, string path)
+    private async Task Logged(HttpContext ctx, string path, RequestLogs? logs)
     {
         var o = _agent.Options;
         var startedAt = DateTime.UtcNow;
@@ -101,6 +118,10 @@ internal sealed class VisionaryMiddleware
             requestId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         }
         ctx.Response.Headers[RequestIdHeader] = requestId;
+        if (logs is not null)
+        {
+            logs.RequestId = requestId;
+        }
 
         var state = new RequestState(ctx, requestId, startedAt, o.SpanMax);
         state.Enter();
@@ -211,6 +232,24 @@ internal sealed class VisionaryMiddleware
         if (error is not null)
         {
             ExceptionDispatchInfo.Capture(error).Throw();
+        }
+    }
+
+    /// <summary>
+    /// Decides the lines the request held back, now that its final route, user and outcome are
+    /// known: failed means a 5xx, an exception, or an error captured in it.
+    /// </summary>
+    private void FinishLogs(HttpContext ctx, RequestLogs logs, bool threw, double durationMs)
+    {
+        try
+        {
+            var status = threw && !ctx.Response.HasStarted ? StatusCodes.Status500InternalServerError : ctx.Response.StatusCode;
+            var failed = threw || status >= 500 || ctx.Features.Get<IExceptionHandlerFeature>()?.Error is not null;
+            _agent.Logs!.Finish(logs, RouteOf(ctx, _agent.Options), UserOf(ctx)?.Id, failed, durationMs);
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: deciding held log lines failed");
         }
     }
 

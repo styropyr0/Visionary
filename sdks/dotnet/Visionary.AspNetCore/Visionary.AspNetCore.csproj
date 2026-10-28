@@ -17,7 +17,7 @@
     <Authors>styropyr0</Authors>
     <Company>styropyr0</Company>
     <Copyright>Copyright styropyr0</Copyright>
-    <Description>Request logs, system metrics, spans and errors from ASP.NET Core into the Visionary tables (Cloudflare D1, PostgreSQL, MySQL or SQLite).</Description>
+    <Description>Request logs, application logs, system metrics, spans and errors from ASP.NET Core into the Visionary tables (Cloudflare D1, PostgreSQL, MySQL or SQLite).</Description>
     <PackageTags>visionary;aspnetcore;analytics;apm;monitoring;logging;metrics</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/styropyr0/Visionary/tree/main/sdks/dotnet</PackageProjectUrl>

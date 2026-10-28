@@ -21,7 +21,7 @@ internal sealed class Redactor
     private static readonly string[] DefaultHeaders =
         { "Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie", "X-Api-Key", "X-Auth-Token" };
 
-    private static readonly string[] DefaultFields =
+    internal static readonly string[] DefaultFields =
     {
         "password", "passwd", "secret", "client_secret", "token", "access_token", "refresh_token", "id_token",
         "api_key", "apikey", "otp", "pin", "card_number", "cvv", "private_key",

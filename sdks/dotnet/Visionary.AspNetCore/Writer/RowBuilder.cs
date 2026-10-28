@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ internal sealed class RowBuilder
     private readonly string _errorInsert;
     private readonly string _releaseInsert;
     private readonly string _profileInsert;
+    private readonly string _logInsert;
 
     public RowBuilder(VisionaryAgent agent)
     {
@@ -28,6 +30,7 @@ internal sealed class RowBuilder
         _errorInsert = Schema.InsertSql("errors", Schema.ErrorColumns, strings);
         _releaseInsert = Schema.InsertSql("releases", Schema.ReleaseColumns, strings);
         _profileInsert = Schema.InsertSql("profiles", Schema.ProfileColumns, strings);
+        _logInsert = Schema.InsertSql("app_logs", Schema.LogColumns, strings);
     }
 
     public static string Timestamp(DateTime t) => t.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
@@ -116,6 +119,42 @@ internal sealed class RowBuilder
             Null(e.LoginAccount),
         };
     }
+
+    /// <summary>An app_logs insert: the message and attrs scrubbed, redacted and capped.</summary>
+    public Stmt Log(LogRecord r, ISet<string> secrets) => new(_logInsert, LogRow(r, secrets));
+
+    public object?[] LogRow(LogRecord r, ISet<string> secrets)
+    {
+        var message = LogText.Truncate(LogText.Scrub(r.Message), LogText.MaxMessage);
+        var attrs = r.Attrs is { Count: > 0 } a ? LogText.EncodeAttrs(a, secrets) : null;
+        return new object?[]
+        {
+            Timestamp(r.At),
+            _agent.Service,
+            _agent.Instance,
+            _agent.Version,
+            VisionaryAgent.Sdk,
+            LogHost,
+            null,
+            Severity.Name(r.Sev),
+            (long)r.Sev,
+            Null(r.Logger),
+            message,
+            attrs,
+            Null(r.RequestId),
+            Null(r.TraceId),
+            Null(r.SpanId),
+            Null(r.UserId),
+            Null(r.SessionId),
+            null,
+            null,
+            null,
+            (long)(Encoding.UTF8.GetByteCount(message) + (attrs is null ? 0 : Encoding.UTF8.GetByteCount(attrs))),
+        };
+    }
+
+    /// <summary>The machine's name, for app_logs.host.</summary>
+    private static readonly string LogHost = VisionaryAgent.HostName();
 
     private object?[] Span(SpanRecord s) => new object?[]
     {

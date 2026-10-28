@@ -95,6 +95,10 @@ public final class Visionary {
 
     /** Records an exception the application handled ({@code handled = 1}), linked to the current request. */
     public static void captureException(Throwable error) {
+        if (error != null) {
+            // The request's held log lines are kept as for a failed request.
+            LogScope.markError();
+        }
         Telemetry t = Telemetry.active();
         if (t != null && error != null) {
             t.capture(error, true);
@@ -104,14 +108,17 @@ public final class Visionary {
     /** The task, running as part of the current request on whichever thread executes it. */
     public static Runnable wrap(Runnable task) {
         RequestScope scope = RequestScope.current();
-        if (scope == null || task == null) {
+        LogScope logs = LogScope.current();
+        if ((scope == null && logs == null) || task == null) {
             return task;
         }
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
+            LogScope previousLogs = LogScope.enter(logs);
             try {
                 task.run();
             } finally {
+                LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
         };
@@ -120,14 +127,17 @@ public final class Visionary {
     /** The task, running as part of the current request on whichever thread executes it. */
     public static <T> Callable<T> wrap(Callable<T> task) {
         RequestScope scope = RequestScope.current();
-        if (scope == null || task == null) {
+        LogScope logs = LogScope.current();
+        if ((scope == null && logs == null) || task == null) {
             return task;
         }
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
+            LogScope previousLogs = LogScope.enter(logs);
             try {
                 return task.call();
             } finally {
+                LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
         };
@@ -183,9 +193,11 @@ public final class Visionary {
             return null;
         }
         RequestScope scope = RequestScope.current();
+        LogScope logs = LogScope.current();
         String spanName = name == null || name.isBlank() ? "background" : name;
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
+            LogScope previousLogs = LogScope.enter(logs);
             VisionarySpan span = Telemetry.start("background", spanName);
             try {
                 return task.call();
@@ -198,6 +210,7 @@ public final class Visionary {
                 if (span != null) {
                     span.close();
                 }
+                LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
         };

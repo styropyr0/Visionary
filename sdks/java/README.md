@@ -1,8 +1,8 @@
 # Visionary for Spring Boot
 
 Add one dependency to a Spring Boot application and Visionary shows every
-request, its database statements and outbound calls, exceptions, host and JVM
-metrics, and CPU profiles. No code is needed: the starter configures itself,
+request, its database statements and outbound calls, exceptions, application
+logs, host and JVM metrics, and CPU profiles. No code is needed: the starter configures itself,
 writes rows to your database on background threads, and the Visionary server
 reads the same database for its dashboards.
 
@@ -54,7 +54,7 @@ exactly as written, not `visionary.service`).
 **3. Start the application and check the log.** You see one line like:
 
 ```
-visionary: writing to jdbc:postgresql://host:5432/visionary; service orders-api, version (none); requests on (prefix '', bodies true); spans on (threshold 100.0ms, max 100); errors on; system metrics every 15000ms
+visionary: writing to jdbc:postgresql://host:5432/visionary; service orders-api, version (none); requests on (prefix '', bodies true); spans on (threshold 100.0ms, max 100); errors on; app logs where VisionaryLogbackAppender is configured; system metrics every 15000ms
 ```
 
 The starter creates its tables if they don't exist.
@@ -340,6 +340,82 @@ directory or `BOOT-INF/classes`) as a plain path, everything else as
 Set `VISIONARY_PROFILE=false` in a service that must never be sampled: it then
 ignores the dashboard and does not read the settings.
 
+### Logs (opt-in, with Logback)
+
+Off until you route your logs to Visionary; upgrading changes nothing. With
+Logback (Spring Boot's default), either let the starter add its appender to
+the root logger:
+
+```sh
+VISIONARY_LOG_CAPTURE=true
+```
+
+or declare it yourself in `logback-spring.xml`, for example to send only some
+loggers or to put your own filters in front (the starter then does not add
+another):
+
+```xml
+<appender name="VISIONARY" class="io.github.styropyr0.visionary.VisionaryLogbackAppender"/>
+<root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="VISIONARY"/>
+</root>
+```
+
+Either way the appender sits next to yours: levels, patterns and the console
+stay exactly as they were. Until one exists, the starter writes no logs, reads
+no log settings and creates no `app_logs` table. It logs
+`visionary: app logs on (level info)` once capture starts.
+
+Each line goes to `app_logs` with its level, logger, message
+(with the exception's stack), and, when logged during a request, its
+`request_id`, `user_id` and the `traceparent` trace id, so the request's page
+shows what it logged. Work handed over with `Visionary.wrap`,
+`Visionary.background` or `@Async` stays linked.
+
+MDC entries and SLF4J 2 key-value pairs become the line's attributes:
+
+```java
+log.atWarn().addKeyValue("order", order.id()).log("payment retried");
+```
+
+`request_id`, `trace_id` (or Micrometer's `traceId`), `span_id` (`spanId`),
+`user_id` and `session_id` go to their own columns. The source line is stored
+when Logback already computes it (a pattern with `%line`); the starter never
+turns caller data on, as it is costly.
+
+What is kept is set in the dashboard under Settings → Logs, read at start and
+every 30 seconds, with no redeploy:
+
+- a level (default `info`, or `VISIONARY_LOG_LEVEL` until the settings are read);
+- the **buffer**: lines below the level are held in the request, and written
+  only when it fails (5xx, an exception, `Visionary.captureException`) or is
+  slow (1 s by default), so a failure comes with its debug lines;
+- overrides that lower or raise the level for a service, route or user until
+  a time, drop rules, and a cap of lines per minute (6000 by default; errors
+  pass up to ten times over).
+
+The appender sees only what your loggers let through: a line below a logger's
+level is never created. For the buffer to have debug lines, set your own
+packages to DEBUG and keep the console where it was with Spring Boot's
+threshold:
+
+```properties
+logging.level.com.example=DEBUG
+logging.threshold.console=INFO
+```
+
+Passwords, tokens, keys and JWTs in messages and attributes are replaced
+before anything is stored (the field names under
+[Bodies and redaction](#bodies-and-redaction) plus a few patterns). The
+starter's own `visionary: ...` lines are never captured. Lines are written by
+their own background thread, in a queue of 10000, so a flood of logs never
+delays request rows.
+
+Keep it out of an `AsyncAppender`: lines lose their request on another thread.
+`VISIONARY_LOGS=false` turns capture off even where the appender is declared.
+With Log4j 2 instead of Logback no logs are captured.
+
 ### System metrics (automatic)
 
 Every 15 seconds (`VISIONARY_SYSTEM_INTERVAL`): host CPU, memory, disk,
@@ -397,6 +473,7 @@ deploy.
 | `releases` | one deploy marker per start, when the release is known |
 | `system_metrics` | host, process, JVM, pool and throughput samples |
 | `profiles` | CPU profiles, only while turned on in the dashboard |
+| `app_logs` | lines logged through Logback, linked to their request |
 
 - **Request id:** an incoming `X-Request-ID` up to 128 characters, else a
   random 32-hex id, echoed on the response.
@@ -473,12 +550,15 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | none | Fields redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error.code` | Dotted path in JSON error responses, stored as `error_code`. |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error.key` | The same, stored as `error_key`. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off) | Set only when no Visionary server reads this database: the starter then deletes `api_logs`, `spans`, `errors` and `profiles` rows older than this, a minute after start and then daily. `releases` are kept. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off) | Set only when no Visionary server reads this database: the starter then deletes `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows older than this, a minute after start and then daily. `releases` are kept. |
 | `VISIONARY_SPANS` | `true` | Record statements and outbound calls. `false` also removes the `DataSource` wrapper and leaves the totals NULL. |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` | Keep spans outside requests at least this slow. |
 | `VISIONARY_SPAN_MAX` | `100` | Spans kept per request. |
 | `VISIONARY_ERRORS` | `true` | Record exceptions. |
 | `VISIONARY_PROFILE` | `true` (follow the dashboard) | `false`: never take CPU profiles, whatever Settings → Profiling says. |
+| `VISIONARY_LOG_CAPTURE` | `false` | Add Visionary's Logback appender to the root logger. Without it, only an appender declared in your Logback configuration captures. See [Logs](#logs-opt-in-with-logback). |
+| `VISIONARY_LOGS` | `true` | `false` ignores the appender even where declared. See [Logs](#logs-opt-in-with-logback). |
+| `VISIONARY_LOG_LEVEL` | `info` | The lowest level kept until Settings → Logs has been read. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds, also `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |
@@ -502,6 +582,7 @@ the Visionary dashboard under Settings, not in the service.
 | No CPU profiles | Profiling is off in the dashboard, the service is not in its list, or no request arrived since the last turn. | Turn it on in Settings → Profiling and include the service. Check `VISIONARY_PROFILE` is not `false`. |
 | `visionary: CPU profiling off: cannot read visionary_settings` | The Visionary server has not created its tables in this database yet. | Start the server against the same database. |
 | D1 writes fail with `exceeded D1's free tier daily row read limit` | Cloudflare's free plan limit is used up for today. | Wait for the reset at midnight UTC, move to a paid Workers plan, or use PostgreSQL or MySQL. |
+| No debug lines on a failed request's logs | The logger's level is above DEBUG, so the lines were never created. | Set your packages to DEBUG and `logging.threshold.console=INFO` (see [Logs](#logs-opt-in-with-logback)). |
 | `visionary: request queue full; N entries dropped` | Writes cannot keep up, usually SQLite or D1 under heavy traffic. | Use PostgreSQL or MySQL. |
 | `database is locked` with SQLite | The app and the server write the same file. | Add the busy timeout and WAL parameters from [Databases](#databases) to both URLs. |
 | Last requests before shutdown are missing, or `visionary: request log flush timed out` | The JVM was killed before the flush finished (`kill -9`, a container stop timeout under 10 s). | Stop the app gracefully (SIGTERM) and give it at least 10 seconds. |

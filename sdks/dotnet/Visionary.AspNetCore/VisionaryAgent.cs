@@ -73,6 +73,10 @@ internal sealed class VisionaryAgent : IDisposable
         }
         if (Store is not null)
         {
+            if (Options.Logs && Options.LogsAdded)
+            {
+                Logs = new AppLogs(this);
+            }
             Interlocked.Exchange(ref _current, this);
         }
     }
@@ -96,6 +100,9 @@ internal sealed class VisionaryAgent : IDisposable
     public HttpCounters Http { get; } = new();
     public RequestTally Tally { get; } = new();
     public Channel<WriteItem> Queue { get; }
+
+    /// <summary>Application log capture (app_logs), with its own queue; null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
+    public AppLogs? Logs { get; }
 
     public bool SpansOn => Enabled && Options.Spans;
     public bool ErrorsOn => Enabled && Options.Errors;
@@ -167,6 +174,11 @@ internal sealed class VisionaryAgent : IDisposable
     /// </summary>
     public void CaptureError(Exception ex, bool handled, HttpContext? context)
     {
+        // An error in a request keeps the debug lines it held back (Settings → Logs, buffer).
+        if (RequestLogs.Current is { } logs && (context is null || ReferenceEquals(logs.Context, context)))
+        {
+            logs.MarkFailed();
+        }
         if (!ErrorsOn || !ErrorReport.MarkSeen(ex))
         {
             return;
@@ -213,7 +225,7 @@ internal sealed class VisionaryAgent : IDisposable
         (Store as IDisposable)?.Dispose();
     }
 
-    private static string HostName()
+    internal static string HostName()
     {
         try
         {

@@ -29,6 +29,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
     private final HttpCounters counters;
     private final RequestWriter writer;
     private final Telemetry telemetry;
+    private final AppLogs logs;
     private final String pathPrefix;
     private final boolean bodies;
     private final int maxBodyBytes;
@@ -36,11 +37,14 @@ final class VisionaryFilter extends OncePerRequestFilter {
     /**
      * @param writer    null when request logging is off
      * @param telemetry null when spans and errors are both off
+     * @param logs      null when application logs are off
      */
-    VisionaryFilter(HttpCounters counters, RequestWriter writer, Telemetry telemetry, VisionaryConfig cfg) {
+    VisionaryFilter(HttpCounters counters, RequestWriter writer, Telemetry telemetry, AppLogs logs,
+            VisionaryConfig cfg) {
         this.counters = counters;
         this.writer = writer;
         this.telemetry = telemetry;
+        this.logs = logs;
         this.pathPrefix = cfg == null ? "" : cfg.pathPrefix();
         this.bodies = cfg != null && cfg.logBodies();
         this.maxBodyBytes = cfg == null ? 8192 : cfg.maxBodyBytes();
@@ -67,8 +71,9 @@ final class VisionaryFilter extends OncePerRequestFilter {
                 ? new CapturingRequest(request, maxBodyBytes) : null;
         CapturingResponse capturedResponse = new CapturingResponse(response, bodies, maxBodyBytes);
         RequestScope scope = telemetry != null ? new RequestScope(requestId, start, telemetry.spanMax) : null;
+        LogScope logScope = logScope(request, requestId);
         Capture capture = new Capture(request, capturedRequest, capturedResponse, requestId, startedAt, start,
-                headers, requestType, scope);
+                headers, requestType, scope, logScope);
 
         Runnable finish = new Runnable() {
             private boolean done;
@@ -84,6 +89,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
         };
 
         RequestScope previous = RequestScope.enter(scope);
+        LogScope previousLogs = LogScope.enter(logScope);
         Throwable thrown = null;
         try {
             chain.doFilter(capturedRequest != null ? capturedRequest : request, capturedResponse);
@@ -91,6 +97,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
             thrown = t;
             throw t;
         } finally {
+            LogScope.restore(previousLogs);
             RequestScope.restore(previous);
             if (thrown != null) {
                 // The container turns the exception into a 500 unless something was already sent.
@@ -107,6 +114,9 @@ final class VisionaryFilter extends OncePerRequestFilter {
     private void countOnly(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         long start = System.nanoTime();
+        // Not logged, so no request id; its lines still carry its trace and user.
+        LogScope logScope = logScope(request, null);
+        LogScope previousLogs = LogScope.enter(logScope);
         Throwable thrown = null;
         try {
             chain.doFilter(request, response);
@@ -114,27 +124,67 @@ final class VisionaryFilter extends OncePerRequestFilter {
             thrown = t;
             throw t;
         } finally {
+            LogScope.restore(previousLogs);
             if (thrown != null) {
                 int status = response.isCommitted() ? response.getStatus() : 500;
                 counters.end(status);
                 tally(request, status, start);
                 recordUnlinked(request, status, thrown);
+                finishLogs(logScope, request, status, true, start);
             } else if (request.isAsyncStarted()) {
                 request.getAsyncContext().addListener(new CompletionListener(() -> {
                     counters.end(response.getStatus());
                     tally(request, response.getStatus(), start);
                     recordUnlinked(request, response.getStatus(), null);
+                    finishLogs(logScope, request, response.getStatus(), false, start);
                 }));
             } else {
                 counters.end(response.getStatus());
                 tally(request, response.getStatus(), start);
                 recordUnlinked(request, response.getStatus(), null);
+                finishLogs(logScope, request, response.getStatus(), false, start);
             }
+        }
+    }
+
+    /** The request's log scope, null when application logs are off. */
+    private LogScope logScope(HttpServletRequest request, String requestId) {
+        if (logs == null || !logs.capturing()) {
+            return null;
+        }
+        return new LogScope(requestId, LogScope.traceParentId(request.getHeader("traceparent")), () -> {
+            VisionaryUser u = user(request);
+            return u == null ? null : u.id();
+        });
+    }
+
+    /**
+     * Decides the lines the request held back: a 5xx, an exception or a captured error
+     * counts as failed.
+     */
+    private void finishLogs(LogScope scope, HttpServletRequest request, int status, boolean thrown, long start) {
+        if (scope == null) {
+            return;
+        }
+        try {
+            logs.finish(scope, route(request, status), thrown || status >= 500,
+                    (System.nanoTime() - start) / 1_000_000.0);
+        } catch (RuntimeException e) {
+            logger.debug("visionary: could not decide the request's log lines", e);
         }
     }
 
     private void finish(Capture c, int status, Throwable thrown) {
         counters.end(status);
+        HttpServletRequest request = c.request;
+        try {
+            finishRequest(c, status, thrown);
+        } finally {
+            finishLogs(c.logScope, request, status, thrown != null, c.start);
+        }
+    }
+
+    private void finishRequest(Capture c, int status, Throwable thrown) {
         HttpServletRequest request = c.request;
         try {
             double durationMs = (System.nanoTime() - c.start) / 1_000_000.0;
@@ -263,7 +313,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
     /** What the request thread captured before the handler ran. */
     private record Capture(HttpServletRequest request, CapturingRequest capturedRequest,
             CapturingResponse capturedResponse, String requestId, Instant startedAt, long start,
-            Map<String, String> headers, String requestType, RequestScope scope) {
+            Map<String, String> headers, String requestType, RequestScope scope, LogScope logScope) {
     }
 
     /** Runs the callback once the async response is complete, following re-dispatches. */

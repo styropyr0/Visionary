@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>Visionary Spring Boot Starter</name>
-    <description>Visionary collector for Spring Boot: logs API requests, database and HTTP client spans, errors and host, process and JVM metrics into your database.</description>
+    <description>Visionary collector for Spring Boot: logs API requests, database and HTTP client spans, errors, application logs and host, process and JVM metrics into your database.</description>
     <url>https://github.com/styropyr0/Visionary/tree/main/sdks/java</url>
 
     <licenses>
@@ -92,6 +92,13 @@
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Application logs: the starters bring Logback; without it there is nothing to hook. -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
             <optional>true</optional>
         </dependency>
 

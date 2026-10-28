@@ -41,10 +41,11 @@ public class VisionaryAutoConfiguration {
 
     private static final Log log = LogFactory.getLog(VisionaryAutoConfiguration.class);
     private static final String HIKARI = "com.zaxxer.hikari.HikariDataSource";
+    private static final String LOGBACK = "ch.qos.logback.classic.LoggerContext";
 
     @Bean
     VisionaryAgent visionaryAgent(Environment environment, ObjectProvider<DataSource> dataSources,
-            ObjectProvider<VisionaryUserLookup> userLookup) {
+            ObjectProvider<VisionaryUserLookup> userLookup, BeanFactory beanFactory) {
         VisionaryConfig cfg = null;
         try {
             cfg = VisionaryConfig.from(environment);
@@ -53,7 +54,7 @@ public class VisionaryAutoConfiguration {
                         + "or VISIONARY_USE_APP_DATASOURCE=true); collection is off");
                 return new VisionaryAgent(cfg);
             }
-            if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors()) {
+            if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors() && !cfg.logs()) {
                 return new VisionaryAgent(cfg);
             }
             ClassLoader loader = getClass().getClassLoader();
@@ -70,7 +71,11 @@ public class VisionaryAutoConfiguration {
             SystemSampler.PoolStats pool = appDataSource != null && ClassUtils.isPresent(HIKARI, loader)
                     ? HikariPoolStats.of(appDataSource)
                     : null;
-            return new VisionaryAgent(store, origin, writer, pool, cfg);
+            // Logback is the only hook for application logs; without it there is nothing to capture.
+            AppLogs logs = cfg.logs() && ClassUtils.isPresent(LOGBACK, loader)
+                    ? new AppLogs(store, origin, cfg, new FrameNamer(appPackages(beanFactory), contextLoader()))
+                    : null;
+            return new VisionaryAgent(store, origin, writer, pool, logs, cfg);
         } catch (RuntimeException | LinkageError e) {
             log.warn("visionary: disabled: " + e.getMessage());
             return new VisionaryAgent(cfg);
@@ -83,22 +88,31 @@ public class VisionaryAutoConfiguration {
      */
     @Bean
     VisionaryProfiler visionaryProfiler(VisionaryAgent agent, BeanFactory beanFactory) {
-        java.util.List<String> packages = java.util.List.of();
+        return new VisionaryProfiler(agent, appPackages(beanFactory), contextLoader());
+    }
+
+    /** The packages of the application's {@code @SpringBootApplication}: its own code in profiles and logs. */
+    private static java.util.List<String> appPackages(BeanFactory beanFactory) {
         try {
             if (AutoConfigurationPackages.has(beanFactory)) {
-                packages = AutoConfigurationPackages.get(beanFactory);
+                return AutoConfigurationPackages.get(beanFactory);
             }
         } catch (RuntimeException e) {
             // no packages: classes loaded from directories still count as the application's
         }
+        return java.util.List.of();
+    }
+
+    private ClassLoader contextLoader() {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        return new VisionaryProfiler(agent, packages, loader != null ? loader : getClass().getClassLoader());
+        return loader != null ? loader : getClass().getClassLoader();
     }
 
     @Bean
     FilterRegistrationBean<VisionaryFilter> visionaryFilter(VisionaryAgent agent) {
         FilterRegistrationBean<VisionaryFilter> registration = new FilterRegistrationBean<>(
-                new VisionaryFilter(agent.counters(), agent.requests(), agent.telemetry(), agent.config()));
+                new VisionaryFilter(agent.counters(), agent.requests(), agent.telemetry(), agent.logs(),
+                        agent.config()));
         registration.setName("visionaryFilter");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         registration.setDispatcherTypes(DispatcherType.REQUEST);
@@ -171,6 +185,20 @@ public class VisionaryAutoConfiguration {
                     filters.add(spans);
                 }
             });
+        }
+    }
+
+    /**
+     * Application logs: with {@code VISIONARY_LOG_CAPTURE=true}, adds {@link VisionaryLogbackAppender}
+     * to the root logger when the application logs through Logback (Spring Boot's default).
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {LOGBACK, "org.slf4j.LoggerFactory"})
+    static class LogbackConfiguration {
+
+        @Bean
+        LogbackInstaller visionaryLogback(VisionaryAgent agent) {
+            return new LogbackInstaller(agent.logs(), agent.config() != null && agent.config().logCapture());
         }
     }
 

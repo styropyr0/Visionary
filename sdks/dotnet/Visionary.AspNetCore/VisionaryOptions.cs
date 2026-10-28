@@ -61,7 +61,7 @@ public sealed class VisionaryOptions
     public int MaxBodyBytes { get; set; } = 8192;
 
     /// <summary>VISIONARY_LOG_RETENTION_DAYS (default 0, off: the Visionary server applies Settings → Retention).
-    /// Above 0 the SDK also deletes older api_logs, spans, errors and profiles rows.</summary>
+    /// Above 0 the SDK also deletes older api_logs, spans, errors, profiles and app_logs rows.</summary>
     public int LogRetentionDays { get; set; }
 
     /// <summary>VISIONARY_LOG_REDACT_HEADERS: added to the default redacted headers.</summary>
@@ -112,6 +112,19 @@ public sealed class VisionaryOptions
     /// Visionary.AspNetCore.Profiling package and <c>AddVisionaryProfiling()</c>.
     /// </summary>
     public bool Profile { get; set; } = true;
+
+    /// <summary>
+    /// VISIONARY_LOGS (default true): copy what the application logs through <c>ILogger</c> into
+    /// app_logs, once <c>builder.Logging.AddVisionary()</c> routes the logs here. False turns it
+    /// off. Which lines are kept follows the dashboard (Settings, Logs).
+    /// </summary>
+    public bool Logs { get; set; } = true;
+
+    /// <summary>Set by <c>builder.Logging.AddVisionary()</c>: the application routes its logs here.</summary>
+    internal bool LogsAdded { get; set; }
+
+    /// <summary>VISIONARY_LOG_LEVEL (default info): the lowest level kept until Settings, Logs has been read.</summary>
+    public string LogLevel { get; set; } = "info";
 
     /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
     internal bool ProfilingAdded { get; set; }
@@ -191,6 +204,8 @@ public sealed class VisionaryOptions
         SpanMax = Int("VISIONARY_SPAN_MAX", 100);
         Errors = Bool("VISIONARY_ERRORS", true);
         Profile = Bool("VISIONARY_PROFILE", true);
+        Logs = Bool("VISIONARY_LOGS", true);
+        LogLevel = Get("VISIONARY_LOG_LEVEL") ?? "info";
     }
 
     /// <summary>A plain number is seconds; otherwise a Go-style duration such as 500ms, 15s, 1m or 1h30m.</summary>

@@ -3,8 +3,8 @@
 Add one NuGet package and two lines to an ASP.NET Core app, and every request
 shows up in the [Visionary](../../Readme.md) dashboard: route, status, time,
 user, redacted bodies, the database and `HttpClient` calls it made, and any
-exception. You also get host, process and GC metrics, and CPU profiles with an
-optional second package.
+exception. You also get host, process and GC metrics, the app's `ILogger`
+lines with one more line, and CPU profiles with an optional second package.
 
 - [Quick start](#quick-start)
 - [Integration recipes](#integration-recipes)
@@ -405,6 +405,61 @@ Turn it off in the same place; no redeploy either way. To keep a service out of
 profiling whatever the dashboard says, set `VISIONARY_PROFILE=false` (or
 `o.Profile = false`). See [How profiling works](#how-profiling-works).
 
+### Application logs
+
+**When:** you want what the app logs through `ILogger` next to its requests.
+Capture is opt-in: add the logging provider, which writes to `app_logs`.
+Nothing else changes; the console and other providers print exactly what they
+printed before. It also adds the collector, so it works without
+`builder.Services.AddVisionary()` too.
+
+```csharp
+builder.Logging.AddVisionary();
+```
+
+```csharp
+app.MapPost("/orders", (Order o, ILogger<Program> log) =>
+{
+    log.LogInformation("Order {OrderId} placed for {Total}", o.Id, o.Total);
+    ...
+});
+```
+
+Each line carries the request's `request_id`, `trace_id` (the current
+`Activity`, else the `traceparent` header) and user. The message is the
+formatted text, with the exception's `ToString()` appended when there is one;
+the category is the `logger`. Message template values and scope values become
+`attrs` (`OrderId`, `Total`); `request_id`, `trace_id`, `span_id`, `user_id`
+and `session_id` among them go to their own columns. Secrets are scrubbed
+from the message and redacted from attrs (the `VISIONARY_LOG_REDACT_FIELDS`
+keys too).
+
+What is kept is set in the dashboard, **Settings → Logs**, read every 30 s:
+the level (until then `VISIONARY_LOG_LEVEL`, default `info`), per-route or
+per-user overrides with an end time, drop rules and a cap per minute. Lines
+below the level are held in the request until it ends; when it failed (5xx,
+an exception, `Visionary.CaptureException`) or was slow, its debug lines are
+kept too.
+
+Microsoft.Extensions.Logging filters by category and level before a provider
+sees a line, so `builder.Logging.AddVisionary()` adds a filter rule that lets the Visionary
+provider (alias `Visionary`) see everything, whatever `Logging:LogLevel`
+says. Rules apply per provider, so other providers keep their levels. To
+keep a noisy category out of `app_logs`, narrow it under the alias:
+
+```json
+{
+  "Logging": {
+    "Visionary": { "LogLevel": { "Microsoft.AspNetCore": "Warning" } }
+  }
+}
+```
+
+Lines go through their own queue (10000 lines) and writer, so a flood of
+them never delays request rows. The SDK's own lines (category `Visionary`,
+messages starting `visionary: `) are never captured. `VISIONARY_LOGS=false`
+turns capture off even where the provider is added.
+
 ### Query plans (Explain)
 
 The .NET SDK has no explainer. It does not answer **Explain** on the Queries
@@ -474,7 +529,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `RedactRequestFields` | empty | Comma list of keys to redact in request bodies only |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `ErrorCodeField` | `error.code` | Dotted path to the error code in JSON error bodies |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `ErrorKeyField` | `error.key` | Dotted path to the error key |
-| `VISIONARY_LOG_RETENTION_DAYS` | `LogRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors` and `profiles` rows |
+| `VISIONARY_LOG_RETENTION_DAYS` | `LogRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows |
 | `VISIONARY_SYSTEM_METRICS` | `SystemMetrics` | `true` | Write `system_metrics` samples |
 | `VISIONARY_SYSTEM_INTERVAL` | `SystemInterval` | `15s` | Sample interval: a plain number is seconds; also `500ms`, `1m`, `1h30m` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `SystemRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `system_metrics` rows |
@@ -483,6 +538,8 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_SPAN_MAX` | `SpanMax` | `100` | Span rows stored per request |
 | `VISIONARY_ERRORS` | `Errors` | `true` | Record exceptions |
 | `VISIONARY_PROFILE` | `Profile` | `true` | Profile when the dashboard asks (needs `AddVisionaryProfiling()`); `false` never profiles |
+| `VISIONARY_LOGS` | `Logs` | `true` | Copy `ILogger` lines into `app_logs` (needs `builder.Logging.AddVisionary()`); `false` never captures |
+| `VISIONARY_LOG_LEVEL` | `LogLevel` | `info` | Lowest level kept until Settings → Logs is read |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
@@ -610,6 +667,7 @@ it is set.
 ```csharp
 builder.Services.AddVisionary(o => { ... });     // register; options override VISIONARY_* settings
 builder.Services.AddVisionaryProfiling();        // optional, Visionary.AspNetCore.Profiling
+builder.Logging.AddVisionary();                  // optional: ILogger lines into app_logs
 app.UseVisionary();                              // the request middleware, first in the pipeline
 
 Visionary.SetUser(ctx, id, handle, role);        // the signed-in user of this request

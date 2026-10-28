@@ -49,22 +49,35 @@ final class FrameNamer {
             return cached;
         }
         String cls = HIDDEN_SUFFIX.matcher(className).replaceFirst("");
-        int dot = cls.lastIndexOf('.');
-        String pkg = dot < 0 ? "" : cls.substring(0, dot);
-        String simple = dot < 0 ? cls : cls.substring(dot + 1);
-        String file = fileName != null && !fileName.isEmpty() ? fileName : sourceFile(simple);
-        String path = null;
-        if (file != null) {
-            String owner = owner(pkg, className);
-            // Library frames name the jar and the file; the JDK and the application the package path.
-            path = owner.startsWith("lib:") ? owner + file : owner + packagePath(pkg, file);
-        }
+        String path = path(cls, className, fileName);
         String out = (cls + "." + method + (path == null ? "" : " " + path + (line > 0 ? ":" + line : "")))
                 .replace(';', ',').replace('\n', ' ');
         if (names.size() < 50_000) {
             names.put(key, out);
         }
         return out;
+    }
+
+    /**
+     * The file part of a frame name, for {@code app_logs.code_file}: {@code std:java/util/HashMap.java},
+     * {@code com/example/OrderService.java}, {@code lib:spring-webmvc/DispatcherServlet.java}; null when
+     * there is no file.
+     */
+    String file(String className, String fileName) {
+        return path(HIDDEN_SUFFIX.matcher(className).replaceFirst(""), className, fileName);
+    }
+
+    private String path(String cls, String className, String fileName) {
+        int dot = cls.lastIndexOf('.');
+        String pkg = dot < 0 ? "" : cls.substring(0, dot);
+        String simple = dot < 0 ? cls : cls.substring(dot + 1);
+        String file = fileName != null && !fileName.isEmpty() ? fileName : sourceFile(simple);
+        if (file == null) {
+            return null;
+        }
+        String owner = owner(pkg, className);
+        // Library frames name the jar and the file; the JDK and the application the package path.
+        return owner.startsWith("lib:") ? owner + file : owner + packagePath(pkg, file);
     }
 
     /** {@code Foo$Bar$$Lambda} → {@code Foo.java}; null for names that are not a class. */

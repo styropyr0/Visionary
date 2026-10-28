@@ -42,7 +42,10 @@ record VisionaryConfig(
         double spanThresholdMs,
         int spanMax,
         boolean errors,
-        boolean profile) {
+        boolean profile,
+        boolean logs,
+        boolean logCapture,
+        String logLevel) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -77,7 +80,12 @@ record VisionaryConfig(
                 r.nonNegativeInt("VISIONARY_SPAN_MAX", 100),
                 r.bool("VISIONARY_ERRORS", true),
                 // false: never profile, whatever the dashboard says.
-                r.bool("VISIONARY_PROFILE", true));
+                r.bool("VISIONARY_PROFILE", true),
+                r.bool("VISIONARY_LOGS", true),
+                // Opt-in: the starter adds the Logback appender to the root logger; otherwise only where declared.
+                r.bool("VISIONARY_LOG_CAPTURE", false),
+                // The lowest level kept until Settings → Logs has been read.
+                r.string("VISIONARY_LOG_LEVEL", "info"));
     }
 
     /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */
@@ -109,9 +117,11 @@ record VisionaryConfig(
     }
 
     String resolvedInstance() {
-        if (!instance.isEmpty()) {
-            return instance;
-        }
+        return instance.isEmpty() ? hostname() : instance;
+    }
+
+    /** The machine's name, for the {@code host} column of {@code app_logs}. */
+    static String hostname() {
         try {
             return InetAddress.getLocalHost().getHostName();
         } catch (Exception e) {

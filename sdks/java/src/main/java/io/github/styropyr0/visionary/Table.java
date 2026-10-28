@@ -93,6 +93,16 @@ final class Table {
             .text("created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime")
             .build();
 
+    static final Table APP_LOGS = builder("app_logs", "logs")
+            .text("created_at", "service", "instance", "version", "source", "host", "container", "level")
+            .integer("severity")
+            .text("logger", "message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id",
+                    "code_file")
+            .integer("code_line")
+            .text("code_func")
+            .integer("size")
+            .build();
+
     /** Created by the Visionary server, never by the SDK; written only while profiling. */
     static final Table PROFILES = builder("profiles", null)
             .text("created_at", "service", "instance", "version", "sdk")

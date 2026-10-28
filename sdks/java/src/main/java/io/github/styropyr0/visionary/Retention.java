@@ -71,8 +71,9 @@ final class Retention {
                 }
             }
         } catch (Exception e) {
-            // The Visionary server creates profiles; until it has, there is nothing to purge.
-            if (table == Table.PROFILES && missingTable(e)) {
+            // The Visionary server creates profiles, and app_logs exists once log capture starts;
+            // until then there is nothing to purge.
+            if ((table == Table.PROFILES || table == Table.APP_LOGS) && missingTable(e)) {
                 return;
             }
             log.error("visionary: retention purge of " + table.name + " failed after " + total + " rows: " + e);
