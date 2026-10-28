@@ -219,6 +219,9 @@ func digestEmailData(app string, d *digestData, summary string) emailView {
 		vit = append(vit, emailRow{Cells: []string{x.Name, was, vitalText(x.Name, x.P75), strings.ReplaceAll(x.Rating, "_", " ")}, Tone: tone})
 	}
 	add(emailSection{Title: "Web Vitals (p75)", Columns: []string{"Metric", "Was", "Now", "Rating"}, Rows: vit})
+	if d.Logs != nil {
+		add(digestLogsSection(d.Logs))
+	}
 	if len(d.Releases) > 0 {
 		var rel []emailRow
 		for _, r := range d.Releases {

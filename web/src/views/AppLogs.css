@@ -167,6 +167,11 @@
 .lg-hist-hint {
   font-size: 12px;
 }
+.lg-hist-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .lg-hist {
   position: relative;
   display: flex;

@@ -62,6 +62,7 @@ type digestData struct {
 	Machines   []digestMachine   `json:"machines"`
 	Containers *digestContainers `json:"containers,omitempty"`
 	Vitals     []digestVital     `json:"web_vitals"`
+	Logs       *digestLogs       `json:"logs,omitempty"` // applogs_digest.go
 }
 
 func (s *Server) digestData(ctx context.Context, now time.Time) (*digestData, error) {
@@ -157,6 +158,7 @@ GROUP BY version, COALESCE(service, '') HAVING MIN(created_at) >= ? ORDER BY fir
 	d.Machines = s.digestMachinesData(ctx, mid, now)
 	d.Containers = s.digestContainersData(ctx, mid, now)
 	d.Vitals = s.digestVitalsData(ctx, start, mid, now)
+	d.Logs = s.digestLogsData(ctx, start, mid, now)
 	return d, nil
 }
 

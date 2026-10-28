@@ -13,6 +13,34 @@ func (s *Server) applogsAnalysisRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/applogs/volume", s.authed(s.handleLogVolume))
 	mux.Handle("GET /api/applogs/hidden-failures", s.authed(s.handleHiddenFailures))
 	mux.Handle("GET /api/applogs/versions", s.authed(s.handleLogVersions))
+	mux.Handle("GET /api/applogs/top-patterns", s.authed(s.handleTopPatterns))
+}
+
+// handleTopPatterns is the busiest messages as a table, for dashboards and
+// reports.
+func (s *Server) handleTopPatterns(w http.ResponseWriter, r *http.Request) {
+	ls, err := s.logSearchOf(r)
+	if err != nil {
+		s.logFail(w, err)
+		return
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT pattern, COUNT(*) AS lines, MAX(severity) AS sev FROM app_logs WHERE `+ls.sql()+
+		` AND pattern IS NOT NULL GROUP BY pattern ORDER BY lines DESC LIMIT 15`, ls.args...)
+	if err != nil {
+		s.logFail(w, dbErr(err))
+		return
+	}
+	ids := make([]string, 0, len(rows.Rows))
+	for _, row := range rows.Rows {
+		ids = append(ids, toString(row[0]))
+	}
+	templates := s.patternTemplates(r.Context(), ids)
+	out := &Result{Columns: []string{"message", "level", "lines"}, Rows: [][]any{}}
+	for _, row := range rows.Rows {
+		out.Rows = append(out.Rows, []any{templates[toString(row[0])], levelNameOf(toInt(row[2])), toInt(row[1])})
+	}
+	out.From, out.To = ls.tr.From.Format(time.RFC3339Nano), ls.tr.To.Format(time.RFC3339Nano)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleLogVersions lists the releases that logged in the range, by

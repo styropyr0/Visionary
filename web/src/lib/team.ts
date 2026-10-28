@@ -206,7 +206,7 @@ export function placeAtBottom(panels: DashPanel[], w: number, h: number): Pick<D
 /** Built-in panels any dashboard can show, by name. */
 export interface Builtin {
   ref: string;
-  group: "API overview" | "Performance" | "System";
+  group: "API overview" | "Performance" | "System" | "Logs";
   title: string;
   description: string;
   viz: Viz;
@@ -247,6 +247,8 @@ export const BUILTINS: Builtin[] = [
   { ref: "system/db_wait", group: "System", title: "Waiting for a connection", description: "Time requests spent waiting for a database connection.", viz: ts(["acquire_wait_ms"], "ms") },
   { ref: "system/throughput", group: "System", title: "Throughput", description: "Requests per second and the most in flight at once.", viz: ts(["avg_rps", "peak_rps", "max_in_flight"], "count") },
   { ref: "system/instances", group: "System", title: "Instances", description: "Every instance reporting system metrics.", viz: { type: "table" } },
+  { ref: "applogs/histogram", group: "Logs", title: "Log lines by level", description: "Application log lines per interval, stacked by level.", viz: ts(["n"], "count", { series: "level", stack: true }) },
+  { ref: "applogs/top-patterns", group: "Logs", title: "Top log messages", description: "The most frequent messages, numbers and ids taken out.", viz: { type: "table" } },
 ];
 
 export const BUILTIN_BY_REF = new Map(BUILTINS.map((b) => [b.ref, b]));

@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   HelpCircle,
+  LayoutGrid,
   Minus,
   Pause,
   Play,
@@ -50,6 +51,7 @@ import {
   type LogView,
 } from "../lib/applogs";
 import { LogDetail } from "./Logs";
+import { AddToDashboard } from "../components/team/AddToDashboard";
 import { CompareTab, HiddenTab, PatternsTab, VolumeTab } from "./AppLogs.insights";
 import "./AppLogs.css";
 
@@ -200,6 +202,7 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
   const [showHelp, setShowHelp] = useState(false);
   const [asking, setAsking] = useState(false);
   const [explain, setExplain] = useState<{ loading: boolean; text?: string; error?: string } | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => setDraft(q), [q]);
 
@@ -403,7 +406,14 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
               </>
             )}
           </span>
-          <span className="dim lg-hist-hint">Drag across the chart to zoom in</span>
+          <span className="lg-hist-actions">
+            <span className="dim lg-hist-hint">Drag across the chart to zoom in</span>
+            {can("edit") && (
+              <button type="button" className="icon-btn" title="Add to dashboard" aria-label="Add to dashboard" onClick={() => setAdding(true)}>
+                <LayoutGrid size={15} />
+              </button>
+            )}
+          </span>
         </div>
         {hist.error ? <div className="panel-state error">{linkify(hist.error.message)}</div> : <Histogram result={hist.data} from={resolved.from} to={resolved.to} onZoom={zoom} />}
       </section>
@@ -441,6 +451,19 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
         onSearch(next);
       }} onFilter={filterBy} />}
       {showHelp && <SyntaxHelp onClose={() => setShowHelp(false)} />}
+      {adding && (
+        <AddToDashboard
+          title={full ? `Logs: ${full}` : "Log lines by level"}
+          source={{
+            kind: "builtin",
+            ref: "applogs/histogram",
+            title: full ? `Logs: ${full}` : "Log lines by level",
+            description: full ? `Lines matching ${full}, by level.` : "Application log lines per interval, stacked by level.",
+            ...(full ? { params: { q: full } } : {}),
+          }}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }

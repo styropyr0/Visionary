@@ -533,7 +533,7 @@ function VariableSelect({ name, range, value, onChange }: { name: VarName; range
 
 function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () => void; onAdd: (kind: DashPanel["kind"], ref: string, w: number, h: number) => void }) {
   const [tab, setTab] = useState<"saved" | "builtin">(saved.length ? "saved" : "builtin");
-  const groups = ["API overview", "Performance", "System"] as const;
+  const groups = ["API overview", "Performance", "System", "Logs"] as const;
   return (
     <Modal title="Add a panel" onClose={onClose}>
       <div className="tabs">

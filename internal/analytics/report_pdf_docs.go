@@ -56,6 +56,7 @@ var verdictPhrases = map[string]string{
 	"Machines":              "%d machine(s) peaked above 90%% CPU or memory",
 	"Containers":            "%d container(s) were killed for memory",
 	"Web Vitals (p75)":      "%d Web Vital(s) rated poor",
+	"Logs":                  "%d new error message(s) were logged",
 }
 
 // digestVerdict sums up what got worse, from the tones the email uses.
