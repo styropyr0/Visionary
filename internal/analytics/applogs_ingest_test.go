@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	sdk "github.com/styropyr0/visionary/sdks/go"
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
@@ -24,8 +25,8 @@ import (
 // and the given Settings → Logs values (logs.* and logserver.config).
 func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	t.Helper()
-	// VISIONARY_TEST_DATABASE_URL runs the log tests on PostgreSQL or MySQL
-	// instead; the log tables there are emptied first.
+	// VISIONARY_TEST_DATABASE_URL runs the log tests on a scratch PostgreSQL
+	// or MySQL database instead, which every test empties completely.
 	dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = "sqlite:///" + filepath.ToSlash(filepath.Join(t.TempDir(), "logs.db"))
@@ -34,15 +35,11 @@ func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" {
+		emptyTestDatabase(t, s)
+	}
 	if err := s.Init(context.Background()); err != nil {
 		t.Fatal(err)
-	}
-	if os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" {
-		for _, table := range []string{"app_logs", "log_patterns", "log_views", "errors"} {
-			if err := s.db.Exec(context.Background(), "DELETE FROM "+table); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 	t.Cleanup(func() { _ = s.db.Close() })
 	// Ingestion writes through the OTLP state's own pool; close it first
@@ -462,4 +459,30 @@ func TestStripLeadingTime(t *testing.T) {
 			t.Errorf("%q: %q %q %q", in, l.message, l.attrs["logged_at"], at)
 		}
 	}
+}
+
+// emptyTestDatabase drops every table of the scratch database, so each test
+// starts as on a fresh install.
+func emptyTestDatabase(t *testing.T, s *Server) {
+	t.Helper()
+	ctx := context.Background()
+	q := `SELECT tablename FROM pg_tables WHERE schemaname = current_schema()`
+	if s.q.d == sdk.MySQL {
+		q = `SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()`
+	}
+	res, err := s.db.Query(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range res.Rows {
+		stmt := `DROP TABLE IF EXISTS "` + toString(row[0]) + `" CASCADE`
+		if s.q.d == sdk.MySQL {
+			stmt = "DROP TABLE IF EXISTS `" + toString(row[0]) + "`"
+		}
+		if err := s.db.Exec(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	securityStates.Delete(s)
+	rumStates.Delete(s)
 }
