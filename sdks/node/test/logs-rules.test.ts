@@ -100,7 +100,6 @@ test("encodeAttrs redacts, scrubs and stays under the cap", () => {
   assert.ok(Buffer.byteLength(kept) <= MAX_ATTRS);
   const doc = JSON.parse(kept) as Record<string, unknown>;
   assert.equal(doc._truncated, true);
-  // Keys are kept in sorted order: the smallest key is there.
   assert.ok(Object.keys(many).sort()[0]! in doc);
 });
 

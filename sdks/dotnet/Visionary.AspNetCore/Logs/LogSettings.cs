@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>Severities as stored in app_logs.severity, with their level names.</summary>
 internal static class Severity
 {
     public const int Trace = 1;
@@ -20,10 +19,6 @@ internal static class Severity
 
     public static string Name(int sev) => sev is >= Trace and <= Fatal ? Names[sev] : "info";
 
-    /// <summary>
-    /// Reads a level name the way every source spells them: trace, debug, info, notice, warn,
-    /// warning, error, err, critical, fatal, panic... Unknown names are 0.
-    /// </summary>
     public static int Parse(string? s) => (s ?? "").Trim().ToLowerInvariant() switch
     {
         "trace" or "trc" or "finest" or "finer" or "verbose" or "vrb" => Trace,
@@ -35,7 +30,6 @@ internal static class Severity
         _ => 0,
     };
 
-    /// <summary>Microsoft.Extensions.Logging's levels; None is 0 (never stored).</summary>
     public static int From(LogLevel level) => level switch
     {
         LogLevel.Trace => Trace,
@@ -48,29 +42,22 @@ internal static class Severity
     };
 }
 
-/// <summary>Changes the level for part of the traffic until a time; empty fields match anything.</summary>
+// Empty fields match anything.
 internal sealed record LogOverride(string Service, string Route, string User, int Level, DateTime? Until)
 {
-    /// <summary>Whether it applies now to <paramref name="service"/>.</summary>
     public bool Active(string? service, DateTime now) =>
         (Until is null || now <= Until) && (Service.Length == 0 || Service == (service ?? ""));
 
-    /// <summary>Whether it applies to a request on <paramref name="route"/> by <paramref name="user"/>.</summary>
     public bool Matches(string? route, string? user) =>
         (Route.Length == 0 || RouteMatches(Route, route ?? "")) && (User.Length == 0 || User == user);
 
-    /// <summary>A route pattern, or a prefix ending in *.</summary>
     public static bool RouteMatches(string pattern, string route) =>
         pattern.EndsWith('*') ? route.StartsWith(pattern[..^1], StringComparison.Ordinal) : pattern == route;
 }
 
-/// <summary>Drops the lines it matches: every non-empty field must match; Level drops lines at or below it.</summary>
+// Empty fields match anything; Level drops lines at or below it.
 internal sealed record LogDrop(string Service, string Logger, string Contains, int Level);
 
-/// <summary>
-/// What the dashboard keeps (Settings → Logs), read from visionary_settings; see SPEC.md
-/// "What is kept".
-/// </summary>
 internal sealed record LogSettings
 {
     public const string Query = "SELECT name, value FROM visionary_settings WHERE name LIKE 'logs.%'";
@@ -84,10 +71,9 @@ internal sealed record LogSettings
     public IReadOnlyList<LogOverride> Overrides { get; init; } = Array.Empty<LogOverride>();
     public IReadOnlyList<LogDrop> Drops { get; init; } = Array.Empty<LogDrop>();
 
-    /// <summary>The defaults, with <paramref name="level"/> (VISIONARY_LOG_LEVEL) as the level.</summary>
     public static LogSettings Defaults(int level) => new() { Level = level > 0 ? level : Severity.Info };
 
-    /// <summary>Settings from (name, value) rows of logs.*; anything missing or unreadable keeps its default.</summary>
+    // Missing or unreadable rows keep their defaults.
     public static LogSettings Parse(IEnumerable<string?[]> rows, int baseLevel)
     {
         var s = Defaults(baseLevel);
@@ -176,7 +162,6 @@ internal sealed record LogSettings
         return list;
     }
 
-    /// <summary>The objects of a JSON array; nothing when it isn't one.</summary>
     private static List<Dictionary<string, string>> Objects(string json)
     {
         var list = new List<Dictionary<string, string>>();
@@ -215,11 +200,7 @@ internal sealed record LogSettings
 
     private static string Field(Dictionary<string, string> o, string key) => o.TryGetValue(key, out var v) ? v.Trim() : "";
 
-    /// <summary>
-    /// The lowest level kept outright for a line outside any request, or once its request is
-    /// known: the base level, then service-wide overrides, then the most specific matching
-    /// override (a user beats a route). Later overrides win among equals.
-    /// </summary>
+    // A user override beats a route one, which beats a service-wide one; later ones win ties.
     public int Floor(string? service, string? route, string? user, DateTime now)
     {
         int level = Level, rank = 0;
@@ -239,10 +220,7 @@ internal sealed record LogSettings
         return level;
     }
 
-    /// <summary>
-    /// The level under which a line logged in a request is held until the request ends: the
-    /// highest level a service-wide, route or user override could give the request.
-    /// </summary>
+    // Lines below this are held until the request ends, since a route or user override may still keep them.
     public int HoldBelow(string? service, DateTime now)
     {
         var level = Level;
@@ -263,10 +241,7 @@ internal sealed record LogSettings
         return level;
     }
 
-    /// <summary>
-    /// The lowest level any line could be kept at now: below it the logger reports itself
-    /// disabled, so the application doesn't even format those messages.
-    /// </summary>
+    // Below this the logger reports itself disabled, so the app doesn't even format the message.
     public int Lowest(string? service, DateTime now)
     {
         if (!Enabled)
@@ -288,7 +263,6 @@ internal sealed record LogSettings
         return level;
     }
 
-    /// <summary>Whether a drop rule matches the line.</summary>
     public bool Dropped(string? service, string? logger, string message, int sev)
     {
         foreach (var d in Drops)

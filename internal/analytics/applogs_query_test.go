@@ -61,17 +61,17 @@ func TestCompileLogQuery(t *testing.T) {
 		}
 	}
 	for q, want := range map[string]string{
-		`"open`:               "closing",
-		`/[/`:                 "regular expression",
-		`/(/`:                 "regular expression",
-		`level:loud`:          "level is one of",
-		`service:>=3`:         "isn't a number",
-		`status:>=x`:          "status takes a code",
-		`http.status:>=x`:     "needs a number",
-		`(a OR b`:             "missing its )",
-		`a)`:                  "unexpected )",
-		`OR`:                  "both sides",
-		`host:`:               "needs a value",
+		`"open`:                  "closing",
+		`/[/`:                    "regular expression",
+		`/(/`:                    "regular expression",
+		`level:loud`:             "level is one of",
+		`service:>=3`:            "isn't a number",
+		`status:>=x`:             "status takes a code",
+		`http.status:>=x`:        "needs a number",
+		`(a OR b`:                "missing its )",
+		`a)`:                     "unexpected )",
+		`OR`:                     "both sides",
+		`host:`:                  "needs a value",
 		strings.Repeat("a ", 70): "more than",
 	} {
 		if _, err := compileLogQuery(q, sqlite, false); err == nil || !strings.Contains(err.Error(), want) {
@@ -83,7 +83,6 @@ func TestCompileLogQuery(t *testing.T) {
 	}
 }
 
-// seedLogs stores lines through the pipeline at fixed recent times.
 func seedLogs(t *testing.T, s *Server) time.Time {
 	t.Helper()
 	base := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
@@ -100,7 +99,6 @@ func seedLogs(t *testing.T, s *Server) time.Time {
 	return base
 }
 
-// getAs calls a GET endpoint as role ("admin", "viewer").
 func getAs(t *testing.T, s *Server, role, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := httptest.NewRequest("GET", path, nil)
@@ -112,7 +110,7 @@ func getAs(t *testing.T, s *Server, role, path string) *httptest.ResponseRecorde
 	default:
 		mux := http.NewServeMux()
 		s.applogsAPIRoutes(mux)
-		// Call the handler behind authed directly, with the session set.
+		// bypass authed; the session is already on the context
 		h, pattern := mux.Handler(r)
 		_ = h
 		_ = pattern
@@ -174,19 +172,19 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Fatalf("viewer sees hidden service: %d rows", len(got.Rows))
 	}
 	for q, want := range map[string]int{
-		"payment":                   2,
-		"level:error":               2,
-		"level:warn+ service:api":   2,
-		"order_id:42":               1,
-		"http.status:>=500":         1,
-		"plan:pro OR plan:free":     2,
-		"-payment service:api":      1,
-		"/time(o|d)ut/":             1,
-		`"payment timeout"`:         1,
-		"request:r2":                1,
-		"host:h* -host:h3":          4,
-		"attempt:2 level:warn":      1,
-		"level:fatal":               0,
+		"payment":                 2,
+		"level:error":             2,
+		"level:warn+ service:api": 2,
+		"order_id:42":             1,
+		"http.status:>=500":       1,
+		"plan:pro OR plan:free":   2,
+		"-payment service:api":    1,
+		"/time(o|d)ut/":           1,
+		`"payment timeout"`:       1,
+		"request:r2":              1,
+		"host:h* -host:h3":        4,
+		"attempt:2 level:warn":    1,
+		"level:fatal":             0,
 	} {
 		if got := list("admin", q); len(got.Rows) != want {
 			t.Errorf("%q: %d rows, want %d", q, len(got.Rows), want)
@@ -195,7 +193,6 @@ func TestAppLogsAPI(t *testing.T) {
 	if got := list("admin", "payment timeout"); strings.Join(got.Terms, ",") != "payment,timeout" {
 		t.Errorf("terms %v", got.Terms)
 	}
-	// A viewer sees masked fields as [hidden].
 	if got := list("viewer", "order_id:42"); !strings.Contains(toString(got.Rows[0][10]), `"card_last4":"[hidden]"`) || len(got.Masked) != 1 {
 		t.Errorf("mask: %v", got.Rows[0][10])
 	}
@@ -203,7 +200,6 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Errorf("bad search: %d", w.Code)
 	}
 
-	// Paging with before=.
 	first := list("admin", "")
 	w := getAs(t, s, "admin", "/api/applogs?"+rangeQS(base, "")+"&limit=2")
 	var page logResult
@@ -217,7 +213,6 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Fatalf("next page %+v", page.Rows)
 	}
 
-	// Histogram: one bucket per level here.
 	w = getAs(t, s, "admin", "/api/applogs/histogram?"+rangeQS(base, "service:api"))
 	var hist Result
 	_ = json.Unmarshal(w.Body.Bytes(), &hist)
@@ -229,7 +224,6 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Fatalf("histogram %d %s", w.Code, w.Body.String())
 	}
 
-	// Fields and top values.
 	w = getAs(t, s, "admin", "/api/applogs/fields?"+rangeQS(base, ""))
 	if !strings.Contains(w.Body.String(), `"name":"order_id"`) || !strings.Contains(w.Body.String(), `"name":"service"`) {
 		t.Fatalf("fields %s", w.Body.String())
@@ -247,7 +241,6 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Fatalf("attr values %s", w.Body.String())
 	}
 
-	// One line, and its context.
 	id := toString(first.Rows[3][0]) // "payment timeout"
 	w = getAs(t, s, "admin", "/api/applogs/"+id)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "payment timeout") {
@@ -267,7 +260,6 @@ func TestAppLogsAPI(t *testing.T) {
 		t.Fatalf("context %s", w.Body.String())
 	}
 
-	// Export.
 	w = getAs(t, s, "admin", "/api/applogs/export?"+rangeQS(base, "service:api")+"&format=csv")
 	if lines := strings.Count(strings.TrimSpace(w.Body.String()), "\n"); lines != 3 || !strings.HasPrefix(w.Body.String(), "id,created_at") {
 		t.Fatalf("csv %s", w.Body.String())
@@ -391,11 +383,11 @@ func TestRequestFieldsInSearch(t *testing.T) {
 		}
 	}
 	for q, want := range map[string]int{
-		"route:/pay":            1,
-		"route:/orders/*":       1,
-		"status:5xx":            1,
-		"status:>=200":          2,
-		"method:get":            1,
+		"route:/pay":              1,
+		"route:/orders/*":         1,
+		"status:5xx":              1,
+		"status:>=200":            2,
+		"method:get":              1,
 		"-route:/pay service:api": 2,
 	} {
 		w := getAs(t, s, "admin", "/api/applogs?"+rangeQS(base, q))

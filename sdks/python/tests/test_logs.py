@@ -249,7 +249,7 @@ class SecretsTest(unittest.TestCase):
         decoded = json.loads(s)
         self.assertIs(decoded.pop("_truncated"), True)
         self.assertTrue(decoded)
-        self.assertTrue(all(v == "v" * 1024 + "…" for v in decoded.values()))  # long values cut first
+        self.assertTrue(all(v == "v" * 1024 + "…" for v in decoded.values()))
 
         many = {"x" * 10 + "%05d" % i: "value" for i in range(2000)}
         s = L.encode_attrs(many)
@@ -257,7 +257,7 @@ class SecretsTest(unittest.TestCase):
         decoded = json.loads(s)
         self.assertIs(decoded["_truncated"], True)
         kept = sorted(k for k in decoded if k != "_truncated")
-        self.assertEqual(kept, sorted(many)[:len(kept)])  # in sorted order while they fit
+        self.assertEqual(kept, sorted(many)[:len(kept)])
 
     def test_cut(self):
         self.assertEqual(L._cut("héllo", 2), "h")

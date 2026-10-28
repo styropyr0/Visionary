@@ -46,7 +46,7 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
   const [imported, setImported] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // #/alerts?rule=12 opens that rule, e.g. right after Logs created it.
+  // #/alerts?rule=12 opens that rule.
   const linked = useRef(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("rule"));
   useEffect(() => {
     const id = Number(linked.current);

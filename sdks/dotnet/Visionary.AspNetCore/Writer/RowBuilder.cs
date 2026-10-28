@@ -120,7 +120,6 @@ internal sealed class RowBuilder
         };
     }
 
-    /// <summary>An app_logs insert: the message and attrs scrubbed, redacted and capped.</summary>
     public Stmt Log(LogRecord r, ISet<string> secrets) => new(_logInsert, LogRow(r, secrets));
 
     public object?[] LogRow(LogRecord r, ISet<string> secrets)
@@ -153,7 +152,6 @@ internal sealed class RowBuilder
         };
     }
 
-    /// <summary>The machine's name, for app_logs.host.</summary>
     private static readonly string LogHost = VisionaryAgent.HostName();
 
     private object?[] Span(SpanRecord s) => new object?[]

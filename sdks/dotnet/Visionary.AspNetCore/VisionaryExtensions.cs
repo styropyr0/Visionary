@@ -42,9 +42,8 @@ namespace Microsoft.Extensions.Logging
     public static class VisionaryLoggingBuilderExtensions
     {
         /// <summary>
-        /// Copies what the application logs through <c>ILogger</c> into Visionary's app_logs. Capture
-        /// is opt-in: <c>AddVisionary()</c> alone adds no provider. Other providers' output does not
-        /// change. It also adds the collector (<c>AddVisionary()</c>), so it works on its own.
+        /// Captures <c>ILogger</c> output into Visionary; other providers are unaffected.
+        /// Also adds the collector, so it works without a separate <c>AddVisionary()</c>.
         /// </summary>
         public static ILoggingBuilder AddVisionary(this ILoggingBuilder builder, Action<VisionaryOptions>? configure = null)
         {
@@ -58,10 +57,8 @@ namespace Microsoft.Extensions.Logging
             services.Configure<VisionaryOptions>(o => o.LogsAdded = true);
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, AppLogWriter>());
             services.AddSingleton<ILoggerProvider, VisionaryLoggerProvider>();
-            // A rule for this provider only, letting it see Trace and up whatever Logging:LogLevel
-            // says; the console and every other provider keep their levels, and the provider
-            // itself passes on what Settings → Logs can't keep. Inserted first, so a
-            // Logging:Visionary rule from configuration, as specific, still wins over it.
+            // Let this provider see Trace and up whatever Logging:LogLevel says; it filters itself.
+            // Inserted first so a Logging:Visionary rule from configuration still wins.
             services.Configure<LoggerFilterOptions>(o =>
                 o.Rules.Insert(0, new LoggerFilterRule(typeof(VisionaryLoggerProvider).FullName, null, LogLevel.Trace, null)));
             return builder;

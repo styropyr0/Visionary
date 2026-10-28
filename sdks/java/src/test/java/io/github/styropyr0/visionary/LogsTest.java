@@ -25,13 +25,12 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-/** Application logs: what is kept, how a line is read from Logback, and how it is stored. */
 class LogsTest {
 
     private final ObjectMapper json = new ObjectMapper();
     private final List<LogRecord> out = new ArrayList<>();
     private final AppLogs logs = new AppLogs(null, "api", LogRules.INFO, this::record);
-    /** Lines get increasing times, so their order is the order they were logged in. */
+    // Each line gets a later time, so sorting by time gives the logged order.
     private Instant clock = Instant.parse("2026-10-28T09:30:00.000Z");
 
     private synchronized void record(LogRecord r) {
@@ -74,7 +73,6 @@ class LogsTest {
         log(LogRules.WARN, "warn line");
     }
 
-    /** Runs {@code body} as one request on {@code route}, then ends it. */
     private LogScope serve(String route, int status, double tookMs, String user, Runnable body) {
         LogScope scope = new LogScope("req-1", "4bf92f3577b34da6a3ce929d0e0e4736", () -> user);
         LogScope previous = LogScope.enter(scope);
@@ -87,15 +85,12 @@ class LogsTest {
         return scope;
     }
 
-    /** The messages queued since the last call, in the order they were logged. */
     private synchronized String taken() {
         String s = out.stream().sorted(Comparator.comparing(r -> r.at)).map(r -> r.message)
                 .collect(Collectors.joining(","));
         out.clear();
         return s;
     }
-
-    // ---- settings ----
 
     @Test
     void parsesSettingsAndFloors() throws Exception {
@@ -157,8 +152,6 @@ class LogsTest {
         assertFalse(s.dropped("web", "", "x", LogRules.INFO));
         assertFalse(s.dropped("api", "", "x", LogRules.TRACE));
     }
-
-    // ---- what is kept ----
 
     @Test
     void debugIsKeptOnlyForFailedRequests() {
@@ -307,11 +300,8 @@ class LogsTest {
         assertEquals("", taken());
     }
 
-    // ---- Logback ----
-
     private VisionaryLogbackAppender appender;
 
-    /** A logger of the test's Logback context, with the appender on the root and the pipeline running. */
     private Logger logback(String name) {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         appender = new VisionaryLogbackAppender();
@@ -431,8 +421,6 @@ class LogsTest {
         assertEquals(LogRules.ERROR, VisionaryLogbackAppender.severity(Level.ERROR));
     }
 
-    // ---- rules ----
-
     @Test
     void textLevel() {
         Map<String, Integer> cases = new LinkedHashMap<>();
@@ -531,8 +519,6 @@ class LogsTest {
         assertTrue(tree.has("key0000"));
         assertFalse(tree.has("key1999"));
     }
-
-    // ---- storing ----
 
     @Test
     void rowMatchesTheInsert() {

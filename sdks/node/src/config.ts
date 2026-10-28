@@ -76,14 +76,9 @@ export interface Options {
    * Profiling). Default true; false never profiles, whatever the dashboard says.
    */
   profile?: boolean;
-  /**
-   * Capture application logs where the app routes them to the SDK
-   * (captureConsole, pinoStream, winstonTransport). Default true
-   * (VISIONARY_LOGS).
-   */
+  /** Capture app logs routed to the SDK (captureConsole, pinoStream, winstonTransport). Default true (VISIONARY_LOGS). */
   logs?: boolean;
-  /** The lowest level kept until Settings → Logs has been read
-   * (VISIONARY_LOG_LEVEL, default info). */
+  /** Lowest level kept until Settings → Logs has been read (VISIONARY_LOG_LEVEL, default info). */
   logLevel?: string;
 }
 

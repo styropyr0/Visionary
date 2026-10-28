@@ -70,8 +70,6 @@ class Config:
     # it and never profiles (VISIONARY_PROFILE=false).
     profile: bool = True
 
-    # Application logs (SPEC "Application logs"): captured once the app routes
-    # its logging here (visionary.capture_logging() or visionary.LogHandler).
     # log_level is the lowest level kept until Settings -> Logs is read.
     logs: bool = True
     log_level: str = "info"

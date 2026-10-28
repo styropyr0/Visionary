@@ -37,14 +37,13 @@ from ._profiler import FrameNamer, parse_ts
 from ._redact import DEFAULT_REDACT_FIELDS, REDACTED
 from ._writer import RequestWriter, Schema
 
-# Severities as stored in app_logs.severity, with their level names.
 TRACE, DEBUG, INFO, WARN, ERROR, FATAL = 1, 2, 3, 4, 5, 6
 LEVEL_NAMES = ("", "trace", "debug", "info", "warn", "error", "fatal")
 
 MAX_MESSAGE = 8 << 10
 MAX_ATTRS = 16 << 10
-MAX_ATTR_VALUE = 1024  # a string attribute's bytes once attrs are over MAX_ATTRS
-MAX_HELD = 500  # lines one request holds back; past it the oldest are dropped
+MAX_ATTR_VALUE = 1024
+MAX_HELD = 500
 SETTINGS_POLL_S = 30.0
 QUEUE_SIZE = 10000
 
@@ -91,10 +90,7 @@ def python_severity(levelno: int) -> int:
     return FATAL
 
 
-# --- levels in plain text ------------------------------------------------------
-
 _LEVEL_FIELD = re.compile(r"""(?i)\b(?:level|lvl|severity)=["']?([a-z]+)""")
-# A date, a time or both, as loggers print them.
 _TIMESTAMP = re.compile(r"^[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?$")
 
 
@@ -137,10 +133,7 @@ def strip_level_word(s: str, sev: int) -> str:
     return rest if w == level_name(sev) or w == "warning" else s
 
 
-# --- secrets and encoding ------------------------------------------------------
-
-# Secrets in free text, replaced before a line is stored. Every SDK uses these
-# same patterns, in this order (SPEC "Application logs", Secrets).
+# Secrets in free text; every SDK uses the same patterns, in this order.
 _SECRETS = [
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)"),
      "[REDACTED:private-key]"),
@@ -244,9 +237,6 @@ def flatten(out: Dict[str, Any], prefix: str, value: Any, depth: int = 0) -> Non
         return
     if prefix:
         out[prefix[:-1]] = attr_value(value)
-
-
-# --- settings ------------------------------------------------------------------
 
 
 class Override:
@@ -409,9 +399,6 @@ def _number(v: str) -> Optional[float]:
     return n if math.isfinite(n) else None
 
 
-# --- lines and the pipeline ----------------------------------------------------
-
-
 class LogLine:
     """One captured line. Scrubbing, encoding and file naming happen on the
     writer thread."""
@@ -431,7 +418,7 @@ class LogLine:
         self.span_id = ""
         self.user_id = ""
         self.session_id = ""
-        self.file = ""  # the raw path; named like CPU profile frames when written
+        self.file = ""
         self.line = 0
         self.func = ""
 
@@ -475,8 +462,6 @@ class LogPipeline:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._read_failed = False
-        # The per-minute cap: lines counted in the current minute, and those
-        # dropped by it, reported once the minute ends.
         self._rate_lock = threading.Lock()
         self._rate_minute = 0
         self._rate_count = 0
@@ -504,7 +489,7 @@ class LogPipeline:
         try:
             rows = self._backend.read_settings("logs")
         except Exception as e:
-            # No server yet, or the table is missing: keep what we had.
+            # No server or table yet: keep the previous settings.
             if not self._read_failed:
                 self._read_failed = True
                 self._logger.debug("visionary: log settings unavailable; using defaults (%s)", e)
@@ -516,8 +501,7 @@ class LogPipeline:
         """Take one line logged in the request ``ann`` (the current one when
         None). Never blocks."""
         s = self.settings
-        # The SDK's own messages are left out: a write failure logged here
-        # would otherwise be queued behind the write that failed.
+        # Skip the SDK's own messages, or a failed write's log line would queue behind it.
         if not s.enabled or line.message.startswith("visionary: "):
             return
         if s.dropped(self._service, line.logger, line.message, line.sev):
@@ -536,7 +520,7 @@ class LogPipeline:
             if not line.user_id:
                 line.user_id = ann.user_id
             if ann.done:
-                # Work the request left running: its route and user are known now.
+                # Logged after the request ended, so its route and user are known.
                 route, user = ann.route, ann.user_id
             elif line.sev >= s.hold_below(self._service, line.created_at):
                 route = user = None
@@ -598,8 +582,7 @@ class LogPipeline:
         self.writer.log(line)
 
 
-# The pipeline LogHandler captures into when it isn't given an agent: the
-# last one started. Set by Agent.start().
+# The last agent started; LogHandler captures into it when not given one.
 _active: Optional[LogPipeline] = None
 
 
@@ -616,9 +599,6 @@ def clear_active(p: LogPipeline) -> None:
 
 def active() -> Optional[LogPipeline]:
     return _active
-
-
-# --- the writer ----------------------------------------------------------------
 
 
 class LogWriter(RequestWriter):

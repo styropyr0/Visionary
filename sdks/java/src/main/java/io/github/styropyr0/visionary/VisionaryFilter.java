@@ -147,7 +147,6 @@ final class VisionaryFilter extends OncePerRequestFilter {
         }
     }
 
-    /** The request's log scope, null when application logs are off. */
     private LogScope logScope(HttpServletRequest request, String requestId) {
         if (logs == null || !logs.capturing()) {
             return null;
@@ -158,10 +157,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
         });
     }
 
-    /**
-     * Decides the lines the request held back: a 5xx, an exception or a captured error
-     * counts as failed.
-     */
+    /** Failed means a 5xx, an exception or a captured error. */
     private void finishLogs(LogScope scope, HttpServletRequest request, int status, boolean thrown, long start) {
         if (scope == null) {
             return;

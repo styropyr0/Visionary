@@ -14,8 +14,7 @@ func statOwner(fi os.FileInfo) (uid, gid uint32, ctime int64) {
 	return 0, 0, 0
 }
 
-// fileID names a file by device and inode, so a rotated log is noticed even
-// when the new file has the same name.
+// Device and inode catch rotation even when the new file has the same name.
 func fileID(fi os.FileInfo) string {
 	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
 		return strconv.FormatUint(uint64(st.Dev), 10) + ":" + strconv.FormatUint(st.Ino, 10)

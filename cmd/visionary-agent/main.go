@@ -52,7 +52,7 @@ type config struct {
 	disks    []string
 	authLog  string // a log file, "journald", "off", or "" to pick one
 	docker   string // the engine's socket, "off", or "" to find one
-	// logs are the log sources to collect: journald, docker, file globs.
+	// journald, docker, or file globs
 	logs     []string
 	stateDir string
 

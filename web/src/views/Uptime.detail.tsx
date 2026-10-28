@@ -326,7 +326,6 @@ const INCIDENT_COLS: Column[] = [
   { key: "error", label: "Reason", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
 ];
 
-/** A link to what services logged around when an incident started. */
 function incidentLogsColumn(startedAt: number): Column {
   return {
     key: "_logs",

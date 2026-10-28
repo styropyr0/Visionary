@@ -72,7 +72,6 @@ internal class Client(
         enqueue(e)
     }
 
-    /** A log line; the server stores it with the session's other logs. */
     fun logLine(level: String, message: String, attrs: Map<String, Any?>) {
         enqueue(event("log", level).string("message", message.take(8192)).attrs("attrs", attrs))
     }

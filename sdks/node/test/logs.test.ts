@@ -12,7 +12,6 @@ import { LogPipeline, logRecord, logValues, setActiveLogs, traceParentId } from 
 import { DEBUG, ERROR, INFO, TRACE, WARN, secretKeys } from "../src/logs/rules.js";
 import { LOG_COLUMNS, insertSQL } from "../src/store/sql.js";
 
-/** A pipeline whose written lines land in `out`, with the given settings rows. */
 function pipeline(rows: string[][] = [], service = "api") {
   const out: LogRecord[] = [];
   const p = new LogPipeline(service, INFO, async () => rows, (r) => out.push(r));
@@ -21,10 +20,9 @@ function pipeline(rows: string[][] = [], service = "api") {
 }
 
 let clock = Date.now();
-/** Lines a millisecond apart, so their times order them. */
+/** A millisecond apart, so their times order them. */
 const line = (sev: number, msg: string) => logRecord(sev, msg, ++clock);
 
-/** Runs one request: fn logs inside it, then it ends with status after tookMs. */
 function serve(p: LogPipeline, route: string, status: number, tookMs: number, user: string, fn: (log: (r: LogRecord) => void) => void) {
   const state = new RequestState("req-" + clock, Date.now(), process.hrtime.bigint(), "GET", route);
   state.route = route;
@@ -43,7 +41,7 @@ const threeLines = (log: (r: LogRecord) => void) => {
   log(line(WARN, "warn line"));
 };
 
-/** Messages in the order they were logged (held lines are queued later). */
+/** Sorted by time, since held lines are queued later. */
 const ordered = (out: LogRecord[]) =>
   out
     .splice(0)
@@ -232,7 +230,6 @@ test("captureConsole still prints and captures with levels", () => {
     [DEBUG, "cache miss { key: 'a' }"],
     [ERROR, "Error: kaput"],
   ]);
-  // Restored: nothing more is captured.
   console.log = () => undefined;
   console.log("after");
   console.log = saved.log;
@@ -304,8 +301,7 @@ test("winstonTransport takes winston's info objects", async () => {
   assert.equal(out[1]!.attrs, undefined);
 });
 
-// End to end: a real agent on node:sqlite, settings read from
-// visionary_settings, a request through wrap() logging with console.
+// End to end: a real agent on node:sqlite, logging with console inside wrap().
 const nodeSqlite = createRequire(import.meta.url)("node:sqlite") as { DatabaseSync?: new (path: string) => any } | undefined;
 
 test("requests write their lines to app_logs", { skip: !nodeSqlite?.DatabaseSync && "needs node:sqlite" }, async () => {

@@ -39,8 +39,7 @@ class Agent:
         self._system: Optional[Recorder] = None
         self._retention: Optional[Retention] = None
         self._profiler: Optional[Profiler] = None
-        # Application logs, through a writer of their own so a flood of lines
-        # never crowds out request rows; None when logs are off.
+        # Own writer, so a flood of log lines never crowds out request rows.
         self._logs: Optional[_logs.LogPipeline] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False

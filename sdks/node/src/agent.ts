@@ -27,8 +27,7 @@ import { Retention, Writer } from "./writer.js";
 export const SDK_VERSION: string = typeof __SDK_VERSION__ === "string" ? __SDK_VERSION__ : "0.0.0";
 
 /**
- * Runs request logging, system metrics, spans, errors and application logs
- * for one process.
+ * Runs request logging, system metrics, spans, errors and app logs for one process.
  * With no database configured it logs one warning and every method is a
  * no-op; it never throws into the application once constructed.
  */
@@ -43,8 +42,7 @@ export class Agent {
   private retention?: Retention;
   private profiler?: Profiler;
   private explainer?: ExplainWorker;
-  /** Application logs, through their own writer so a flood of lines never
-   * crowds out request rows; undefined when logs are off. */
+  /** Own writer, so a flood of log lines never crowds out request rows. */
   private logs?: LogPipeline;
   private logWriter?: Writer;
   private readonly schemas = new Map<Schema, Promise<boolean> | true>();
@@ -238,8 +236,6 @@ export class Agent {
     return requests && telemetry;
   }
 
-  /** Queues a finished request and, when it was slow or failed, its spans,
-   * and decides the log lines it held back. */
   finishRequest(state: RequestState, entry: Entry): void {
     this.logs?.finish(state, entry.route, entry.status >= 500 || state.failed, entry.durationMs);
     if (!this.writer) return;

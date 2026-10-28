@@ -13,17 +13,17 @@ import (
 
 func TestTemplateOf(t *testing.T) {
 	for in, want := range map[string]string{
-		"payment 4512 failed for user u_93 after 30s":                         "payment <*> failed for user <*> after <*>",
-		`user "alice@example.com" signed in from 203.0.113.9:4431`:            "user <*> signed in from <*>",
-		"order 3f2a9c1e-1b2c-4d5e-8f90-123456789abc shipped":                  "order <*> shipped",
-		"GET https://api.stripe.com/v1/charges?limit=3 took 120ms":            "GET https://api.stripe.com/<*> took <*>",
-		"cache miss key=session:abc123 ttl=300":                               "cache miss key=<*> ttl=<*>",
-		"retry 1/3, 2/3":                                                      "retry <*>",
-		"panic: runtime error\ngoroutine 1 [running]:\nmain.main()":           "panic: runtime error",
-		"connected to Postgres":                                               "connected to Postgres",
-		"2026-10-28T10:00:00Z worker started":                                 "<*> worker started",
-		"hash 0xdeadbeefcafe and sha a3f9c2b18e7d6f50":                        "hash <*> and sha <*>",
-		`192.0.2.7 - - "GET /static/app.3.js HTTP/1.1" 200 512`:            `<*> - - "GET /static/app.<*>.js HTTP/<*>" <*>`,
+		"payment 4512 failed for user u_93 after 30s":               "payment <*> failed for user <*> after <*>",
+		`user "alice@example.com" signed in from 203.0.113.9:4431`:  "user <*> signed in from <*>",
+		"order 3f2a9c1e-1b2c-4d5e-8f90-123456789abc shipped":        "order <*> shipped",
+		"GET https://api.stripe.com/v1/charges?limit=3 took 120ms":  "GET https://api.stripe.com/<*> took <*>",
+		"cache miss key=session:abc123 ttl=300":                     "cache miss key=<*> ttl=<*>",
+		"retry 1/3, 2/3":                                            "retry <*>",
+		"panic: runtime error\ngoroutine 1 [running]:\nmain.main()": "panic: runtime error",
+		"connected to Postgres":                                     "connected to Postgres",
+		"2026-10-28T10:00:00Z worker started":                       "<*> worker started",
+		"hash 0xdeadbeefcafe and sha a3f9c2b18e7d6f50":              "hash <*> and sha <*>",
+		`192.0.2.7 - - "GET /static/app.3.js HTTP/1.1" 200 512`:     `<*> - - "GET /static/app.<*>.js HTTP/<*>" <*>`,
 	} {
 		if got := templateOf(in); got != want {
 			t.Errorf("%q:\n got %q\nwant %q", in, got, want)
@@ -55,7 +55,7 @@ func TestPatternJobAndAnalysis(t *testing.T) {
 	if _, err := s.ingestLogLines(ctx, lines); err != nil {
 		t.Fatal(err)
 	}
-	// A request that answered 200 although it logged an error.
+	// answered 200 but logged an error
 	if err := s.db.Exec(ctx, `INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms) VALUES ('rq-ok', ?, 'GET', '/orders/1', '/orders/{id}', 200, 12)`,
 		base.Add(39*time.Second).Format(tsLayout)); err != nil {
 		t.Fatal(err)
@@ -71,12 +71,10 @@ func TestPatternJobAndAnalysis(t *testing.T) {
 	if len(res.Rows) != 4 || res.Rows[0][0] != "served order <*>" || toInt(res.Rows[0][1]) != 30 || res.Rows[0][2] != "v1" || res.Rows[0][4] != "orders.go" {
 		t.Fatalf("patterns %+v", res.Rows)
 	}
-	// The card number was redacted in place and reported.
 	res, _ = s.db.Query(ctx, `SELECT message FROM app_logs WHERE code_file = 'pay.go'`)
 	if !strings.Contains(toString(res.Rows[0][0]), "[REDACTED:card-number]") {
 		t.Fatalf("card not redacted: %v", res.Rows)
 	}
-	// The pattern and its sample were made from the redacted line.
 	res, _ = s.db.Query(ctx, `SELECT template, sample FROM log_patterns WHERE code_file = 'pay.go'`)
 	if len(res.Rows) != 1 || strings.Contains(toString(res.Rows[0][1]), "4111") || !strings.Contains(toString(res.Rows[0][1]), "[REDACTED:card-number]") {
 		t.Fatalf("pattern kept the secret: %+v", res.Rows)
@@ -149,12 +147,12 @@ func TestPatternJobAndAnalysis(t *testing.T) {
 
 func TestRedactSecrets(t *testing.T) {
 	for in, kind := range map[string]string{
-		"card 4111-1111-1111-1111":                         "card number",
-		"tok ghp_" + strings.Repeat("a", 36):               "GitHub token",
-		"slack xoxb-1234567890-abcdef":                     "Slack token",
-		"stripe sk_live_" + strings.Repeat("x", 24):        "Stripe key",
-		"google AIza" + strings.Repeat("B", 35):            "Google API key",
-		"password=hunter2":                                 "credential",
+		"card 4111-1111-1111-1111":                  "card number",
+		"tok ghp_" + strings.Repeat("a", 36):        "GitHub token",
+		"slack xoxb-1234567890-abcdef":              "Slack token",
+		"stripe sk_live_" + strings.Repeat("x", 24): "Stripe key",
+		"google AIza" + strings.Repeat("B", 35):     "Google API key",
+		"password=hunter2":                          "credential",
 	} {
 		out, kinds := redactSecrets(in)
 		if len(kinds) == 0 || kinds[0] != kind || out == in {
@@ -212,7 +210,6 @@ func TestLogSettingsAPI(t *testing.T) {
 	if l := s.logRules(); l.Level != logrules.Warn || l.Rate != 1000 || s.logServer().Rate != 5000 || s.logAccess().HiddenServices[0] != "hr" {
 		t.Fatalf("not applied: %+v %+v", l, s.logServer())
 	}
-	// Stored where the SDKs read them.
 	res, _ := s.db.Query(context.Background(), `SELECT value FROM visionary_settings WHERE name = 'logs.level'`)
 	if len(res.Rows) != 1 || res.Rows[0][0] != "warn" {
 		t.Fatalf("stored %+v", res.Rows)
@@ -243,7 +240,6 @@ func TestLogSettingsAPI(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"matched":true`) || !strings.Contains(w.Body.String(), `"ms":42`) {
 		t.Fatalf("rule test %s", w.Body.String())
 	}
-	// Audit entries are queued for the audit writer.
 	var actions []string
 	for len(s.team().audits) > 0 {
 		if a := (<-s.team().audits).action; strings.HasPrefix(a, "logs.") {

@@ -13,13 +13,8 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// The secret scanner reads each batch of the pattern job for credentials
-// and card numbers that reached app_logs anyway (an old SDK, a shipper, a
-// direct insert, a format the SDK's scrubbing misses). It redacts them in
-// place and opens a Security finding (source 'logs', kind 'secret_in_logs')
-// naming the service and the code that logs them, so the leak gets fixed
-// where it starts. One finding per service, place and kind per day; more
-// lines add to its count.
+// Catches secrets that got past SDK scrubbing (old SDKs, shippers, direct inserts),
+// redacts them in place and opens one finding per service, place and kind per day.
 
 var secretDetectors = []struct {
 	kind string
@@ -58,8 +53,6 @@ func luhnCard(s string) bool {
 	return sum%10 == 0
 }
 
-// redactSecrets replaces what the detectors and the shared patterns find;
-// it returns the text and the kinds found.
 func redactSecrets(text string) (string, []string) {
 	var kinds []string
 	for _, d := range secretDetectors {
@@ -82,7 +75,6 @@ func redactSecrets(text string) (string, []string) {
 	return text, kinds
 }
 
-// secretLeak is one finding being built: where lines leaked which kinds.
 type secretLeak struct {
 	service, where, logger, host, sample string
 	kinds                                map[string]bool
@@ -90,9 +82,8 @@ type secretLeak struct {
 	ids                                  []int64
 }
 
-// scanSecrets checks a batch read by the pattern job (columns id,
-// created_at, service, version, message, attrs, severity, code_file,
-// code_line, size, logger, host).
+// scanSecrets expects the pattern job's columns: id, created_at, service, version,
+// message, attrs, severity, code_file, code_line, size, logger, host.
 func (s *Server) scanSecrets(ctx context.Context, rows *db.Rows) {
 	leaks := map[string]*secretLeak{}
 	for _, r := range rows.Rows {

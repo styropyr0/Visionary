@@ -12,26 +12,9 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// Application logs (app_logs): lines the service logs through slog (see
-// LogHandler) or the standard log package (see CaptureStdLog), linked to the
-// request whose context they were logged with.
-//
-// What is kept follows the dashboard (Settings → Logs), read from
-// visionary_settings every 30 seconds like the profiling switch:
-//
-//   - logs.level: lines below it are not stored...
-//   - ...except inside a request that failed (5xx, a panic, a captured
-//     error) or was slow (logs.slow_ms): there the lines down to
-//     logs.buffer_level that were held back are written too, so every
-//     failure comes with its debug lines (logs.buffer).
-//   - logs.overrides lower or raise the level for a service, a route or a
-//     user until a time, without a redeploy.
-//   - logs.drop drops matching lines; logs.rate caps lines per minute.
-//
-// Lines below the level are held in the request until it ends and then
-// written or dropped; nothing on a request path waits for the database.
-// The rules themselves live in the logrules package, shared with the
-// Visionary server.
+// Lines below the level are held in the request until it ends, then written
+// or dropped, so a failed request keeps its debug lines. Nothing on a request
+// path waits for the database.
 
 // Severities as stored in app_logs.severity.
 const (
@@ -43,18 +26,15 @@ const (
 	sevFatal = logrules.Fatal
 )
 
-// ParseLevel reads a level name (trace, debug, info, warn, error, fatal and
-// their usual spellings) as a severity, 1 trace to 6 fatal; 0 when unknown.
+// ParseLevel reads a level name as a severity, 1 trace to 6 fatal; 0 when unknown.
 func ParseLevel(s string) int { return logrules.ParseLevel(s) }
 
 const (
-	// maxHeldLogs bounds the lines one request holds back; past it, the
-	// oldest held lines are dropped.
+	// Past maxHeldLogs a request drops its oldest held lines.
 	maxHeldLogs     = 500
 	logSettingsPoll = 30 * time.Second
 )
 
-// logHost is the machine's name, for the host column.
 var logHost = hostname()
 
 var logColumns = []string{
@@ -63,8 +43,7 @@ var logColumns = []string{
 	"code_func", "size",
 }
 
-// logRecord is one captured line. Redaction and encoding happen on the
-// writer goroutine.
+// Redaction and encoding happen on the writer goroutine.
 type logRecord struct {
 	at        time.Time
 	sev       int
@@ -81,21 +60,18 @@ type logRecord struct {
 	fn        string
 }
 
-// heldLogs are a request's lines below its level, kept until it ends.
 type heldLogs struct {
 	lines   []*logRecord
 	dropped int
 }
 
-// logger is the Agent's log pipeline.
 type logger struct {
 	a    *Agent
 	w    *writer
 	base int
 	set  atomic.Pointer[logrules.Settings]
 
-	// The per-minute cap: lines counted in the current minute, and those
-	// dropped by it, reported once the minute ends.
+	// Per-minute cap; drops are reported once the minute ends.
 	rateMu     sync.Mutex
 	rateMinute int64
 	rateCount  int
@@ -114,7 +90,6 @@ func newLogger(a *Agent, w *writer, base int) *logger {
 
 func (l *logger) settings() *logrules.Settings { return l.set.Load() }
 
-// start polls the dashboard's settings until ctx ends or close.
 func (l *logger) start(ctx context.Context) {
 	go func() {
 		defer close(l.done)
@@ -134,7 +109,7 @@ func (l *logger) start(ctx context.Context) {
 			cancel()
 			switch {
 			case err != nil:
-				// No server yet, or the table is missing: keep what we had.
+				// No server or table yet; keep the old settings.
 				if !failed {
 					l.a.cfg.Logger.Debug("visionary: log settings unavailable; using defaults", "err", err)
 					failed = true
@@ -152,11 +127,10 @@ func (l *logger) close() {
 	l.once.Do(func() { close(l.stop) })
 }
 
-// capture takes one line logged with ctx. It never blocks.
+// capture never blocks.
 func (l *logger) capture(ctx context.Context, r *logRecord) {
 	s := l.settings()
-	// The SDK's own messages are left out: a write failure logged here
-	// would otherwise be queued behind the write that failed.
+	// Skip the SDK's own messages, or a write failure would queue behind the failed write.
 	if !s.Enabled || isQuiet(ctx) || strings.HasPrefix(r.message, "visionary: ") {
 		return
 	}
@@ -182,8 +156,7 @@ func (l *logger) capture(ctx context.Context, r *logRecord) {
 		r.userID = ann.user.ID
 	}
 	if ann.done {
-		// Background work the request left running: its route and user are
-		// known now.
+		// Background work the request left running; its route and user are known now.
 		route, user := ann.route, ann.user.ID
 		ann.mu.Unlock()
 		if r.sev >= s.Floor(service, route, user, r.at) {
@@ -208,9 +181,8 @@ func (l *logger) capture(ctx context.Context, r *logRecord) {
 	ann.mu.Unlock()
 }
 
-// finish decides a request's held lines once it has ended: kept when they
-// reach the level for its route and user, or, when the request failed or
-// was slow, the buffer's level.
+// finish keeps held lines at the route/user level, or at the buffer level when
+// the request failed or was slow.
 func (l *logger) finish(ann *annotations, route string, failed bool, took time.Duration) {
 	ann.mu.Lock()
 	h := ann.logs
@@ -233,8 +205,7 @@ func (l *logger) finish(ann *annotations, route string, failed bool, took time.D
 	}
 }
 
-// emit queues a line, within the per-minute cap. Errors and fatals pass the
-// cap up to ten times over, so a flood of info lines never hides them.
+// Errors and fatals get ten times the per-minute cap so an info flood never hides them.
 func (l *logger) emit(r *logRecord) {
 	s := l.settings()
 	if s.Rate > 0 {

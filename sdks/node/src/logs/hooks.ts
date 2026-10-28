@@ -5,15 +5,10 @@ import { activeLogs, logRecord, takeAttrs } from "./pipeline.js";
 import type { AttrValue } from "./rules.js";
 import { DEBUG, ERROR, FATAL, INFO, TRACE, WARN, parseLevel, stripLevelWord, textLevel } from "./rules.js";
 
-/**
- * Hooks that copy the application's log lines to Visionary without changing
- * what it prints: console, pino and winston. Lines go to the agent started
- * last (init()); before one starts, and with VISIONARY_LOGS=false, they are
- * only printed.
- */
+// Copies console, pino and winston lines to Visionary without changing what they print.
+// Until init() runs, or with VISIONARY_LOGS=false, lines are only printed.
 
-/** Set while a line is being captured, so nothing the capture itself logs
- * is captured again. */
+/** Set while capturing, so anything the capture itself logs isn't captured again. */
 let capturing = false;
 
 function capture(make: () => LogRecord | undefined): void {
@@ -37,14 +32,9 @@ const CONSOLE_LEVELS: Record<ConsoleMethod, number> = { debug: DEBUG, log: 0, in
 let restoreConsole: (() => void) | undefined;
 
 /**
- * Copies every console.debug/log/info/warn/error/trace call to Visionary.
- * Each still prints exactly as before. console.log and console.info lines
- * are info unless the text states a level at its start ("ERROR ...",
- * "[warn] ...", "level=debug"); the others have the method's level.
- * Returns a function that puts the previous methods back.
- *
- *     visionary.init();
- *     visionary.captureConsole();
+ * Copies console calls to Visionary; they still print as before. console.log/info lines
+ * use a level stated at their start ("ERROR ...", "level=debug"), else info.
+ * Returns a function that restores the console.
  */
 export function captureConsole(): () => void {
   if (restoreConsole) return restoreConsole;
@@ -79,8 +69,6 @@ function consoleRecord(method: ConsoleMethod, args: unknown[]): LogRecord | unde
   return logRecord(sev, message);
 }
 
-/** Pino's numeric levels: 10 trace, 20 debug, 30 info, 40 warn, 50 error,
- * 60 fatal. */
 function pinoSev(level: unknown): number {
   if (typeof level === "string") return parseLevel(level) || INFO;
   if (typeof level !== "number") return INFO;
@@ -92,19 +80,16 @@ function pinoSev(level: unknown): number {
   return FATAL;
 }
 
-/** Pino's own fields that are not the line's attributes. */
 const PINO_BASE = new Set(["level", "time", "msg", "pid", "hostname", "v"]);
 
-/** A destination stream pino writes its JSON lines to. */
 export interface PinoStream {
   write(line: string): boolean;
 }
 
 /**
- * A pino destination that copies each line to Visionary and writes it on to
- * `next` unchanged (default: stdout; null to only capture). Pass a higher
- * pino level than you print at to give Visionary the debug lines its buffer
- * keeps for failed requests; or use it in pino.multistream with `null`.
+ * A pino destination that copies each line to Visionary and passes it on to `next`
+ * (stdout by default; null to only capture). Give pino a lower level than you print at
+ * (e.g. pino.multistream with `null`) so failed requests keep their debug lines.
  *
  *     const log = pino({ level: "debug" }, visionary.pinoStream());
  */
@@ -130,7 +115,6 @@ function pinoRecord(line: string): LogRecord | undefined {
     if (PINO_BASE.has(k) || (k === "message" && v === msg)) continue;
     flatten(attrs, k, v, 0);
   }
-  // A child logger's name is the logger name.
   if (typeof attrs.name === "string" && attrs.logger === undefined) {
     attrs.logger = attrs.name;
     delete attrs.name;
@@ -148,9 +132,6 @@ function lineTime(v: unknown): number {
   return Date.now();
 }
 
-/** Flattens a value into dotted keys: nested objects become "a.b", times
- * RFC 3339, errors their message, anything else not a string, number or
- * boolean its string form. */
 function flatten(out: Record<string, AttrValue>, key: string, v: unknown, depth: number): void {
   if (v === undefined || typeof v === "function") return;
   if (typeof v === "string" || typeof v === "boolean") out[key] = v;
@@ -170,7 +151,6 @@ function json(v: unknown): string {
   }
 }
 
-/** Winston's npm and syslog levels; the rest read like any level name. */
 function winstonSev(level: unknown): number {
   const name = String(level ?? "").toLowerCase();
   if (name === "silly") return TRACE;
@@ -178,26 +158,20 @@ function winstonSev(level: unknown): number {
   return parseLevel(name) || INFO;
 }
 
-/** Winston's own fields that are not the line's attributes. */
 const WINSTON_BASE = new Set(["level", "message", "timestamp"]);
 const LEVEL = Symbol.for("level");
 
 /**
- * A winston transport (an object-mode stream, which is what winston pipes
- * to) that copies each line to Visionary. It prints nothing: keep your
- * Console transport for that. winston-transport is not needed.
+ * A winston transport that copies each line to Visionary. It prints nothing, so keep your
+ * Console transport.
  *
- *     const logger = winston.createLogger({
- *       level: "debug",
- *       transports: [new winston.transports.Console({ level: "info" }), visionary.winstonTransport()],
- *     });
+ *     transports: [new winston.transports.Console({ level: "info" }), visionary.winstonTransport()]
  */
 export class VisionaryTransport extends Writable {
   constructor() {
     super({ objectMode: true });
   }
 
-  /** Takes one winston info object. */
   log(info: Record<string | symbol, unknown>, callback?: () => void): void {
     capture(() => winstonRecord(info));
     callback?.();

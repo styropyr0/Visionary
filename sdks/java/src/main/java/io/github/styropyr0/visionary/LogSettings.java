@@ -9,35 +9,25 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * The {@code logs.*} rows of {@code visionary_settings}, as the dashboard's
- * Settings → Logs page writes them (SPEC.md, "What is kept").
- *
- * @param level       the lowest level kept
- * @param buffer      whether a failed or slow request's held lines are kept down to {@code bufferLevel}
- * @param slowMs      a request at least this slow counts as slow
- * @param rate        lines per minute per process, 0 for no cap
+ * @param buffer whether a failed or slow request keeps its held lines down to {@code bufferLevel}
+ * @param rate   lines per minute per process, 0 for no cap
  */
 record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, double slowMs, int rate,
         List<LevelOverride> overrides, List<Drop> drops) {
 
-    /**
-     * Changes the level for part of the traffic until a time; empty fields match anything.
-     *
-     * @param until null for no end
-     */
+    /** Empty fields match anything; a null {@code until} never expires. */
     record LevelOverride(String service, String route, String user, int level, Instant until) {
 
         boolean active(String svc, Instant now) {
             return (until == null || !now.isAfter(until)) && (service.isEmpty() || service.equals(svc));
         }
 
-        /** An override with neither route nor user applies to everything in its service. */
         boolean matches(String r, String u) {
             return (route.isEmpty() || routeMatches(route, r)) && (user.isEmpty() || user.equals(u));
         }
     }
 
-    /** Drops the lines it matches; {@code level} (when not 0) drops only lines at or below it. */
+    /** Empty fields match anything; a non-zero {@code level} drops only lines at or below it. */
     record Drop(String service, String logger, String contains, int level) {
     }
 
@@ -46,7 +36,6 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
                 List.of(), List.of());
     }
 
-    /** Reads (name, value) rows of {@code logs.*}; anything missing or unreadable keeps its default. */
     static LogSettings parse(List<String[]> rows, int base, ObjectMapper json) {
         LogSettings d = defaults(base);
         boolean enabled = d.enabled;
@@ -125,11 +114,7 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
                 List.copyOf(drops));
     }
 
-    /**
-     * The lowest level kept for a line of {@code service} on {@code route} by {@code user} (both
-     * may be empty): the base level, then service-wide overrides, then the most specific
-     * matching override (a user beats a route). Later overrides win among equals.
-     */
+    /** A user override beats a route one, which beats a service-wide one; later ones win ties. */
     int floor(String service, String route, String user, Instant now) {
         int out = level;
         int rank = 0;
@@ -146,10 +131,7 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
         return out;
     }
 
-    /**
-     * The level under which a line logged in a request is held until the request ends:
-     * everything a route or user override could keep.
-     */
+    /** Lines below this are held until the request ends, since a route or user override may still keep them. */
     int holdBelow(String service, Instant now) {
         int out = level;
         for (LevelOverride o : overrides) {
@@ -165,7 +147,6 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
         return out;
     }
 
-    /** The lowest level any line could be kept at: the base level, the buffer's, any override's. */
     int lowest() {
         int out = buffer ? Math.min(level, bufferLevel) : level;
         for (LevelOverride o : overrides) {
@@ -174,7 +155,6 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
         return out;
     }
 
-    /** Whether a drop rule matches the line. */
     boolean dropped(String service, String logger, String message, int sev) {
         for (Drop d : drops) {
             if ((!d.service.isEmpty() && !d.service.equals(service))
@@ -188,7 +168,6 @@ record LogSettings(boolean enabled, int level, boolean buffer, int bufferLevel, 
         return false;
     }
 
-    /** A route pattern, or a prefix ending in {@code *}. */
     static boolean routeMatches(String pattern, String route) {
         String r = route == null ? "" : route;
         if (pattern.endsWith("*")) {

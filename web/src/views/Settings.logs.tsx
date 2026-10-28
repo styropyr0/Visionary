@@ -25,7 +25,6 @@ function list(s: string): string[] {
     .filter(Boolean);
 }
 
-/** Settings → Logs: what services keep, for how long debug is on, what is dropped and parsed, who sees what. */
 export function LogsTab() {
   const toast = useToast();
   const res = useQuery("log-settings", () => logSettingsApi.get());
@@ -221,7 +220,6 @@ export function LogsTab() {
   );
 }
 
-/** The log archive: its state, the latest hours, and loading a range back. */
 function ArchiveCard({ admin }: { admin: boolean }) {
   const toast = useToast();
   const [run, setRun] = useState(0);

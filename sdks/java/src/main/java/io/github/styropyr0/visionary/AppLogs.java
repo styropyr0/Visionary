@@ -15,33 +15,23 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * Application logs ({@code app_logs}): lines the application logs through
- * Logback (see {@link VisionaryLogbackAppender}), linked to the request they
- * were logged in.
- *
- * <p>What is kept follows the dashboard (Settings → Logs), read from
- * {@code visionary_settings} at start and every 30 seconds like the profiling
- * switch: lines below {@code logs.level} are dropped, except inside a request
- * that failed (5xx, an exception, a captured error) or was slow, where the
- * lines down to {@code logs.buffer_level} that were held back are written too.
- * Overrides change the level for a service, route or user until a time; drop
- * rules and a per-minute cap thin the rest. Lines below the level are held in
- * the request until it ends; nothing on a request path waits for the database.
+ * Lines below the level are held per request and written only if the request fails or is
+ * slow. Nothing on the request path waits for the database.
  */
 final class AppLogs {
 
     private static final Log log = LogFactory.getLog(AppLogs.class);
     static final String SETTINGS_QUERY = "SELECT name, value FROM visionary_settings WHERE name LIKE 'logs.%'";
     static final Duration POLL_INTERVAL = Duration.ofSeconds(30);
-    /** Lines one request holds back; past it, the oldest are dropped. */
+    /** Per request; past this the oldest held lines are dropped. */
     static final int MAX_HELD = 500;
-    /** Messages the SDK logs itself; never captured, so a failed write is not queued behind itself. */
+    /** Never captured, or a failed write would queue a line behind itself. */
     static final String OWN_PREFIX = "visionary: ";
 
     private static volatile AppLogs active;
-    /** The agent's pipeline once it runs, waiting for an appender; guarded by the class. */
+    /** Waits here for an appender; guarded by the class. */
     private static AppLogs ready;
-    /** Started {@link VisionaryLogbackAppender}s; guarded by the class. */
+    /** Guarded by the class. */
     private static int appenders;
 
     private final Store store;
@@ -52,7 +42,6 @@ final class AppLogs {
     private final LogWriter writer;
     private volatile LogSettings settings;
 
-    // The per-minute cap: lines counted in the current minute, and those dropped by it.
     private final Object rateLock = new Object();
     private long rateMinute = Long.MIN_VALUE;
     private int rateCount;
@@ -72,7 +61,7 @@ final class AppLogs {
         this(store, service, baseLevel, writer::enqueue, writer);
     }
 
-    /** For tests: lines go to {@code sink} instead of a writer. */
+    /** For tests. */
     AppLogs(Store store, String service, int baseLevel, Consumer<LogRecord> sink) {
         this(store, service, baseLevel, sink, null);
     }
@@ -87,7 +76,6 @@ final class AppLogs {
         this.settings = LogSettings.defaults(baseLevel);
     }
 
-    /** The running pipeline, or null before the agent starts and after it stops. */
     static AppLogs active() {
         return active;
     }
@@ -96,11 +84,7 @@ final class AppLogs {
         return settings;
     }
 
-    /**
-     * The agent runs: capture starts as soon as a {@link VisionaryLogbackAppender} exists, now
-     * if the application's Logback configuration already has one. Until then nothing runs and
-     * {@code app_logs} is not created.
-     */
+    /** Capture starts once an appender exists; until then {@code app_logs} isn't created. */
     static void ready(AppLogs logs) {
         boolean go;
         synchronized (AppLogs.class) {
@@ -112,7 +96,6 @@ final class AppLogs {
         }
     }
 
-    /** An appender started (from the Logback configuration, or attached by the starter). */
     static void appenderStarted() {
         AppLogs logs;
         synchronized (AppLogs.class) {
@@ -130,12 +113,10 @@ final class AppLogs {
         }
     }
 
-    /** Whether lines are being taken: an appender exists and the agent runs. */
     boolean capturing() {
         return active == this;
     }
 
-    /** Starts the writer and the settings poll, then takes lines. Once; not again after {@link #stop}. */
     synchronized void start() {
         if (started || stopped) {
             return;
@@ -156,7 +137,6 @@ final class AppLogs {
         active = this;
     }
 
-    /** Stops taking lines and flushes what is queued, at most {@code timeout}. */
     synchronized void stop(Duration timeout) {
         stopped = true;
         synchronized (AppLogs.class) {
@@ -184,7 +164,6 @@ final class AppLogs {
         }
     }
 
-    /** Reads Settings → Logs; a failed read keeps the previous values (at first the defaults). */
     void poll() {
         List<String[]> rows;
         try {
@@ -205,13 +184,11 @@ final class AppLogs {
         settings = s;
     }
 
-    /** Whether a line at {@code sev} could be kept at all; a cheap check before building it. */
     boolean wants(int sev) {
         LogSettings s = settings;
         return s.enabled() && sev >= s.lowest();
     }
 
-    /** Takes one line logged on this thread. Never blocks on the database. */
     void capture(LogRecord r) {
         LogSettings s = settings;
         if (!s.enabled() || r.message.startsWith(OWN_PREFIX)) {
@@ -239,7 +216,7 @@ final class AppLogs {
                 r.userId = scope.userId();
             }
             if (scope.done) {
-                // Work the request left running: its route and user are known now.
+                // Logged after the request ended, so its route and user are final.
                 keepFrom = s.floor(service, scope.route, r.userId == null ? "" : r.userId, r.at);
             } else if (r.sev >= s.holdBelow(service, r.at)) {
                 keepFrom = r.sev;
@@ -259,10 +236,6 @@ final class AppLogs {
         }
     }
 
-    /**
-     * Decides a request's held lines once it has ended: kept when they reach the level for
-     * its route and user, or, when the request failed or was slow, the buffer's level.
-     */
     void finish(LogScope scope, String route, boolean failed, double tookMs) {
         ArrayDeque<LogRecord> held;
         String user;
@@ -287,10 +260,7 @@ final class AppLogs {
         }
     }
 
-    /**
-     * Queues a line within the per-minute cap. Errors and fatals pass the cap up to ten
-     * times over, so a flood of info lines never hides them.
-     */
+    /** Errors and fatals get ten times the per-minute cap so an info flood can't hide them. */
     void emit(LogRecord r) {
         int rate = settings.rate();
         if (rate > 0) {

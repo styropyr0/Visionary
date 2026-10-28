@@ -82,9 +82,9 @@ record VisionaryConfig(
                 // false: never profile, whatever the dashboard says.
                 r.bool("VISIONARY_PROFILE", true),
                 r.bool("VISIONARY_LOGS", true),
-                // Opt-in: the starter adds the Logback appender to the root logger; otherwise only where declared.
+                // Opt-in: adds the Logback appender to the root logger.
                 r.bool("VISIONARY_LOG_CAPTURE", false),
-                // The lowest level kept until Settings → Logs has been read.
+                // Used until the dashboard's log settings are read.
                 r.string("VISIONARY_LOG_LEVEL", "info"));
     }
 
@@ -120,7 +120,6 @@ record VisionaryConfig(
         return instance.isEmpty() ? hostname() : instance;
     }
 
-    /** The machine's name, for the {@code host} column of {@code app_logs}. */
     static String hostname() {
         try {
             return InetAddress.getLocalHost().getHostName();

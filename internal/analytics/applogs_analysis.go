@@ -16,8 +16,6 @@ func (s *Server) applogsAnalysisRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/applogs/top-patterns", s.authed(s.handleTopPatterns))
 }
 
-// handleTopPatterns is the busiest messages as a table, for dashboards and
-// reports.
 func (s *Server) handleTopPatterns(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -43,8 +41,6 @@ func (s *Server) handleTopPatterns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleLogVersions lists the releases that logged in the range, by
-// service, newest first: what the Releases tab compares.
 func (s *Server) handleLogVersions(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -64,9 +60,6 @@ FROM app_logs WHERE `+ls.sql()+` AND version IS NOT NULL GROUP BY service, versi
 	writeJSON(w, http.StatusOK, map[string]any{"versions": out})
 }
 
-// handleLogVolume says where log volume comes from: by service, source and
-// level, the code lines that log the most, and the busy patterns nobody
-// looks at (candidates to lower or drop).
 func (s *Server) handleLogVolume(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -103,7 +96,7 @@ func (s *Server) handleLogVolume(w http.ResponseWriter, r *http.Request) {
 		total, bytes = toInt(res.Rows[0][0]), toInt(res.Rows[0][1])
 	}
 	out["lines"], out["bytes"] = total, bytes
-	// A sample message per code line, so the list reads as code, not paths.
+	// a sample message per code line, so the list isn't just paths
 	if code, ok := out["code"].(*Result); ok && len(code.Rows) > 0 {
 		code.Columns = append(code.Columns, "sample")
 		for i, row := range code.Rows {
@@ -139,8 +132,6 @@ func nonNilArgs(v any) []any {
 	return []any{v}
 }
 
-// quietPatterns are patterns that make up at least 2% of the bytes in the
-// range, that nobody has opened in 30 days and no alert watches.
 func (s *Server) quietPatterns(ctx context.Context, ls *logSearch, total int64) ([]map[string]any, error) {
 	if total == 0 {
 		return []map[string]any{}, nil
@@ -174,8 +165,7 @@ func (s *Server) quietPatterns(ctx context.Context, ls *logSearch, total int64) 
 	return out, nil
 }
 
-// handleHiddenFailures finds errors logged inside requests that answered
-// 2xx or 3xx: failures the API didn't report to its client.
+// handleHiddenFailures finds errors logged in requests that still answered 2xx or 3xx.
 func (s *Server) handleHiddenFailures(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -183,7 +173,6 @@ func (s *Server) handleHiddenFailures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	where := ls.sql()
-	// The search applies to the log lines; qualify their columns.
 	q := `SELECT l.pattern, a.method, a.route, COUNT(*) AS lines, COUNT(DISTINCT a.request_id) AS requests, MAX(l.id) AS sample_id,
   MAX(a.request_id) AS sample_request, MAX(l.created_at) AS last, MAX(a.status) AS status
 FROM (SELECT * FROM app_logs WHERE ` + where + ` AND severity >= 5 AND request_id IS NOT NULL) AS l
@@ -213,7 +202,6 @@ GROUP BY l.pattern, a.method, a.route ORDER BY lines DESC LIMIT 50`
 	writeJSON(w, http.StatusOK, map[string]any{"failures": out})
 }
 
-// alertedPatterns are the patterns enabled alert rules watch.
 func (s *Server) alertedPatterns(ctx context.Context) map[string]bool {
 	return s.logAlertPatterns(ctx)
 }

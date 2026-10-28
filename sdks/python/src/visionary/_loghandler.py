@@ -10,8 +10,7 @@ from typing import Any, Dict, Optional, Union
 
 from . import _logs, _spans
 
-# LogRecord attributes that are not extra fields. Read from a real record so
-# every Python version's set (taskName in 3.12, ...) is covered.
+# Read from a real record so every Python version's fields are covered.
 _STANDARD = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {"message", "asctime"}
 
 _formatter = logging.Formatter()
@@ -34,16 +33,14 @@ class LogHandler(logging.Handler):
     def __init__(self, level: Union[int, str] = logging.NOTSET, agent: Any = None) -> None:
         super().__init__(level)
         self._agent = agent
-        # Set by capture_logging: pass on what Python's last resort would have
-        # printed, and the old root level that applies to it.
+        # Set by capture_logging, to keep what Python's last resort would have printed.
         self._last_resort = False
         self._keep: Optional["_KeepOutput"] = None
 
     def handle(self, record: logging.LogRecord) -> bool:
         if self._last_resort:
             _last_resort(self, record)
-        # Filtered but not serialized behind the handler's lock: capture is
-        # thread-safe, and request threads must not queue behind each other.
+        # No handler lock: capture is thread-safe, and request threads mustn't queue behind each other.
         rv = self.filter(record)
         if rv:
             if isinstance(rv, logging.LogRecord):  # 3.12+: a filter may return a replacement
@@ -52,8 +49,7 @@ class LogHandler(logging.Handler):
         return bool(rv)
 
     def emit(self, record: logging.LogRecord) -> None:
-        # Never the SDK's own lines (its logger, or anything its threads log,
-        # such as a database driver writing a batch), and never re-entrant.
+        # Skip the SDK's own lines (its threads too, e.g. a DB driver) and re-entrant calls.
         name = record.name
         if name == "visionary" or name.startswith("visionary.") or _spans.is_internal():
             return
@@ -69,7 +65,7 @@ class LogHandler(logging.Handler):
         try:
             pipe.capture(line_from_record(record))
         except Exception:
-            # Never into the app's output, and never raised into its code.
+            # never break the app over a log line
             pass
         finally:
             _busy.on = False

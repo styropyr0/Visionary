@@ -69,7 +69,6 @@ ERROR_COLUMNS = [
     "created_at", "service", "instance", "version", "request_id", "method", "route", "path", "user_id",
     "type", "message", "stack", "fingerprint", "handled", "runtime",
 ]
-# Application logs (SPEC "Application logs").
 LOG_COLUMNS = [
     "created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",
     "message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line",
@@ -94,8 +93,7 @@ TABLES = {
 _SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql", "logs": "logs.sql"}
 _MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS)}
 
-# NOT NULL columns in api_logs and app_logs; on D1 they are bound as-is, like
-# the Go SDK (an empty log message must not become NULL).
+# Bound as-is on D1, like the Go SDK, so an empty log message doesn't become NULL.
 _D1_REQUIRED = {
     "requests": {
         "request_id", "created_at", "method", "path", "status", "duration_ms",

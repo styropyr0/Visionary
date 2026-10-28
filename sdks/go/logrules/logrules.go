@@ -1,9 +1,5 @@
-// Package logrules holds the rules every source of application logs
-// follows: level names and numbers, finding a level in plain text, scrubbing
-// secrets, encoding a line's fields, and what Settings → Logs keeps. The
-// Go SDK applies them to the lines it captures and the Visionary server to
-// the lines it receives, so both store the same thing. sdks/SPEC.md
-// ("Application logs") is the contract the other SDKs follow.
+// Package logrules holds the log rules shared by the Go SDK and the Visionary
+// server, so both store the same thing. Other SDKs follow sdks/SPEC.md.
 package logrules
 
 import (
@@ -43,9 +39,8 @@ func Name(sev int) string {
 	return levelNames[sev]
 }
 
-// ParseLevel reads a level name the way sources spell them: trace, debug,
-// info, notice, warn, warning, error, err, critical, fatal, panic... Unknown
-// names are 0.
+// ParseLevel reads a level name in its usual spellings (warn, warning, err...).
+// Unknown names are 0.
 func ParseLevel(s string) int {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "trace", "trc", "finest", "finer", "verbose", "vrb":
@@ -69,11 +64,8 @@ func Clamp(sev int) int {
 	return min(max(sev, Trace), Fatal)
 }
 
-// TextLevel finds the level a plain-text line states at its start, the
-// way loggers print it: "ERROR ...", "[warn] ...", "error: ...",
-// "2026-10-28 09:30:12 WARN ...", or a level=/lvl=/severity= field in the
-// first 200 bytes. A bare lowercase word ("error rate is low") is not a
-// level. 0 when the line states none.
+// TextLevel finds the level a plain-text line states near its start ("ERROR ...",
+// "[warn]", "level=debug"), or 0. A bare lowercase "error rate is low" is not one.
 func TextLevel(s string) int {
 	head := s[:min(len(s), 200)]
 	if m := levelFieldRE.FindStringSubmatch(head); m != nil {
@@ -106,13 +98,11 @@ func TextLevel(s string) int {
 
 var (
 	levelFieldRE = regexp.MustCompile(`(?i)\b(?:level|lvl|severity)=["']?([a-z]+)`)
-	// timestampRE matches a date, a time or both, as loggers print them.
-	timestampRE = regexp.MustCompile(`^[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?$`)
+	timestampRE  = regexp.MustCompile(`^[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?$`)
 )
 
-// StripLevelWord removes a leading upper-case level word that TextLevel
-// read as sev ("INFO started" → "started", "WARNING: disk" → "disk"): the
-// level has its own column.
+// StripLevelWord removes the leading level word TextLevel read as sev
+// ("WARNING: disk" → "disk"), since the level has its own column.
 func StripLevelWord(s string, sev int) string {
 	word, rest, ok := strings.Cut(s, " ")
 	if !ok || strings.TrimSpace(rest) == "" || word != strings.ToUpper(word) {
@@ -125,7 +115,7 @@ func StripLevelWord(s string, sev int) string {
 	return s
 }
 
-// Secrets in free text, replaced before a line is stored (SPEC.md, Logs).
+// Secrets in free text, replaced before a line is stored.
 var secretPatterns = []struct {
 	re   *regexp.Regexp
 	with string
@@ -147,8 +137,7 @@ func Scrub(s string) string {
 	return s
 }
 
-// DefaultSecretKeys are the field names whose values are never stored, the
-// same as the request bodies' redaction.
+// DefaultSecretKeys are field names whose values are never stored.
 var DefaultSecretKeys = []string{
 	"password", "passwd", "secret", "client_secret", "token", "access_token", "refresh_token", "id_token",
 	"api_key", "apikey", "otp", "pin", "card_number", "cvv", "private_key",
@@ -165,9 +154,8 @@ func SecretKeys(extra []string) map[string]bool {
 	return m
 }
 
-// EncodeAttrs writes attrs as one flat JSON object: values under a secret
-// key (its last dotted part) redacted, strings scrubbed, at most MaxAttrs
-// bytes (long values are cut first, then keys dropped in sorted order).
+// EncodeAttrs writes attrs as one flat JSON object with secrets redacted, capped
+// at MaxAttrs bytes (long values are cut first, then keys dropped).
 func EncodeAttrs(attrs map[string]any, secret map[string]bool) string {
 	out := make(map[string]any, len(attrs))
 	for k, v := range attrs {
@@ -242,8 +230,8 @@ type Override struct {
 	until time.Time
 }
 
-// Drop drops the lines it matches; empty fields match anything, and Level
-// (when set) drops only lines at or below it.
+// Drop drops matching lines. Empty fields match anything; a set Level drops
+// only lines at or below it.
 type Drop struct {
 	Service  string `json:"service"`
 	Logger   string `json:"logger"`
@@ -273,8 +261,7 @@ func Defaults(level int) *Settings {
 	return &Settings{Enabled: true, Level: level, Buffer: true, BufferLevel: Debug, Slow: time.Second, Rate: 6000}
 }
 
-// Parse reads (name, value) rows of logs.*; anything missing or unreadable
-// keeps its default.
+// Parse reads (name, value) rows of logs.*; bad or missing ones keep their default.
 func Parse(rows [][]string, base int) *Settings {
 	s := Defaults(base)
 	for _, r := range rows {
@@ -352,7 +339,6 @@ func ParseTime(v string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// active reports whether o applies now to service.
 func (o *Override) active(service string, now time.Time) bool {
 	if !o.until.IsZero() && now.After(o.until) {
 		return false
@@ -360,8 +346,7 @@ func (o *Override) active(service string, now time.Time) bool {
 	return o.Service == "" || o.Service == service
 }
 
-// matches reports whether o applies to a request on route by user. An
-// override with neither applies to everything in its service.
+// An override with no route or user applies to its whole service.
 func (o *Override) matches(route, user string) bool {
 	if o.Route != "" && !RouteMatches(o.Route, route) {
 		return false
@@ -377,10 +362,8 @@ func RouteMatches(pattern, route string) bool {
 	return pattern == route
 }
 
-// Floor is the lowest level kept for a line of service on route by user
-// (both may be empty): the base level, then service-wide overrides, then
-// the most specific matching override (a user beats a route). Later
-// overrides win among equals.
+// Floor is the lowest level kept for service on route by user. The most
+// specific override wins (a user beats a route), later ones among equals.
 func (s *Settings) Floor(service, route, user string, now time.Time) int {
 	level, rank := s.Level, 0
 	for i := range s.Overrides {
@@ -402,9 +385,8 @@ func (s *Settings) Floor(service, route, user string, now time.Time) int {
 	return level
 }
 
-// HoldBelow is the level under which a line logged in a request is held
-// until the request ends: everything a route or user override could keep,
-// and everything the buffer might keep.
+// HoldBelow is the level under which request lines are held until the
+// request ends, since an override or the buffer might still keep them.
 func (s *Settings) HoldBelow(service string, now time.Time) int {
 	level := s.Level
 	for i := range s.Overrides {

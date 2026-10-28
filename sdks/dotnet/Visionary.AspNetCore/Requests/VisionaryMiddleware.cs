@@ -46,7 +46,7 @@ internal sealed class VisionaryMiddleware
         tally.Start();
         var started = Stopwatch.GetTimestamp();
         var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
-        // Every request holds its log lines below the level until it ends, logged or not.
+        // Held for every request, logged or not.
         RequestLogs? logs = null;
         if (_agent.Logs is not null)
         {
@@ -235,10 +235,7 @@ internal sealed class VisionaryMiddleware
         }
     }
 
-    /// <summary>
-    /// Decides the lines the request held back, now that its final route, user and outcome are
-    /// known: failed means a 5xx, an exception, or an error captured in it.
-    /// </summary>
+    // Failed means a 5xx, an exception, or an error captured during the request.
     private void FinishLogs(HttpContext ctx, RequestLogs logs, bool threw, double durationMs)
     {
         try

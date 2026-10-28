@@ -96,7 +96,7 @@ public final class Visionary {
     /** Records an exception the application handled ({@code handled = 1}), linked to the current request. */
     public static void captureException(Throwable error) {
         if (error != null) {
-            // The request's held log lines are kept as for a failed request.
+            // Keeps the request's held log lines, as for a failed request.
             LogScope.markError();
         }
         Telemetry t = Telemetry.active();

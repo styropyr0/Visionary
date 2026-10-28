@@ -44,7 +44,6 @@ const KIND_LABEL: Record<string, string> = {
   server_log: "Server log",
 };
 
-/** Recent sessions of the app, each opening its timeline. */
 export function SessionsPanel({ app }: { app: string }) {
   const { resolved, tick } = useApp();
   const qs = rangeQuery(resolved.from, resolved.to, { app });

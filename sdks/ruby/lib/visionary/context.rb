@@ -95,17 +95,14 @@ module Visionary
       @mutex.synchronize { @errors << row }
     end
 
-    # An exception escaped the app or was captured during the request: its
-    # held log lines are kept down to logs.buffer_level.
+    # Marks the request failed, so its held log lines are kept down to logs.buffer_level.
     def failed!
       @mutex.synchronize { @failed = true }
     end
 
     def failed? = @mutex.synchronize { @failed || !@errors.empty? }
 
-    # Holds a log line until the request ends, at most max of them (the
-    # oldest go first). False once the request has been logged: the caller
-    # decides the line itself.
+    # Holds at most max lines, dropping the oldest. False once the request has been logged.
     def hold_log(record, max)
       @mutex.synchronize do
         return false if @logged
@@ -116,7 +113,6 @@ module Visionary
       end
     end
 
-    # The held lines, once; [] when there are none.
     def take_held_logs
       @mutex.synchronize do
         out = @held || []

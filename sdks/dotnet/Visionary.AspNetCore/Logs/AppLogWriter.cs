@@ -7,12 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>
-/// The app_logs writer, separate from <see cref="TelemetryWriter"/> so a flood of lines never
-/// crowds out request rows: the same batching (50 lines or 3 seconds, a failed batch retried
-/// twice) from its own 10000-line queue. It also reads Settings → Logs from visionary_settings
-/// at start and every 30 seconds, and purges app_logs when VISIONARY_LOG_RETENTION_DAYS is set.
-/// </summary>
+// Separate from TelemetryWriter so a flood of log lines can't crowd out request rows.
 internal sealed class AppLogWriter : BackgroundService
 {
     private const int BatchSize = 50;
@@ -88,7 +83,6 @@ internal sealed class AppLogWriter : BackgroundService
             }
         }
 
-        // Shutting down: drain what is queued, bounded by a timeout.
         using var drain = new CancellationTokenSource(DrainTimeout);
         while (reader.TryRead(out var item))
         {
@@ -113,7 +107,6 @@ internal sealed class AppLogWriter : BackgroundService
         }
     }
 
-    /// <summary>Reads Settings → Logs now and every 30 seconds, keeping the previous values when a read fails.</summary>
     private async Task PollAsync(AppLogs logs, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -135,7 +128,7 @@ internal sealed class AppLogWriter : BackgroundService
         }
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
-            // No Visionary server yet, or the table is missing: keep what we had.
+            // No server yet or the table is missing; keep the previous settings.
             if (!_readFailedLogged)
             {
                 _readFailedLogged = true;
@@ -201,7 +194,7 @@ internal sealed class AppLogWriter : BackgroundService
         }
         catch (Exception e)
         {
-            // Shutdown timeout or a bug in row building: never take the writer down with it.
+            // Never let one bad batch take the writer down.
             _agent.Logger.LogError("visionary: log batch write failed; {Count} lines dropped: {Error}", batch.Count, e.Message);
         }
     }

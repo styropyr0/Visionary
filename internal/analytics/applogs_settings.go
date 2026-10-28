@@ -11,16 +11,7 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// Settings → Logs. The logs.* values are read by the SDKs too (every 30
-// seconds), so a change reaches every service without a redeploy:
-//
-//	GET  /api/settings/logs                  everything, with the syslog receiver's state
-//	PUT  /api/settings/logs                  admins: replace the settings
-//	POST /api/settings/logs/overrides        editors: add a level override for a while
-//	DELETE /api/settings/logs/overrides/{i}  editors: remove one
-//	POST /api/settings/logs/drops            editors: add a drop rule
-//	DELETE /api/settings/logs/drops/{i}      editors: remove one
-//	POST /api/settings/logs/rules/test       try a parse rule on a sample line
+// The SDKs re-read the logs.* settings every 30 seconds, so changes need no redeploy.
 
 func (s *Server) applogsSettingsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/settings/logs", s.authed(s.handleLogSettings))
@@ -32,7 +23,6 @@ func (s *Server) applogsSettingsRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/settings/logs/rules/test", s.authed(s.handleTestParseRule))
 }
 
-// logSettingsView is Settings → Logs as the page edits it.
 type logSettingsView struct {
 	Enabled     bool                `json:"enabled"`
 	Level       string              `json:"level"`
@@ -79,7 +69,6 @@ func (s *Server) handleLogSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validLogSettings checks a view and returns the stored values.
 func validLogSettings(v logSettingsView) (map[string]string, error) {
 	if logrules.ParseLevel(v.Level) == 0 || logrules.ParseLevel(v.BufferLevel) == 0 {
 		return nil, fmt.Errorf("levels are trace, debug, info, warn, error or fatal")
@@ -149,7 +138,6 @@ func nonNil[T any](s []T) []T {
 	return s
 }
 
-// saveLogSettings stores v and applies it to this server at once.
 func (s *Server) saveLogSettings(w http.ResponseWriter, r *http.Request, v logSettingsView, action string, detail any) bool {
 	kv, err := validLogSettings(v)
 	if err != nil {
@@ -182,8 +170,6 @@ func (s *Server) handlePutLogSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAddLogOverride changes the level for a service, route or user for
-// a number of minutes: "debug for /checkout for 15 minutes".
 func (s *Server) handleAddLogOverride(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "edit") {
 		return
@@ -203,7 +189,6 @@ func (s *Server) handleAddLogOverride(w http.ResponseWriter, r *http.Request) {
 	o := body.Override
 	o.Until = time.Now().UTC().Add(time.Duration(body.Minutes) * time.Minute).Format(tsLayout)
 	v := s.logSettingsView()
-	// Drop expired overrides while here.
 	now := time.Now()
 	kept := v.Overrides[:0]
 	for _, x := range v.Overrides {
@@ -267,7 +252,6 @@ func (s *Server) handleDeleteLogDrop(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleTestParseRule shows what a parse rule makes of a sample line.
 func (s *Server) handleTestParseRule(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Pattern string `json:"pattern"`

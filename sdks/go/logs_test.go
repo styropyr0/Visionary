@@ -15,8 +15,6 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// logAgent is an Agent with only log capture, writing to a fake store; its
-// queued lines are read with queued.
 func logAgent(t *testing.T, rows [][]string) *Agent {
 	t.Helper()
 	a := &Agent{cfg: Config{Logger: slog.Default(), Requests: RequestsConfig{Enabled: true}}, db: &fakeStore{data: rows},
@@ -43,8 +41,7 @@ func queued(a *Agent) []*logRecord {
 	}
 }
 
-// messages lists the lines in the order they were logged, which is the
-// order they are stored in (held lines are queued later).
+// Sorted by time, since held lines are queued later.
 func messages(recs []*logRecord) string {
 	slices.SortStableFunc(recs, func(a, b *logRecord) int { return a.at.Compare(b.at) })
 	var m []string
@@ -54,8 +51,6 @@ func messages(recs []*logRecord) string {
 	return strings.Join(m, ",")
 }
 
-// serve runs one request through Middleware; the handler logs with the
-// request's context and answers status after taking took.
 func serve(a *Agent, path string, status int, took time.Duration, user string, log func(ctx context.Context, l *slog.Logger)) {
 	l := slog.New(LogHandler(nil))
 	h := a.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,8 +65,7 @@ func serve(a *Agent, path string, status int, took time.Duration, user string, l
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
 }
 
-// threeLines logs a little apart, so the lines' times order them even on
-// clocks with a coarse tick (Windows).
+// Spaced out so times order the lines even on coarse clocks (Windows).
 func threeLines(ctx context.Context, l *slog.Logger) {
 	l.DebugContext(ctx, "debug line")
 	time.Sleep(2 * time.Millisecond)
@@ -235,8 +229,7 @@ func TestCaptureStdLog(t *testing.T) {
 	if got[0].sev != sevInfo || got[1].sev != sevError || got[2].sev != sevWarn {
 		t.Fatalf("levels %d %d %d", got[0].sev, got[1].sev, got[2].sev)
 	}
-	// Here the SDK's own package logs, so the first frame outside it is the
-	// test runner; in an application it is the line that called log.
+	// The SDK's own package logs here, so the first outside frame is the test runner.
 	if got[0].file == "" || got[0].line == 0 {
 		t.Fatalf("no code location: %+v", got[0])
 	}

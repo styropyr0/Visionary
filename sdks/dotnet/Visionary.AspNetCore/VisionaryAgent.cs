@@ -101,7 +101,7 @@ internal sealed class VisionaryAgent : IDisposable
     public RequestTally Tally { get; } = new();
     public Channel<WriteItem> Queue { get; }
 
-    /// <summary>Application log capture (app_logs), with its own queue; null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
+    /// <summary>Null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
     public AppLogs? Logs { get; }
 
     public bool SpansOn => Enabled && Options.Spans;
@@ -174,7 +174,7 @@ internal sealed class VisionaryAgent : IDisposable
     /// </summary>
     public void CaptureError(Exception ex, bool handled, HttpContext? context)
     {
-        // An error in a request keeps the debug lines it held back (Settings → Logs, buffer).
+        // An error keeps the debug lines the request held back.
         if (RequestLogs.Current is { } logs && (context is null || ReferenceEquals(logs.Context, context)))
         {
             logs.MarkFailed();

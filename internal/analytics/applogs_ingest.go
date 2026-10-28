@@ -13,20 +13,9 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// The pipeline every line the server receives goes through (OTLP, the
-// ingest endpoints, syslog, the host agent), before it is stored in
-// app_logs: lines the SDKs write themselves already followed the same rules
-// in the SDK.
-//
-//  1. Parse: a message that is a JSON object or logfmt, or matches an access
-//     log or a parse rule of Settings → Logs, gives its fields to the line.
-//  2. Level: the source's own, else one stated in the text, else info.
-//  3. Settings → Logs: drop rules and the level for the service.
-//  4. Secrets scrubbed, fields encoded and capped (logrules).
-//  5. The per-service cap (lines per minute); past it lines are dropped and
-//     one warn line says how many.
+// Lines from OTLP, ingest endpoints, syslog and the agent go through this
+// pipeline; the SDKs apply the same rules before sending.
 
-// logLine is one line received by the server.
 type logLine struct {
 	at                                            time.Time
 	service, instance, version, source, host, ctr string
@@ -45,22 +34,17 @@ var logsTable = &otlpTable{"app_logs", []string{
 	"code_func", "size",
 }}
 
-// logServerSettings are Settings → Logs options only the server uses,
-// stored as logserver.* (the SDKs read logs.* only).
+// logServerSettings are server-only options, stored as logserver.* (SDKs read logs.* only).
 type logServerSettings struct {
-	// Rate caps lines per minute per service across server-side sources;
-	// 0 is no cap.
-	Rate int `json:"rate"`
-	// Redact are extra field names whose values are never stored.
-	Redact []string `json:"redact"`
-	// Rules parse plain-text lines into fields.
-	Rules []parseRule `json:"rules"`
-	// Syslog is the listen address of the syslog receiver ("" is off).
+	// lines per minute per service; 0 means no cap
+	Rate   int         `json:"rate"`
+	Redact []string    `json:"redact"`
+	Rules  []parseRule `json:"rules"`
+	// empty turns the syslog receiver off
 	Syslog string `json:"syslog"`
-	// SyslogService names lines whose sender gives no app name.
-	SyslogService string `json:"syslog_service"`
-	// Access limits what viewers see.
-	Access logAccessSettings `json:"access"`
+	// used when the sender gives no app name
+	SyslogService string            `json:"syslog_service"`
+	Access        logAccessSettings `json:"access"`
 }
 
 const (
@@ -73,7 +57,6 @@ func defaultLogServerSettings() logServerSettings {
 	return logServerSettings{Rate: defaultLogRate, Redact: []string{}, Rules: []parseRule{}}
 }
 
-// logRules is Settings → Logs as the SDKs read it.
 func (s *Server) logRules() *logrules.Settings {
 	if l := s.live().Logs; l != nil {
 		return l
@@ -88,7 +71,6 @@ func (s *Server) logServer() logServerSettings {
 	return defaultLogServerSettings()
 }
 
-// parseLogSettings reads logs.* and logserver.* from the stored settings.
 func parseLogSettings(m map[string][2]string) (*logrules.Settings, *logServerSettings) {
 	var rows [][]string
 	for name, v := range m {
@@ -115,7 +97,6 @@ func parseLogSettings(m map[string][2]string) (*logrules.Settings, *logServerSet
 	return logrules.Parse(rows, logrules.Info), &ls
 }
 
-// logIngest keeps the per-service minute counters.
 type logIngest struct {
 	mu      sync.Mutex
 	minute  int64
@@ -130,8 +111,7 @@ func (s *Server) logIngestState() *logIngest {
 	return v.(*logIngest)
 }
 
-// ingestLogLines stores lines through the pipeline. It returns how many
-// were kept; an error means the database refused them.
+// ingestLogLines returns how many lines were kept; an error means the database refused them.
 func (s *Server) ingestLogLines(ctx context.Context, lines []*logLine) (int, error) {
 	if len(lines) == 0 {
 		return 0, nil
@@ -185,7 +165,6 @@ func (s *Server) ingestLogLines(ctx context.Context, lines []*logLine) (int, err
 	return kept, s.otlp().write(ctx, rows)
 }
 
-// logRow is the line in logsTable's column order.
 func logRow(l *logLine, secret map[string]bool) []any {
 	msg := logrules.Truncate(logrules.Scrub(l.message), logrules.MaxMessage)
 	attrs := ""
@@ -206,7 +185,6 @@ func logRow(l *logLine, secret map[string]bool) []any {
 	}
 }
 
-// normalizeLogLine parses the message and settles time and level.
 func normalizeLogLine(l *logLine, rules []parseRule, now time.Time) {
 	if l.attrs == nil {
 		l.attrs = map[string]any{}
@@ -244,17 +222,13 @@ func normalizeLogLine(l *logLine, rules []parseRule, now time.Time) {
 	}
 }
 
-// leadingTime matches the timestamp plain-text loggers print first:
-// "2026-10-28 11:00:01,123", "2026-10-28T11:00:01Z", "[2026-10-28 11:00:01]",
-// "2026/10/28 11:00:01.123456".
+// leadingTime matches stamps like "2026-10-28 11:00:01,123" or "[2026/10/28T11:00:01Z]".
 var leadingTime = regexp.MustCompile(`^\[?(\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]?\s+`)
 
 var trailingZone = regexp.MustCompile(`[+-]\d{2}:?\d{2}$`)
 
-// stripLeadingTime takes a leading timestamp out of a plain-text message.
-// With a zone it becomes the line's time when the source gave none; a
-// timestamp without a zone can't be placed, so it is kept as logged_at and
-// the time the line arrived stands.
+// stripLeadingTime only trusts a zoned timestamp as the line's time; without
+// a zone it is kept as logged_at and the arrival time stands.
 func stripLeadingTime(l *logLine) {
 	m := leadingTime.FindStringSubmatch(l.message)
 	if m == nil || len(m[0]) >= len(l.message) {
@@ -273,10 +247,7 @@ func stripLeadingTime(l *logLine) {
 	l.message = l.message[len(m[0]):]
 }
 
-// takeLogFields moves well-known fields of a structured line to the line's
-// columns and returns what is left for attrs. Keys follow the common
-// shippers: ECS (Elastic), OpenTelemetry, Loki labels, Bunyan/pino, logrus,
-// zap, Serilog.
+// takeLogFields knows the keys of ECS, OpenTelemetry, Loki, Bunyan/pino, logrus, zap and Serilog.
 func takeLogFields(l *logLine, fields map[string]any) {
 	for k, v := range fields {
 		s := fieldString(v)
@@ -372,8 +343,7 @@ func takeLogFields(l *logLine, fields map[string]any) {
 	}
 }
 
-// originalOf is the raw text a structured message replaced; set while
-// parsing, so "message" inside the JSON wins over the JSON text itself.
+// originalOf is the raw text a parsed message replaced, so a "message" field wins over the JSON itself.
 func originalOf(l *logLine) string {
 	if s, ok := l.attrs[rawKey].(string); ok {
 		return s
@@ -383,7 +353,6 @@ func originalOf(l *logLine) string {
 
 const rawKey = "\x00raw"
 
-// parseJSONMessage reads a message that is one JSON object.
 func parseJSONMessage(l *logLine) bool {
 	m := strings.TrimSpace(l.message)
 	if len(m) < 2 || m[0] != '{' || m[len(m)-1] != '}' {
@@ -401,14 +370,12 @@ func parseJSONMessage(l *logLine) bool {
 	takeLogFields(l, fields)
 	delete(l.attrs, rawKey)
 	if l.message == m {
-		// No message field: keep the line readable rather than repeating
-		// the JSON that is now in attrs.
+		// no message field; don't repeat the JSON that's now in attrs
 		l.message = summarizeFields(fields)
 	}
 	return true
 }
 
-// summarizeFields is a short text for a structured line with no message.
 func summarizeFields(fields map[string]any) string {
 	var parts []string
 	for k, v := range fields {
@@ -472,8 +439,7 @@ func fieldString(v any) string {
 	return string(b)
 }
 
-// levelOf reads a level name, or a number on the common scales: 1..6,
-// bunyan/pino 10..60, syslog 0..7 is not guessed (ambiguous with 1..6).
+// levelOf accepts 1..6 and bunyan/pino 10..60; syslog 0..7 overlaps 1..6, so it isn't guessed.
 func levelOf(v any) int {
 	s := strings.TrimSpace(fieldString(v))
 	if n := logrules.ParseLevel(s); n > 0 {
@@ -492,8 +458,7 @@ func levelOf(v any) int {
 	return 0
 }
 
-// timeOf reads RFC 3339 text, Visionary's format, or epoch seconds,
-// milliseconds, microseconds or nanoseconds.
+// timeOf takes epoch numbers in seconds, ms, µs or ns.
 func timeOf(v any) (time.Time, bool) {
 	s := strings.TrimSpace(fieldString(v))
 	if s == "" {
@@ -521,11 +486,9 @@ func timeOf(v any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// logfmtPair finds key=value pairs, quoted or bare.
 var logfmtPair = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_.\-]*)=("(?:[^"\\]|\\.)*"|[^\s]*)`)
 
-// parseLogfmt reads "time=... level=info msg=\"hello\" k=v" when the line
-// is mostly pairs and has a msg or level.
+// parseLogfmt only applies when the line is mostly pairs and has a msg or level.
 func parseLogfmt(l *logLine) bool {
 	m := l.message
 	if !strings.Contains(m, "=") {
@@ -599,10 +562,8 @@ func parseAccessLog(l *logLine) bool {
 	return true
 }
 
-// parseRule turns plain-text lines into fields: a regular expression with
-// named groups, or a pattern with %{TYPE:name} placeholders (grok's
-// notation). Groups named message, level and time set those; the rest
-// become fields. Service and source, when set, limit the rule to those.
+// parseRule is a regexp with named groups or a grok-style %{TYPE:name} pattern;
+// groups named message, level and time set those columns.
 type parseRule struct {
 	Name    string `json:"name"`
 	Service string `json:"service"`
@@ -612,7 +573,6 @@ type parseRule struct {
 	re *regexp.Regexp
 }
 
-// grokTypes are the placeholder types a parse rule can use.
 var grokTypes = map[string]string{
 	"WORD":              `\w+`,
 	"NOTSPACE":          `\S+`,
@@ -632,7 +592,6 @@ var grokTypes = map[string]string{
 
 var grokToken = regexp.MustCompile(`%\{([A-Z0-9_]+)(?::([A-Za-z_][A-Za-z0-9_.]*))?\}`)
 
-// compile builds the rule's expression; an error names what is wrong.
 func (r *parseRule) compile() error {
 	src := r.Pattern
 	if strings.Contains(src, "%{") {
@@ -664,7 +623,6 @@ func (r *parseRule) compile() error {
 	return nil
 }
 
-// applyParseRules applies the first rule that matches the line.
 func applyParseRules(l *logLine, rules []parseRule) bool {
 	for i := range rules {
 		r := &rules[i]

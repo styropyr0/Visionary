@@ -45,7 +45,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.summary = "disabled";
     }
 
-    /** @param logs application log capture, null when off */
+    /** @param logs null when off */
     VisionaryAgent(Store store, Origin origin, RequestWriter writer, SystemSampler.PoolStats pool,
             AppLogs logs, VisionaryConfig cfg) {
         this.config = cfg;
@@ -123,7 +123,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         return logRequests ? writer : null;
     }
 
-    /** Application log capture, null when off or Visionary is disabled. */
+    /** Null when off or Visionary is disabled. */
     AppLogs logs() {
         return logs;
     }

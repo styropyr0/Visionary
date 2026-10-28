@@ -58,11 +58,7 @@ final class FrameNamer {
         return out;
     }
 
-    /**
-     * The file part of a frame name, for {@code app_logs.code_file}: {@code std:java/util/HashMap.java},
-     * {@code com/example/OrderService.java}, {@code lib:spring-webmvc/DispatcherServlet.java}; null when
-     * there is no file.
-     */
+    /** E.g. {@code std:java/util/HashMap.java} or {@code lib:spring-webmvc/DispatcherServlet.java}; null when there is no file. */
     String file(String className, String fileName) {
         return path(HIDDEN_SUFFIX.matcher(className).replaceFirst(""), className, fileName);
     }

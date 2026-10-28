@@ -35,7 +35,6 @@ func TestLogAlerts(t *testing.T) {
 	if !strings.Contains(obs[0].Message, "`level:error declined` in checkout") || !strings.Contains(obs[0].Message, "Latest: checkout: ERROR card declined for order 2") {
 		t.Fatalf("message %q", obs[0].Message)
 	}
-	// The expected line is missing: < 1 fires on a real zero.
 	obs, err = s.observe(ctx, rule("log_absent", `"backup finished"`, "<", 1, ""), now)
 	if err != nil || len(obs) != 1 || *obs[0].Value != 0 || !obs[0].Breach {
 		t.Fatalf("absent %+v %v", obs, err)
@@ -48,8 +47,7 @@ func TestLogAlerts(t *testing.T) {
 	if err != nil || len(obs) == 0 || *obs[0].Value != 3 {
 		t.Fatalf("error lines %+v %v", obs, err)
 	}
-	// A rule made from a line watches its pattern, which the volume page
-	// then doesn't call unread.
+	// a rule on a pattern means the volume page no longer lists it as unwatched
 	res, _ := s.db.Query(ctx, `SELECT pattern FROM app_logs WHERE message = 'slow gateway'`)
 	pid := toString(res.Rows[0][0])
 	on := true

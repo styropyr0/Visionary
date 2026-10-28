@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// fakeModel answers chat completions with the given contents in turn and
-// records the prompts it was sent.
 func fakeModel(t *testing.T, s *Server, replies ...string) *[]string {
 	t.Helper()
 	var prompts []string

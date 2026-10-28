@@ -20,33 +20,15 @@ import {
 } from "./rules.js";
 
 /**
- * Application logs (app_logs): lines the service logs through console, pino
- * or winston (see hooks.ts), linked to the request they were logged in.
- *
- * What is kept follows the dashboard (Settings → Logs), read from
- * visionary_settings every 30 seconds like the profiling switch:
- *
- *   - logs.level: lines below it are not stored...
- *   - ...except inside a request that failed (5xx, an exception, a captured
- *     error) or was slow (logs.slow_ms): there the lines down to
- *     logs.buffer_level that were held back are written too, so every
- *     failure comes with its debug lines (logs.buffer).
- *   - logs.overrides lower or raise the level for a service, a route or a
- *     user until a time, without a redeploy.
- *   - logs.drop drops matching lines; logs.rate caps lines per minute.
- *
- * Lines below the level are held in the request until it ends and then
- * written or dropped; nothing on a request path waits for the database.
+ * App log pipeline. What's kept follows Settings → Logs, re-read every 30 s. Lines below
+ * the level are held in their request and written only if it fails or is slow.
  */
 
-/** How often the dashboard's settings are read again. */
 const POLL_MS = 30_000;
-/** The lines one request holds back; past it, the oldest are dropped. */
 const MAX_HELD = 500;
 
 const HOST = hostname();
 
-/** One captured line. Scrubbing and encoding happen on the writer. */
 export interface LogRecord {
   /** epoch ms */
   at: number;
@@ -61,7 +43,6 @@ export interface LogRecord {
   sessionId: string;
 }
 
-/** A request's lines below its level, kept until it ends. */
 export interface HeldLogs {
   lines: LogRecord[];
   dropped: number;
@@ -73,16 +54,12 @@ export interface LogIdentity {
   version: string;
 }
 
-/** A record with only the given fields set. */
 export function logRecord(sev: number, message: string, at = Date.now()): LogRecord {
   return { at, sev, logger: "", message, requestId: "", traceId: "", spanId: "", userId: "", sessionId: "" };
 }
 
 const COLUMN_ATTRS = ["request_id", "trace_id", "span_id", "user_id", "session_id", "logger"] as const;
 
-/** Moves the attributes that have columns of their own (request_id,
- * trace_id, span_id, user_id, session_id, logger) out of attrs, when they
- * are strings. */
 export function takeAttrs(r: LogRecord, attrs: Record<string, AttrValue>): void {
   for (const k of COLUMN_ATTRS) {
     const v = attrs[k];
@@ -100,7 +77,6 @@ export function takeAttrs(r: LogRecord, attrs: Record<string, AttrValue>): void 
 
 const orNull = (s: string): string | null => s || null;
 
-/** The app_logs row in LOG_COLUMNS order. */
 export function logValues(r: LogRecord, ident: LogIdentity, secrets: Set<string>): Value[] {
   const msg = truncateBytes(scrub(r.message), MAX_MESSAGE);
   const attrs = r.attrs ? encodeAttrs(r.attrs, secrets) : "";
@@ -129,16 +105,13 @@ export function logValues(r: LogRecord, ident: LogIdentity, secrets: Set<string>
   ];
 }
 
-/** The trace id of a W3C traceparent header ("00-<32 hex>-<16 hex>-<2 hex>"),
- * or "" when there is none. */
 export function traceParentId(h: string | undefined): string {
   const parts = (h ?? "").trim().split("-");
   const id = parts[1] ?? "";
   return parts.length >= 4 && /^[0-9a-f]{32}$/.test(id) && /[^0]/.test(id) ? id : "";
 }
 
-/** The process's log pipeline, set by the agent that started last; the
- * hooks hand their lines to it. */
+/** Set by the agent started last; the hooks send their lines here. */
 let current: LogPipeline | undefined;
 
 export function activeLogs(): LogPipeline | undefined {
@@ -149,15 +122,11 @@ export function setActiveLogs(p: LogPipeline | undefined): void {
   current = p;
 }
 
-/** Decides which captured lines are written: settings, holding lines in
- * their request, the per-minute cap. */
 export class LogPipeline {
   private settings: LogSettings;
   private timer?: NodeJS.Timeout;
   private polling = false;
   private stopped = false;
-  // The per-minute cap: lines counted in the current minute, and those
-  // dropped by it, reported once the minute ends.
   private rateMinute = 0;
   private rateCount = 0;
   private rateDrop = 0;
@@ -171,7 +140,6 @@ export class LogPipeline {
     this.settings = defaultLogSettings(base);
   }
 
-  /** Reads the dashboard's settings now and every 30 seconds. */
   start(): void {
     this.timer = setInterval(() => void this.poll(), POLL_MS);
     this.timer.unref();
@@ -183,17 +151,14 @@ export class LogPipeline {
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** The settings in force. */
   current(): LogSettings {
     return this.settings;
   }
 
-  /** Replaces the settings (what a poll does). */
   apply(rows: string[][]): void {
     this.settings = parseLogSettings(rows, this.base);
   }
 
-  /** Reads Settings → Logs. No server yet, or no table: keep what we had. */
   async poll(): Promise<void> {
     if (this.polling || this.stopped) return;
     this.polling = true;
@@ -206,12 +171,10 @@ export class LogPipeline {
     }
   }
 
-  /** Takes one line logged in the current async context. Never throws or
-   * blocks. */
+  /** Never throws or blocks. */
   capture(r: LogRecord, state: RequestState | undefined = currentRequest()): void {
     const s = this.settings;
-    // The SDK's own messages are left out: a write failure logged here would
-    // otherwise be queued behind the write that failed.
+    // Skip the SDK's own messages, or a failed write's log line would queue behind it.
     if (!s.enabled || isQuiet() || r.message.startsWith("visionary: ")) return;
     if (dropped(s, this.service, r.logger, r.message, r.sev)) return;
     if (!state) {
@@ -222,7 +185,7 @@ export class LogPipeline {
     r.traceId ||= state.traceId;
     r.userId ||= state.userId;
     if (state.done) {
-      // Work the request left running: its route and user are known now.
+      // Logged after the request ended, so its route and user are known.
       if (r.sev >= floor(s, this.service, state.resolveRoute(), state.userId, r.at)) this.emit(r);
       return;
     }
@@ -238,9 +201,6 @@ export class LogPipeline {
     held.lines.push(r);
   }
 
-  /** Decides a request's held lines once it has ended: kept when they reach
-   * the level for its route and user, or, when the request failed or was
-   * slow, the buffer's level. */
   finish(state: RequestState, route: string, failed: boolean, tookMs: number): void {
     const held = state.heldLogs;
     state.heldLogs = undefined;
@@ -255,8 +215,7 @@ export class LogPipeline {
     }
   }
 
-  /** Queues a line, within the per-minute cap. Errors and fatals pass the cap
-   * up to ten times over, so a flood of info lines never hides them. */
+  /** Errors and fatals get ten times the per-minute cap, so a flood of info lines never hides them. */
   private emit(r: LogRecord): void {
     const s = this.settings;
     if (s.rate > 0) {

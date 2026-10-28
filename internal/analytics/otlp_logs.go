@@ -10,10 +10,8 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// Logs: every record is stored in app_logs (see applogs_ingest.go). Records
-// at ERROR or above that carry exception.* attributes are also kept as
-// errors rows (a logged exception, so handled = 1), linked to the request
-// whose span was active.
+// ERROR+ records with exception.* attributes are also stored as handled errors,
+// linked to the request whose span was active.
 
 func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) (int64, error) {
 	now := time.Now()
@@ -71,10 +69,6 @@ func (o *otlpState) ingestLogs(ctx context.Context, rls []*logspb.ResourceLogs) 
 	return 0, err
 }
 
-// otlpLogLine maps a log record: severity number (1-4 trace, 5-8 debug,
-// 9-12 info, 13-16 warn, 17-20 error, 21-24 fatal) or text, the body as the
-// message (a map body gives its fields), attributes as fields, the scope as
-// the logger and code.* attributes as the code location.
 func otlpLogLine(res *otlpResource, resAttrs otlpAttrs, scope string, lr *logspb.LogRecord, at uint64) *logLine {
 	l := &logLine{
 		at:       time.Unix(0, int64(at)),
@@ -114,8 +108,6 @@ func otlpLogLine(res *otlpResource, resAttrs otlpAttrs, scope string, lr *logspb
 	return l
 }
 
-// otlpValue turns an attribute value into plain Go values: maps for
-// key-value lists, JSON text for arrays.
 func otlpValue(v *commonpb.AnyValue) any {
 	switch t := v.GetValue().(type) {
 	case *commonpb.AnyValue_StringValue:

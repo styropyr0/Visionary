@@ -122,7 +122,6 @@ internal static class Schema
         "created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded",
     };
 
-    /// <summary>The app_logs table of SPEC.md "Application logs".</summary>
     public static readonly string[] LogColumns =
     {
         "created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",

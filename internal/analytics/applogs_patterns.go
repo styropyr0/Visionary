@@ -16,17 +16,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Patterns: the pattern job reads lines that have none yet, reduces each
-// message to a template (numbers, ids, addresses, quoted text and the like
-// become <*>), names the template per service with a 16-hex id, writes the
-// id on the lines and keeps a log_patterns row per template: its counts,
-// when it was first and last seen, and the release it first appeared in.
-// The secret scanner (applogs_secrets.go) reads the same batch.
-//
-//	GET /api/applogs/patterns         templates in the range, busiest first, with a trend
-//	GET /api/applogs/compare          what a release logs that another didn't, and the reverse
-//	GET /api/applogs/volume           lines and bytes by service, source, level and code line
-//	GET /api/applogs/hidden-failures  errors logged in requests that answered 2xx or 3xx
+// The pattern job turns each new message into a per-service template (variable
+// parts become <*>) and keeps a log_patterns row per template.
 
 const (
 	patternBatch    = 2000
@@ -50,10 +41,9 @@ var (
 	tplSpace  = regexp.MustCompile(`\s+`)
 )
 
-// templateOf reduces a message to its template.
 func templateOf(msg string) string {
 	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		// A stack trace or a multi-line dump: its first line names it.
+		// stack traces and dumps are named by their first line
 		msg = msg[:i]
 	}
 	if len(msg) > 2000 {
@@ -61,8 +51,7 @@ func templateOf(msg string) string {
 	}
 	t := reduceTemplate(msg, true)
 	if !strings.ContainsFunc(strings.ReplaceAll(t, "<*>", ""), unicode.IsLetter) {
-		// Nothing but values (an access-log line is mostly quoted text):
-		// keep the words inside the quotes rather than one placeholder.
+		// all values (e.g. access logs): keep the quoted words instead of one placeholder
 		t = reduceTemplate(msg, false)
 	}
 	if len(t) > maxTemplateLen {
@@ -74,8 +63,7 @@ func templateOf(msg string) string {
 	return t
 }
 
-// reduceTemplate replaces the variable parts of msg with <*>; quoted text
-// counts as one variable part when quoted is set.
+// reduceTemplate treats quoted text as one variable part when quoted is set.
 func reduceTemplate(msg string, quoted bool) string {
 	t := msg
 	if quoted {
@@ -97,23 +85,20 @@ func reduceTemplate(msg string, quoted bool) string {
 	return strings.TrimSpace(tplSpace.ReplaceAllString(t, " "))
 }
 
-// patternID names a template within a service.
 func patternID(service, template string) string {
 	h := sha1.Sum([]byte(service + "\n" + template))
 	return hex.EncodeToString(h[:8])
 }
 
-// patternAgg is a template's share of one batch.
 type patternAgg struct {
 	id, service, template, sample, version, file string
-	line                                           int64
-	severity                                       int64
-	first, last                                    string
-	lines, bytes                                   int64
-	ids                                            []int64
+	line                                         int64
+	severity                                     int64
+	first, last                                  string
+	lines, bytes                                 int64
+	ids                                          []int64
 }
 
-// applogsPatternsStart runs the job until ctx ends.
 func (s *Server) applogsPatternsStart(ctx context.Context) {
 	go func() {
 		t := time.NewTimer(20 * time.Second)
@@ -133,7 +118,7 @@ func (s *Server) applogsPatternsStart(ctx context.Context) {
 				}
 				wait = time.Minute
 			case n == patternBatch:
-				wait = time.Second // more to do
+				wait = time.Second
 			}
 			t.Reset(wait)
 		}
@@ -142,8 +127,6 @@ func (s *Server) applogsPatternsStart(ctx context.Context) {
 
 var patternMu sync.Map // *Server → *sync.Mutex: one pass at a time
 
-// patternPass names the patterns of up to patternBatch lines that have
-// none; it returns how many it read.
 func (s *Server) patternPass(ctx context.Context) (int, error) {
 	v, _ := patternMu.LoadOrStore(s, &sync.Mutex{})
 	mu := v.(*sync.Mutex)
@@ -156,8 +139,7 @@ func (s *Server) patternPass(ctx context.Context) (int, error) {
 	if len(rows.Rows) == 0 {
 		return 0, nil
 	}
-	// Secrets first: the scanner redacts the rows in place, so templates
-	// and samples are made from what is stored, never from a credential.
+	// scan first: it redacts in place, so templates and samples never hold a credential
 	s.scanSecrets(ctx, rows)
 	aggs := map[string]*patternAgg{}
 	var order []string
@@ -242,8 +224,6 @@ func levelNameOf(sev int64) string { return levelNames[min(max(sev, 1), 6)] }
 
 var levelNames = [...]string{"", "trace", "debug", "info", "warn", "error", "fatal"}
 
-// handleLogPatterns lists the templates of the matching lines in the range,
-// busiest first, with a count per bucket for a trend line.
 func (s *Server) handleLogPatterns(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -277,7 +257,6 @@ FROM app_logs WHERE ` + ls.sql() + ` AND pattern IS NOT NULL GROUP BY pattern OR
 			}
 		}
 	}
-	// Trend: counts per bucket for the patterns on this page.
 	trend := map[string]map[int64]int64{}
 	if len(ids) > 0 {
 		bucket := strconv.FormatInt(ls.tr.Bucket, 10)
@@ -316,14 +295,11 @@ FROM app_logs WHERE ` + ls.sql() + ` AND pattern IS NOT NULL GROUP BY pattern OR
 		}
 		out = append(out, p)
 	}
-	// pending lines have not been through the pattern job yet.
+	// pending: lines the pattern job hasn't reached yet
 	writeJSON(w, http.StatusOK, map[string]any{"patterns": out, "total": total, "pending": pending, "bucket": ls.tr.Bucket, "from": from})
 }
 
-// handleLogCompare lists the templates one release logs that the other
-// doesn't (and those whose rate changed most), for a service: what a
-// deploy changed in the logs. a and b are versions; each is read over its
-// own lifetime within the range.
+// handleLogCompare reads each version (a, b) over its own lifetime within the range.
 func (s *Server) handleLogCompare(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -423,7 +399,6 @@ func (s *Server) handleLogCompare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"a": a, "b": b, "lines_a": ta, "lines_b": tb, "changes": rows})
 }
 
-// patternTemplates reads the templates of patterns by id.
 func (s *Server) patternTemplates(ctx context.Context, ids []string) map[string]string {
 	out := map[string]string{}
 	for start := 0; start < len(ids); start += 400 {

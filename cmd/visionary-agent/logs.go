@@ -22,13 +22,8 @@ import (
 	"time"
 )
 
-// Log collection, off until VISIONARY_AGENT_LOGS names sources: journald,
-// docker (every container's output), and file globs (/var/log/nginx/*.log).
-// Lines go to the server's log ingest in batches, gzipped NDJSON with the
-// server key; the server parses, scrubs and stores them like any other
-// source. Where each source got to (the journal cursor, file offsets) is kept
-// in VISIONARY_AGENT_STATE, so a restart neither repeats nor loses lines; a
-// source seen for the first time starts at its end.
+// Log collection is off until VISIONARY_AGENT_LOGS names sources. Progress is
+// saved in VISIONARY_AGENT_STATE so a restart neither repeats nor loses lines.
 
 const (
 	logQueueSize   = 20000
@@ -39,7 +34,6 @@ const (
 	logScanSources = 15 * time.Second
 )
 
-// logEntry is one line, in the fields the ingest endpoint reads.
 type logEntry struct {
 	Time      string `json:"time"`
 	Message   string `json:"message"`
@@ -76,7 +70,7 @@ func newLogShipper(cfg config, logger *slog.Logger, docker *dockerCollector) *lo
 	}
 }
 
-// push queues a line; a full queue drops it rather than block a reader.
+// push drops the line when the queue is full so readers never block.
 func (s *logShipper) push(e *logEntry) {
 	if e.Host == "" {
 		e.Host = s.cfg.host
@@ -91,7 +85,6 @@ func (s *logShipper) push(e *logEntry) {
 	}
 }
 
-// run starts the sources and ships until ctx ends.
 func (s *logShipper) run(ctx context.Context) {
 	var files []string
 	for _, src := range s.cfg.logs {
@@ -115,7 +108,6 @@ func (s *logShipper) run(ctx context.Context) {
 	s.ship(ctx)
 }
 
-// ship batches the queue and posts it.
 func (s *logShipper) ship(ctx context.Context) {
 	t := time.NewTicker(logFlushEvery)
 	defer t.Stop()
@@ -200,7 +192,7 @@ func (s *logShipper) post(ctx context.Context, batch []*logEntry) error {
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusRequestEntityTooLarge {
-			// The server will never take this batch; drop it.
+			// Retrying won't help, so drop the batch.
 			s.log.Warn("logs: batch refused", "status", resp.Status, "body", strings.TrimSpace(string(b)))
 			return nil
 		}
@@ -209,18 +201,13 @@ func (s *logShipper) post(ctx context.Context, batch []*logEntry) error {
 	return nil
 }
 
-// ── State ─────────────────────────────────────────────────────────────────
-
-// logState is where each source got to.
 type logState struct {
-	path string
-	mu   sync.Mutex
-	// Journal is the cursor of the last journal entry read.
+	path    string
+	mu      sync.Mutex
 	Journal string `json:"journal"`
-	// Files are offsets by path, with the file's identity to notice
-	// rotation.
+	// Files holds offsets by path, with the file identity to spot rotation.
 	Files map[string]fileMark `json:"files"`
-	// Containers are the time of the last line read, by container id.
+	// Containers holds the last line's time by container id.
 	Containers map[string]string `json:"containers"`
 }
 
@@ -264,10 +251,6 @@ func (st *logState) save() {
 	}
 }
 
-// ── journald ──────────────────────────────────────────────────────────────
-
-// journald follows the journal with journalctl, from the saved cursor or
-// from now.
 func (s *logShipper) journald(ctx context.Context) {
 	for ctx.Err() == nil {
 		args := []string{"-f", "-o", "json", "--no-pager"}
@@ -306,11 +289,9 @@ func (s *logShipper) journald(ctx context.Context) {
 	}
 }
 
-// journalPriority maps syslog priorities (0 emerg .. 7 debug).
+// Syslog priorities, 0 emerg to 7 debug.
 var journalPriority = [...]string{"fatal", "fatal", "fatal", "error", "warn", "info", "info", "debug"}
 
-// journalEntry reads one line of journalctl -o json; it returns the entry's
-// cursor too.
 func journalEntry(b []byte) (*logEntry, string, bool) {
 	var j map[string]any
 	if json.Unmarshal(b, &j) != nil {
@@ -321,7 +302,7 @@ func journalEntry(b []byte) (*logEntry, string, bool) {
 		case string:
 			return v
 		case []any:
-			// A binary MESSAGE comes as an array of bytes.
+			// journald sends a binary MESSAGE as an array of bytes.
 			var out []byte
 			for _, x := range v {
 				if f, ok := x.(float64); ok {
@@ -353,10 +334,6 @@ func journalEntry(b []byte) (*logEntry, string, bool) {
 	return e, str("__CURSOR"), true
 }
 
-// ── Files ─────────────────────────────────────────────────────────────────
-
-// tailFiles follows the files matching globs, picking up new files and
-// rotated ones.
 func (s *logShipper) tailFiles(ctx context.Context, globs []string) {
 	t := time.NewTicker(logPollFiles)
 	defer t.Stop()
@@ -382,9 +359,8 @@ func (s *logShipper) tailFiles(ctx context.Context, globs []string) {
 	}
 }
 
-// readFile reads what was appended to path since the saved offset. A file
-// seen for the first time starts at its end; a file whose identity changed
-// (rotated) or that shrank (truncated) starts again from the beginning.
+// A file seen for the first time starts at its end; a rotated or truncated
+// one starts again from the beginning.
 func (s *logShipper) readFile(path string) {
 	fi, err := os.Stat(path)
 	if err != nil || fi.IsDir() {
@@ -418,7 +394,7 @@ func (s *logShipper) readFile(path string) {
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
-			// A line still being written waits for its newline.
+			// Partial line; wait for its newline.
 			break
 		}
 		read += int64(len(line))
@@ -440,8 +416,7 @@ func (s *logShipper) setMark(path string, m fileMark) {
 	s.state.mu.Unlock()
 }
 
-// fileService names lines by their file: /var/log/nginx/access.log is
-// nginx, /srv/app/logs/app.log is app.
+// /var/log/nginx/access.log is nginx, /srv/app/logs/app.log is app.
 func fileService(path string) string {
 	dir := filepath.Base(filepath.Dir(path))
 	if dir == "log" || dir == "logs" || dir == "." || dir == "/" {
@@ -451,10 +426,6 @@ func fileService(path string) string {
 	return dir
 }
 
-// ── Containers ────────────────────────────────────────────────────────────
-
-// containers follows the output of every running container, starting a
-// stream for each new one and letting finished ones end.
 func (s *logShipper) containers(ctx context.Context) {
 	var mu sync.Mutex
 	following := map[string]bool{}
@@ -485,8 +456,6 @@ func (s *logShipper) containers(ctx context.Context) {
 	}
 }
 
-// containerService names a container's lines: its compose service or
-// Kubernetes container label, else its name.
 func containerService(c listed) string {
 	for _, k := range []string{"com.docker.compose.service", "io.kubernetes.container.name", "com.docker.swarm.service.name"} {
 		if v := c.Labels[k]; v != "" {
@@ -547,9 +516,8 @@ func (s *logShipper) followContainer(ctx context.Context, c listed) {
 	_ = demuxDocker(resp.Body, emit)
 }
 
-// demuxDocker reads the engine's multiplexed log stream: frames of an
-// 8-byte header (stream type, 3 zero bytes, big-endian length) and payload.
-// Lines can span frames.
+// Docker frames are an 8-byte header (stream type, 3 zero bytes, big-endian
+// length) then the payload. Lines can span frames.
 func demuxDocker(r io.Reader, emit func(stream, line string)) error {
 	hdr := make([]byte, 8)
 	partial := map[string]string{}
@@ -598,8 +566,6 @@ func readLines(r io.Reader, emit func(string)) {
 	}
 }
 
-// splitDockerTime separates the RFC 3339 timestamp the engine puts before
-// each line (timestamps=1).
 func splitDockerTime(line string) (string, string) {
 	at, rest, ok := strings.Cut(line, " ")
 	if ok {

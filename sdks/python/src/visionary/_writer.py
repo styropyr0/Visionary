@@ -56,7 +56,6 @@ class RequestWriter:
     """One background thread that batches api_logs rows and the telemetry
     rows (spans, errors, releases) next to them."""
 
-    # The thread's name and the rows' name in its messages (LogWriter: app_logs).
     _THREAD = "visionary-requests"
     _WHAT = "request"
 

@@ -8,12 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// Copies what the application logs through <see cref="ILogger"/> into Visionary's app_logs,
-/// linked to the request it was logged in. It is one more provider: the others (console,
-/// debug, OpenTelemetry...) print exactly what they printed before. <c>builder.Logging.AddVisionary()</c>
-/// registers it, with a filter rule that lets it see Trace and up whatever the other providers'
-/// levels; which lines are kept follows the dashboard (Settings → Logs). Lines logged before
-/// the collector starts, or with collection off, are ignored.
+/// Copies <see cref="ILogger"/> output into Visionary, linked to the request it was logged in.
+/// Register it with <c>builder.Logging.AddVisionary()</c>; other providers are unaffected.
 /// </summary>
 [ProviderAlias("Visionary")]
 public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalScope
@@ -32,13 +28,13 @@ public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalS
     {
     }
 
-    /// <summary>The SDK's own categories, never captured, so a failed write can't be queued behind itself.</summary>
+    // Never capture the SDK's own logs, or a failed write would queue behind itself.
     private static bool Own(string category) =>
         category == "Visionary" || category.StartsWith("Styropyr0.Visionary", StringComparison.Ordinal);
 
     private static AppLogs? Pipeline => VisionaryAgent.Current?.Logs;
 
-    /// <summary>Keys ILogger scopes from ActivityTrackingOptions carry; trace and span go to their columns, the rest is noise.</summary>
+    // From ActivityTrackingOptions scopes: trace and span get their own columns, the rest is noise.
     private static readonly HashSet<string> ActivityKeys = new(StringComparer.Ordinal)
     {
         "SpanId", "TraceId", "ParentId", "TraceState", "TraceFlags", "Tags", "Baggage",
@@ -153,7 +149,6 @@ public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalS
         }
     }
 
-    /// <summary>Adds structured fields as flat attrs; nested key/value lists become dotted keys.</summary>
     internal static void AddPairs(Dictionary<string, object> attrs, IEnumerable<KeyValuePair<string, object?>> pairs, string prefix = "", int depth = 0)
     {
         foreach (var (k, v) in pairs)
@@ -171,7 +166,6 @@ public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalS
         }
     }
 
-    /// <summary>A stored value: a string, number or boolean; times as RFC 3339; anything else its string form.</summary>
     internal static object Value(object v) => v switch
     {
         string s => s,
@@ -195,10 +189,7 @@ public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalS
         }
     }
 
-    /// <summary>
-    /// Moves the attributes with columns of their own (request_id, trace_id, span_id, user_id,
-    /// session_id, logger) out of attrs.
-    /// </summary>
+    // Moves keys that have their own columns (request_id, trace_id, user_id...) out of attrs.
     internal static void Take(LogRecord r, Dictionary<string, object> attrs)
     {
         foreach (var key in ColumnKeys)

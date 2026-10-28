@@ -21,15 +21,8 @@ import (
 	"time"
 )
 
-// The log archive: every finished hour of app_logs is written to an
-// S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Backblaze B2, rclone)
-// as gzipped NDJSON, one object per hour, so logs outlive Settings →
-// Retention cheaply. Archived hours are listed in log_archives; an admin
-// can load a range back into app_logs (rehydrate), where it is searched like
-// any other line. Configured in Settings → Server → Log archive.
-//
-//	GET  /api/applogs/archives            archived hours and the archive's state
-//	POST /api/applogs/archives/rehydrate  load {from, to} back
+// Finished hours of app_logs go to an S3-compatible bucket as gzipped NDJSON,
+// one object per hour, so logs can outlive retention and be rehydrated later.
 
 const (
 	archiveEvery     = 10 * time.Minute
@@ -44,7 +37,6 @@ func (s *Server) applogsArchiveRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/applogs/archives/rehydrate", s.authed(s.handleRehydrate))
 }
 
-// archiveConf is the bucket from Settings; ok is false while it is not set.
 type archiveConf struct {
 	endpoint, bucket, region, access, secret, prefix string
 }
@@ -64,7 +56,7 @@ func (s *Server) archiveConf() (archiveConf, bool) {
 	return c, c.endpoint != "" && c.bucket != "" && c.access != "" && c.secret != ""
 }
 
-// objectKey names an hour's object: <prefix>/2026/10/28/11.ndjson.gz.
+// objectKey is <prefix>/2026/10/28/11.ndjson.gz.
 func (c archiveConf) objectKey(hour time.Time) string {
 	k := hour.UTC().Format("2006/01/02/15") + archiveObjectExt
 	if c.prefix != "" {
@@ -73,8 +65,7 @@ func (c archiveConf) objectKey(hour time.Time) string {
 	return k
 }
 
-// objectURL is the path-style URL of a key, which every S3-compatible
-// store accepts.
+// objectURL is path-style, which every S3-compatible store accepts.
 func (c archiveConf) objectURL(key string) string {
 	parts := strings.Split(key, "/")
 	for i, p := range parts {
@@ -83,8 +74,7 @@ func (c archiveConf) objectURL(key string) string {
 	return c.endpoint + "/" + url.PathEscape(c.bucket) + "/" + strings.Join(parts, "/")
 }
 
-// sign adds AWS Signature Version 4 headers to req, with an unsigned payload
-// (allowed by S3 and the stores that copy it).
+// sign adds SigV4 headers with an unsigned payload, which S3 and its clones allow.
 func (c archiveConf) sign(req *http.Request, now time.Time) {
 	now = now.UTC()
 	date, stamp := now.Format("20060102"), now.Format("20060102T150405Z")
@@ -122,7 +112,6 @@ func hmacSHA256(key []byte, data string) []byte {
 	return h.Sum(nil)
 }
 
-// canonicalQuery sorts and escapes the query the way SigV4 wants.
 func canonicalQuery(q url.Values) string {
 	keys := make([]string, 0, len(q))
 	for k := range q {
@@ -152,8 +141,7 @@ func (c archiveConf) put(ctx context.Context, key string, body io.ReadSeeker, si
 		return err
 	}
 	req.ContentLength = size
-	// A .gz file, not gzip content encoding: stores would hand it back
-	// decompressed, and clients decompress it on the way.
+	// a .gz object, not Content-Encoding: gzip, or stores hand it back decompressed
 	req.Header.Set("Content-Type", "application/gzip")
 	c.sign(req, time.Now())
 	resp, err := archiveClient.Do(req)
@@ -173,7 +161,7 @@ func (c archiveConf) get(ctx context.Context, key string) (io.ReadCloser, error)
 	if err != nil {
 		return nil, err
 	}
-	// Ask for the bytes as stored, so the HTTP client does not unzip them.
+	// otherwise the HTTP client unzips the stored bytes
 	req.Header.Set("Accept-Encoding", "identity")
 	c.sign(req, time.Now())
 	resp, err := archiveClient.Do(req)
@@ -188,22 +176,19 @@ func (c archiveConf) get(ctx context.Context, key string) (io.ReadCloser, error)
 	return resp.Body, nil
 }
 
-// archiveState is the archiver's last outcome, for Settings.
 type archiveState struct {
 	mu      sync.Mutex
 	lastRun time.Time
 	lastErr string
 }
 
-var archiveStates sync.Map // *Server → *archiveState
+var archiveStates sync.Map
 
 func (s *Server) archiveState() *archiveState {
 	v, _ := archiveStates.LoadOrStore(s, &archiveState{})
 	return v.(*archiveState)
 }
 
-// applogsArchiveStart archives finished hours every ten minutes while a
-// bucket is set.
 func (s *Server) applogsArchiveStart(ctx context.Context) {
 	go func() {
 		t := time.NewTimer(2 * time.Minute)
@@ -235,14 +220,12 @@ func (s *Server) applogsArchiveStart(ctx context.Context) {
 	}()
 }
 
-// archivePass writes the oldest finished hours not yet archived, at most
-// archiveHoursRun of them; it returns how many it wrote.
 func (s *Server) archivePass(ctx context.Context, now time.Time) (int, error) {
 	c, ok := s.archiveConf()
 	if !ok {
 		return 0, nil
 	}
-	done := now.UTC().Truncate(time.Hour) // hours before this have ended
+	done := now.UTC().Truncate(time.Hour)
 	res, err := s.db.Query(ctx, `SELECT MIN(created_at) FROM app_logs`)
 	if err != nil || len(res.Rows) == 0 || res.Rows[0][0] == nil {
 		return 0, err
@@ -276,12 +259,10 @@ func (s *Server) archivePass(ctx context.Context, now time.Time) (int, error) {
 	return wrote, nil
 }
 
-// archiveColumns are written for each line; rehydrate reads them back.
 var archiveColumns = []string{"created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",
 	"message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line", "code_func"}
 
-// archiveHour writes one hour's lines to the bucket, through a temporary
-// file so an hour of any size is sent with a known length.
+// archiveHour goes through a temp file so the upload has a known length.
 func (s *Server) archiveHour(ctx context.Context, c archiveConf, hour time.Time) (int64, int64, error) {
 	f, err := os.CreateTemp("", "visionary-archive-*.ndjson.gz")
 	if err != nil {
@@ -350,8 +331,7 @@ func (s *Server) handleLogArchives(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleRehydrate loads archived hours back into app_logs. Hours that
-// still have lines are skipped, so nothing is loaded twice.
+// handleRehydrate skips hours that still have lines, so nothing loads twice.
 func (s *Server) handleRehydrate(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
@@ -414,15 +394,14 @@ func (s *Server) handleRehydrate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"lines": total, "hours": out})
 }
 
-// rehydrateObject reads one archived hour back into app_logs, as written:
-// the lines already passed the pipeline once.
+// rehydrateObject inserts lines as archived; they already went through the pipeline.
 func (s *Server) rehydrateObject(ctx context.Context, c archiveConf, key string) (int, error) {
 	body, err := c.get(ctx, key)
 	if err != nil {
 		return 0, err
 	}
 	defer body.Close()
-	// Gzipped as written; plain when a store or proxy unzipped it.
+	// plain if a store or proxy already unzipped it
 	br := bufio.NewReader(body)
 	var src io.Reader = br
 	if magic, _ := br.Peek(2); len(magic) == 2 && magic[0] == 0x1f && magic[1] == 0x8b {

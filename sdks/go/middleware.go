@@ -28,8 +28,7 @@ type annotations struct {
 	requestID string
 	method    string
 	path      string
-	// traceID is the W3C trace the request belongs to (traceparent), for
-	// the log lines it writes.
+	// traceID comes from traceparent, for the request's log lines.
 	traceID string
 
 	mu    sync.Mutex
@@ -40,7 +39,7 @@ type annotations struct {
 	// errs are errors captured during the request, written when it ends so
 	// they carry its final route and user.
 	errs []*errorRecord
-	// logs are lines below the level, held until the request ends.
+	// held until the request ends
 	logs *heldLogs
 	done bool
 }
@@ -268,8 +267,7 @@ func (c *httpCounters) observe(status int) {
 	}
 }
 
-// traceParentID is the trace id of a W3C traceparent header
-// ("00-<32 hex>-<16 hex>-<2 hex>"), or "" when there is none.
+// traceParentID returns the trace id of a W3C traceparent header, or "".
 func traceParentID(h string) string {
 	parts := strings.Split(strings.TrimSpace(h), "-")
 	if len(parts) < 4 || len(parts[1]) != 32 || strings.Trim(parts[1], "0") == "" {

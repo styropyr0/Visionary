@@ -67,8 +67,7 @@ type retentionKind struct {
 	Description string `json:"description"`
 	DefaultDays int    `json:"default_days"`
 	tables      []string
-	// where narrows the rows of the tables this kind covers, for a table
-	// split between kinds; a constant of this package, never input.
+	// splits a table shared between kinds; always a package constant, never input
 	where string
 }
 
@@ -103,8 +102,7 @@ type liveSettings struct {
 	// Config holds the stored config.* values by key (Settings → Server);
 	// never sent as is, since some are secrets.
 	Config map[string]string `json:"-"`
-	// Logs is Settings → Logs as the SDKs read it (logs.*); LogServer the
-	// options only the server uses (logserver.*).
+	// logs.* as the SDKs read it, and the server-only logserver.*
 	Logs      *logrules.Settings `json:"-"`
 	LogServer *logServerSettings `json:"-"`
 }

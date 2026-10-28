@@ -119,7 +119,6 @@ function ticks(total: number): number[] {
   return [0, 0.25, 0.5, 0.75, 1].map((f) => f * total);
 }
 
-/** A line the request logged, placed on its time axis. */
 export interface LogMark {
   id: number;
   offset: number;
@@ -130,7 +129,6 @@ export interface LogMark {
 /**
  * The calls a request made, on the request's own time axis: where each one
  * started (offset) and how long it took. Click a row for the statement or URL.
- * Lines the request logged sit between them at the moment they were logged.
  */
 export function Waterfall({ spans, requestMs, logs = [], onOpenLog }: { spans: SpanRow[]; requestMs: number; logs?: LogMark[]; onOpenLog?: (id: number) => void }) {
   const [open, setOpen] = useState<Set<number>>(new Set());

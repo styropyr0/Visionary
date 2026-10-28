@@ -8,6 +8,5 @@ import "os"
 // use it only run on Linux.
 func statOwner(os.FileInfo) (uid, gid uint32, ctime int64) { return 0, 0, 0 }
 
-// fileID has no inode to go by here; rotation is noticed when a file
-// shrinks.
+// No inode here, so rotation is only noticed when a file shrinks.
 func fileID(os.FileInfo) string { return "" }

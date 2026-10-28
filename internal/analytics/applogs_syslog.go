@@ -15,13 +15,10 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// The syslog receiver: RFC 5424 and RFC 3164 messages over UDP and TCP
-// (newline-delimited or octet-counted), on the address in Settings → Logs,
-// off while it is empty. Syslog has no keys: listen on a private address or
-// behind a firewall. Lines are batched for a second before they are stored.
+// Syslog has no auth: bind it to a private address or put it behind a firewall.
 
 type syslogRunner struct {
-	// ctx is the server's, which the listeners live on.
+	// the server's ctx; listeners live as long as it
 	ctx   context.Context
 	mu    sync.Mutex
 	addr  string
@@ -37,8 +34,6 @@ func (s *Server) syslog() *syslogRunner {
 	return v.(*syslogRunner)
 }
 
-// syslogStart follows the setting: it (re)binds when the address changes
-// and flushes received lines every second.
 func (s *Server) syslogStart(ctx context.Context) {
 	rn := s.syslog()
 	rn.mu.Lock()
@@ -78,7 +73,6 @@ func (s *Server) syslogStart(ctx context.Context) {
 	}()
 }
 
-// syslogApply binds addr, or stops listening when it is empty.
 func (s *Server) syslogApply(ctx context.Context, addr string) {
 	rn := s.syslog()
 	rn.mu.Lock()
@@ -120,8 +114,7 @@ func (s *Server) syslogApply(ctx context.Context, addr string) {
 	go s.syslogTCP(lctx, ln)
 }
 
-// syslogReapply applies a changed address at once rather than within 30
-// seconds; before the receiver has started it does nothing.
+// syslogReapply applies a new address now instead of on the next 30s check.
 func (s *Server) syslogReapply() {
 	rn := s.syslog()
 	rn.mu.Lock()
@@ -132,7 +125,6 @@ func (s *Server) syslogReapply() {
 	}
 }
 
-// syslogStatus is what Settings shows: the address bound and any error.
 func (s *Server) syslogStatus() (addr, errText string) {
 	rn := s.syslog()
 	rn.mu.Lock()
@@ -203,8 +195,7 @@ func (s *Server) syslogTCP(ctx context.Context, ln net.Listener) {
 	}
 }
 
-// readSyslogFrame reads one message: octet-counted ("123 <34>1 ...", RFC
-// 6587) when it starts with a length, else up to the next newline.
+// readSyslogFrame handles octet-counted (RFC 6587) and newline-delimited framing.
 func readSyslogFrame(r *bufio.Reader) (string, error) {
 	b, err := r.Peek(1)
 	if err != nil {
@@ -255,7 +246,7 @@ func syslogSev(pri int) int {
 var syslogFacilities = []string{"kern", "user", "mail", "daemon", "auth", "syslog", "lpr", "news", "uucp", "cron", "authpriv", "ftp", "ntp", "audit", "alert", "clock",
 	"local0", "local1", "local2", "local3", "local4", "local5", "local6", "local7"}
 
-// parseSyslog reads one message; a line in neither format is kept as it is.
+// parseSyslog keeps a line in neither format as is.
 func parseSyslog(msg, defaultService string) *logLine {
 	msg = strings.TrimRight(strings.TrimPrefix(msg, "\ufeff"), "\r\n\x00")
 	if strings.TrimSpace(msg) == "" {

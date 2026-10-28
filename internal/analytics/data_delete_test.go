@@ -38,8 +38,7 @@ func TestDeleteLogsInRange(t *testing.T) {
 		h(w, r)
 		return w
 	}
-	// Two old lines, and the pattern seen only then; the pattern that goes on
-	// after the range stays.
+	// two old lines and the pattern seen only then; a pattern still logged after the range stays
 	w := call(s.handleDataPreview)
 	var out struct {
 		Counts []dataCount `json:"counts"`

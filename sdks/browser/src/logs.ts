@@ -13,7 +13,6 @@ const METHODS: [keyof Console, LogLevel][] = [
   ["error", "error"],
 ];
 
-/** One argument as text, the way the console would print it, roughly. */
 function text(v: unknown): string {
   if (typeof v === "string") return v;
   if (v instanceof Error) return `${v.name}: ${v.message}`;
@@ -24,11 +23,6 @@ function text(v: unknown): string {
   }
 }
 
-/**
- * Sends lines to Logs, with the page they were logged on: log(), and the
- * console when captureConsole is on. Lines from this SDK and beyond the
- * per-minute cap are not sent.
- */
 export function makeLogger(report: Report) {
   let minute = 0;
   let count = 0;
@@ -51,7 +45,6 @@ export function makeLogger(report: Report) {
   return send;
 }
 
-/** Wraps the console so lines also go to Logs; it still prints as before. */
 export function captureConsole(send: (level: LogLevel, message: string) => void, min: LogLevel = "info") {
   for (const [method, level] of METHODS) {
     if (ORDER[level] < ORDER[min]) continue;

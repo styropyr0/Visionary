@@ -14,19 +14,6 @@ import (
 	"github.com/styropyr0/visionary/internal/db"
 )
 
-// The Logs page's API. Every endpoint takes the dashboard range (from, to)
-// and the search (q), and only reads app_logs rows the viewer may see (see
-// logScope).
-//
-//	GET /api/applogs                 a page of lines, newest first (before=id for the next)
-//	GET /api/applogs/histogram       lines per bucket and level
-//	GET /api/applogs/fields          the fields seen, or the top values of one (field=)
-//	GET /api/applogs/{id}            one line in full
-//	GET /api/applogs/{id}/context    the lines around it from the same source
-//	GET /api/applogs/tail            new lines as they arrive (server-sent events)
-//	GET /api/applogs/export          the matching lines as CSV or NDJSON
-//	GET/POST/DELETE /api/applogs/views  saved searches
-
 const (
 	logsPage       = 200
 	logsExportMax  = 50000
@@ -34,7 +21,6 @@ const (
 	logsTailWindow = 30 * time.Minute
 )
 
-// logListColumns are what the list shows; the detail has everything.
 const logListColumns = `id, created_at, level, severity, service, source, host, container, logger, message, attrs, request_id, trace_id, user_id, code_file, code_line, pattern`
 
 func (s *Server) applogsAPIRoutes(mux *http.ServeMux) {
@@ -51,8 +37,6 @@ func (s *Server) applogsAPIRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/applogs/{id}/context", s.authed(s.handleAppLogContext))
 }
 
-// logSearch is a compiled search over a range: the WHERE clause and its
-// arguments, ready to be extended.
 type logSearch struct {
 	tr    timeRange
 	where []string
@@ -62,7 +46,6 @@ type logSearch struct {
 
 func (ls *logSearch) sql() string { return strings.Join(ls.where, " AND ") }
 
-// logSearchOf reads range, q and the viewer's limits from the request.
 func (s *Server) logSearchOf(r *http.Request) (*logSearch, error) {
 	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
 	if err != nil {
@@ -89,10 +72,9 @@ func (s *Server) logSearchFor(r *http.Request, tr timeRange, q string) (*logSear
 	return ls, nil
 }
 
-// onD1 reports a Cloudflare D1 database, which lacks some SQLite features.
+// onD1 reports Cloudflare D1, which lacks some SQLite features.
 func (s *Server) onD1() bool { return strings.Contains(s.db.Name(), "D1") }
 
-// logFail answers a search error as 400 and anything else as fail does.
 func (s *Server) logFail(w http.ResponseWriter, err error) {
 	var qe *logQueryError
 	if errors.As(err, &qe) {
@@ -102,11 +84,9 @@ func (s *Server) logFail(w http.ResponseWriter, err error) {
 	s.fail(w, err)
 }
 
-// logResult is a page of lines with what the page needs to show them.
 type logResult struct {
 	*Result
-	Terms []string `json:"terms"`
-	// Masked are the fields hidden from this viewer.
+	Terms  []string `json:"terms"`
 	Masked []string `json:"masked,omitempty"`
 }
 
@@ -160,11 +140,8 @@ func (s *Server) handleAppLogsHistogram(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, newResult(rows, 100000, "", ls.tr))
 }
 
-// fieldColumns are the columns the field list offers, in its order.
 var fieldColumns = []string{"level", "service", "source", "host", "container", "logger", "version", "instance", "code_file", "user_id", "request_id", "trace_id", "pattern"}
 
-// handleAppLogsFields lists the fields of matching lines with how many
-// carry each, or, with field=, the top values of one field.
 func (s *Server) handleAppLogsFields(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -181,7 +158,6 @@ func (s *Server) handleAppLogsFields(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"field": field, "values": values, "total": total})
 		return
 	}
-	// Sample the newest matching lines for their fields.
 	q := `SELECT ` + strings.Join(fieldColumns[1:], ", ") + `, attrs FROM app_logs WHERE ` + ls.sql() + ` ORDER BY created_at DESC LIMIT ` + strconv.Itoa(logsFieldScan)
 	rows, err := s.db.Query(ctx, q, ls.args...)
 	if err != nil {
@@ -261,7 +237,7 @@ func (s *Server) topLogValues(ctx context.Context, ls *logSearch, field string, 
 	} else {
 		p := &queryParser{d: s.q}
 		expr = p.attr(strings.TrimPrefix(field, "attrs."))
-		// The field's path is bound before the WHERE arguments.
+		// the path's arg is bound before the WHERE args
 		args = append(p.args, args...)
 	}
 	q := `SELECT v, COUNT(*) AS n FROM (SELECT ` + expr + ` AS v FROM app_logs WHERE ` + ls.sql() + ` ORDER BY created_at DESC LIMIT ` + strconv.Itoa(logsFieldScan*4) + `) AS s WHERE v IS NOT NULL GROUP BY v ORDER BY n DESC LIMIT 10`
@@ -321,8 +297,7 @@ func rowMap(res *Result, i int) map[string]any {
 	return m
 }
 
-// handleAppLogContext returns the lines logged around one: by the same
-// container, else host, else instance, else service; n before and after.
+// handleAppLogContext returns lines around one from the same container, else host, instance or service.
 func (s *Server) handleAppLogContext(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -387,7 +362,6 @@ func (s *Server) handleAppLogContext(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, dbErr(err))
 		return
 	}
-	// Oldest first: the earlier lines reversed, then the line and later ones.
 	out := &Result{Columns: a.Columns}
 	for i := len(b.Rows) - 1; i >= 0; i-- {
 		out.Rows = append(out.Rows, b.Rows[i])
@@ -400,10 +374,6 @@ func (s *Server) handleAppLogContext(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"result": out, "by": by, "value": val, "id": id})
 }
 
-// handleAppLogsAround returns the lines logged shortly before and after a
-// moment by one source (service, instance, host or container, as given):
-// what a service said around an error, a failed uptime check, an OOM kill
-// or a crash.
 func (s *Server) handleAppLogsAround(w http.ResponseWriter, r *http.Request) {
 	qs := r.URL.Query()
 	at, err := time.Parse(time.RFC3339Nano, qs.Get("at"))
@@ -446,8 +416,6 @@ func (s *Server) handleAppLogsAround(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// handleAppLogsTail streams lines newer than the last one sent, polling
-// the table every second, for at most 30 minutes per connection.
 func (s *Server) handleAppLogsTail(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	now := time.Now().UTC()
@@ -512,8 +480,6 @@ func (s *Server) handleAppLogsTail(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAppLogsExport writes the matching lines, newest first, as CSV or
-// NDJSON (format=), at most 50 000.
 func (s *Server) handleAppLogsExport(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.logSearchOf(r)
 	if err != nil {
@@ -562,8 +528,6 @@ func (s *Server) handleAppLogsExport(w http.ResponseWriter, r *http.Request) {
 		_ = enc.Encode(m)
 	}
 }
-
-// Saved searches.
 
 type logView struct {
 	ID        int64    `json:"id"`
@@ -643,8 +607,7 @@ func (s *Server) handleDeleteLogView(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// logScope limits what a viewer reads (Settings → Logs → Access): viewers
-// don't see the hidden services. Editors and admins see everything.
+// logScope hides the hidden services from viewers; editors and admins see everything.
 func (s *Server) logScope(r *http.Request) (string, []any) {
 	if r == nil || s.can(r, "edit") {
 		return "", nil
@@ -661,7 +624,6 @@ func (s *Server) logScope(r *http.Request) (string, []any) {
 	return "(service IS NULL OR service NOT IN (" + marks + "))", args
 }
 
-// maskedLogFields are the fields viewers see as [hidden].
 func (s *Server) maskedLogFields(r *http.Request) []string {
 	if r == nil || s.can(r, "edit") {
 		return nil
@@ -669,7 +631,6 @@ func (s *Server) maskedLogFields(r *http.Request) []string {
 	return s.logAccess().MaskedFields
 }
 
-// maskLogRows hides masked fields in attrs for viewers; it returns them.
 func (s *Server) maskLogRows(r *http.Request, res *Result) []string {
 	masked := s.maskedLogFields(r)
 	if len(masked) == 0 {
@@ -711,7 +672,6 @@ func (s *Server) maskLogRows(r *http.Request, res *Result) []string {
 	return masked
 }
 
-// logAccessSettings are Settings → Logs → Access.
 type logAccessSettings struct {
 	HiddenServices []string `json:"hidden_services"`
 	MaskedFields   []string `json:"masked_fields"`

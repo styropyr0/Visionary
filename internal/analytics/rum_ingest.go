@@ -102,7 +102,6 @@ func (s *Server) handleClientIngest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Log lines go to app_logs with the server's other logs.
 	rows, lines := clientLogLines(rows)
 	s.ingestClientLogs(lines)
 	if len(rows) > 0 && !st.writer.enqueue(rows) {
@@ -493,7 +492,7 @@ func normalizeURLPath(u string) string {
 type rumLimiter struct {
 	s         *Server
 	mu        sync.Mutex
-	ips, keys     map[string]*seenLimiter
+	ips, keys map[string]*seenLimiter
 }
 
 type seenLimiter struct {
@@ -505,7 +504,9 @@ func newRUMLimiter(s *Server) *rumLimiter {
 	return &rumLimiter{s: s, ips: map[string]*seenLimiter{}, keys: map[string]*seenLimiter{}}
 }
 
-func (l *rumLimiter) allowIP(ip string) bool { return l.allow(l.ips, ip, l.s.confInt("client_rate_per_ip")) }
+func (l *rumLimiter) allowIP(ip string) bool {
+	return l.allow(l.ips, ip, l.s.confInt("client_rate_per_ip"))
+}
 
 // allowKey limits by the key's hash, so the map never holds keys themselves.
 func (l *rumLimiter) allowKey(key string) bool {

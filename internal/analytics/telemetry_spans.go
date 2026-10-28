@@ -49,7 +49,6 @@ LIMIT 20`, tr, rid)
 		return
 	})
 	g.Go(func() (err error) {
-		// The lines the request logged, for the waterfall and its Logs tab.
 		q, args := `SELECT id, created_at, level, severity, logger, message, attrs, code_file, code_line, pattern
 FROM app_logs WHERE request_id = ?`, []any{rid}
 		if scope, sargs := s.logScope(r); scope != "" {

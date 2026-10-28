@@ -18,7 +18,6 @@ using Xunit;
 
 namespace Styropyr0.Visionary.Tests;
 
-/// <summary>Application logs (SPEC.md "Application logs"); mirrors sdks/go/logs_test.go and logrules_test.go.</summary>
 [Collection(BackgroundTests.AgentCollection)]
 public sealed class LogsTests : IDisposable
 {
@@ -41,7 +40,6 @@ public sealed class LogsTests : IDisposable
         }
     }
 
-    /// <summary>An agent with log capture on, its settings from <paramref name="rows"/>, and a logger factory set up like AddVisionary does.</summary>
     private (VisionaryAgent Agent, ILoggerFactory Loggers) Setup(params string[][] rows)
     {
         var o = new VisionaryOptions { DatabaseUrl = "sqlite:///" + _db.Replace('\\', '/'), Service = "api", LogsAdded = true };
@@ -66,11 +64,9 @@ public sealed class LogsTests : IDisposable
         return list;
     }
 
-    /// <summary>The lines in the order they were logged, which is the order they are stored in.</summary>
     private static string Messages(IEnumerable<LogRecord> recs) =>
         string.Join(",", recs.OrderBy(r => r.At).Select(r => r.Message));
 
-    /// <summary>Runs one request through the middleware; the handler logs, then answers after taking <paramref name="tookMs"/>.</summary>
     private static async Task Serve(VisionaryAgent agent, ILoggerFactory loggers, string route, int status, int tookMs, string? user,
         Action<ILogger> log, Exception? fail = null)
     {
@@ -105,7 +101,7 @@ public sealed class LogsTests : IDisposable
         }
     }
 
-    /// <summary>Logs a little apart, so the lines' times order them.</summary>
+    // Spaced apart so their timestamps order them.
     private static void ThreeLines(ILogger l)
     {
         l.LogDebug("debug line");
@@ -298,8 +294,7 @@ public sealed class LogsTests : IDisposable
         l.LogDebug("quiet");
         l.LogWarning("loud");
         Assert.Equal(new[] { "loud" }, other.Lines);
-        // Visionary saw the debug line (outside a request it is below the level, so not kept),
-        // which is what lets a failed request keep it.
+        // Visionary still sees debug lines, so a failed request can keep them.
         Assert.True(l.IsEnabled(LogLevel.Debug));
         Assert.False(l.IsEnabled(LogLevel.Trace));
         Assert.Equal("loud", Messages(Queued(agent)));

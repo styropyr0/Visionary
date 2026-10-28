@@ -12,12 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
 
 /**
- * With {@code VISIONARY_LOG_CAPTURE=true}, adds a {@link VisionaryLogbackAppender}
- * to Logback's root logger while the agent runs, next to the appenders already
- * there. Levels, filters and the other appenders are left as they are, so what
- * the application prints does not change. Does nothing by default (capture is
- * opt-in), when SLF4J is bound to another backend, when logs are off, or when
- * the application's Logback configuration already has one.
+ * With {@code VISIONARY_LOG_CAPTURE=true}, adds the appender to the root logger. Levels and
+ * other appenders are left alone, so what the application prints doesn't change.
  */
 final class LogbackInstaller implements SmartLifecycle {
 
@@ -27,10 +23,7 @@ final class LogbackInstaller implements SmartLifecycle {
     private VisionaryLogbackAppender appender;
     private volatile boolean running;
 
-    /**
-     * @param logs   null when logs are off
-     * @param attach {@code VISIONARY_LOG_CAPTURE}: add the appender to the root logger
-     */
+    /** @param logs null when logs are off */
     LogbackInstaller(AppLogs logs, boolean attach) {
         this.logs = logs;
         this.attach = attach;
@@ -59,7 +52,7 @@ final class LogbackInstaller implements SmartLifecycle {
         a.setContext(context);
         a.setName("VISIONARY");
         a.start();
-        // Added last: appenders run in order, so caller data a console pattern asks for is already there.
+        // Added last so caller data a console pattern asks for is already computed.
         r.addAppender(a);
         root = r;
         appender = a;
@@ -84,7 +77,7 @@ final class LogbackInstaller implements SmartLifecycle {
         return running;
     }
 
-    /** Starts after the agent (so lines have somewhere to go) and stops before it. */
+    /** Starts after the agent so lines have somewhere to go, and stops before it. */
     @Override
     public int getPhase() {
         return SmartLifecycle.DEFAULT_PHASE - 4095;

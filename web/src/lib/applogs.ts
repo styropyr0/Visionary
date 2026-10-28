@@ -6,7 +6,6 @@ export type Level = (typeof LEVELS)[number];
 
 export const LEVEL_LABEL: Record<Level, string> = { trace: "Trace", debug: "Debug", info: "Info", warn: "Warn", error: "Error", fatal: "Fatal" };
 
-/** Level colors, from the theme's status tokens. */
 export const LEVEL_COLOR: Record<Level, string> = {
   trace: "var(--text-3)",
   debug: "var(--series-6)",
@@ -21,7 +20,7 @@ export function asLevel(v: unknown): Level {
   return (LEVELS as readonly string[]).includes(s) ? (s as Level) : "info";
 }
 
-/** A list row: the columns of logListColumns on the server, as an object. */
+/** Mirrors logListColumns on the server. */
 export interface LogLine {
   id: number;
   created_at: string;
@@ -42,7 +41,6 @@ export interface LogLine {
   pattern: string | null;
 }
 
-/** Rows of a Result as lines, attrs parsed. */
 export function toLines(res: Result | undefined): LogLine[] {
   if (!res) return [];
   return res.rows.map((row) => {
@@ -185,18 +183,16 @@ export const logsApi = {
   tailUrl: (q: string, after?: number) => `/api/applogs/tail?${new URLSearchParams({ q, ...(after ? { after: String(after) } : {}) })}`,
 };
 
-/** Quotes a value for the search when it needs it. */
 export function quoteValue(v: unknown): string {
   const s = String(v ?? "");
   return /^[A-Za-z0-9_.\-/@:]+$/.test(s) && !s.includes(":") ? s : `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-/** A field:value term, or -field:value to exclude it. */
 export function fieldTerm(field: string, value: unknown, exclude = false): string {
   return `${exclude ? "-" : ""}${field}:${quoteValue(value)}`;
 }
 
-/** Adds a term to a search unless it is already there; replaces its opposite. */
+/** Skips a term already there and replaces its opposite. */
 export function addTerm(q: string, term: string): string {
   const opposite = term.startsWith("-") ? term.slice(1) : `-${term}`;
   const parts = q.trim() ? q.trim().split(/\s+(?=(?:[^"]*"[^"]*")*[^"]*$)/) : [];
@@ -205,7 +201,6 @@ export function addTerm(q: string, term: string): string {
   return [...kept, term].join(" ");
 }
 
-/** A link to the Logs page with a search, and optionally a range. */
 export function logsHref(q: string, range?: { from: Date | string; to: Date | string }): string {
   const p = new URLSearchParams();
   if (q) p.set("q", q);
@@ -217,15 +212,13 @@ export function logsHref(q: string, range?: { from: Date | string; to: Date | st
   return `#/applogs${qs ? `?${qs}` : ""}`;
 }
 
-/** The longest literal run of a template, to match its lines by text. */
+/** Longest literal run of a template, for matching its lines by text. */
 export function templateLiteral(template: string): string {
   return template
     .split("<*>")
     .map((s) => s.trim())
     .reduce((a, b) => (b.length > a.length ? b : a), "");
 }
-
-// Settings → Logs.
 
 export interface LogOverride {
   service: string;
@@ -310,7 +303,6 @@ export const archiveApi = {
     }),
 };
 
-/** Creates an alert rule from a search: "alert me when this happens again". */
 export function alertFromSearch(name: string, query: string, service?: string) {
   return api<{ id: number }>("/api/alerts/rules", {
     method: "POST",

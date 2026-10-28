@@ -83,7 +83,6 @@ function writeHash(q: string, tab: Tab) {
   window.history.replaceState(null, "", `#/applogs${qs ? `?${qs}` : ""}`);
 }
 
-/** Per-viewer choice of extra columns; storage may be unavailable. */
 function loadColumns(): string[] {
   try {
     const v = JSON.parse(localStorage.getItem("va.logs.columns") ?? "[]");
@@ -97,7 +96,7 @@ function saveColumns(cols: string[]) {
   try {
     localStorage.setItem("va.logs.columns", JSON.stringify(cols));
   } catch {
-    // A convenience only.
+    // localStorage may be unavailable.
   }
 }
 
@@ -108,7 +107,7 @@ export function AppLogs() {
   const [tab, setTabState] = useState<Tab>(initial.tab);
   const [q, setQ] = useState(initial.q);
 
-  // A link with a range (from an error, a deploy, a chart) pins it.
+  // A linked range (from an error, a deploy, a chart) pins it.
   useEffect(() => {
     if (initial.from && initial.to) setRange({ kind: "absolute", from: initial.from, to: initial.to });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,8 +178,6 @@ export function AppLogs() {
   );
 }
 
-// ── Search ────────────────────────────────────────────────────────────────
-
 function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
   const { range, resolved, tick, setRange } = useApp();
   const meta = useMeta();
@@ -192,7 +189,7 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
   const [columns, setColumns] = useState<string[]>(loadColumns);
   const [pages, setPages] = useState<LogResult[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
-  // #/applogs?line=123 opens a line, for links that point at one.
+  // #/applogs?line=123 opens that line.
   const [selected, setSelected] = useState<LogLine | null>(() => {
     const id = Number(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("line"));
     return id > 0 ? ({ id } as LogLine) : null;
@@ -207,7 +204,6 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
 
   useEffect(() => setDraft(q), [q]);
 
-  // A link to a line while the page is open.
   useEffect(() => {
     const on = () => {
       const id = Number(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("line"));
@@ -217,7 +213,6 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
     return () => window.removeEventListener("hashchange", on);
   }, []);
 
-  // The search sent: the typed query plus the quick filters.
   const full = useMemo(() => [q, level, service ? fieldTerm("service", service) : ""].filter(Boolean).join(" "), [q, level, service]);
   const key = `${resolved.from.getTime()}-${resolved.to.getTime()}-${tick}-${full}`;
   const first = useQuery(live ? null : `applogs:${key}`, (signal) => logsApi.list(resolved.from, resolved.to, full, {}, signal));
@@ -245,7 +240,6 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
     }
   };
 
-  // Live tail: new lines stream in at the top, newest first.
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   useEffect(() => {
@@ -263,7 +257,7 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
       toast("ok", "Live tail stopped after 30 minutes.");
     });
     es.onerror = () => {
-      // The browser reconnects on its own; nothing to do.
+      // EventSource reconnects on its own.
     };
     return () => es.close();
   }, [live, full, toast]);
@@ -300,8 +294,7 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
   };
 
   const filterBy = (field: string, value: unknown, exclude = false) => onSearch(addTerm(q, fieldTerm(field, value, exclude)));
-  // Each zoom remembers the range it came from, so Zoom out steps back
-  // through them; past the first, or after picking a range, it doubles the span.
+  // Zoom out steps back through earlier zooms, then doubles the span.
   const zooms = useRef<{ from: TimeRange; to: TimeRange }[]>([]);
   const zoom = (from: Date, to: Date) => {
     const next: TimeRange = { kind: "absolute", from: from.toISOString(), to: to.toISOString() };
@@ -500,7 +493,6 @@ function SearchTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }
   );
 }
 
-/** The analyst's text, with #123 line references as links. */
 function ExplainText({ text, onOpen }: { text: string; onOpen: (id: number) => void }) {
   return (
     <div className="lg-explain-text">
@@ -625,9 +617,7 @@ function SavedSearches({ q, columns, onPick }: { q: string; columns: string[]; o
   );
 }
 
-// ── Histogram ─────────────────────────────────────────────────────────────
-
-/** Lines per bucket stacked by level; drag across it to zoom the range. */
+/** Drag across it to zoom the range. */
 function Histogram({ result, from, to, onZoom }: { result?: Result; from: Date; to: Date; onZoom: (from: Date, to: Date) => void }) {
   const bucket = result?.bucket ?? 60;
   const buckets = useMemo(() => {
@@ -704,8 +694,6 @@ function Histogram({ result, from, to, onZoom }: { result?: Result; from: Date; 
     </div>
   );
 }
-
-// ── Fields ────────────────────────────────────────────────────────────────
 
 function FieldSidebar({
   fields,
@@ -793,13 +781,10 @@ function FieldValues({ field, from, to, q, onFilter }: { field: string; from: Da
   );
 }
 
-// ── Table ─────────────────────────────────────────────────────────────────
-
 export function LevelBadge({ level }: { level: Level }) {
   return <span className={`lg-level lv-${level}`}>{level}</span>;
 }
 
-/** The message with the searched words marked. */
 function Highlight({ text, terms }: { text: string; terms: string[] }) {
   const words = terms.filter((t) => t.length > 0);
   if (words.length === 0) return <>{text}</>;
@@ -899,11 +884,9 @@ export function LogTable({
   );
 }
 
-// ── One line ──────────────────────────────────────────────────────────────
-
 const COLUMN_FIELDS = ["service", "source", "host", "container", "logger", "instance", "version", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line", "code_func", "pattern"];
 
-/** Which search field a column is filtered by. */
+/** Columns whose search field has a different name. */
 const FILTER_FIELD: Record<string, string> = { request_id: "request", trace_id: "trace", span_id: "span", user_id: "user", session_id: "session", code_file: "file", code_line: "line", code_func: "func" };
 
 export function LogLineDrawer({
@@ -1106,8 +1089,6 @@ function ContextLines({ id }: { id: number }) {
   );
 }
 
-// ── Syntax ────────────────────────────────────────────────────────────────
-
 const SYNTAX: [string, string][] = [
   ["timeout", "The message contains timeout (any case)"],
   ['"connection refused"', "The message contains the phrase"],
@@ -1145,7 +1126,6 @@ function SyntaxHelp({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** A small panel of the lines a source logged around a moment, for other pages. */
 export function LogsAround({
   at,
   scope,

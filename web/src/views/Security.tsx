@@ -287,7 +287,7 @@ function SecurityPage() {
   );
 }
 
-/** Opens Requests on one IP, over the range shown (or the one given). */
+/** Opens Requests filtered to one IP. */
 function openLogs(ip: string, from?: string, to?: string, setRange?: (r: { kind: "absolute"; from: string; to: string }) => void) {
   if (from && to && setRange) setRange({ kind: "absolute", from, to });
   window.location.hash = `#/logs?ip=${encodeURIComponent(ip)}`;

@@ -14,25 +14,19 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// LogHandler wraps an slog.Handler so every record also goes to Visionary's
-// app_logs, linked to the request when it was logged with the request's
-// context (slog.InfoContext(r.Context(), ...)). next still gets exactly what
-// it got before, at its own level; Visionary sees lower levels too, so the
-// buffer can keep a failed request's debug lines.
+// LogHandler wraps next so every record also goes to Visionary, linked to the
+// request when logged with its context. next still gets exactly what it did
+// before; it may be nil to send records only to Visionary.
 //
 //	slog.SetDefault(slog.New(visionary.LogHandler(slog.NewJSONHandler(os.Stdout, nil))))
-//
-// next may be nil to send records only to Visionary. Records are captured by
-// the Agent that handles the request in ctx, else the most recently started
-// one; before any Agent starts they only reach next.
 func LogHandler(next slog.Handler) slog.Handler {
 	return &slogHandler{next: next}
 }
 
 type slogHandler struct {
 	next   slog.Handler
-	attrs  []slog.Attr // from WithAttrs, already prefixed by their groups
-	groups string      // "a.b." for WithGroup("a").WithGroup("b")
+	attrs  []slog.Attr
+	groups string // "a.b." for WithGroup("a").WithGroup("b")
 }
 
 func (h *slogHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -88,8 +82,7 @@ func prefixAttrs(prefix string, attrs []slog.Attr) []slog.Attr {
 	return out
 }
 
-// slogSev maps slog's levels (Debug -4, Info 0, Warn 4, Error 8) and the
-// steps between them onto the stored severities.
+// slog levels are Debug -4, Info 0, Warn 4, Error 8, with steps between.
 func slogSev(l slog.Level) int {
 	switch {
 	case l < slog.LevelDebug:
@@ -127,7 +120,6 @@ func (h *slogHandler) record(r slog.Record) *logRecord {
 	return rec
 }
 
-// addAttr flattens a (possibly grouped) attribute into dotted keys.
 func addAttr(out map[string]any, prefix string, a slog.Attr) {
 	v := a.Value.Resolve()
 	if v.Kind() == slog.KindGroup {
@@ -169,8 +161,7 @@ func attrValue(v slog.Value) any {
 	return v.String()
 }
 
-// take moves the attributes that have columns of their own (request_id,
-// trace_id, span_id, user_id, session_id, logger) out of attrs.
+// take moves attributes that have their own columns (request_id, user_id...) out of attrs.
 func (r *logRecord) take(attrs map[string]any) {
 	for _, k := range []string{"request_id", "trace_id", "span_id", "user_id", "session_id", "logger"} {
 		v, ok := attrs[k]
@@ -202,14 +193,9 @@ func (r *logRecord) take(attrs map[string]any) {
 	}
 }
 
-// CaptureStdLog copies every line written through the standard log package
-// (log.Printf, log.Println, and slog's default handler, which writes through
-// it) to Visionary, without changing what the application prints. Lines
-// carry no request context; a level is read from the text when it states one
-// ("ERROR ...", "[warn]", "level=debug"), else they are info.
-//
-// Call it after Start. It returns a function that puts the previous writer
-// back.
+// CaptureStdLog copies lines written through the standard log package to
+// Visionary without changing what is printed. Call it after Start; the
+// returned func puts the previous writer back.
 func (a *Agent) CaptureStdLog() (restore func()) {
 	if a == nil || a.logs == nil {
 		return func() {}
@@ -219,17 +205,15 @@ func (a *Agent) CaptureStdLog() (restore func()) {
 	return func() { log.SetOutput(prev) }
 }
 
-// stdLogWriter turns log package output into records, one per line.
 type stdLogWriter struct {
 	a      *Agent
 	flags  int
 	prefix string
 	mu     sync.Mutex
-	rest   []byte // a line not yet ended
+	rest   []byte
 }
 
-// Write gets one log call's output at a time, ending in a newline; a call
-// that prints several lines (a stack trace) stays one record.
+// A log call that prints several lines (a stack trace) stays one record.
 func (w *stdLogWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	w.rest = append(w.rest, p...)
@@ -265,8 +249,7 @@ func (w *stdLogWriter) line(s string) {
 	w.a.logs.capture(context.Background(), rec)
 }
 
-// stripStdHeader removes the date, time and file the log flags put before
-// the message: "2026/10/28 09:30:12.123456 main.go:42: ".
+// stripStdHeader removes the log flags' prefix: "2026/10/28 09:30:12.123456 main.go:42: ".
 func stripStdHeader(s string, flags int) string {
 	if flags&(log.Ldate|log.Ltime|log.Lmicroseconds) != 0 {
 		n := 0
@@ -290,8 +273,7 @@ func stripStdHeader(s string, flags int) string {
 	return s
 }
 
-// callerOutside finds the first frame of the application above the log
-// machinery: outside the SDK, the runtime and the given packages.
+// callerOutside skips frames in the SDK, the runtime and the given packages.
 func callerOutside(pkgs ...string) (runtime.Frame, bool) {
 	pcs := make([]uintptr, 24)
 	n := runtime.Callers(3, pcs)
@@ -319,14 +301,11 @@ func containsStr(list []string, s string) bool {
 
 var logNamer = sync.OnceValue(newFrameNamer)
 
-// codeFile names a source file the way CPU profiles do: relative to the
-// project for the application's own code, lib:/std: for the rest.
+// codeFile names files like CPU profiles do: project-relative, else lib:/std:.
 func codeFile(path, fn string) string {
 	return logNamer().file(path, fn)
 }
 
-// shortFunc drops the import path: "github.com/a/b/pkg.(*T).Method" →
-// "pkg.(*T).Method".
 func shortFunc(fn string) string {
 	if i := strings.LastIndexByte(fn, '/'); i >= 0 {
 		return fn[i+1:]

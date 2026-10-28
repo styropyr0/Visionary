@@ -19,16 +19,12 @@ export type Item = { entry: Entry } | { table: Table; args: Value[] } | { log: L
 export interface WriterOptions {
   /** Rows waiting at most (default 5000); past it they are dropped and counted. */
   queueSize?: number;
-  /** Builds an app_logs row from a captured line, on the writer. */
   logRow?: (r: LogRecord) => Value[];
 }
 
 /**
- * A background writer: api_logs, spans, errors and releases rows are queued
- * without blocking and written in batches of up to 50, every 3 s or as soon
- * as 50 are waiting. A full queue drops rows and counts them. Application
- * logs have a writer of their own, so a flood of lines never crowds out
- * request rows.
+ * Queues rows without blocking and writes them in batches of up to 50, every 3 s or once
+ * 50 are waiting. A full queue drops rows and counts them.
  */
 export class Writer {
   private queue: Item[] = [];

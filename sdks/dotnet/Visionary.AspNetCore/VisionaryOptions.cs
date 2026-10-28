@@ -114,13 +114,11 @@ public sealed class VisionaryOptions
     public bool Profile { get; set; } = true;
 
     /// <summary>
-    /// VISIONARY_LOGS (default true): copy what the application logs through <c>ILogger</c> into
-    /// app_logs, once <c>builder.Logging.AddVisionary()</c> routes the logs here. False turns it
-    /// off. Which lines are kept follows the dashboard (Settings, Logs).
+    /// VISIONARY_LOGS (default true): capture <c>ILogger</c> output once <c>builder.Logging.AddVisionary()</c> is called.
     /// </summary>
     public bool Logs { get; set; } = true;
 
-    /// <summary>Set by <c>builder.Logging.AddVisionary()</c>: the application routes its logs here.</summary>
+    /// <summary>Set by <c>builder.Logging.AddVisionary()</c>.</summary>
     internal bool LogsAdded { get; set; }
 
     /// <summary>VISIONARY_LOG_LEVEL (default info): the lowest level kept until Settings, Logs has been read.</summary>

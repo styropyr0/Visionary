@@ -6,8 +6,6 @@ require "logger"
 require "stringio"
 require "visionary"
 
-# Application logs: the rules every SDK shares (sdks/go/logrules), holding
-# and deciding lines per request, and the Logger the app writes to.
 class LogsTest < Minitest::Test
   L = Visionary::Logs
 
@@ -19,8 +17,7 @@ class LogsTest < Minitest::Test
 
     def enqueue(item) = @mutex.synchronize { @items << item }
 
-    # The queued records, in the order they were logged (held lines are
-    # queued later).
+    # Sorted by time, since held lines are queued later.
     def take
       @mutex.synchronize { @items.map(&:last).tap { @items.clear } }.sort_by(&:at)
     end
@@ -66,8 +63,6 @@ class LogsTest < Minitest::Test
     Visionary.instance_variable_set(:@agent, @saved_agent)
   end
 
-  # A pipeline with the given settings rows, installed as the running
-  # agent's; its queued lines are read with queued.
   def pipeline(rows = [], service: "api")
     cfg = Visionary::Config.new.tap do |c|
       c.service = service
@@ -85,8 +80,6 @@ class LogsTest < Minitest::Test
   def queued = @writer.take
   def messages = queued.map(&:message).join(",")
 
-  # Runs one request through the middleware; the block logs while it is
-  # handled, and the response has status after taking took seconds.
   def serve(path, status = 200, took: 0, user: nil, &block)
     app = lambda do |_env|
       Visionary.set_user(user) if user
@@ -100,7 +93,7 @@ class LogsTest < Minitest::Test
     body.close
   end
 
-  # Logged a little apart, so the lines' times order them.
+  # A little apart, so their times order them.
   def three_lines(log)
     log.debug("debug line")
     sleep 0.002
@@ -108,8 +101,6 @@ class LogsTest < Minitest::Test
     sleep 0.002
     log.warn("warn line")
   end
-
-  # --- rules ---------------------------------------------------------------
 
   def test_parse_level
     { "WARNING" => L::WARN, "crit" => L::FATAL, "notice" => L::INFO, "Severe" => L::ERROR, "" => 0, "loud" => 0 }
@@ -233,7 +224,7 @@ class LogsTest < Minitest::Test
     parsed = JSON.parse(s)
     assert_operator s.bytesize, :<=, L::MAX_ATTRS
     assert_equal true, parsed["_truncated"]
-    assert parsed.key?("x000000") # kept in sorted order
+    assert parsed.key?("x000000")
     refute parsed.key?("x001999")
   end
 
@@ -259,8 +250,6 @@ class LogsTest < Minitest::Test
     assert_equal "warning", c.log_level
     assert_equal "info", Visionary::Config.from_env("VISIONARY_LOG_LEVEL" => "loud").log_level
   end
-
-  # --- requests ------------------------------------------------------------
 
   def test_debug_kept_only_for_failed_requests
     pipeline
@@ -346,8 +335,6 @@ class LogsTest < Minitest::Test
     assert_equal "", messages
   end
 
-  # --- outside requests, drops and the cap ----------------------------------
-
   def test_outside_requests
     pipeline([["logs.level", "warn"]])
     log = Visionary.logger
@@ -405,8 +392,6 @@ class LogsTest < Minitest::Test
     pipe.poll(FakeStore.new(RuntimeError.new("no such table: visionary_settings")))
     assert_equal L::DEBUG, pipe.settings.level, "keeps the previous values"
   end
-
-  # --- the Logger ------------------------------------------------------------
 
   def test_forwards_to_inner_unchanged
     pipeline([["logs.level", "debug"]])
@@ -487,8 +472,6 @@ class LogsTest < Minitest::Test
     log.info("after")
     assert_equal "kept,after", messages
   end
-
-  # --- rows ------------------------------------------------------------------
 
   def test_row_matches_columns
     pipe = pipeline

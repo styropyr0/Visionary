@@ -91,7 +91,6 @@ public class VisionaryAutoConfiguration {
         return new VisionaryProfiler(agent, appPackages(beanFactory), contextLoader());
     }
 
-    /** The packages of the application's {@code @SpringBootApplication}: its own code in profiles and logs. */
     private static java.util.List<String> appPackages(BeanFactory beanFactory) {
         try {
             if (AutoConfigurationPackages.has(beanFactory)) {
@@ -188,10 +187,7 @@ public class VisionaryAutoConfiguration {
         }
     }
 
-    /**
-     * Application logs: with {@code VISIONARY_LOG_CAPTURE=true}, adds {@link VisionaryLogbackAppender}
-     * to the root logger when the application logs through Logback (Spring Boot's default).
-     */
+    /** Adds the Logback appender to the root logger when {@code VISIONARY_LOG_CAPTURE=true}. */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(name = {LOGBACK, "org.slf4j.LoggerFactory"})
     static class LogbackConfiguration {

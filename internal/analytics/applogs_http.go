@@ -13,21 +13,8 @@ import (
 	"time"
 )
 
-// Log ingest over HTTP, with a server ingest key like OTLP:
-//
-//   - POST /api/ingest/logs: a JSON array of lines, {"logs": [...]}, one
-//     object, NDJSON, or plain text (one line per line). ?service=,
-//     ?source= and ?host= fill what the lines leave out.
-//   - POST /api/ingest/logs/_bulk (and /{index}/_bulk): the Elasticsearch
-//     bulk API, so Filebeat, Fluent Bit, Vector and Logstash send here with
-//     their Elasticsearch output; GET /api/ingest/logs answers their version
-//     check.
-//   - POST /loki/api/v1/push: Loki's JSON push (Promtail, Alloy, Fluent
-//     Bit's loki output, Vector's loki sink with JSON encoding).
-//
-// The key goes in Authorization (Bearer, ApiKey, or Basic with the key as
-// the password), x-visionary-key, or ?key= for shippers that can't set
-// headers.
+// The _bulk and Loki endpoints let Filebeat, Fluent Bit, Vector, Logstash and
+// Promtail ship here with their stock Elasticsearch or Loki outputs.
 
 func (s *Server) applogsIngestRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/ingest/logs", s.logIngestHandler(s.ingestNative))
@@ -38,7 +25,6 @@ func (s *Server) applogsIngestRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /loki/api/v1/push", s.logIngestHandler(s.ingestLoki))
 }
 
-// logIngestKey reads the key from any of the places shippers can put it.
 func logIngestKey(r *http.Request) string {
 	if k := otlpKey(r); k != "" {
 		return k
@@ -62,12 +48,9 @@ func logIngestKey(r *http.Request) string {
 
 type logIngestFunc func(w http.ResponseWriter, r *http.Request, body []byte) ([]*logLine, func(kept int), error)
 
-// errLogBadBody is a body that can't be read as the format the endpoint
-// takes; the sender should not retry it.
+// errLogBadBody means the body can't be parsed; senders shouldn't retry it.
 var errLogBadBody = errors.New("bad body")
 
-// logIngestHandler checks the key and limits, reads the body and stores
-// what the format function parsed; the format function answers.
 func (s *Server) logIngestHandler(parse logIngestFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.ingestKeyValid(logIngestKey(r), "server") {
@@ -122,7 +105,6 @@ func (s *Server) logIngestHandler(parse logIngestFunc) http.HandlerFunc {
 	}
 }
 
-// ingestNative reads Visionary's own format.
 func (s *Server) ingestNative(w http.ResponseWriter, r *http.Request, body []byte) ([]*logLine, func(int), error) {
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	trimmed := bytes.TrimSpace(body)
@@ -155,7 +137,6 @@ func (s *Server) ingestNative(w http.ResponseWriter, r *http.Request, body []byt
 		}
 		lines = append(lines, lineFromObject(obj, "http"))
 	default:
-		// NDJSON, or plain text: one line each.
 		sc := bufio.NewScanner(bytes.NewReader(trimmed))
 		sc.Buffer(make([]byte, 64<<10), otlpMaxBody)
 		for sc.Scan() {
@@ -182,8 +163,6 @@ func decodeNumbers(b []byte, v any) error {
 	return dec.Decode(v)
 }
 
-// lineFromObject reads one structured line: its fields go through the same
-// mapping as JSON messages (message, level, time, service, ids, ...).
 func lineFromObject(obj map[string]any, source string) *logLine {
 	l := &logLine{source: source, attrs: map[string]any{}}
 	fields := map[string]any{}
@@ -199,9 +178,7 @@ func lineFromObject(obj map[string]any, source string) *logLine {
 	return l
 }
 
-// ingestBulk reads the Elasticsearch bulk API: action lines (index,
-// create) each followed by a document; delete and update are answered as
-// done and ignored.
+// ingestBulk acknowledges delete and update actions but ignores them.
 func (s *Server) ingestBulk(w http.ResponseWriter, r *http.Request, body []byte) ([]*logLine, func(int), error) {
 	sc := bufio.NewScanner(bytes.NewReader(body))
 	sc.Buffer(make([]byte, 64<<10), otlpMaxBody)
@@ -246,8 +223,7 @@ func (s *Server) ingestBulk(w http.ResponseWriter, r *http.Request, body []byte)
 	}, nil
 }
 
-// handleBulkInfo answers the cluster check Elasticsearch clients make
-// before sending.
+// handleBulkInfo answers the version check Elasticsearch clients make first.
 func (s *Server) handleBulkInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Elastic-Product", "Elasticsearch")
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -258,8 +234,6 @@ func (s *Server) handleBulkInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ingestLoki reads Loki's JSON push: streams of labels with [time ns,
-// line, structured metadata] values.
 func (s *Server) ingestLoki(w http.ResponseWriter, r *http.Request, body []byte) ([]*logLine, func(int), error) {
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if ct == "application/x-protobuf" {

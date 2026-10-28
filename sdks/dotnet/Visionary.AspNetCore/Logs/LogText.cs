@@ -10,10 +10,6 @@ using System.Text.RegularExpressions;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>
-/// The text rules every SDK applies to app_logs lines (SPEC.md "Application logs"): secret
-/// scrubbing, the attrs encoding and its caps, and the level a plain-text line states.
-/// </summary>
 internal static class LogText
 {
     public const int MaxMessage = 8 << 10;
@@ -23,7 +19,7 @@ internal static class LogText
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(1);
     private static readonly JsonWriterOptions JsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    /// <summary>Secrets in free text, replaced in this order before a line is stored.</summary>
+    // Applied in this order.
     private static readonly (Regex Re, string With)[] SecretPatterns =
     {
         (Re(@"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)"), "[REDACTED:private-key]"),
@@ -35,12 +31,10 @@ internal static class LogText
 
     private static readonly Regex LevelField = Re(@"(?i)\b(?:level|lvl|severity)=[""']?([a-z]+)");
 
-    /// <summary>A date, a time or both, as loggers print them.</summary>
     private static readonly Regex TimestampWord = Re(@"^[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?$");
 
     private static Regex Re(string pattern) => new(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant, Timeout);
 
-    /// <summary>Replaces credentials in <paramref name="s"/>.</summary>
     public static string Scrub(string s)
     {
         foreach (var (re, with) in SecretPatterns)
@@ -60,15 +54,10 @@ internal static class LogText
         return s;
     }
 
-    /// <summary>The attribute names whose values are never stored: the request redaction defaults plus <paramref name="extra"/>.</summary>
     public static HashSet<string> SecretKeys(IEnumerable<string> extra) =>
         new(Redactor.DefaultFields.Concat(extra).Select(f => f.Trim()).Where(f => f.Length > 0), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Writes attrs as one flat JSON object in key order: values under a secret key (its last
-    /// dotted part) redacted, strings scrubbed, at most <see cref="MaxAttrs"/> bytes. Long string
-    /// values are cut first, then keys dropped (with "_truncated": true).
-    /// </summary>
+    // Over MaxAttrs, long string values are cut first, then keys dropped with "_truncated": true.
     public static string EncodeAttrs(IReadOnlyDictionary<string, object> attrs, ISet<string> secret)
     {
         var output = new SortedDictionary<string, object>(StringComparer.Ordinal);
@@ -143,7 +132,6 @@ internal static class LogText
         return Encoding.UTF8.GetString(buf.WrittenSpan);
     }
 
-    /// <summary>Cuts <paramref name="s"/> to at most <paramref name="maxBytes"/> UTF-8 bytes on a character boundary.</summary>
     public static string Truncate(string s, int maxBytes)
     {
         if (s.Length * 3 <= maxBytes || Encoding.UTF8.GetByteCount(s) <= maxBytes)
@@ -182,12 +170,7 @@ internal static class LogText
         return s[..i];
     }
 
-    /// <summary>
-    /// The level a plain-text line states at its start, the way loggers print it: "ERROR ...",
-    /// "[warn] ...", "error: ...", "2026-10-28 09:30:12 WARN ...", or a level=/lvl=/severity=
-    /// field in the first 200 characters. A bare lower-case word ("error rate is low") is not a
-    /// level. 0 when the line states none.
-    /// </summary>
+    // A bare lower-case word ("error rate is low") is not a level.
     public static int TextLevel(string s)
     {
         var head = s.Length > 200 ? s[..200] : s;
@@ -217,11 +200,7 @@ internal static class LogText
         return 0;
     }
 
-    /// <summary>
-    /// Removes a leading upper-case level word that <see cref="TextLevel"/> read as
-    /// <paramref name="sev"/> ("INFO started" → "started", "WARNING: disk" → "disk"): the level
-    /// has its own column.
-    /// </summary>
+    // The level has its own column, so "INFO started" is stored as "started".
     public static string StripLevelWord(string s, int sev)
     {
         var space = s.IndexOf(' ');
@@ -239,7 +218,6 @@ internal static class LogText
         return w == Severity.Name(sev) || w == "warning" ? rest : s;
     }
 
-    /// <summary>The trace id of a W3C traceparent header ("00-&lt;32 hex&gt;-&lt;16 hex&gt;-&lt;2 hex&gt;"), or null when there is none.</summary>
     public static string? TraceParentId(string? header)
     {
         var parts = (header ?? "").Trim().Split('-');

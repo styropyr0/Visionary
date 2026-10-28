@@ -71,11 +71,7 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean) {
   };
 }
 
-/**
- * The X-Request-ID of an XHR response. getAllResponseHeaders lists only
- * headers the page may read, without the console error getResponseHeader
- * logs for the rest.
- */
+// getAllResponseHeaders skips the console error getResponseHeader logs for headers the page can't read.
 function xhrRequestId(x: XMLHttpRequest): string | null {
   try {
     const m = /^x-request-id:\s*(.+)$/im.exec(x.getAllResponseHeaders());

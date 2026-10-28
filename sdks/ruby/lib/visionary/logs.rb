@@ -4,27 +4,9 @@ require "json"
 require "time"
 
 module Visionary
-  # Application logs (app_logs): lines the app logs through Visionary.logger
-  # or Rails.logger (Visionary.capture_rails_logger), linked to the request
-  # they were logged in.
-  #
-  # What is kept follows the dashboard (Settings → Logs), read from
-  # visionary_settings every 30 seconds like the profiling switch:
-  #
-  # - logs.level: lines below it are not stored...
-  # - ...except inside a request that failed (5xx, an exception, a captured
-  #   error) or was slow (logs.slow_ms): there the lines down to
-  #   logs.buffer_level that were held back are written too, so every failure
-  #   comes with its debug lines (logs.buffer).
-  # - logs.overrides lower or raise the level for a service, a route or a
-  #   user until a time, without a redeploy.
-  # - logs.drop drops matching lines; logs.rate caps lines per minute.
-  #
-  # This file holds the rules (the same in every SDK, see sdks/SPEC.md and
-  # sdks/go/logrules); logs/pipeline.rb holds, decides and queues the lines,
-  # logs/logger.rb is the Logger the app writes to.
+  # App logs (app_logs): the rules every SDK shares (sdks/go/logrules). What's kept
+  # follows Settings → Logs; logs/pipeline.rb and logs/logger.rb do the capturing.
   module Logs
-    # Severities as stored in app_logs.severity, with their level names.
     TRACE = 1
     DEBUG = 2
     INFO = 3
@@ -36,7 +18,6 @@ module Visionary
     MAX_MESSAGE = 8 * 1024
     MAX_ATTRS = 16 * 1024
     MAX_VALUE = 1024
-    # The lines one request holds back; past it, the oldest are dropped.
     MAX_HELD = 500
     QUEUE_SIZE = 10_000
     POLL_S = 30
@@ -54,8 +35,7 @@ module Visionary
       end
     end.freeze
 
-    # Secrets in free text, replaced before a line is stored. Every SDK uses
-    # these same patterns (sdks/SPEC.md, Logs).
+    # Secrets in free text; every SDK uses the same patterns, in this order.
     SECRET_PATTERNS = [
       [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)/, "[REDACTED:private-key]"],
       [/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/, "[REDACTED:jwt]"],
@@ -66,23 +46,19 @@ module Visionary
     ].freeze
 
     LEVEL_FIELD = /\b(?:level|lvl|severity)=["']?([a-z]+)/i
-    # A date, a time or both, as loggers print them.
     TIMESTAMP = %r{\A[\[(]?[0-9][0-9/:.,\-TZ+]*[\])]?\z}
 
-    # One captured line. Redaction and encoding happen on the writer thread.
     Record = Struct.new(:at, :sev, :logger, :message, :attrs, :request_id, :trace_id, :span_id, :user_id,
                         :session_id, :file, :line, :func)
 
-    # Changes the level for part of the traffic until a time (nil: no end).
+    # Changes the level for part of the traffic; until nil means no end.
     Override = Struct.new(:service, :route, :user, :sev, :until) do
-      # Whether it applies now to service.
       def active?(service, now)
         return false if self.until && now > self.until
         self.service.empty? || self.service == service.to_s
       end
 
-      # Whether it applies to a request on route by user. One with neither
-      # applies to everything in its service.
+      # One with neither route nor user applies to its whole service.
       def matches?(route, user)
         return false if !self.route.empty? && !Logs.route_matches?(self.route, route.to_s)
         self.user.empty? || self.user == user.to_s
@@ -91,17 +67,13 @@ module Visionary
       def scoped? = !route.empty? || !user.empty?
     end
 
-    # Drops the lines it matches; empty fields match anything, and sev (when
-    # set) drops only lines at or below it.
+    # Empty fields match anything; sev, when set, drops only lines at or below it.
     Drop = Struct.new(:service, :logger, :contains, :sev)
 
-    # What Settings → Logs asks for (visionary_settings logs.*).
     Settings = Struct.new(:enabled, :level, :buffer, :buffer_level, :slow_ms, :rate, :overrides, :drops,
                           keyword_init: true) do
-      # The lowest level kept for a line of service on route by user (both
-      # may be empty): the base level, then service-wide overrides, then the
-      # most specific matching override (a user beats a route). Later
-      # overrides win among equals.
+      # Base level, then service-wide overrides, then the most specific match (user beats
+      # route); later overrides win ties.
       def floor(service, route, user, now = Time.now)
         level = self.level
         rank = 0
@@ -115,8 +87,7 @@ module Visionary
         level
       end
 
-      # The level under which a line logged in a request is held until it
-      # ends: everything a route or user override could keep.
+      # Lines in a request below this are held until it ends, since an override may still keep them.
       def hold_below(service, now = Time.now)
         level = self.level
         overrides.each { |o| level = o.sev if !o.scoped? && o.active?(service, now) }
@@ -144,14 +115,10 @@ module Visionary
 
     module_function
 
-    # A level name the way every source spells it (trace, debug, info,
-    # notice, warn, warning, error, err, critical, fatal, panic, ...); 0 when
-    # unknown.
     def parse_level(s)
       LEVELS.fetch(s.to_s.strip.downcase, 0)
     end
 
-    # The level name of sev; info when it is out of range.
     def name(sev) = sev.to_i.between?(TRACE, FATAL) ? NAMES[sev] : "info"
 
     def defaults(level = 0)
@@ -159,8 +126,6 @@ module Visionary
                    slow_ms: 1000.0, rate: 6000, overrides: [], drops: [])
     end
 
-    # visionary_settings rows ([[name, value], ...]) as Settings; anything
-    # missing or unreadable keeps its default.
     def parse_settings(rows, base = 0)
       s = defaults(base)
       rows.each do |name, value|
@@ -216,23 +181,19 @@ module Visionary
       d
     end
 
-    # A timestamp in the formats Visionary writes (created_at, RFC 3339,
-    # with a space and no zone); no zone means UTC.
+    # Formats Visionary writes; no zone means UTC.
     def parse_time(s)
       Profiler.parse_time(s) || Time.iso8601(s)
     rescue ArgumentError
       nil
     end
 
-    # A route pattern, allowing a trailing * for prefixes.
     def route_matches?(pattern, route)
       pattern.end_with?("*") ? route.start_with?(pattern.chomp("*")) : pattern == route
     end
 
-    # The level a plain-text line states at its start, the way loggers print
-    # it: "ERROR ...", "[warn] ...", "error: ...", "2026-10-28 09:30:12 WARN
-    # ...", or a level=/lvl=/severity= field in the first 200 bytes. A bare
-    # lower-case word ("error rate is low") is not a level. 0 when none.
+    # The level a line states at its start ("ERROR ...", "[warn] ...", "2026-10-28 09:30:12 WARN ...",
+    # level=debug in the first 200 bytes); 0 if none. A bare lower-case word isn't a level.
     def text_level(s)
       head = Visionary.utf8(s).byteslice(0, 200).scrub("")
       if (m = LEVEL_FIELD.match(head)) && (n = parse_level(m[1])).positive?
@@ -250,8 +211,6 @@ module Visionary
       0
     end
 
-    # Removes a leading upper-case level word that names sev ("INFO started"
-    # → "started", "WARNING: disk" → "disk"): the level has its own column.
     def strip_level_word(s, sev)
       i = s.index(" ")
       return s unless i
@@ -262,7 +221,6 @@ module Visionary
       w == name(sev) || w == "warning" ? rest : s
     end
 
-    # Replaces credentials in s.
     def scrub(s)
       SECRET_PATTERNS.each do |re, with|
         s = s.gsub(re, with) if re.match?(s)
@@ -270,14 +228,12 @@ module Visionary
       s
     end
 
-    # The default redacted field names plus extra, lower case.
     def secret_keys(extra = [])
       (Redactor::DEFAULT_FIELDS + Array(extra)).map { |f| f.to_s.strip.downcase }.reject(&:empty?).to_h { |f| [f, true] }
     end
 
-    # attrs as one flat JSON object: values under a secret key (its last
-    # dotted part) redacted, strings scrubbed, at most MAX_ATTRS bytes (long
-    # values are cut first, then keys dropped in sorted order).
+    # attrs as flat JSON with secrets redacted, capped at MAX_ATTRS: long values are cut
+    # first, then keys dropped in sorted order.
     def encode_attrs(attrs, secret)
       out = {}
       attrs.each do |k, v|
@@ -306,14 +262,10 @@ module Visionary
       JSON.generate(kept)
     end
 
-    # s cut to at most n bytes without splitting a character.
     def truncate(s, n)
       s.bytesize <= n ? s : s.byteslice(0, n).scrub("")
     end
 
-    # Flattens a Hash into dotted keys with string, number or boolean values
-    # (anything else as its string form; times RFC 3339). nil values are left
-    # out.
     def flatten(hash, prefix = "", out = {})
       hash.each do |k, v|
         key = "#{prefix}#{k}"
@@ -341,8 +293,7 @@ module Visionary
       "?"
     end
 
-    # The W3C trace id of a traceparent header (00-<32 hex>-<16 hex>-<2
-    # hex>); nil when it is malformed or all zeros.
+    # The trace id of a traceparent header; nil when malformed or all zeros.
     def trace_parent_id(header)
       parts = header.to_s.strip.split("-")
       return nil if parts.size < 4

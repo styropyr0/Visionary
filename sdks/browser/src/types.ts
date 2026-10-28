@@ -33,10 +33,7 @@ export interface InitOptions {
   app?: string;
   /** fetch/XHR calls to skip, by substring or pattern of the URL. */
   ignoreUrls?: (string | RegExp)[];
-  /**
-   * Sends console.debug/log/info/warn/error lines to Logs, still printing
-   * them. Off by default. At most 120 lines a minute are sent.
-   */
+  /** Also send console lines to Logs (they still print). Off by default; at most 120 a minute. */
   captureConsole?: boolean;
   /** The lowest console level sent when captureConsole is on. Default "info". */
   logLevel?: LogLevel;

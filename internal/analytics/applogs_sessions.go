@@ -11,24 +11,14 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// Browser and mobile logs, and a session's timeline.
-//
-// The browser and mobile SDKs send log lines as client events of kind
-// "log" (name is the level); they are stored in app_logs, not
-// client_events, with the session and the user. The SDKs put the
-// X-Request-ID of each API response in the api event's attrs, which links a
-// session to the server's request rows and their log lines:
-//
-//	GET /api/rum/session-list   recent sessions in the range
-//	GET /api/rum/session/{id}   one session: its events, its logs, and the
-//	                            server's lines and requests for the API calls it made
+// Client SDKs send logs as events of kind "log" (name is the level); they go to
+// app_logs. The X-Request-ID in api event attrs links a session to server requests.
 
 func (s *Server) applogsSessionRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/rum/session-list", s.authed(s.handleSessionList))
 	mux.Handle("GET /api/rum/session/{id}", s.authed(s.handleSessionTimeline))
 }
 
-// clientLogLines takes the log events out of a client batch's rows.
 func clientLogLines(rows []clientRow) (rest []clientRow, lines []*logLine) {
 	for _, r := range rows {
 		if r.Kind != "log" {
@@ -98,11 +88,10 @@ FROM client_events WHERE `+where+` GROUP BY session_id ORDER BY last DESC LIMIT 
 	writeJSON(w, http.StatusOK, newResult(rows, 100, "", tr))
 }
 
-// timelineItem is one thing that happened in a session.
 type timelineItem struct {
 	At        string         `json:"at"`
 	Kind      string         `json:"kind"` // page_load, screen, api, error, web_vital, custom, log, request, server_log
-	Side      string         `json:"side"` // client or server
+	Side      string         `json:"side"`
 	Name      string         `json:"name,omitempty"`
 	Message   string         `json:"message,omitempty"`
 	Level     string         `json:"level,omitempty"`
@@ -122,7 +111,6 @@ func (s *Server) handleSessionTimeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// A session lasts hours at most; look a day either side of now's range.
 	since := time.Now().UTC().AddDate(0, 0, -s.maxRangeDays()).Format(tsLayout)
 	events, err := s.db.Query(ctx, `SELECT created_at, kind, name, url, method, status, duration_ms, value, message, attrs, user_id, app, device, os
 FROM client_events WHERE session_id = ? AND created_at >= ? ORDER BY created_at LIMIT 2000`, id, since)
@@ -156,7 +144,6 @@ FROM client_events WHERE session_id = ? AND created_at >= ? ORDER BY created_at 
 			}
 		}
 	}
-	// The session's own log lines, and the server's lines for its requests.
 	logWhere := "session_id = ?"
 	logArgs := []any{id}
 	if len(requestIDs) > 0 {
@@ -206,8 +193,7 @@ FROM client_events WHERE session_id = ? AND created_at >= ? ORDER BY created_at 
 	writeJSON(w, http.StatusOK, map[string]any{"session": info, "items": items})
 }
 
-// ingestClientLogs stores the log events of a client batch without holding
-// up the response.
+// ingestClientLogs runs in the background so the response isn't held up.
 func (s *Server) ingestClientLogs(lines []*logLine) {
 	if len(lines) == 0 {
 		return

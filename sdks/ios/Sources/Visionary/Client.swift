@@ -87,7 +87,6 @@ final class Client {
         enqueue(e)
     }
 
-    /// A log line; the server stores it with the session's other logs.
     func logLine(_ level: String, message: String, attrs: [(String, AttributeValue)]) {
         let e = event("log", level)
         e.string("message", String(message.prefix(8192))).attrs("attrs", attrs)

@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// The weekly digest's Logs section: volume and errors against the week
-// before, and the warn-or-worse messages first logged this week.
-
 type digestLogs struct {
 	Lines      int64              `json:"lines"`
 	PrevLines  int64              `json:"previous_lines"`
@@ -51,8 +48,6 @@ ORDER BY severity DESC, lines DESC LIMIT 8`, mid.UTC().Format(tsLayout), now.UTC
 	return d
 }
 
-// digestLogsSection is the section for the email and the PDF; rows of new
-// error messages are flagged.
 func digestLogsSection(l *digestLogs) emailSection {
 	sec := emailSection{
 		Title: "Logs",

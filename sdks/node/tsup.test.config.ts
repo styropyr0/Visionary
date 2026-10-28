@@ -1,7 +1,6 @@
 import { defineConfig } from "tsup";
 
-// Bundles the tests (test/*.test.ts) with the sources they import, the same
-// way as the package, for `node --test`.
+// Bundles the tests with the sources they import, for `node --test`.
 export default defineConfig({
   entry: ["test/*.test.ts"],
   outDir: "test-dist",

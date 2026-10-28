@@ -25,14 +25,11 @@ class Annotations:
         self.route = ""
         self.trace = trace  # _spans.Trace, or None when spans are off
         self.request = request
-        # The W3C trace the request belongs to (traceparent), for its log lines.
         self.trace_id = trace_id
-        # An exception escaped or was captured in the request (its held log
-        # lines are then kept down to logs.buffer_level).
+        # An exception escaped or was captured; held log lines are then kept.
         self.failed = False
-        # Log lines below the level, held until the request ends (_logs.Held).
+        # _logs.Held: lines below the level, held until the request ends.
         self.logs: Any = None
-        # The request has ended: lines logged after it are decided at once.
         self.done = False
 
     def set_user(self, id: Any, handle: Optional[str], role: Optional[str]) -> None:

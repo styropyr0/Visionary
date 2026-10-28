@@ -62,7 +62,7 @@ type digestData struct {
 	Machines   []digestMachine   `json:"machines"`
 	Containers *digestContainers `json:"containers,omitempty"`
 	Vitals     []digestVital     `json:"web_vitals"`
-	Logs       *digestLogs       `json:"logs,omitempty"` // applogs_digest.go
+	Logs       *digestLogs       `json:"logs,omitempty"`
 }
 
 func (s *Server) digestData(ctx context.Context, now time.Time) (*digestData, error) {

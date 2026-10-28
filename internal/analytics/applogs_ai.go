@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// The analyst on the Logs page:
-//
-//	POST /api/applogs/ask      a question in words → a search, checked before it is returned
-//	POST /api/applogs/explain  what the matching lines say, citing them by id
-
 func (s *Server) applogsAIRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/applogs/ask", s.authed(s.handleLogAsk))
 	mux.Handle("POST /api/applogs/explain", s.authed(s.handleLogExplain))
@@ -68,8 +63,6 @@ func (s *Server) logFieldsHint(ctx context.Context) string {
 	return strings.Join(parts, "\n")
 }
 
-// handleLogAsk turns a question into a search, and a time range when the
-// question names one.
 func (s *Server) handleLogAsk(w http.ResponseWriter, r *http.Request) {
 	if s.llm() == nil {
 		writeError(w, http.StatusBadRequest, errAnalystOff.Error())
@@ -107,7 +100,6 @@ Now is ` + time.Now().UTC().Format(time.RFC3339) + `.
 			return
 		}
 		if _, err := compileLogQuery(out.Query, s.q, s.onD1()); err != nil {
-			// Once more, with the error.
 			messages = append(messages, chatMessage{Role: "assistant", Content: content},
 				chatMessage{Role: "user", Content: "That search is invalid: " + err.Error() + ". Reply with a corrected JSON object."})
 			continue
@@ -124,8 +116,6 @@ Now is ` + time.Now().UTC().Format(time.RFC3339) + `.
 	writeError(w, http.StatusBadGateway, "the model could not write a valid search for that; try wording it differently")
 }
 
-// handleLogExplain summarizes the lines matching a search: the patterns
-// that dominate, the errors and what they point at, citing line ids.
 func (s *Server) handleLogExplain(w http.ResponseWriter, r *http.Request) {
 	if s.llm() == nil {
 		writeError(w, http.StatusBadRequest, errAnalystOff.Error())

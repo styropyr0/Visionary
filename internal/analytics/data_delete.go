@@ -75,8 +75,7 @@ type dataRequest struct {
 	Service *string  `json:"service"`
 }
 
-// dataTimeColumns names the first and last time of rows that span a period
-// instead of having a created_at; a row is in the range when all of it is.
+// dataTimeColumns is for tables without created_at; a row is in range only when its whole span is.
 var dataTimeColumns = map[string][2]string{
 	"log_patterns": {"first_seen", "last_seen"},
 }

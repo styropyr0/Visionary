@@ -3,13 +3,10 @@ package io.github.styropyr0.visionary;
 import java.time.Instant;
 import java.util.Map;
 
-/**
- * One captured log line. Filled on the logging thread; scrubbing, encoding and
- * naming the source file happen on the writer thread.
- */
+/** Filled on the logging thread; scrubbing and encoding happen on the writer thread. */
 final class LogRecord {
 
-    /** Attributes that have columns of their own; Micrometer Tracing's MDC names count as the active span. */
+    /** traceId and spanId are Micrometer Tracing's MDC names. */
     private static final String[][] COLUMNS = {
         {"request_id"}, {"trace_id", "traceId"}, {"span_id", "spanId"}, {"user_id"}, {"session_id"}, {"logger"},
     };
@@ -25,7 +22,7 @@ final class LogRecord {
     String spanId;
     String userId;
     String sessionId;
-    /** Caller data, when the logger recorded it: binary class name, method, source file, line. */
+    /** Set only when the logger recorded caller data. */
     String className;
     String method;
     String fileName;
@@ -38,7 +35,7 @@ final class LogRecord {
         this.message = message == null ? "" : message;
     }
 
-    /** Moves the attributes with columns of their own out of {@code attrs} and keeps the rest. */
+    /** Moves keys that have their own columns out of {@code attrs}. */
     LogRecord take(Map<String, Object> fields) {
         for (String[] names : COLUMNS) {
             for (String name : names) {

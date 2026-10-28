@@ -13,7 +13,6 @@ import { useSession } from "../lib/team";
 import { alertFromSearch, asLevel, fieldTerm, logSettingsApi, logsApi, templateLiteral, type CompareChange, type Pattern } from "../lib/applogs";
 import { LevelBadge } from "./AppLogs";
 
-/** A small bar chart of counts, for a pattern's trend. */
 function Spark({ points }: { points: number[] }) {
   const max = Math.max(1, ...points);
   return (
@@ -25,7 +24,6 @@ function Spark({ points }: { points: number[] }) {
   );
 }
 
-/** Message templates with <*> shown as placeholders. */
 export function Template({ text }: { text: string }) {
   return (
     <span className="mono lg-template">
@@ -43,8 +41,6 @@ function useRun() {
   const { resolved, tick } = useApp();
   return { resolved, key: `${resolved.from.getTime()}-${resolved.to.getTime()}-${tick}` };
 }
-
-// ── Patterns ──────────────────────────────────────────────────────────────
 
 export function PatternsTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
   const { resolved, key } = useRun();
@@ -135,8 +131,6 @@ export function PatternsTab({ q, onSearch }: { q: string; onSearch: (q: string) 
     </section>
   );
 }
-
-// ── Volume ────────────────────────────────────────────────────────────────
 
 function rows(res: Result | undefined): Record<string, unknown>[] {
   if (!res) return [];
@@ -308,7 +302,7 @@ export function VolumeTab({ q, onSearch }: { q: string; onSearch: (q: string) =>
   );
 }
 
-/** Lower a chatty line or drop it, as a drop rule every SDK and shipper follows. */
+/** Saved as a drop rule, so every SDK and shipper applies it. */
 function ReduceDialog({ target, onClose }: { target: { service: string | null; text: string; label: string }; onClose: () => void }) {
   const toast = useToast();
   const [contains, setContains] = useState(templateLiteral(target.text).slice(0, 120) || target.text.slice(0, 120));
@@ -369,8 +363,6 @@ function ReduceDialog({ target, onClose }: { target: { service: string | null; t
     </Modal>
   );
 }
-
-// ── Hidden failures ───────────────────────────────────────────────────────
 
 export function HiddenTab({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
   const { resolved, key } = useRun();
@@ -433,8 +425,6 @@ export function HiddenTab({ q, onSearch }: { q: string; onSearch: (q: string) =>
     </section>
   );
 }
-
-// ── Releases ──────────────────────────────────────────────────────────────
 
 interface VersionRow {
   service: string;

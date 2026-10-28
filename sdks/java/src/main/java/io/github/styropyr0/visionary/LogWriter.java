@@ -12,19 +12,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-/**
- * The background writer for {@code app_logs}, separate from the requests writer
- * so a flood of lines never crowds out request rows: a bounded queue of 10000
- * lines that never blocks the logging thread, flushed every 50 lines or 3
- * seconds with the same retries.
- */
+/** Separate from the requests writer so a flood of log lines can't crowd out request rows. */
 final class LogWriter {
 
     private static final Log log = LogFactory.getLog(LogWriter.class);
 
     static final int QUEUE_SIZE = 10_000;
     private static final int ATTEMPTS = 3;
-    /** The secret patterns use lazy and alternating groups; a roomy stack keeps long lines from failing. */
+    /** The secret regexes recurse deeply on long lines, so give the thread a big stack. */
     private static final long STACK_SIZE = 8L << 20;
     private static final String HOST = VisionaryConfig.hostname();
 
@@ -42,7 +37,7 @@ final class LogWriter {
     private final Thread thread;
     private boolean schemaReady;
 
-    /** @param namer names {@code code_file} like CPU profile frames; null keeps the bare file name */
+    /** @param namer null keeps the bare file name */
     LogWriter(Store store, Origin origin, Set<String> secretKeys, FrameNamer namer) {
         this.store = store;
         this.origin = origin;
@@ -56,7 +51,7 @@ final class LogWriter {
         thread.start();
     }
 
-    /** Enqueues without blocking; when the queue is full the line is dropped and counted. */
+    /** Never blocks; when the queue is full the line is dropped and counted. */
     void enqueue(LogRecord r) {
         lock.lock();
         try {
@@ -73,7 +68,6 @@ final class LogWriter {
         }
     }
 
-    /** Drains the queue and waits for the final flush, at most {@code timeout}. */
     void close(Duration timeout) {
         lock.lock();
         try {
@@ -143,7 +137,7 @@ final class LogWriter {
             try {
                 rows.add(row(r));
             } catch (RuntimeException | StackOverflowError e) {
-                // A line that cannot be scrubbed is not stored at all rather than stored unredacted.
+                // Better to drop a line we can't scrub than store it unredacted.
             }
         }
         if (rows.isEmpty()) {
@@ -168,7 +162,6 @@ final class LogWriter {
         log.error("visionary: app log write failed; " + rows.size() + " lines dropped: " + last);
     }
 
-    /** The row in {@link Table#APP_LOGS} column order. */
     Object[] row(LogRecord r) {
         String message = Values.capBytes(LogRules.scrub(r.message), LogRules.MAX_MESSAGE);
         if (message == null) {

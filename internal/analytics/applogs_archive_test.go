@@ -16,7 +16,6 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// fakeS3 keeps objects in memory and checks that requests are signed.
 type fakeS3 struct {
 	mu      sync.Mutex
 	objects map[string][]byte
@@ -70,7 +69,7 @@ func TestArchiveAndRehydrate(t *testing.T) {
 	}
 	n, err := s.archivePass(ctx, now)
 	if err != nil || n != 3 {
-		// h1, h2 and the empty hour between h2 and now are archived; the current hour is not.
+		// h1, h2 and the empty hour after h2; not the current hour
 		t.Fatalf("archived %d %v", n, err)
 	}
 	if n, _ := s.archivePass(ctx, now); n != 0 {
@@ -85,7 +84,6 @@ func TestArchiveAndRehydrate(t *testing.T) {
 		t.Fatalf("archives %+v", res.Rows)
 	}
 
-	// Retention removes the first hour; rehydrate brings it back once.
 	if err := s.db.Exec(ctx, `DELETE FROM app_logs WHERE created_at < ?`, h2.Format(tsLayout)); err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +125,7 @@ func keys(m map[string][]byte) []string {
 	return out
 }
 
-// The signature for a fixed request, against a value computed by hand with
-// the SigV4 steps; a change in the canonical request breaks it.
+// TestArchiveSignature checks against a signature worked out by hand from the SigV4 steps.
 func TestArchiveSignature(t *testing.T) {
 	c := archiveConf{endpoint: "https://s3.example.com", bucket: "b", region: "us-east-1", access: "AKIDEXAMPLE", secret: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
 	req, _ := http.NewRequest(http.MethodGet, c.objectURL("logs/2026/10/28/11.ndjson.gz"), bytes.NewReader(nil))
@@ -143,8 +140,7 @@ func TestArchiveSignature(t *testing.T) {
 	}
 }
 
-// VISIONARY_TEST_S3=endpoint,bucket,access,secret runs the archive against
-// a real S3-compatible store, whose own signature check verifies ours.
+// TestArchiveRealS3 runs against a real store when VISIONARY_TEST_S3=endpoint,bucket,access,secret is set.
 func TestArchiveRealS3(t *testing.T) {
 	conf := strings.Split(os.Getenv("VISIONARY_TEST_S3"), ",")
 	if len(conf) != 4 {

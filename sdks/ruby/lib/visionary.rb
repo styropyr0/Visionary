@@ -76,22 +76,17 @@ module Visionary
     # The agent if it has started, without starting it.
     def running_agent = @agent
 
-    # A Logger that copies every line to app_logs, linked to the request it
-    # was logged in, and forwards every call to inner (any ::Logger) unchanged.
-    # What is kept follows Settings → Logs in the dashboard.
+    # A Logger that copies lines to app_logs and forwards every call to inner (any ::Logger)
+    # unchanged.
     #
     #   logger = Visionary.logger(Logger.new($stdout))
-    #   logger.info("charged card")                 # inner prints it as before
-    #   logger.debug { "cart: #{cart.inspect}" }   # kept when the request fails
+    #   logger.debug { "cart: #{cart.inspect}" } # kept when the request fails
     def logger(inner = nil)
       Logs::Logger.new(inner)
     end
 
-    # Copies Rails.logger to app_logs without changing what Rails prints:
-    # broadcasts it to a Visionary.logger (Rails 7.1+ broadcast_to, older
-    # ActiveSupport::Logger.broadcast). TaggedLogging tags become the "tags"
-    # attribute. Call it once, in an initializer; later calls return the same
-    # logger. nil when Rails.logger is not set.
+    # Copies Rails.logger to app_logs without changing what Rails prints. Call it once, in an
+    # initializer; nil when Rails.logger is not set.
     def capture_rails_logger
       return @rails_capture if @rails_capture
       rails = defined?(::Rails) && ::Rails.respond_to?(:logger) ? ::Rails.logger : nil

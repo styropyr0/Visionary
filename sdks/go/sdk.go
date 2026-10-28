@@ -110,17 +110,13 @@ type Config struct {
 	Logs     LogsConfig
 }
 
-// LogsConfig captures application logs into app_logs. Capture starts once
-// the application routes its logs here: LogHandler for slog, CaptureStdLog
-// for the log package. Which lines are kept follows the dashboard (Settings
-// → Logs); Level is the default until it has been read.
+// LogsConfig captures application logs into app_logs once they are routed
+// here with LogHandler or CaptureStdLog. Settings → Logs decides what is kept.
 type LogsConfig struct {
 	Enabled bool
-	// Level is the lowest level kept before the dashboard's setting is
-	// read (VISIONARY_LOG_LEVEL, default info).
+	// Level applies until Settings → Logs is read (VISIONARY_LOG_LEVEL, default info).
 	Level string
-	// QueueSize bounds the lines waiting for the database (default 10000);
-	// past it, lines are dropped and counted.
+	// QueueSize bounds lines waiting for the database (default 10000); extra ones are dropped.
 	QueueSize int
 }
 
@@ -168,8 +164,8 @@ type RequestsConfig struct {
 }
 
 type SystemConfig struct {
-	Enabled       bool
-	Interval      time.Duration
+	Enabled  bool
+	Interval time.Duration
 	// RetentionDays, above 0, makes the SDK delete system_metrics rows older
 	// than that many days. 0 (the default) leaves it to the server.
 	RetentionDays int
@@ -269,8 +265,7 @@ type Agent struct {
 	// VISIONARY_PROFILE=false.
 	profiler *profiler
 	limiter  errLimiter
-	// logs captures application logs, through its own writer so a flood of
-	// lines never crowds out request rows; nil when logs are off.
+	// logs has its own writer so a flood of lines never crowds out request rows.
 	logs *logger
 }
 

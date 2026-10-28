@@ -8,20 +8,7 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Application logs: the lines services log, in app_logs. They arrive from
-// the SDKs (which write the table themselves, like api_logs), OTLP, the
-// HTTP ingest endpoints (native JSON, Elasticsearch _bulk, Loki push), the
-// syslog listener and the host agent (journald, files, containers). The
-// Logs page searches them; patterns, alerts and the security scanner read
-// them in the background.
-//
-//   - app_logs: one row per line. severity is 1 trace .. 6 fatal; pattern
-//     is filled by the pattern job (applogs_patterns.go).
-//   - log_patterns: one row per message template per service.
-//   - log_views: saved searches.
-//   - log_archives: hours of app_logs written to the archive bucket.
-//
-// It also indexes client_events by session, for a session's timeline.
+// app_logs.severity runs 1 (trace) to 6 (fatal); pattern is filled later by the pattern job.
 
 func init() {
 	for _, t := range []string{"APP_LOGS", "LOG_PATTERNS"} {
@@ -90,15 +77,13 @@ CREATE TABLE IF NOT EXISTS log_archives (
 {index} idx_log_archives_hour ON log_archives (hour);
 {index} idx_client_events_session ON client_events (session_id, created_at)`
 	if q.d == sdk.MySQL {
-		// MySQL cannot index TEXT without a length; the pattern key is short.
+		// MySQL can't index TEXT without a length
 		ddl = strings.Replace(ddl, "id            {key} NOT NULL PRIMARY KEY", "id            VARCHAR(16) NOT NULL PRIMARY KEY", 1)
 	}
 	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{tail}", tail, "{index}", index).Replace(ddl)
 }
 
-// applogsStart runs the syslog receiver and, on PostgreSQL, adds the
-// trigram index that makes text search fast when the extension can be
-// created; without it searches scan the time range.
+// applogsStart also adds a trigram index on PostgreSQL when it can, so text search doesn't scan the range.
 func (s *Server) applogsStart(ctx context.Context) {
 	s.syslogStart(ctx)
 	s.applogsPatternsStart(ctx)

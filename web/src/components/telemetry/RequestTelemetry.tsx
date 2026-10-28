@@ -41,7 +41,6 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
   const requestMs = toNumber(rec.duration_ms) ?? 0;
   const untrackedMs = useMemo(() => untracked(spans, requestMs).ms, [spans, requestMs]);
   const after = useMemo(() => afterResponse(spans, requestMs), [spans, requestMs]);
-  // The lines it logged, placed from the request's start.
   const logs = useMemo<LogMark[]>(() => {
     const start = new Date(String(rec.created_at ?? "")).getTime();
     return records(q.data?.logs).map((l) => ({

@@ -71,8 +71,7 @@ final class Retention {
                 }
             }
         } catch (Exception e) {
-            // The Visionary server creates profiles, and app_logs exists once log capture starts;
-            // until then there is nothing to purge.
+            // profiles and app_logs may not exist yet; nothing to purge then.
             if ((table == Table.PROFILES || table == Table.APP_LOGS) && missingTable(e)) {
                 return;
             }

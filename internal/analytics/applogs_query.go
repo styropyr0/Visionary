@@ -16,8 +16,7 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// The Logs page's search language, compiled to SQL with every value a bound
-// parameter:
+// Search syntax; every value becomes a bound parameter:
 //
 //	timeout                    message contains "timeout" (any case)
 //	"connection refused"       message contains the phrase
@@ -31,8 +30,6 @@ import (
 //	a OR b   (a OR b) c        alternatives; terms side by side must all match
 //	/time(d|o)ut/  file:/x/    a regular expression (not on Cloudflare D1)
 
-// logColumns are the fields that are columns of app_logs, by the names the
-// search accepts.
 var logColumns = map[string]string{
 	"id": "id", "service": "service", "source": "source", "host": "host", "container": "container",
 	"logger": "logger", "instance": "instance", "version": "version", "release": "version",
@@ -44,14 +41,11 @@ var logColumns = map[string]string{
 	"severity": "severity", "level": "severity",
 }
 
-// numericColumns compare as numbers.
 var numericColumns = map[string]bool{"id": true, "code_line": true, "severity": true}
 
-// logQuery is a compiled search.
 type logQuery struct {
 	where string
 	args  []any
-	// terms are the free-text words and phrases, for highlighting.
 	terms []string
 }
 
@@ -59,16 +53,13 @@ type logQueryError struct{ msg string }
 
 func (e *logQueryError) Error() string { return e.msg }
 
-// token kinds of the search language.
 type qtok struct {
 	kind  byte // 'w' word, 'p' phrase, 'r' regex, '(' ')', '-' not, 'O' or, 'A' and
 	text  string
 	field string
-	op    string // ":", ":>", ":>=", ":<", ":<="
+	op    string
 }
 
-// lexQuery splits a search into tokens. A field is a word ending in ":"
-// right before its value.
 func lexQuery(s string) ([]qtok, error) {
 	var out []qtok
 	i := 0
@@ -116,7 +107,6 @@ func lexQuery(s string) ([]qtok, error) {
 
 var fieldPrefix = regexp.MustCompile(`^([A-Za-z_@][A-Za-z0-9_.@\-]*)(:>=|:<=|:>|:<|:)`)
 
-// lexValue reads a phrase, a regex or a word.
 func lexValue(s string) (qtok, int, error) {
 	switch s[0] {
 	case '"':
@@ -136,8 +126,7 @@ func lexValue(s string) (qtok, int, error) {
 		}
 		return qtok{}, 0, &logQueryError{"a quoted phrase is missing its closing \""}
 	case '/':
-		// /…/ is a regular expression when the closing slash ends the term;
-		// otherwise it is a path such as /orders/* or /pay.
+		// /…/ is a regex only when the closing slash ends the term; otherwise a path like /orders/*
 		for i := 1; i < len(s); i++ {
 			if s[i] == '\\' {
 				i++
@@ -162,7 +151,6 @@ func lexValue(s string) (qtok, int, error) {
 	return qtok{kind: 'w', text: s[:n]}, n, nil
 }
 
-// queryParser builds the WHERE clause.
 type queryParser struct {
 	toks  []qtok
 	pos   int
@@ -170,23 +158,18 @@ type queryParser struct {
 	args  []any
 	terms []string
 	depth int
-	// noRegex is set on Cloudflare D1, where SQLite has no REGEXP.
+	// Cloudflare D1 has no REGEXP
 	noRegex bool
-	// from and to bound the requests route: and status: look up; empty
-	// leaves them unbounded (alert rules add their window themselves).
+	// bound the route:/status: request lookups; alert rules add their own window
 	from, to string
 }
 
 const maxQueryTerms = 60
 
-// compileLogQuery turns a search into a condition on app_logs; an empty
-// search is "1=1". noRegex refuses regular expressions (Cloudflare D1).
 func compileLogQuery(q string, d sqlDialect, noRegex bool) (*logQuery, error) {
 	return compileLogQueryIn(q, d, noRegex, nil)
 }
 
-// compileLogQueryIn is compileLogQuery with the range the search covers,
-// which bounds the request lookups of route: and status:.
 func compileLogQueryIn(q string, d sqlDialect, noRegex bool, tr *timeRange) (*logQuery, error) {
 	if len(q) > 2000 {
 		return nil, &logQueryError{"the search is longer than 2000 characters"}
@@ -279,7 +262,7 @@ func (p *queryParser) unary() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// NULL fields count as not matching, so NOT keeps them.
+		// NULL counts as not matching, so NOT keeps those rows
 		return "NOT COALESCE(" + c + ", 1=0)", nil
 	}
 	if t.kind == '(' {
@@ -310,7 +293,6 @@ func (p *queryParser) arg(v any) string {
 	return "?"
 }
 
-// like is a case-insensitive pattern match.
 func (p *queryParser) like(expr, pattern string) string {
 	op := "LIKE"
 	if p.d.d == sdk.Postgres {
@@ -332,7 +314,6 @@ func (p *queryParser) regex(expr, re string) (string, error) {
 	return expr + " REGEXP " + p.arg("(?i)"+re), nil
 }
 
-// attr is the SQL for a field of attrs.
 func (p *queryParser) attr(key string) string {
 	path := `$."` + strings.ReplaceAll(key, `"`, ``) + `"`
 	switch p.d.d {
@@ -426,9 +407,9 @@ func (p *queryParser) term(t *qtok) (string, error) {
 		return expr + " = " + p.arg(n), nil
 	}
 	if !isCol {
-		// Fields keep their JSON type: "42" and 42 both match 42.
+		// fields keep their JSON type, so "42" and 42 both match 42
 		if f, err := strconv.ParseFloat(t.text, 64); err == nil {
-			// The field appears twice, so its path is bound twice, in order.
+			// the path is bound twice, in order
 			text := expr + " = " + p.arg(t.text)
 			return "(" + text + " OR " + p.num(p.attr(key)) + " = " + p.arg(f) + ")", nil
 		}
@@ -441,10 +422,9 @@ func (p *queryParser) term(t *qtok) (string, error) {
 	return expr + " = " + p.arg(t.text), nil
 }
 
-// requestField matches lines by the request they were logged in:
-// route:/orders/{id}, route:/admin/*, status:>=500, method:POST.
+// requestField matches lines by their request: route:/orders/{id}, status:>=500, method:POST.
 func (p *queryParser) requestField(field string, t *qtok) (string, error) {
-	// The range comes first in the SQL, so its arguments are bound first.
+	// the range comes first in the SQL, so its args are bound first
 	window := ""
 	if p.from != "" {
 		window = "created_at >= " + p.arg(p.from) + " AND created_at < " + p.arg(p.to) + " AND "
@@ -482,7 +462,6 @@ func (p *queryParser) requestField(field string, t *qtok) (string, error) {
 	return "request_id IN (SELECT request_id FROM api_logs WHERE " + window + cond + ")", nil
 }
 
-// level reads level:error, level:warn+, level:>=warn and severity numbers.
 func (p *queryParser) level(t *qtok) (string, error) {
 	text, op := strings.ToLower(t.text), strings.TrimPrefix(t.op, ":")
 	if strings.HasSuffix(text, "+") {
@@ -503,7 +482,6 @@ func (p *queryParser) level(t *qtok) (string, error) {
 	return "severity " + op + " " + p.arg(sev), nil
 }
 
-// wildcard turns * into %, escaping the rest; contains wraps a bare word.
 func wildcard(s string, contains bool) string {
 	parts := strings.Split(s, "*")
 	for i := range parts {
@@ -516,8 +494,6 @@ func wildcard(s string, contains bool) string {
 	return out
 }
 
-// sqliteRegexp registers REGEXP with the SQLite driver once and reports
-// whether that worked.
 var sqliteRegexp = sync.OnceValue(func() bool {
 	var mu sync.Mutex
 	cache := map[string]*regexp.Regexp{}

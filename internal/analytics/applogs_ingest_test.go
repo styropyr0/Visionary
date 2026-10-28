@@ -21,12 +21,9 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
-// logsTestServer is a server on a fresh SQLite file with an ingest key k1
-// and the given Settings → Logs values (logs.* and logserver.config).
 func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	t.Helper()
-	// VISIONARY_TEST_DATABASE_URL runs the log tests on a scratch PostgreSQL
-	// or MySQL database instead, which every test empties completely.
+	// set VISIONARY_TEST_DATABASE_URL to run on a scratch PostgreSQL or MySQL; each test wipes it
 	dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = "sqlite:///" + filepath.ToSlash(filepath.Join(t.TempDir(), "logs.db"))
@@ -42,8 +39,7 @@ func logsTestServer(t *testing.T, settings map[string]string) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.db.Close() })
-	// Ingestion writes through the OTLP state's own pool; close it first
-	// so the file can be removed.
+	// ingestion uses the OTLP state's own pool; close it so the file can be removed
 	t.Cleanup(func() {
 		if v, ok := otlpStates.LoadAndDelete(s); ok && v.(*otlpState).sql != nil {
 			_ = v.(*otlpState).sql.Close()
@@ -61,7 +57,6 @@ func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	return s
 }
 
-// logRows reads app_logs as maps, oldest first.
 func logRows(t *testing.T, s *Server) []map[string]any {
 	t.Helper()
 	res, err := s.db.Query(context.Background(), `SELECT * FROM app_logs ORDER BY id`)
@@ -224,7 +219,6 @@ func TestIngestElasticsearchBulk(t *testing.T) {
 	if rows[1]["message"] != "container stdout line" || attrsOf(t, rows[1])["stream"] != "stdout" {
 		t.Fatalf("docker json %+v", rows[1])
 	}
-	// The version check shippers make first.
 	req := httptest.NewRequest("GET", "/api/ingest/logs", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -285,7 +279,6 @@ func TestIngestOTLPLogs(t *testing.T) {
 	if rows[1]["message"] != "from a map" || attrsOf(t, rows[1])["k"] != "v" {
 		t.Fatalf("map body %+v", rows[1])
 	}
-	// The exception still becomes an error, as before.
 	res, err := s.db.Query(context.Background(), `SELECT type FROM errors`)
 	if err != nil || len(res.Rows) != 1 || res.Rows[0][0] != "CardError" {
 		t.Fatalf("errors %+v %v", res, err)
@@ -373,9 +366,7 @@ func TestSyslogListener(t *testing.T) {
 	s := logsTestServer(t, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Find a port free for TCP, then let the receiver bind it for both. On
-	// Windows some UDP ports are reserved even when TCP is free; a refused
-	// bind is reported in the status, so try another port.
+	// some UDP ports are reserved on Windows even when TCP is free, so retry on a refused bind
 	addr := ""
 	for attempt := 0; attempt < 20 && addr == ""; attempt++ {
 		probe, err := net.Listen("tcp", "127.0.0.1:0")
@@ -442,12 +433,12 @@ func TestLogSettingsFromLive(t *testing.T) {
 
 func TestStripLeadingTime(t *testing.T) {
 	for in, want := range map[string][3]string{
-		"2026-10-27T10:00:01Z worker started":        {"worker started", "", "2026-10-27T10:00:01.000Z"},
+		"2026-10-27T10:00:01Z worker started":         {"worker started", "", "2026-10-27T10:00:01.000Z"},
 		"[2026-10-27 10:00:01,250] WARNING: low disk": {"low disk", "2026-10-27 10:00:01,250", ""},
-		"2026/10/27 10:00:01.123456 plain":           {"plain", "2026/10/27 10:00:01.123456", ""},
-		"2026-10-27 10:00:01+05:30 zoned":            {"zoned", "", "2026-10-27T04:30:01.000Z"},
-		"no time here":                               {"no time here", "", ""},
-		"2026-10-27T10:00:01Z":                       {"2026-10-27T10:00:01Z", "", ""},
+		"2026/10/27 10:00:01.123456 plain":            {"plain", "2026/10/27 10:00:01.123456", ""},
+		"2026-10-27 10:00:01+05:30 zoned":             {"zoned", "", "2026-10-27T04:30:01.000Z"},
+		"no time here":                                {"no time here", "", ""},
+		"2026-10-27T10:00:01Z":                        {"2026-10-27T10:00:01Z", "", ""},
 	} {
 		l := &logLine{message: in}
 		normalizeLogLine(l, nil, time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC))
@@ -461,8 +452,6 @@ func TestStripLeadingTime(t *testing.T) {
 	}
 }
 
-// emptyTestDatabase drops every table of the scratch database, so each test
-// starts as on a fresh install.
 func emptyTestDatabase(t *testing.T, s *Server) {
 	t.Helper()
 	ctx := context.Background()

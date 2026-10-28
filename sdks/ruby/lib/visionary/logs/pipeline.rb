@@ -4,14 +4,10 @@ require "socket"
 
 module Visionary
   module Logs
-    # The agent's log pipeline: decides each captured line (written now,
-    # held in its request, or dropped), applies the per-minute cap and
-    # queues lines for its own writer. Nothing on a request path waits for
-    # the database.
+    # Decides and queues captured lines; nothing on a request path waits for the database.
     class Pipeline
       attr_reader :writer, :service
 
-      # writer: given in tests; by default a LogWriter of its own.
       def initialize(cfg, instance, store, schemas, logger, writer: nil)
         @cfg = cfg
         @instance = instance
@@ -29,8 +25,7 @@ module Visionary
         reset_rate
       end
 
-      # The current settings; replaced whole by poll, so readers never see
-      # a half-updated one.
+      # Replaced whole by poll, so readers never see a half-updated one.
       def settings = @settings
 
       def settings=(s)
@@ -49,8 +44,7 @@ module Visionary
         @writer.after_fork
       end
 
-      # Reads Settings → Logs, keeping the previous values when the read
-      # fails (no Visionary server yet, or the table is missing).
+      # Keeps the previous values when the read fails (no server or table yet).
       def poll(store)
         @settings = Logs.parse_settings(store.rows(SETTINGS_SQL), @base)
         @read_failed = false
@@ -61,27 +55,23 @@ module Visionary
         end
       end
 
-      # The lowest level a line could be kept at now; nil while capture is
-      # off in the dashboard.
+      # nil while capture is off in the dashboard.
       def lowest
         s = @settings
         s.enabled ? s.lowest(@service) : nil
       end
 
-      # Whether a line at sev could be kept at all, before it is built: inside
-      # a request it may be held, outside it must reach the floor.
+      # Inside a request a line may be held; outside it must reach the floor.
       def wants?(sev, ctx = RequestContext.current)
         s = @settings
         return false unless s.enabled
         ctx ? sev >= s.lowest(@service) : sev >= s.floor(@service, "", "")
       end
 
-      # Takes one line logged in ctx (the current request, or nil). Never
-      # blocks.
+      # Never blocks.
       def capture(rec, ctx = RequestContext.current)
         s = @settings
-        # The SDK's own messages are left out: a write failure logged here
-        # would otherwise be queued behind the write that failed.
+        # Skip the SDK's own messages, or a failed write's log line would queue behind it.
         return if !s.enabled || rec.message.start_with?("visionary: ")
         return if s.dropped?(@service, rec.logger, rec.message, rec.sev)
 
@@ -95,16 +85,12 @@ module Visionary
         return emit(rec) if rec.sev >= s.hold_below(@service, rec.at)
         return if ctx.hold_log(rec, MAX_HELD)
 
-        # Work the request left running, after it ended: its route and user
-        # are known now.
+        # Logged after the request ended, so its route and user are known.
         emit(rec) if rec.sev >= s.floor(@service, ctx.route, ctx.user[0], rec.at)
       rescue StandardError
         nil
       end
 
-      # Decides a request's held lines once it has ended: kept when they
-      # reach the level for its route and user, or, when the request failed
-      # or was slow, the buffer's level.
       def finish(ctx, route, failed, duration_ms)
         lines = ctx.take_held_logs
         return if lines.empty?
@@ -121,8 +107,7 @@ module Visionary
         nil
       end
 
-      # Queues a line within the per-minute cap. Errors and fatals pass the
-      # cap up to ten times over, so a flood of info lines never hides them.
+      # Errors and fatals get ten times the per-minute cap, so a flood of info lines never hides them.
       def emit(rec)
         rate = @settings.rate
         if rate.positive?
@@ -146,7 +131,6 @@ module Visionary
         @writer.enqueue([:log, rec])
       end
 
-      # The app_logs row for rec, in Schema::LOG_COLUMNS order.
       def row(rec)
         msg = Logs.truncate(Logs.scrub(Visionary.utf8(rec.message)), MAX_MESSAGE)
         attrs = rec.attrs && !rec.attrs.empty? ? Logs.encode_attrs(rec.attrs, @secrets) : nil
@@ -171,9 +155,7 @@ module Visionary
       end
     end
 
-    # The app_logs writer: its own thread and queue (10000 lines), so a flood
-    # of lines never crowds out request rows. Same batching and retries as
-    # the main writer; it also reads Settings → Logs every 30 s.
+    # Its own thread and queue, so a flood of lines never crowds out request rows.
     class LogWriter < Writer
       def initialize(cfg, store, schemas, logger, pipeline)
         super(cfg, store, schemas, logger)

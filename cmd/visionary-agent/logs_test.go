@@ -93,7 +93,7 @@ func TestReadFileFollowsRotation(t *testing.T) {
 	if err := os.WriteFile(path, []byte("old line\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s.readFile(path) // first sight: starts at the end
+	s.readFile(path)
 	if got := drain(s); len(got) != 0 {
 		t.Fatalf("read history: %+v", got)
 	}
@@ -112,7 +112,7 @@ func TestReadFileFollowsRotation(t *testing.T) {
 	if got := drain(s); len(got) != 1 || got[0].Message != "partial now done" {
 		t.Fatalf("finished line %+v", got)
 	}
-	// Truncated (copytruncate rotation): start again from the top.
+	// copytruncate rotation: start again from the top.
 	if err := os.WriteFile(path, []byte("fresh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,6 @@ func TestReadFileFollowsRotation(t *testing.T) {
 	if got := drain(s); len(got) != 1 || got[0].Message != "fresh" {
 		t.Fatalf("after truncate %+v", got)
 	}
-	// Offsets survive a restart.
 	s.state.save()
 	s2 := testShipper(t, "http://x")
 	s2.state = loadLogState(filepath.Dir(s.state.path))

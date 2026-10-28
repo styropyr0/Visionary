@@ -8,19 +8,6 @@ import (
 	"time"
 )
 
-// Alerts on logs:
-//
-//   - log_matches: lines matching the rule's search (spec.query) in the
-//     window, e.g. "level:error service:checkout" > 10. "Alert me when this
-//     happens again" on a line is pattern:<id> > 0.
-//   - log_absent: the same count, for "it stopped": < 1 alerts when an
-//     expected line (a cron job's "backup finished") was not logged.
-//   - log_new_patterns: message templates seen for the first time.
-//   - log_lines, log_error_lines: volume, with an anomaly mode for floods
-//     and for logs that suddenly stop.
-//
-// Notifications quote the latest matching lines.
-
 func logMetrics() []metricDef {
 	fixed := func(sql string) func(int64) string { return func(int64) string { return sql } }
 	logScopes := []string{"service"}
@@ -46,10 +33,8 @@ func logMetrics() []metricDef {
 	}
 }
 
-// logQueryMetric reports whether a metric takes a search.
 func logQueryMetric(id string) bool { return id == "log_matches" || id == "log_absent" }
 
-// observeLogMatches counts the lines matching the rule's search.
 func (s *Server) observeLogMatches(ctx context.Context, r alertRule, now time.Time) ([]observation, error) {
 	w := specWindow(r.Spec)
 	cq, err := compileLogQuery(r.Spec.Query, s.q, s.onD1())
@@ -93,7 +78,6 @@ func quoteSearch(q string) string {
 	return "`" + q + "`"
 }
 
-// sampleLines quotes the latest three matching lines.
 func (s *Server) sampleLines(ctx context.Context, where string, args []any) string {
 	res, err := s.db.Query(ctx, `SELECT level, service, message FROM app_logs WHERE `+where+` ORDER BY created_at DESC, id DESC LIMIT 3`, args...)
 	if err != nil || len(res.Rows) == 0 {
@@ -117,8 +101,7 @@ func firstLine(s string) string {
 	return s
 }
 
-// observeLogNewPatterns counts templates at warn or worse first seen in
-// the window.
+// observeLogNewPatterns counts warn-or-worse templates first seen in the window.
 func (s *Server) observeLogNewPatterns(ctx context.Context, r alertRule, now time.Time) ([]observation, error) {
 	w := specWindow(r.Spec)
 	args := []any{now.Add(-w).UTC().Format(tsLayout), now.UTC().Format(tsLayout)}
@@ -150,7 +133,6 @@ func (s *Server) observeLogNewPatterns(ctx context.Context, r alertRule, now tim
 
 var patternTerm = regexp.MustCompile(`\bpattern:([0-9a-f]{16})\b`)
 
-// logAlertPatterns reads the patterns that enabled log alert rules name.
 func (s *Server) logAlertPatterns(ctx context.Context) map[string]bool {
 	out := map[string]bool{}
 	rules, err := s.alertEngine().enabledRules(ctx)
@@ -167,7 +149,6 @@ func (s *Server) logAlertPatterns(ctx context.Context) map[string]bool {
 	return out
 }
 
-// previewLogQuery is a rule preview's chart: matching lines per hour.
 func (s *Server) previewLogQuery(ctx context.Context, sp ruleSpec, day timeSpan, tr timeRange) (*Result, error) {
 	cq, err := compileLogQuery(sp.Query, s.q, s.onD1())
 	if err != nil {

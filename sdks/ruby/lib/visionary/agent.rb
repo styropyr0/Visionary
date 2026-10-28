@@ -46,7 +46,6 @@ module Visionary
       end
       @profiler = Profiler.new(cfg, @instance, @store, @writer, @logger) if cfg.profile && @writer
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
-      # Application logs go through a writer of their own (see Logs::LogWriter).
       @logs = Logs::Pipeline.new(cfg, @instance, @store, @schemas, @logger) if cfg.logs
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)

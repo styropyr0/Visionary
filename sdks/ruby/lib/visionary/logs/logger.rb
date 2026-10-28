@@ -2,21 +2,9 @@
 
 module Visionary
   module Logs
-    # A ::Logger-compatible logger that copies every line to app_logs and
-    # forwards every call to inner (when given) unchanged:
-    #
-    #   logger = Visionary.logger(Logger.new($stdout))
-    #
-    # inner still prints exactly what it printed before, at its own level;
-    # Visionary sees lower levels too, so the buffer can keep a failed
-    # request's debug lines. A block is evaluated once and its value handed
-    # to both. Lines are captured by the running agent; before it starts they
-    # only reach inner.
-    #
-    # Messages follow Logger: a String, an Exception ("Class: message" and
-    # its backtrace), or a Hash, whose "message"/"msg" is the message and
-    # whose other keys become attrs (request_id, trace_id, span_id, user_id,
-    # session_id and logger go to their own columns).
+    # A ::Logger that copies every line to app_logs and forwards every call to inner unchanged.
+    # Visionary also sees levels inner doesn't print, so failed requests keep their debug lines.
+    # In a Hash message, "message"/"msg" is the text and the other keys become attrs.
     class Logger
       # ::Logger's severities, without requiring the logger gem.
       SEVERITIES = { debug: 0, info: 1, warn: 2, error: 3, fatal: 4, unknown: 5 }.freeze
@@ -66,7 +54,6 @@ module Visionary
         end
       end
 
-      # Raw text: kept as plain text, its level read from the text.
       def <<(msg)
         result = @inner ? (@inner << msg) : self
         text = Visionary.utf8(msg).chomp
@@ -76,21 +63,18 @@ module Visionary
         result
       end
 
-      # inner's level; alone (broadcast from Rails.logger), the lowest level
-      # Visionary keeps, so the lines it may keep reach it.
+      # Alone (broadcast from Rails.logger), the lowest level Visionary keeps, so those lines reach it.
       def level
         return @inner.level if @inner
         capture_level
       end
 
-      # Forwarded to inner. Alone it is remembered but changes nothing:
-      # what is kept follows Settings → Logs.
+      # Alone it changes nothing: what is kept follows Settings → Logs.
       def level=(v)
         @inner ? (@inner.level = v) : (@level = v)
       end
 
-      # ActiveSupport's LoggerSilence (Rails.logger.silence) sets this for
-      # the current thread or fiber; lines below it are not captured.
+      # Set per thread or fiber by ActiveSupport's LoggerSilence (Rails.logger.silence).
       def local_level
         Thread.current[@local_key]
       end
@@ -111,7 +95,6 @@ module Visionary
       def close = @inner&.close
       def reopen(*args) = @inner&.reopen(*args)
 
-      # Anything else (tagged, push_tags, ...) goes to inner.
       def method_missing(name, *args, **kwargs, &block)
         return super unless @inner.respond_to?(name)
         @inner.public_send(name, *args, **kwargs, &block)
@@ -121,7 +104,6 @@ module Visionary
         @inner.respond_to?(name) || super
       end
 
-      # Integer, :debug or "warn" as ::Logger's number.
       def self.severity(v)
         return v if v.is_a?(Integer)
         SEVERITIES.fetch(v.to_s.downcase.to_sym, SEVERITIES[:unknown])
@@ -129,14 +111,11 @@ module Visionary
 
       private
 
-      # The pipeline of the running agent, nil when capture is off.
       def pipeline
         agent = Visionary.running_agent
         agent.respond_to?(:logs) ? agent.logs : nil
       end
 
-      # The ::Logger level of the lowest line Visionary may keep (UNKNOWN when
-      # it keeps none).
       def capture_level
         lowest = pipeline&.lowest
         return SEVERITIES[:unknown] unless lowest
@@ -157,8 +136,7 @@ module Visionary
         end
       end
 
-      # ::Logger#add's rules: with no message the block, else progname, is
-      # the message.
+      # Like ::Logger#add: with no message, the block or else progname is the message.
       def capture(severity, message, progname, block)
         pipe = pipeline
         return unless pipe
@@ -217,8 +195,7 @@ module Visionary
         !local.nil? && n < local
       end
 
-      # The active OpenTelemetry span, when the app uses one and the request
-      # brought no traceparent.
+      # Falls back to the active OpenTelemetry span when the request brought no traceparent.
       def otel(rec)
         return unless defined?(::OpenTelemetry::Trace)
         ctx = RequestContext.current
@@ -232,9 +209,6 @@ module Visionary
       end
 
       class << self
-        # A message as [text, attrs]: Strings as they are, Exceptions as
-        # "Class: message" and the backtrace, Hashes split into the message
-        # ("message"/"msg") and flat attrs, anything else inspected.
         def split(message)
           case message
           when String then [Visionary.utf8(message), {}]
@@ -253,8 +227,7 @@ module Visionary
           end
         end
 
-        # The TaggedLogging tags of logger in this thread, through a Rails 7.1+
-        # BroadcastLogger's broadcasts too.
+        # TaggedLogging tags, including through a Rails 7.1+ BroadcastLogger.
         def tags(logger)
           return [] unless logger
           loggers = logger.respond_to?(:broadcasts) ? [logger, *logger.broadcasts] : [logger]
@@ -269,9 +242,7 @@ module Visionary
           []
         end
 
-        # Where the line was logged: the first frame outside this SDK and the
-        # logger machinery (Logger, ActiveSupport's broadcast and tagged
-        # loggers), one frame at a time.
+        # The first frame outside this SDK and the logger machinery.
         def location
           i = 1
           while i < 40
@@ -296,7 +267,6 @@ module Visionary
       end
     end
 
-    # Names source files like CPU profile frames (Profiler::Frames).
     def self.frames
       @frames ||= Profiler::Frames.new
     end

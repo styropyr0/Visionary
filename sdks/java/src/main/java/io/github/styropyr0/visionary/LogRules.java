@@ -17,11 +17,6 @@ import java.util.regex.Pattern;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-/**
- * The rules every source of application logs follows (SPEC.md, "Application
- * logs"; {@code sdks/go/logrules}): level names and numbers, finding a level in
- * plain text, scrubbing secrets and encoding a line's fields.
- */
 final class LogRules {
 
     // Severities as stored in app_logs.severity.
@@ -34,7 +29,7 @@ final class LogRules {
 
     static final int MAX_MESSAGE = 8 << 10;
     static final int MAX_ATTRS = 16 << 10;
-    /** A string attribute is cut to this many bytes when the attributes do not fit. */
+    /** String values are cut to this when the attributes don't fit. */
     private static final int MAX_ATTR_VALUE = 1024;
 
     private static final String[] NAMES = {"", "trace", "debug", "info", "warn", "error", "fatal"};
@@ -43,12 +38,10 @@ final class LogRules {
     private LogRules() {
     }
 
-    /** A severity's level name; out-of-range severities are info. */
     static String name(int sev) {
         return sev < TRACE || sev > FATAL ? "info" : NAMES[sev];
     }
 
-    /** Reads a level name the way sources spell them; 0 when unknown. */
     static int parseLevel(String s) {
         if (s == null) {
             return 0;
@@ -65,15 +58,9 @@ final class LogRules {
     }
 
     private static final Pattern LEVEL_FIELD = Pattern.compile("(?i)\\b(?:level|lvl|severity)=[\"']?([a-z]+)");
-    /** A date, a time or both, as loggers print them. */
     private static final Pattern TIMESTAMP = Pattern.compile("^[\\[(]?[0-9][0-9/:.,\\-TZ+]*[\\])]?$");
 
-    /**
-     * The level a plain-text line states at its start ({@code ERROR ...}, {@code [warn] ...},
-     * {@code error: ...}, {@code 2026-10-28 09:30:12 WARN ...}), or a {@code level=} field in the
-     * first 200 characters. A bare lower-case word ({@code error rate is low}) is not a level.
-     * 0 when the line states none.
-     */
+    /** A bare lower-case word ({@code error rate is low}) is not a level. */
     static int textLevel(String s) {
         String head = s.length() > 200 ? s.substring(0, 200) : s;
         Matcher m = LEVEL_FIELD.matcher(head);
@@ -105,10 +92,7 @@ final class LogRules {
         return 0;
     }
 
-    /**
-     * Removes a leading upper-case level word that {@link #textLevel} read as {@code sev}
-     * ({@code INFO started} → {@code started}, {@code WARNING: disk} → {@code disk}).
-     */
+    /** The level has its own column, so {@code INFO started} is stored as {@code started}. */
     static String stripLevelWord(String s, int sev) {
         int space = s.indexOf(' ');
         if (space < 0) {
@@ -135,7 +119,7 @@ final class LogRules {
         return s.substring(start, end);
     }
 
-    /** Credentials in free text and what replaces them, in the order SPEC.md gives. */
+    /** Applied in this order. */
     private static final Pattern[] SECRETS = {
         Pattern.compile("-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)"),
         Pattern.compile("\\beyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}"),
@@ -148,7 +132,6 @@ final class LogRules {
         "[REDACTED:private-key]", "[REDACTED:jwt]", "$1 [REDACTED]", "[REDACTED:aws-key]", "$1$2[REDACTED]",
     };
 
-    /** Replaces credentials in {@code s}. */
     static String scrub(String s) {
         if (s == null || s.isEmpty()) {
             return s;
@@ -162,7 +145,6 @@ final class LogRules {
         return s;
     }
 
-    /** The redacted field names (the request redaction defaults plus {@code extra}), lower case. */
     static Set<String> secretKeys(List<String> extra) {
         Set<String> out = new HashSet<>();
         List<String> all = new ArrayList<>(Redactor.DEFAULT_FIELDS);
@@ -178,10 +160,6 @@ final class LogRules {
         return Collections.unmodifiableSet(out);
     }
 
-    /**
-     * Adds a value under {@code key} as a string, number or boolean; maps become dotted keys,
-     * times their ISO-8601 form, anything else its string form.
-     */
     static void putAttr(Map<String, Object> out, String key, Object value) {
         if (key == null || key.isEmpty()) {
             return;
@@ -211,12 +189,7 @@ final class LogRules {
         out.put(key, v);
     }
 
-    /**
-     * The attributes as one flat JSON object: values under a secret key (its last dotted
-     * part) redacted, strings scrubbed, at most {@link #MAX_ATTRS} bytes. Long string values
-     * are cut first, then keys are kept in sorted order while they fit, with
-     * {@code "_truncated": true}. Null when there are none.
-     */
+    /** Over {@link #MAX_ATTRS}, long string values are cut first, then keys dropped with {@code "_truncated": true}. */
     static String encodeAttrs(Map<String, Object> attrs, Set<String> secret) {
         if (attrs == null || attrs.isEmpty()) {
             return null;
