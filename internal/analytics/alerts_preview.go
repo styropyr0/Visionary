@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -175,6 +176,38 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 	case sp.Metric == "uptime_cert_days":
 		out.Unit, out.Threshold = "days", ptr(sp.Threshold)
 		out.Note = "Each check's days until its certificate expires are below; certificates change too rarely to chart."
+
+	case logQueryMetric(sp.Metric):
+		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
+		res, err := s.previewLogQuery(ctx, sp, day[0], tr)
+		if err != nil {
+			if missingTable(err, "app_logs") {
+				out.Note = "No logs yet: connect a service's logs first."
+				return out, nil
+			}
+			return nil, err
+		}
+		out.Result = res
+		out.Note = "Matching lines per hour. The rule counts them over its window."
+
+	case sp.Metric == "log_new_patterns":
+		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
+		t := strings.ReplaceAll(s.q.bucketOf("3600"), "created_at", "first_seen")
+		where, args := "first_seen >= ? AND first_seen < ? AND severity >= 4", []any{day[0].From.UTC().Format(tsLayout), now.UTC().Format(tsLayout)}
+		if sp.Scope.Service != "" {
+			where, args = where+" AND service = ?", append(args, sp.Scope.Service)
+		}
+		res, err := s.db.Query(ctx, `SELECT `+t+` AS t, '' AS series, COUNT(*) AS value FROM log_patterns WHERE `+where+` GROUP BY `+t+` ORDER BY t`, args...)
+		if err != nil {
+			if missingTable(err, "log_patterns") {
+				out.Note = "No logs yet: connect a service's logs first."
+				return out, nil
+			}
+			return nil, err
+		}
+		tr.Bucket = 3600
+		out.Result = newResult(res, s.maxRows(), "", tr)
+		out.Note = "New message templates at warn or worse per hour."
 
 	case sp.Metric == "new_error_types":
 		out.Unit, out.Threshold = "count", ptr(sp.Threshold)

@@ -163,13 +163,7 @@ GROUP BY l.pattern, a.method, a.route ORDER BY lines DESC LIMIT 50`
 	writeJSON(w, http.StatusOK, map[string]any{"failures": out})
 }
 
-// alertedPatterns are the patterns alert rules watch; filled in by the
-// alerts integration.
+// alertedPatterns are the patterns enabled alert rules watch.
 func (s *Server) alertedPatterns(ctx context.Context) map[string]bool {
 	return s.logAlertPatterns(ctx)
-}
-
-// logAlertPatterns reads the patterns that alert rules on logs watch.
-func (s *Server) logAlertPatterns(ctx context.Context) map[string]bool {
-	return map[string]bool{}
 }

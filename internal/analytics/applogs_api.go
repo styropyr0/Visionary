@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/styropyr0/visionary/internal/db"
 )
 
 // The Logs page's API. Every endpoint takes the dashboard range (from, to)
@@ -44,6 +46,7 @@ func (s *Server) applogsAPIRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/applogs/views", s.authed(s.handleLogViews))
 	mux.Handle("POST /api/applogs/views", s.authed(s.handleCreateLogView))
 	mux.Handle("DELETE /api/applogs/views/{id}", s.authed(s.handleDeleteLogView))
+	mux.Handle("GET /api/applogs/around", s.authed(s.handleAppLogsAround))
 	mux.Handle("GET /api/applogs/{id}", s.authed(s.handleAppLog))
 	mux.Handle("GET /api/applogs/{id}/context", s.authed(s.handleAppLogContext))
 }
@@ -395,6 +398,52 @@ func (s *Server) handleAppLogContext(w http.ResponseWriter, r *http.Request) {
 	}
 	s.maskLogRows(r, out)
 	writeJSON(w, http.StatusOK, map[string]any{"result": out, "by": by, "value": val, "id": id})
+}
+
+// handleAppLogsAround returns the lines logged shortly before and after a
+// moment by one source (service, instance, host or container, as given):
+// what a service said around an error, a failed uptime check, an OOM kill
+// or a crash.
+func (s *Server) handleAppLogsAround(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	at, err := time.Parse(time.RFC3339Nano, qs.Get("at"))
+	if err != nil {
+		if at, err = time.Parse(tsLayout, qs.Get("at")); err != nil {
+			writeError(w, http.StatusBadRequest, "at must be a timestamp")
+			return
+		}
+	}
+	before, after := 2*time.Minute, 30*time.Second
+	if v, err := strconv.Atoi(qs.Get("before_s")); err == nil && v >= 0 && v <= 3600 {
+		before = time.Duration(v) * time.Second
+	}
+	if v, err := strconv.Atoi(qs.Get("after_s")); err == nil && v >= 0 && v <= 3600 {
+		after = time.Duration(v) * time.Second
+	}
+	tr := timeRange{From: at.Add(-before).UTC(), To: at.Add(after).UTC(), Bucket: 60}
+	ls, err := s.logSearchFor(r, tr, qs.Get("q"))
+	if err != nil {
+		s.logFail(w, err)
+		return
+	}
+	for _, c := range []string{"service", "instance", "host", "container", "request_id"} {
+		if v := qs.Get(c); v != "" {
+			ls.where = append(ls.where, c+" = ?")
+			ls.args = append(ls.args, v)
+		}
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT `+logListColumns+` FROM app_logs WHERE `+ls.sql()+` ORDER BY created_at, id LIMIT 300`, ls.args...)
+	if err != nil {
+		if missingTable(err, "app_logs") {
+			writeJSON(w, http.StatusOK, newResult(&db.Rows{Columns: []string{}}, 0, "", tr))
+			return
+		}
+		s.logFail(w, dbErr(err))
+		return
+	}
+	res := newResult(rows, 300, "", tr)
+	s.maskLogRows(r, res)
+	writeJSON(w, http.StatusOK, res)
 }
 
 // handleAppLogsTail streams lines newer than the last one sent, polling

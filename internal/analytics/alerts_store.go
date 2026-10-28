@@ -28,6 +28,8 @@ type ruleSpec struct {
 	// Metric is a built-in metric id, or "custom" with SQL.
 	Metric    string     `json:"metric"`
 	SQL       string     `json:"sql,omitempty"`
+	// Query is the Logs search of log_matches and log_absent rules.
+	Query     string     `json:"query,omitempty"`
 	Scope     alertScope `json:"scope"`
 	Op        string     `json:"op,omitempty"`
 	Threshold float64    `json:"threshold"`

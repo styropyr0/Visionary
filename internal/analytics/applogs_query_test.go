@@ -352,3 +352,25 @@ func TestAppLogsTail(t *testing.T) {
 	}
 	t.Fatal("no lines arrived")
 }
+
+func TestLogsAroundAndRequestLogs(t *testing.T) {
+	s := logsTestServer(t, nil)
+	base := seedLogs(t, s)
+	r := httptest.NewRequest("GET", "/api/applogs/around?at="+url.QueryEscape(base.Add(time.Second).Format(time.RFC3339))+"&host=h1&before_s=5&after_s=1", nil)
+	r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, &session{UserID: "u", Role: "admin"}))
+	w := httptest.NewRecorder()
+	s.handleAppLogsAround(w, r)
+	var res Result
+	_ = json.Unmarshal(w.Body.Bytes(), &res)
+	if w.Code != 200 || len(res.Rows) != 2 || res.Rows[0][9] != "order placed" || res.Rows[1][9] != "payment timeout after 30s" {
+		t.Fatalf("around %d %s", w.Code, w.Body.String())
+	}
+	r = httptest.NewRequest("GET", "/api/telemetry/requests/r2", nil)
+	r.SetPathValue("request_id", "r2")
+	r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, &session{UserID: "u", Role: "admin"}))
+	w = httptest.NewRecorder()
+	s.handleRequestTelemetry(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"payment timeout after 30s"`) || !strings.Contains(w.Body.String(), `"logs":{"columns":["id","created_at","level"`) {
+		t.Fatalf("request telemetry %d %s", w.Code, w.Body.String())
+	}
+}

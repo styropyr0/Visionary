@@ -25,7 +25,7 @@ func (s *Server) handleRequestTelemetry(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid request id")
 		return
 	}
-	var logID, spans, errs *Result
+	var logID, spans, errs, lines *Result
 	tr := timeRange{}
 	g, ctx := errgroup.WithContext(r.Context())
 	g.Go(func() (err error) {
@@ -48,6 +48,22 @@ ORDER BY created_at, id
 LIMIT 20`, tr, rid)
 		return
 	})
+	g.Go(func() (err error) {
+		// The lines the request logged, for the waterfall and its Logs tab.
+		q, args := `SELECT id, created_at, level, severity, logger, message, attrs, code_file, code_line, pattern
+FROM app_logs WHERE request_id = ?`, []any{rid}
+		if scope, sargs := s.logScope(r); scope != "" {
+			q, args = q+" AND "+scope, append(args, sargs...)
+		}
+		lines, err = s.telemetryQuery(ctx, q+` ORDER BY created_at, id LIMIT 300`, tr, args...)
+		if err != nil && missingTable(err, "app_logs") {
+			lines, err = &Result{Columns: []string{}, Rows: [][]any{}}, nil
+		}
+		if lines != nil {
+			s.maskLogRows(r, lines)
+		}
+		return
+	})
 	if err := g.Wait(); err != nil {
 		s.fail(w, err)
 		return
@@ -56,7 +72,7 @@ LIMIT 20`, tr, rid)
 	if len(logID.Rows) > 0 && len(logID.Rows[0]) > 0 {
 		id = logID.Rows[0][0]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"log_id": id, "spans": spans, "errors": errs})
+	writeJSON(w, http.StatusOK, map[string]any{"log_id": id, "spans": spans, "errors": errs, "logs": lines})
 }
 
 // handleSpanGroups ranks span names of one kind (db by default) by total

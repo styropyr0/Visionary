@@ -305,6 +305,10 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeCertExpiry(ctx, r, now)
 	case "new_error_types":
 		return s.observeNewErrors(ctx, r, now)
+	case "log_matches", "log_absent":
+		return s.observeLogMatches(ctx, r, now)
+	case "log_new_patterns":
+		return s.observeLogNewPatterns(ctx, r, now)
 	}
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok {

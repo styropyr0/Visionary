@@ -263,6 +263,14 @@ func (s *Server) checkRule(ctx context.Context, in ruleInput) (alertRule, error)
 		} else {
 			sp.SQL = ""
 		}
+		if logQueryMetric(sp.Metric) {
+			sp.Query = strings.TrimSpace(sp.Query)
+			if _, err := compileLogQuery(sp.Query, s.q, s.onD1()); err != nil {
+				return rule, badInput("the log search: " + err.Error())
+			}
+		} else {
+			sp.Query = ""
+		}
 		if ct := sp.ClearThreshold; ct != nil {
 			loose := (sp.Op == ">" || sp.Op == ">=") && *ct > sp.Threshold || (sp.Op == "<" || sp.Op == "<=") && *ct < sp.Threshold
 			if loose {
