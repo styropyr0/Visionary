@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
 // LogHandler wraps an slog.Handler so every record also goes to Visionary's
@@ -38,7 +40,7 @@ func (h *slogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 		return true
 	}
 	_, a := fromContext(ctx)
-	return a != nil && a.logs != nil && a.logs.settings().enabled
+	return a != nil && a.logs != nil && a.logs.settings().Enabled
 }
 
 func (h *slogHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -235,7 +237,7 @@ func (w *stdLogWriter) Write(p []byte) (int, error) {
 	if i := bytes.LastIndexByte(w.rest, '\n'); i >= 0 {
 		out = append([]byte(nil), w.rest[:i]...)
 		w.rest = w.rest[i+1:]
-	} else if len(w.rest) > maxLogMessage {
+	} else if len(w.rest) > logrules.MaxMessage {
 		out, w.rest = w.rest, nil
 	}
 	w.mu.Unlock()
@@ -253,16 +255,9 @@ func (w *stdLogWriter) line(s string) {
 		return
 	}
 	rec := &logRecord{at: time.Now(), sev: sevInfo, message: s}
-	if sev := textLevel(s); sev > 0 {
-		rec.sev = sev
-		// slog's default handler prints "INFO msg k=v" through log: the
-		// level has its own column.
-		if word, rest, ok := strings.Cut(s, " "); ok && strings.TrimSpace(rest) != "" {
-			w := strings.ToLower(strings.TrimSuffix(word, ":"))
-			if word == strings.ToUpper(word) && (w == levelName(sev) || w == "warning") {
-				rec.message = rest
-			}
-		}
+	if sev := logrules.TextLevel(s); sev > 0 {
+		// slog's default handler prints "INFO msg k=v" through log.
+		rec.sev, rec.message = sev, logrules.StripLevelWord(s, sev)
 	}
 	if f, ok := callerOutside("log", "log/slog", "io"); ok {
 		rec.file, rec.line, rec.fn = codeFile(f.File, f.Function), f.Line, shortFunc(f.Function)

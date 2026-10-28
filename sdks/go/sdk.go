@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/styropyr0/visionary/sdks/go/d1"
+	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
 // User is who made a request. Only ID is required; Handle and Role make the
@@ -331,7 +332,7 @@ func New(cfg Config) (*Agent, error) {
 		}
 		w := newWriter(lc, false, a.ident, db, cfg.Logger)
 		w.logsOnly = true
-		w.logSecrets = secretKeys(cfg.Requests.RedactFields)
+		w.logSecrets = logrules.SecretKeys(cfg.Requests.RedactFields)
 		a.logs = newLogger(a, w, ParseLevel(cfg.Logs.Level))
 	}
 	return a, nil

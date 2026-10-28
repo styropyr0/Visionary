@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
 // logAgent is an Agent with only log capture, writing to a fake store; its
@@ -20,11 +22,11 @@ func logAgent(t *testing.T, rows [][]string) *Agent {
 	a := &Agent{cfg: Config{Logger: slog.Default(), Requests: RequestsConfig{Enabled: true}}, db: &fakeStore{data: rows},
 		ident: identity{service: "api", instance: "i-1", version: "v2"}}
 	w := newWriter(RequestsConfig{QueueSize: 1000}, false, a.ident, a.db, a.cfg.Logger)
-	w.logsOnly, w.logSecrets = true, secretKeys(nil)
+	w.logsOnly, w.logSecrets = true, logrules.SecretKeys(nil)
 	a.writer = newWriter(RequestsConfig{}, true, a.ident, a.db, a.cfg.Logger)
 	a.logs = newLogger(a, w, sevInfo)
 	if rows != nil {
-		a.logs.set.Store(parseLogSettings(rows, sevInfo))
+		a.logs.set.Store(logrules.Parse(rows, sevInfo))
 	}
 	return a
 }
@@ -237,53 +239,6 @@ func TestCaptureStdLog(t *testing.T) {
 	// test runner; in an application it is the line that called log.
 	if got[0].file == "" || got[0].line == 0 {
 		t.Fatalf("no code location: %+v", got[0])
-	}
-}
-
-func TestTextLevel(t *testing.T) {
-	for in, want := range map[string]int{
-		"ERROR something":               sevError,
-		"2026-10-28 WARN disk":          sevWarn,
-		"level=debug msg=x":             sevDebug,
-		"[info] started":                sevInfo,
-		"time=x level=WARN msg=y":       sevWarn,
-		"INFO handled":                  sevInfo,
-		"payment failed":                0,
-		"user error rate is low but ok": 0,
-		"error: connection refused":     sevError,
-		"Error handling request":        0,
-		"10:03:44 [ERROR] x":            sevError,
-	} {
-		if got := textLevel(in); got != want {
-			t.Errorf("%q: %d, want %d", in, got, want)
-		}
-	}
-}
-
-func TestScrubSecrets(t *testing.T) {
-	in := `login password=hunter2 token: "abc def" Authorization: Bearer abcdefghijkl key AKIAABCDEFGHIJKLMNOP jwt eyJhbGciOiJ.eyJzdWIiOiIx.c2lnbmF0dXJl`
-	got := scrubSecrets(in)
-	for _, leak := range []string{"hunter2", "abc def", "abcdefghijkl", "AKIAABCDEFGHIJKLMNOP", "eyJhbGciOiJ"} {
-		if strings.Contains(got, leak) {
-			t.Fatalf("%q leaked in %q", leak, got)
-		}
-	}
-	if !strings.Contains(got, "password=[REDACTED]") || !strings.Contains(got, "Bearer [REDACTED]") {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestEncodeAttrs(t *testing.T) {
-	s := encodeAttrs(map[string]any{"user.password": "x", "n": 1, "note": "token=abc"}, secretKeys([]string{"ssn"}))
-	if !strings.Contains(s, `"user.password":"[REDACTED]"`) || !strings.Contains(s, `"note":"token=[REDACTED]"`) {
-		t.Fatalf("got %s", s)
-	}
-	big := map[string]any{}
-	for i := range 40 {
-		big[strings.Repeat("k", i+1)] = strings.Repeat("v", 2000)
-	}
-	if s := encodeAttrs(big, nil); len(s) > maxLogAttrs || !json.Valid([]byte(s)) {
-		t.Fatalf("too big: %d", len(s))
 	}
 }
 
