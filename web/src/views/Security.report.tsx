@@ -168,7 +168,7 @@ export function SecurityReport() {
 
         {actions.length > 0 && (
           <ReportSection title="Recommended actions">
-            <ol className="sec-actions">
+            <ol className="sec-steps">
               {actions.map((a) => (
                 <li key={a}>{a}</li>
               ))}

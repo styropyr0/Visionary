@@ -1255,6 +1255,17 @@ pre,
   transition: opacity 160ms;
 }
 
+/* A chart is at least its height, and grows when a neighbour in the row is
+   taller, so no blank band sits under it. */
+.panel-body:has(> .chart) {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-body > .chart {
+  flex: 1 0 auto;
+}
+
 .panel-body.refetching {
   opacity: 0.55;
 }

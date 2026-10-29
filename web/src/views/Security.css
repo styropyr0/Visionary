@@ -299,17 +299,17 @@
 }
 
 .sec-bullets,
-.sec-actions {
+.sec-steps {
   margin: 0;
   padding-left: 20px;
   line-height: 1.6;
 }
 
-.sec-actions li + li {
+.sec-steps li + li {
   margin-top: 4px;
 }
 
-.sec-actions li::marker {
+.sec-steps li::marker {
   color: var(--text-3);
   font-weight: 600;
 }
