@@ -12,7 +12,8 @@ import (
 // Kubernetes, Cloud Run, ...) fills the container_* columns of its own
 // system_metrics rows from its cgroup. Where no agent can reach a container
 // engine, these are the only containers there are, so the Containers view
-// lists them next to the agent's, with source "sdk": host is the instance
+// lists them next to the agent's, unless an agent already lists the same
+// container, with source "sdk": host is the instance
 // and name the service. State, health, restarts, ports and I/O need the
 // engine and stay empty; OOM kills come from container_oom_kills.
 
@@ -30,10 +31,68 @@ const (
 	sdkSeries     = "COALESCE(service, instance)"
 )
 
+// agentCovers tells whether an agent already lists the container behind an
+// SDK instance: the instance is the container's name, or its hostname, which
+// Docker sets to the first 12 characters of the container ID.
+func (s *Server) agentCovers(ctx context.Context) func(instance string) bool {
+	res, err := s.db.Query(ctx, `
+SELECT c.container_id, c.name
+FROM host_containers AS c
+JOIN (SELECT host, MAX(created_at) AS at FROM host_containers WHERE created_at >= ? GROUP BY host) AS l
+  ON l.host = c.host AND l.at = c.created_at
+LIMIT 2000`, time.Now().UTC().Add(-24*time.Hour).Format(tsLayout))
+	if err != nil {
+		return func(string) bool { return false }
+	}
+	ids, names := make([]string, 0, len(res.Rows)), map[string]bool{}
+	for _, row := range res.Rows {
+		ids = append(ids, toString(row[0]))
+		names[toString(row[1])] = true
+	}
+	return func(instance string) bool {
+		if names[instance] {
+			return true
+		}
+		if len(instance) < 12 {
+			return false
+		}
+		for _, id := range ids {
+			if strings.HasPrefix(id, instance) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// sdkCoveredClause leaves out the SDK instances an agent already covers, for
+// the charts and events that list agents and SDKs together.
+func (s *Server) sdkCoveredClause(ctx context.Context, tr timeRange) string {
+	res, err := s.db.Query(ctx, `SELECT DISTINCT instance FROM system_metrics
+WHERE created_at >= ? AND created_at < ? AND (container_mem_used_mb IS NOT NULL OR container_oom_kills > 0) LIMIT 500`,
+		tr.From.Format(tsLayout), tr.To.Format(tsLayout))
+	if err != nil {
+		return ""
+	}
+	covers := s.agentCovers(ctx)
+	var names []string
+	for _, row := range res.Rows {
+		if n := toString(row[0]); instanceName.MatchString(n) && covers(n) {
+			names = append(names, "'"+n+"'")
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return " AND instance NOT IN (" + strings.Join(names, ",") + ")"
+}
+
 // sdkContainers is one list row per instance reporting a container, in
-// containerListColumns order plus source.
+// containerListColumns order plus source. An instance an agent already lists
+// is left out: the SDK is the fallback where there is no agent.
 func (s *Server) sdkContainers(ctx context.Context, tr timeRange) [][]any {
 	now := time.Now().UTC()
+	covered := s.agentCovers(ctx)
 	snap, err := s.db.Query(ctx, `
 SELECT m.instance, COALESCE(m.service, m.instance), m.created_at, m.interval_s, m.uptime_s, m.container_cpu_cores, m.container_cpu_limit, m.cpu_count,
   m.container_mem_used_mb, m.container_mem_limit_mb, m.host_mem_total_mb
@@ -85,6 +144,9 @@ WHERE created_at >= ? AND created_at < ? AND container_oom_kills > 0 GROUP BY in
 			memLimit = r[10]
 		}
 		inst := toString(r[0])
+		if covered(inst) {
+			continue
+		}
 		events := ooms[inst]
 		row := []any{
 			inst, r[1], nil, nil, state, nil, nil, nil, nil, started, finished,
@@ -177,6 +239,9 @@ func (s *Server) sdkContainerPanel(r *http.Request, panel string, one bool, tr t
 	if err != nil {
 		return nil, err
 	}
+	if r.URL.Query().Get("source") != "sdk" {
+		filter += s.sdkCoveredClause(r.Context(), tr)
+	}
 	sql := p.all
 	if one {
 		sql = p.one
@@ -195,6 +260,9 @@ func (s *Server) sdkContainerEvents(r *http.Request, tr timeRange) ([][]any, err
 	filter, err := sdkFilter(r)
 	if err != nil {
 		return nil, err
+	}
+	if r.URL.Query().Get("source") != "sdk" {
+		filter += s.sdkCoveredClause(r.Context(), tr)
 	}
 	res, err := s.db.Query(r.Context(), `SELECT created_at, instance, `+sdkSeries+`, container_oom_kills FROM system_metrics
 WHERE created_at >= ? AND created_at < ? AND container_oom_kills > 0`+filter+` ORDER BY created_at DESC LIMIT 500`,
