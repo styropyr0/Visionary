@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, Copy, X } from "lucide-react";
 import type { Result } from "../lib/api";
 import { formatCount } from "../lib/format";
+import { copyText } from "../lib/clipboard";
 
 function useEscape(onClose: () => void) {
   useEffect(() => {
@@ -67,14 +68,10 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   return (
     <button type="button"
       className="btn ghost sm"
-      onClick={() => {
-        navigator.clipboard
-          ?.writeText(text)
-          .then(() => {
-            setDone(true);
-            window.setTimeout(() => setDone(false), 1400);
-          })
-          .catch(() => undefined);
+      onClick={async () => {
+        if (!(await copyText(text))) return;
+        setDone(true);
+        window.setTimeout(() => setDone(false), 1400);
       }}
     >
       {done ? <Check size={14} /> : <Copy size={14} />}

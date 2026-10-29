@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useQuery } from "../lib/useQuery";
 import { Card } from "../views/Settings.profiling";
 import { useToast } from "./Toast";
+import { copyText } from "../lib/clipboard";
 
 interface TwoStepState {
   available: boolean;
@@ -58,12 +59,8 @@ export function TwoStepSetup({ onDone, onCancel }: { onDone: () => void; onCance
     }
   };
   const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("ok", "Copied.");
-    } catch {
-      toast("err", "Couldn't copy; select the text instead.");
-    }
+    if (await copyText(text)) toast("ok", "Copied.");
+    else toast("err", "Couldn't copy; select the text instead.");
   };
 
   if (codes) {

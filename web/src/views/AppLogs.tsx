@@ -54,6 +54,7 @@ import {
 import { LogDetail } from "./Logs";
 import { AddToDashboard } from "../components/team/AddToDashboard";
 import { CompareTab, HiddenTab, PatternsTab, VolumeTab } from "./AppLogs.insights";
+import { copyText } from "../lib/clipboard";
 import "./AppLogs.css";
 
 type Tab = "search" | "patterns" | "volume" | "hidden" | "releases";
@@ -1064,7 +1065,7 @@ function FieldRow({ name, value, filterField, onFilter, attr }: { name: string; 
           className="icon-btn"
           aria-label={`Copy ${name}`}
           title="Copy"
-          onClick={() => navigator.clipboard?.writeText(text).catch(() => undefined)}
+          onClick={() => void copyText(text)}
         >
           <Copy size={12} />
         </button>

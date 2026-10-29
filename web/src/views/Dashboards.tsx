@@ -29,6 +29,7 @@ import { VizView } from "../components/VizView";
 import { DashGrid, resolveLayout } from "../components/team/DashGrid";
 import { TvMode } from "../components/team/TvMode";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { copyText } from "../lib/clipboard";
 import "./Dashboards.css";
 
 type Vars = Partial<Record<VarName, string>>;
@@ -210,10 +211,9 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
 
   const shareLink = () => {
     const link = `${window.location.origin}${window.location.pathname}${dashboardLink(id, range.from, range.to, vars)}`;
-    navigator.clipboard
-      ?.writeText(link)
-      .then(() => toast("ok", "Link copied, with this time range and these selections."))
-      .catch(() => toast("err", "Could not copy the link."));
+    copyText(link).then((ok) =>
+      ok ? toast("ok", "Link copied, with this time range and these selections.") : toast("err", "Could not copy the link."),
+    );
   };
 
   const save = async () => {
