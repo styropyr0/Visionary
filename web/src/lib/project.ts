@@ -227,7 +227,7 @@ Visionary.start(config: VisionaryConfig(
     {
       key: "otel",
       name: "OpenTelemetry",
-      how: "Any OpenTelemetry SDK or collector sends OTLP over HTTP to this server.",
+      how: "Any OpenTelemetry SDK or collector sends OTLP over HTTP to this server, or over gRPC to port 4317 once Settings → Server → Ingest turns it on.",
       guide: `${REPO}/blob/main/docs/otlp.md`,
       steps: [
         {

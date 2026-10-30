@@ -45,6 +45,7 @@ export interface PageHelp {
 
 /** This server's address, for snippets that post to it. */
 const origin = typeof location === "undefined" ? "https://visionary.example.com" : location.origin;
+const hostname = typeof location === "undefined" ? "visionary.example.com" : location.hostname;
 
 export const TOPICS: Record<string, SetupTopic> = {
   sdk: {
@@ -405,13 +406,17 @@ Visionary.start(config: VisionaryConfig(
     id: "otlp",
     title: "Or send OpenTelemetry",
     intro:
-      "A service that already has an OpenTelemetry SDK can report here without a Visionary SDK. Point its OTLP/HTTP exporter at this server with a Server ingest key from Settings → API keys. Traces become requests and calls, exceptions become errors, metrics fill System. gRPC is not served; use the HTTP exporter. Whether spans and errors are kept, and how many, is set in Settings → Server → Ingest.",
+      "A service that already has an OpenTelemetry SDK can report here without a Visionary SDK. Point its OTLP exporter at this server with a Server ingest key from Settings → API keys. Traces become requests and calls, exceptions become errors, metrics fill System. OTLP/HTTP works on this address; for OTLP/gRPC, turn on Accept OpenTelemetry over gRPC in Settings → Server → Ingest and restart, then send to port 4317 (plaintext, so put a TLS proxy in front for traffic that leaves your network). Whether spans and errors are kept, and how many, is set in Settings → Server → Ingest.",
     any: {
       label: "Service environment",
       code: `OTEL_EXPORTER_OTLP_ENDPOINT=${origin}
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer <server key>"
-OTEL_SERVICE_NAME=my-api`,
+OTEL_SERVICE_NAME=my-api
+
+# Or OTLP/gRPC, once it is on in Settings → Server → Ingest
+OTEL_EXPORTER_OTLP_ENDPOINT=http://${hostname}:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc`,
     },
   },
   tracing: {

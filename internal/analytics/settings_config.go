@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -98,6 +99,8 @@ var confDefs = []confDef{
 	{Key: "client_rate_per_ip", Group: "ingest", Label: "Frontend events per IP per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "120", Max: 1000000},
 	{Key: "client_rate_per_key", Group: "ingest", Label: "Frontend events per key per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "6000", Max: 10000000},
 	{Key: "otlp_rate", Group: "ingest", Label: "OpenTelemetry requests per second", Kind: confInt, Default: "50", Max: 100000},
+	{Key: "otlp_grpc", Group: "ingest", Label: "Accept OpenTelemetry over gRPC", Help: "Serves OTLP/gRPC on the port below, for exporters set to OTEL_EXPORTER_OTLP_PROTOCOL=grpc. OTLP/HTTP on the main port always works. Plaintext: put TLS in front with a proxy that speaks HTTP/2.", Kind: confBool, Default: "false", Restart: true},
+	{Key: "otlp_grpc_addr", Group: "ingest", Label: "OpenTelemetry gRPC address", Help: "host:port or :port to listen on.", Kind: confText, Default: ":4317", Restart: true},
 	{Key: "agent_rate", Group: "ingest", Label: "Host agent reports per second", Kind: confInt, Default: "50", Max: 100000},
 	{Key: "spans", Group: "ingest", Label: "Keep OpenTelemetry spans", Kind: confBool, Default: "true"},
 	{Key: "errors", Group: "ingest", Label: "Keep OpenTelemetry errors", Kind: confBool, Default: "true"},
@@ -270,6 +273,16 @@ func (d *confDef) normalize(v string) (string, error) {
 					return "", fmt.Errorf("%q is not an IP address or CIDR range", p)
 				}
 			}
+		}
+	}
+	if d.Key == "otlp_grpc_addr" {
+		addr := v
+		if !strings.Contains(addr, ":") {
+			addr = ":" + addr
+		}
+		_, port, err := net.SplitHostPort(addr)
+		if n, perr := strconv.Atoi(port); err != nil || perr != nil || n < 1 || n > 65535 {
+			return "", fmt.Errorf("%s must be host:port or :port", d.Label)
 		}
 	}
 	if d.Key == "digest_tz" && v != "" {

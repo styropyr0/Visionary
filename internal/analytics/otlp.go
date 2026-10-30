@@ -3,6 +3,7 @@ package analytics
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -21,10 +22,11 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-// OpenTelemetry ingestion over OTLP/HTTP, mapped onto Visionary's tables
-// (docs/otlp.md). The bodies of the three Export services have the same wire
-// and JSON form as TracesData, MetricsData and LogsData, so the data packages
-// are enough and the gRPC service stubs are not linked in.
+// OpenTelemetry ingestion over OTLP/HTTP and OTLP/gRPC (otlp_grpc.go),
+// mapped onto Visionary's tables (docs/otlp.md). The bodies of the three
+// Export services have the same wire and JSON form as TracesData, MetricsData
+// and LogsData, so the data packages are enough and the generated service
+// stubs are not linked in.
 
 const (
 	// otlpMaxBody caps a request body, on the wire and decompressed.
@@ -33,28 +35,47 @@ const (
 	otlpMaxInFlight = 8
 )
 
+// otlpSignal is one Export service: how its body becomes rows. Both
+// transports go through ingest.
+type otlpSignal struct {
+	name    string
+	service string
+	// rejected names the partial_success count in OTLP/JSON.
+	rejected string
+	ingest   func(o *otlpState, ctx context.Context, decode func(proto.Message) error) (int64, error)
+}
+
+var otlpSignals = []otlpSignal{
+	{"traces", "opentelemetry.proto.collector.trace.v1.TraceService", "rejectedSpans",
+		func(o *otlpState, ctx context.Context, decode func(proto.Message) error) (int64, error) {
+			var data tracepb.TracesData
+			if err := decode(&data); err != nil {
+				return 0, err
+			}
+			return o.ingestTraces(ctx, data.ResourceSpans)
+		}},
+	{"metrics", "opentelemetry.proto.collector.metrics.v1.MetricsService", "rejectedDataPoints",
+		func(o *otlpState, ctx context.Context, decode func(proto.Message) error) (int64, error) {
+			var data metricspb.MetricsData
+			if err := decode(&data); err != nil {
+				return 0, err
+			}
+			return o.ingestMetrics(ctx, data.ResourceMetrics)
+		}},
+	{"logs", "opentelemetry.proto.collector.logs.v1.LogsService", "rejectedLogRecords",
+		func(o *otlpState, ctx context.Context, decode func(proto.Message) error) (int64, error) {
+			var data logspb.LogsData
+			if err := decode(&data); err != nil {
+				return 0, err
+			}
+			return o.ingestLogs(ctx, data.ResourceLogs)
+		}},
+}
+
 func (s *Server) otlpRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/traces", s.otlpHandler("rejectedSpans", func(o *otlpState, req *otlpRequest) (int64, error) {
-		var data tracepb.TracesData
-		if err := req.decode(&data); err != nil {
-			return 0, err
-		}
-		return o.ingestTraces(req.r.Context(), data.ResourceSpans)
-	}))
-	mux.HandleFunc("POST /v1/metrics", s.otlpHandler("rejectedDataPoints", func(o *otlpState, req *otlpRequest) (int64, error) {
-		var data metricspb.MetricsData
-		if err := req.decode(&data); err != nil {
-			return 0, err
-		}
-		return o.ingestMetrics(req.r.Context(), data.ResourceMetrics)
-	}))
-	mux.HandleFunc("POST /v1/logs", s.otlpHandler("rejectedLogRecords", func(o *otlpState, req *otlpRequest) (int64, error) {
-		var data logspb.LogsData
-		if err := req.decode(&data); err != nil {
-			return 0, err
-		}
-		return o.ingestLogs(req.r.Context(), data.ResourceLogs)
-	}))
+	for _, sig := range otlpSignals {
+		mux.HandleFunc("POST /v1/"+sig.name, s.otlpHandler(sig))
+	}
 }
 
 // otlpRequest is one export: its body and how to answer it.
@@ -64,16 +85,20 @@ type otlpRequest struct {
 	body []byte
 }
 
-// errOTLPBadData marks a body that does not decode; the exporter must not
-// retry it.
-var errOTLPBadData = errors.New("bad data")
+var (
+	// errOTLPBadData marks a body that does not decode; the exporter must
+	// not retry it.
+	errOTLPBadData = errors.New("bad data")
+	errOTLPKey     = errors.New("missing or invalid ingest key")
+	errOTLPBusy    = errors.New("too many concurrent exports")
+	errOTLPRate    = errors.New("export rate exceeded")
+)
+
+const otlpRejectedMsg = "items without valid ids or timestamps were rejected"
 
 func (req *otlpRequest) decode(m proto.Message) error {
 	if !req.json {
-		if err := proto.Unmarshal(req.body, m); err != nil {
-			return errors.Join(errOTLPBadData, err)
-		}
-		return nil
+		return otlpUnmarshal(req.body, m)
 	}
 	body, err := otlpHexIDsToBase64(req.body)
 	if err != nil {
@@ -85,7 +110,44 @@ func (req *otlpRequest) decode(m proto.Message) error {
 	return nil
 }
 
-func (s *Server) otlpHandler(rejectedField string, ingest func(*otlpState, *otlpRequest) (int64, error)) http.HandlerFunc {
+func otlpUnmarshal(body []byte, m proto.Message) error {
+	if err := proto.Unmarshal(body, m); err != nil {
+		return errors.Join(errOTLPBadData, err)
+	}
+	return nil
+}
+
+// otlpAdmit checks the key and the limits both transports share. When it
+// admits the export, release must be called once the export is done.
+func (s *Server) otlpAdmit(key string) (o *otlpState, release func(), err error) {
+	if !s.ingestKeyValid(key, "server") {
+		return nil, nil, errOTLPKey
+	}
+	o = s.otlp()
+	select {
+	case o.inflight <- struct{}{}:
+	default:
+		return nil, nil, errOTLPBusy
+	}
+	syncLimit(o.limiter, o.s.confInt("otlp_rate"))
+	if !o.limiter.Allow() {
+		<-o.inflight
+		return nil, nil, errOTLPRate
+	}
+	return o, func() { <-o.inflight }, nil
+}
+
+// otlpIngest turns an export into rows. An error other than errOTLPBadData
+// is a failed write, logged here; the exporter should retry it.
+func (s *Server) otlpIngest(ctx context.Context, o *otlpState, sig otlpSignal, decode func(proto.Message) error) (int64, error) {
+	rejected, err := sig.ingest(o, ctx, decode)
+	if err != nil && !errors.Is(err, errOTLPBadData) {
+		s.logger.Warn("otlp write", "signal", sig.name, "err", err)
+	}
+	return rejected, err
+}
+
+func (s *Server) otlpHandler(sig otlpSignal) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		req := &otlpRequest{r: r, json: ct == "application/json"}
@@ -93,25 +155,17 @@ func (s *Server) otlpHandler(rejectedField string, ingest func(*otlpState, *otlp
 			req.fail(w, http.StatusUnsupportedMediaType, "Content-Type must be application/x-protobuf or application/json")
 			return
 		}
-		if !s.ingestKeyValid(otlpKey(r), "server") {
-			req.fail(w, http.StatusUnauthorized, "missing or invalid ingest key")
+		o, release, err := s.otlpAdmit(otlpKey(r))
+		switch {
+		case errors.Is(err, errOTLPKey):
+			req.fail(w, http.StatusUnauthorized, err.Error())
 			return
-		}
-		o := s.otlp()
-		select {
-		case o.inflight <- struct{}{}:
-			defer func() { <-o.inflight }()
-		default:
+		case err != nil:
 			w.Header().Set("Retry-After", "1")
-			req.fail(w, http.StatusTooManyRequests, "too many concurrent exports")
+			req.fail(w, http.StatusTooManyRequests, err.Error())
 			return
 		}
-		syncLimit(o.limiter, o.s.confInt("otlp_rate"))
-		if !o.limiter.Allow() {
-			w.Header().Set("Retry-After", "1")
-			req.fail(w, http.StatusTooManyRequests, "export rate exceeded")
-			return
-		}
+		defer release()
 		body, status, err := otlpReadBody(w, r)
 		if err != nil {
 			req.fail(w, status, err.Error())
@@ -119,32 +173,33 @@ func (s *Server) otlpHandler(rejectedField string, ingest func(*otlpState, *otlp
 		}
 		req.body = body
 
-		rejected, err := ingest(o, req)
+		rejected, err := s.otlpIngest(r.Context(), o, sig, req.decode)
 		switch {
 		case errors.Is(err, errOTLPBadData):
 			req.fail(w, http.StatusBadRequest, "the body is not a valid OTLP export")
 			return
 		case err != nil:
-			s.logger.Warn("otlp write", "path", r.URL.Path, "err", err)
 			w.Header().Set("Retry-After", "5")
 			req.fail(w, http.StatusServiceUnavailable, "the database is unavailable; retry later")
 			return
 		}
 		msg := ""
 		if rejected > 0 {
-			msg = "items without valid ids or timestamps were rejected"
+			msg = otlpRejectedMsg
 		}
-		req.respond(w, rejectedField, rejected, msg)
+		req.respond(w, sig.rejected, rejected, msg)
 	}
 }
 
 // otlpKey reads the ingest key from x-visionary-key or Authorization: Bearer,
 // so OTEL_EXPORTER_OTLP_HEADERS can carry either.
-func otlpKey(r *http.Request) string {
-	if k := strings.TrimSpace(r.Header.Get("x-visionary-key")); k != "" {
+func otlpKey(r *http.Request) string { return otlpKeyFrom(r.Header.Get) }
+
+func otlpKeyFrom(get func(string) string) string {
+	if k := strings.TrimSpace(get("x-visionary-key")); k != "" {
 		return k
 	}
-	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	auth := strings.TrimSpace(get("Authorization"))
 	if len(auth) > 7 && strings.EqualFold(auth[:7], "bearer ") {
 		return strings.TrimSpace(auth[7:])
 	}
@@ -196,19 +251,25 @@ func (req *otlpRequest) respond(w http.ResponseWriter, rejectedField string, rej
 		writeJSON(w, http.StatusOK, body)
 		return
 	}
-	var out []byte
-	if rejected > 0 || msg != "" {
-		var ps []byte
-		ps = protowire.AppendTag(ps, 1, protowire.VarintType)
-		ps = protowire.AppendVarint(ps, uint64(rejected))
-		ps = protowire.AppendTag(ps, 2, protowire.BytesType)
-		ps = protowire.AppendString(ps, msg)
-		out = protowire.AppendTag(out, 1, protowire.BytesType)
-		out = protowire.AppendBytes(out, ps)
-	}
+	out := otlpExportResponse(rejected, msg)
 	w.Header().Set("Content-Type", "application/x-protobuf")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(out)
+}
+
+// otlpExportResponse encodes Export<Signal>ServiceResponse; the three share
+// the layout of partial_success.
+func otlpExportResponse(rejected int64, msg string) []byte {
+	if rejected == 0 && msg == "" {
+		return []byte{}
+	}
+	var ps, out []byte
+	ps = protowire.AppendTag(ps, 1, protowire.VarintType)
+	ps = protowire.AppendVarint(ps, uint64(rejected))
+	ps = protowire.AppendTag(ps, 2, protowire.BytesType)
+	ps = protowire.AppendString(ps, msg)
+	out = protowire.AppendTag(out, 1, protowire.BytesType)
+	return protowire.AppendBytes(out, ps)
 }
 
 // fail answers with a google.rpc.Status, as OTLP/HTTP asks for errors.

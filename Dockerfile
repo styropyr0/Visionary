@@ -31,6 +31,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=server /out/visionary /visionary
 ENV VISIONARY_ADDR=:8090
-EXPOSE 8090
+# 4317 is OTLP/gRPC, served once Settings → Server → Ingest turns it on.
+EXPOSE 8090 4317
 USER nonroot:nonroot
 ENTRYPOINT ["/visionary"]

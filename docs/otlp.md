@@ -1,6 +1,7 @@
-# OpenTelemetry (OTLP/HTTP)
+# OpenTelemetry (OTLP)
 
-Visionary accepts OpenTelemetry traces, metrics and logs over OTLP/HTTP, so any
+Visionary accepts OpenTelemetry traces, metrics and logs over OTLP/HTTP and
+OTLP/gRPC, so any
 service with an OpenTelemetry SDK can report to it without a Visionary SDK. The
 data lands in the same tables the SDKs write (`api_logs`, `spans`, `errors`,
 `releases`, `system_metrics`, `metrics`), so the dashboards and the analyst work
@@ -37,12 +38,46 @@ OTEL_RESOURCE_ATTRIBUTES="service.version=1.4.2,service.instance.id=checkout-1"
   Error bodies are a `google.rpc.Status` in the request's encoding. OTLP
   exporters retry `429` and `503` and drop the rest, as the specification
   says.
-- OTLP/gRPC is not served; use the HTTP exporters.
 
 Settings → Server → Ingest sets, for OTLP data, whether spans and errors are
 kept, the span threshold outside requests (default 100 ms) and the spans kept
 per request (default 100), and the export rate limit (per second, default 50).
 They apply after a restart.
+
+### OTLP/gRPC
+
+OTLP/gRPC is off by default. Settings → Server → Ingest → *Accept
+OpenTelemetry over gRPC* turns it on, on its own port (*OpenTelemetry gRPC
+address*, default `:4317`); both apply after a restart. Publish that port too
+(`-p 4317:4317` with Docker).
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://visionary.example.com:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer <key>"   # or x-visionary-key=<key>
+```
+
+| Method | Request |
+|---|---|
+| `opentelemetry.proto.collector.trace.v1.TraceService/Export` | `ExportTraceServiceRequest` |
+| `opentelemetry.proto.collector.metrics.v1.MetricsService/Export` | `ExportMetricsServiceRequest` |
+| `opentelemetry.proto.collector.logs.v1.LogsService/Export` | `ExportLogsServiceRequest` |
+
+- The key is read from the `authorization: Bearer <key>` or `x-visionary-key`
+  metadata.
+- The listener is plaintext (h2c). For traffic that leaves your network, put
+  a proxy that speaks HTTP/2 to the backend in front (Caddy, Envoy, nginx
+  with `grpc_pass`) and give the exporter `https://`.
+- `gzip` compression is supported. Messages over 8 MB (on the wire or after
+  decompression) get `RESOURCE_EXHAUSTED` without retry information, so they
+  are not retried.
+- The data, the mapping, the limits and the answers are those of OTLP/HTTP:
+  `OK` with an `Export*ServiceResponse` (with `partial_success` as above),
+  `INVALID_ARGUMENT` for a message that does not decode, `UNAUTHENTICATED`
+  for a missing or wrong key, `RESOURCE_EXHAUSTED` with `RetryInfo` (1 s)
+  beyond the 8 concurrent exports or the rate limit, which both transports
+  share, and `UNAVAILABLE` with `RetryInfo` (5 s) when the database cannot be
+  written.
 
 ## Mapping
 
