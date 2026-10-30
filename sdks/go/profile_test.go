@@ -363,6 +363,12 @@ type fakeStore struct {
 	data    [][]string
 	err     error
 	written []stmt
+	scripts int
+}
+
+func (f *fakeStore) execScript(context.Context, string) error {
+	f.scripts++
+	return nil
 }
 
 func (f *fakeStore) batch(_ context.Context, stmts []stmt) error {

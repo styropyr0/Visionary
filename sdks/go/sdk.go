@@ -108,6 +108,18 @@ type Config struct {
 	Requests RequestsConfig
 	System   SystemConfig
 	Logs     LogsConfig
+	Metrics  MetricsConfig
+}
+
+// MetricsConfig writes custom metrics (Counter, Gauge, Histogram) to the
+// metrics table. Nothing is written until the application records one.
+type MetricsConfig struct {
+	Enabled bool
+	// Interval is how often each series is written (default 15s).
+	Interval time.Duration
+	// MaxSeries caps label sets per metric name (default 1000); new ones past
+	// it are dropped and counted.
+	MaxSeries int
 }
 
 // LogsConfig captures application logs into app_logs once they are routed
@@ -209,6 +221,9 @@ type SystemConfig struct {
 //	VISIONARY_PROFILE=false              (never profile; default: follow the dashboard)
 //	VISIONARY_LOGS=true|false            (default true; see LogHandler and CaptureStdLog)
 //	VISIONARY_LOG_LEVEL                  (default info, until Settings → Logs is read)
+//	VISIONARY_METRICS=true|false         (default true; see Counter, Gauge and Histogram)
+//	VISIONARY_METRICS_INTERVAL           (default 15s)
+//	VISIONARY_METRICS_MAX_SERIES         (default 1000 per metric name)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -249,6 +264,11 @@ func FromEnv() Config {
 			Enabled: envBool("VISIONARY_LOGS", true),
 			Level:   env("VISIONARY_LOG_LEVEL", "info"),
 		},
+		Metrics: MetricsConfig{
+			Enabled:   envBool("VISIONARY_METRICS", true),
+			Interval:  envDuration("VISIONARY_METRICS_INTERVAL", 15*time.Second),
+			MaxSeries: envInt("VISIONARY_METRICS_MAX_SERIES", 1000),
+		},
 	}
 }
 
@@ -266,7 +286,8 @@ type Agent struct {
 	profiler *profiler
 	limiter  errLimiter
 	// logs has its own writer so a flood of lines never crowds out request rows.
-	logs *logger
+	logs    *logger
+	metrics *metricsRecorder
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -330,6 +351,14 @@ func New(cfg Config) (*Agent, error) {
 		w.logSecrets = logrules.SecretKeys(cfg.Requests.RedactFields)
 		a.logs = newLogger(a, w, ParseLevel(cfg.Logs.Level))
 	}
+	if cfg.Metrics.Enabled {
+		// One row per series per interval; room for many series at once.
+		mc := cfg.Requests
+		mc.QueueSize = 20000
+		w := newWriter(mc, false, a.ident, db, cfg.Logger)
+		w.metricsOnly = true
+		a.metrics = newMetricsRecorder(cfg.Metrics, w, db, cfg.Logger)
+	}
 	return a, nil
 }
 
@@ -388,6 +417,9 @@ func (a *Agent) Start(ctx context.Context) {
 		a.logs.start(ctx)
 		active.Store(a)
 	}
+	if a.metrics != nil {
+		a.metrics.start(ctx)
+	}
 }
 
 // Close flushes queued rows and buffered samples, waiting until ctx ends at
@@ -406,6 +438,9 @@ func (a *Agent) Close(ctx context.Context) {
 	if a.logs != nil {
 		a.logs.close()
 		a.logs.w.close(ctx)
+	}
+	if a.metrics != nil {
+		a.metrics.close(ctx)
 	}
 	if a.system != nil {
 		a.system.close(ctx)
