@@ -399,7 +399,8 @@ Test from several addresses, or raise the limit while testing.
 
 **`visionary: queue full` in a service's log.** The database can't keep up,
 so the SDK drops rows rather than slow requests. SQLite and D1 suit modest
-traffic; for thousands of requests a second, use PostgreSQL or MySQL.
+traffic (SQLite about 1,000 requests a second); for thousands of requests a
+second, use PostgreSQL or MySQL. See [Scale](#scale) to measure yours.
 
 ## Integration details
 
@@ -538,7 +539,90 @@ granted only those tables, is still the tidy choice.
 Long ranges read pre-aggregated rollups (per minute and per hour), so a 30-day
 dashboard reads a small fraction of the raw rows: about 10× fewer for
 requests and 60× fewer for system metrics. They build themselves in the
-background, including history.
+background, including history. When traffic is heavy (a range would hold
+more than 500,000 requests), shorter ranges read them too; their
+percentiles are then estimated from a latency histogram rather than exact.
+
+### Scale
+
+Visionary stays on SQL. These numbers come from `cmd/visionary-bench`, which
+drives the Go SDK in process (each request with 3 spans, 2 log lines, a
+counter and a histogram, 1% errors, JSON bodies stored) and then times the
+dashboard's queries through the server's API. Run it against your own
+database before you size anything:
+
+```sh
+go run ./cmd/visionary-bench -db "$VISIONARY_DATABASE_URL" -rate 2000 -duration 60s
+go run ./cmd/visionary-bench -server http://localhost:8090 -read-only   # sign-in off, or -token
+```
+
+Measured on one laptop (Intel Core Ultra 5 125H, 14 cores, 32 GB, NVMe SSD,
+Windows 11), with the load generator, the database and the server on the
+same machine; PostgreSQL 18.4 with its default settings, SQLite through
+`modernc.org/sqlite`. A request is about 6 rows. Rows/s is what reached the
+database over 30 s; "dropped" is rows the SDK let go because its queue was
+full.
+
+| Backend | Requests/s offered | Rows/s, SDK before | Dropped before | Rows/s, SDK now | Dropped now |
+|---|---|---|---|---|---|
+| PostgreSQL | 1,000 | 5,100 | 274 | 5,900 | 0 |
+| PostgreSQL | 2,000 | 7,000 | 26,600 | 11,900 | 0 |
+| PostgreSQL | 4,000 | 7,600 | 192,700 | 24,000 | 0 |
+| PostgreSQL | 6,000 | | | 33,900 | 22,700 |
+| PostgreSQL | 8,000 | | | 38,400 | 98,400 |
+| SQLite | 500 | 2,900 | 50 | 3,000 | 0 |
+| SQLite | 1,000 | 3,300 | 19,400 | 5,700 | 0 |
+| SQLite | 2,000 | 3,100 | 98,900 | 7,600 | 23,500 |
+
+"Before" wrote one INSERT per row in batches of 50; the SDK now sends
+multi-row INSERTs in batches of 500, writes up to 4 batches at once on
+PostgreSQL and MySQL, and opens SQLite with a busy timeout (without one, its
+writers failed on the server's lock and dropped whole batches). The ceiling
+is the database: COPY instead of multi-row INSERTs measured the same.
+
+Reads, with 340,000 requests, 1 million spans and 700,000 log lines in the
+database (median of 5, ms):
+
+| Query | 1 h | 24 h before | 24 h now | 7 d |
+|---|---|---|---|---|
+| Overview stats / latency / routes | 550 / 920 / 600 | 530 / 890 / 600 | 32 / 1 / 1 | 35 / 1 / 1 |
+| Performance percentiles / routes | 970 / 710 | 930 / 720 | 1 / 1 | 1 / 1 |
+| Logs: latest page / phrase search | 1 / 11 | 1 / 30 | 1 / 30 | 1 / 29 |
+| Logs: histogram | 570 | 580 | 540 | 550 |
+| Traces: search | 430 | 390 | 380 | 380 |
+| Metrics: PromQL rate | 2 | 2 | 2 | 1 |
+
+The log histogram and trace search still scan every row in the range, so
+they grow with volume (about 1.3 s and 1 s at twice this data).
+
+Rules of thumb from these numbers:
+
+- **SQLite:** up to about 1,000 requests a second from one host's services.
+  Past that, use PostgreSQL.
+- **PostgreSQL:** about 4,000 requests a second (24,000 rows a second) on a
+  machine like this one with default settings, while the dashboard stays
+  usable. A dedicated database server, `synchronous_commit = off` for
+  Visionary's database, and spans or logs only where they help go further.
+- **D1:** batches stay at 50 statements of 100 parameters, so the SDK writes
+  as before; for steady traffic in the hundreds of requests a second, use
+  PostgreSQL.
+- **MySQL** gets the same multi-row writes; it was not measured here.
+
+**Time partitioning (PostgreSQL).** From a few million rows a day, turn on
+Settings → Data → Time partitioning. `api_logs`, `spans`, `app_logs`,
+`metrics` and `client_events` then get one partition per day on
+`created_at` (the text timestamps sort as time, so the bounds are plain
+dates), created a week ahead, plus a default partition for stray
+timestamps. Retention drops whole days instead of deleting rows 5,000 at a
+time, and a query over a range reads only its days. Empty tables convert at
+once. A table with rows converts only when an admin presses **Convert**: the
+server copies it into a partitioned twin in chunks of 50,000 rows while the
+SDKs keep writing, builds the indexes, then locks the table for the swap
+(the last few seconds of rows, then a rename), keeping the id sequence. In
+tests, 1.8 million spans converted under 500 requests a second without
+losing or dropping a row. The database needs room for a second copy while
+it runs. `VISIONARY_PARTITIONING=daily` turns it on before anything is
+saved, for installs set up as code. It needs PostgreSQL 13 or later.
 
 ## The analyst
 
