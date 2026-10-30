@@ -7,8 +7,9 @@ calls the page makes and the errors it hits.
 
 Unlike the server SDKs, it does not touch a database. It sends events to
 your Visionary server's ingest endpoint with a public client key. It has no
-runtime dependencies, is about 4.3 KB gzipped (`<script>` build), and uses no
-cookies.
+runtime dependencies, is about 5.4 KB gzipped (`<script>` build), and uses no
+cookies. Optional [session replay](#session-replay) adds a recorder of about
+4 KB that is loaded only in the sessions it records.
 
 ## Quick start
 
@@ -197,6 +198,69 @@ Visionary.init({ ..., sampleRate: 0.1 }); // 10% of browser tabs report
 
 A tab is either fully in or fully out, so sampled sessions stay whole.
 
+### Session replay
+
+Records what the user sees and does, so a session can be watched in
+**Frontend → Recent sessions** next to its timeline of page loads, API calls,
+errors and the server's logs. It is off until you turn it on in two places:
+**Accept session replays** in **Settings → Server → Ingest**, and `replay` in
+`init()`:
+
+```js
+Visionary.init({
+  ...,
+  replay: {
+    sampleRate: 0.05,       // 5% of sessions are recorded from the start
+    onErrorSampleRate: 1,   // the others keep their last minute, sent if an error happens
+  },
+});
+```
+
+The recorder is a separate file, fetched only when a session is picked: a
+split chunk of the npm package (your bundler handles it), or
+`visionary-replay.min.js` next to `visionary.min.js` for the script tag (set
+`replay.src` if you host it elsewhere). It records a snapshot of the page and
+then its changes, mouse, scroll, input and window size; it never records
+other frames, canvases' pixels or audio.
+
+Privacy, done in the browser before anything is sent:
+
+- Input values are recorded as asterisks (`maskInputs: true`, the default).
+- Passwords, emails, phone numbers, card fields (`autocomplete="cc-…"` or
+  names like `card`, `cvv`), one-time codes and hidden inputs are never
+  recorded, whatever `maskInputs` says.
+- `maskAllText: true` records all text as asterisks; `data-visionary-mask` on
+  an element does it for that element.
+- `data-visionary-block` (or `blockSelector: ".chat, #map"`) records an
+  element as an empty box of its size, and nothing inside it.
+- Scripts, iframes, objects and embeds are never recorded, nor are query
+  strings of the page URL.
+
+```html
+<section data-visionary-block>…</section>
+<p class="balance" data-visionary-mask>…</p>
+```
+
+Upload: a gzipped chunk (`CompressionStream`, or plain JSON in older
+browsers) every 5 s to `/api/ingest/replay` with the client key, and the rest
+with `sendBeacon` when the page is hidden. Chunks are numbered per session,
+so a session that spans several page loads plays in order. An error-sampled
+session keeps 30 to 60 s in memory and sends nothing unless an error
+happens; it then records to the end of the session. Recording stops on a
+`4xx` answer (replays off, a limit hit) and after two hours on one page.
+
+Cost: a minute of an ordinary page is typically 20 to 200 KB once gzipped,
+more for pages that change constantly. Replays are kept 7 days by default
+(**Settings → Data**, Session replays) and **Session replay storage** in
+**Settings → Server → Ingest** caps their total (2 GB by default; the least
+recently active go first). With the log archive set up, finished replays are
+also copied to its bucket under `replays/`.
+
+The player loads the page's stylesheets, fonts and images from your site, so
+they must still be reachable, and a page that changed since looks different.
+Styles added with `insertRule` after the first snapshot and shadow DOM are not
+recorded.
+
 ### Content Security Policy
 
 With a CSP, allow the Visionary server in `connect-src`, and the script's
@@ -249,6 +313,7 @@ offline.
 | `app` | `"web"` | App name on every event. |
 | `captureConsole` | `false` | Sends console lines to Logs. |
 | `logLevel` | `"info"` | The lowest console level sent: `debug`, `info`, `warn` or `error`. |
+| `replay` | off | Session replay: `sampleRate` (default 0), `onErrorSampleRate` (default 0), `maskInputs` (default `true`), `maskAllText` (default `false`), `blockSelector`, `src`. See [Session replay](#session-replay). |
 
 ## API
 
@@ -272,6 +337,9 @@ All set in the dashboard, not in environment variables:
   limit off): **Settings → Server → Ingest**. These apply after the server
   restarts.
 - How long events are kept: **Settings → Data**, Frontend events.
+- Session replay: **Accept session replays** and **Session replay storage**
+  in **Settings → Server → Ingest** (they apply at once); how long replays
+  are kept in **Settings → Data**, Session replays.
 
 ## Troubleshooting
 
@@ -290,14 +358,17 @@ Open the browser's developer tools, Network tab, and filter on
 | `503 ingest queue full` | The server cannot write fast enough. | Check the server's database; lower `sampleRate`. |
 | Route changes do not show | The app uses a hash router. | Use history mode. |
 | Calls to your API fail with a CORS error after adding `traceOrigins` | The API's CORS preflight does not allow the `traceparent` header. | Add `traceparent` to its `Access-Control-Allow-Headers`, or remove the origin from `traceOrigins`. |
+| `403 session replay is off` on `ingest/replay` | **Accept session replays** is off. | Turn it on in **Settings → Server → Ingest**. |
+| No `ingest/replay` requests | The session was not picked (`sampleRate`, `onErrorSampleRate`), or, for the script tag, `visionary-replay.min.js` did not load. | Check the Network tab for the script; set `replay.src` if you host the files yourself. |
 | Caught errors do not show | The framework catches them before the page does. | Call `captureException` in the error boundary or error handler. |
 
 ## Build
 
 ```sh
 npm install
-npm run build   # dist/index.js (ESM), dist/visionary.min.js (IIFE), types
+npm run build   # dist/index.js and dist/replay.js (ESM), dist/visionary.min.js and dist/visionary-replay.min.js (IIFE), types
 ```
 
-The build fails if the script build grows over 6 KB gzipped. The event format
+The build fails if the script build grows over 6 KB gzipped, or the replay
+recorder over 8 KB. The event format
 is defined in [`sdks/SPEC.md`](../SPEC.md), "Client ingest API".

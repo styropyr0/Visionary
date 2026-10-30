@@ -30,12 +30,13 @@ import (
 //	incidents.go declared incidents: roles, timeline, status updates, postmortems
 //	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
+//	replay.go    session replay recorded by the browser SDK
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.replaySchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -59,6 +60,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.incidentsRoutes(mux)
 	s.metricsRoutes(mux)
 	s.ssoRoutes(mux)
+	s.replayRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -82,6 +84,7 @@ func (s *Server) Start(ctx context.Context) {
 	s.securityStart(ctx)
 	s.applogsStart(ctx)
 	s.tracesStart(ctx)
+	s.replayStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.

@@ -205,3 +205,156 @@ tr.clickable {
 .fe-tl-at {
   text-align: right;
 }
+.fe-session-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fe-replay-icon {
+  color: var(--accent);
+}
+
+/* Session replay */
+.rp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rp-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.rp-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  background: #fff;
+}
+.rp-screen iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+  background: #fff;
+}
+.rp-pointer {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: left 60ms linear, top 60ms linear;
+}
+.rp-click {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: rp-click 450ms ease-out forwards;
+}
+@keyframes rp-click {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+.rp-track {
+  position: relative;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--button-wash);
+  cursor: pointer;
+  touch-action: none;
+}
+.rp-played {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent-wash);
+  pointer-events: none;
+}
+.rp-idle {
+  position: absolute;
+  top: 9px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--border-strong) 0 3px, transparent 3px 6px);
+  pointer-events: none;
+}
+.rp-mark,
+.rp-key {
+  width: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+.rp-mark {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  padding: 0;
+  margin-left: -2px;
+  cursor: pointer;
+}
+.rp-mark:hover {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  margin-left: -3px;
+}
+.rp-key {
+  display: inline-block;
+  height: 10px;
+  margin: 0 2px 0 8px;
+  vertical-align: -1px;
+}
+.rp-mark.kind-page_load,
+.rp-key.kind-page_load {
+  background: var(--accent);
+}
+.rp-mark.kind-server_log,
+.rp-key.kind-server_log {
+  background: var(--series-3);
+}
+.rp-mark.bad,
+.rp-key.bad {
+  background: var(--critical);
+}
+.rp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.rp-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rp-legend {
+  margin-left: auto;
+  font-size: 12px;
+}
+.rp-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+.rp-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

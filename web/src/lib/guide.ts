@@ -299,6 +299,14 @@ export const GUIDE: GuideSection[] = [
         title: "Open a client error",
         text: "Click a row in **Error groups** for its message, stack trace, device, page and its latest occurrences.",
       },
+      {
+        title: "Turn on session replay",
+        text: "Switch on **Accept session replays** in **Settings → Server → Ingest**, then pass `replay: { sampleRate: 0.05, onErrorSampleRate: 1 }` to the browser SDK's `init`: 5% of sessions are recorded whole, and the others send their last minute only when an error happens. Inputs are masked in the browser; passwords, emails, phone numbers and card fields are never recorded. Add `data-visionary-mask` to an element to mask its text, or `data-visionary-block` to leave it out. Replays are kept 7 days (**Settings → Data**) and **Session replay storage** caps their size; the oldest go first.",
+      },
+      {
+        title: "Watch a session",
+        text: "In **Recent sessions**, a play icon marks sessions with a replay. Open one and choose **Replay**: play, pause, change the speed, or click the bar. The marks on it are page loads, API calls, errors and server logs; click one to jump just before it. **Skip inactivity** jumps over idle stretches.",
+      },
     ],
   },
   {

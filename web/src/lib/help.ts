@@ -369,6 +369,23 @@ Visionary.init({
 Visionary.setUser(user.id); // optional`,
     },
   },
+  replay: {
+    id: "replay",
+    title: "Session replay (browser, optional)",
+    intro:
+      "Records what users see and do on the page so a session can be watched next to its timeline. Turn on Settings → Server → Ingest → Accept session replays, then add `replay` to `init`. `sampleRate` records that share of sessions; `onErrorSampleRate` keeps the last minute of the others in memory and sends it only when an error happens. Input values are recorded as asterisks (`maskInputs`, on by default); passwords, emails, phone numbers, card and hidden fields are never recorded; `maskAllText` masks all text, `data-visionary-mask` one element's text, and `data-visionary-block` or `blockSelector` records an element as an empty box. Other sites' frames are never recorded. The recorder (about 4 KB gzipped) loads only in sessions it records. A recorded minute is typically 20 to 200 KB, kept 7 days by default (Settings → Data) and capped by Session replay storage.",
+    any: {
+      label: "JavaScript",
+      code: `Visionary.init({
+  endpoint: "${origin}",
+  key: "pk_…",
+  replay: { sampleRate: 0.05, onErrorSampleRate: 1 },
+});
+
+<div data-visionary-block>…</div>  <!-- never recorded -->
+<p data-visionary-mask>…</p>       <!-- text recorded as *** -->`,
+    },
+  },
   ios: {
     id: "ios",
     title: "2. Add the iOS SDK",
@@ -754,12 +771,13 @@ export const HELP: Record<Route, PageHelp> = {
   frontend: {
     title: "Frontend",
     tip: "What your users experience in the browser and in mobile apps: Web Vitals, page and screen loads, and client errors.",
-    what: "Data from the browser, Android and iOS SDKs: Core Web Vitals per page, screen load times per device, JavaScript and app errors, and sessions.",
+    what: "Data from the browser, Android and iOS SDKs: Core Web Vitals per page, screen load times per device, JavaScript and app errors, and sessions, with a replay of what the user saw when session replay is on.",
     read: [
       "Web Vitals are rated good, needs improvement or poor by Google's thresholds, at the 75th percentile.",
       "Slow screens on low-end devices show up in the device breakdown.",
+      "Sessions with a play icon beside their id have a replay: open one and choose Replay. The marks on the bar are its page loads, API calls, errors and server logs; click one to jump there.",
     ],
-    setup: ["clientkey", "browser", "ios", "android"],
+    setup: ["clientkey", "browser", "replay", "ios", "android"],
   },
   uptime: {
     title: "Uptime",

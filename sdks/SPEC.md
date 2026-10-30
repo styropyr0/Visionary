@@ -927,6 +927,16 @@ At most 100 events per request. Kinds:
 The server stores one `client_events` row per event and computes `fingerprint`
 for errors.
 
+### Session replay chunks
+
+`POST /api/ingest/replay?sid=&seq=&start=&end=&enc=&app=&reason=&url=&user=`,
+the same key and origin rules. The body is a JSON array of recorder events
+(`[time_ms, type, data]`, as `sdks/browser/src/replay/record.ts` writes them),
+gzipped when `enc=gzip`, at most 512 KB as sent and 16 MB unzipped. `seq`
+counts up per session; `start` and `end` are epoch milliseconds; `reason` is
+`sample` or `error`. Answers: `204`, `400`, `401`, `403` (replays off in
+Settings → Server → Ingest), `413`, `429`, `507` (the storage cap is reached).
+
 ## Environment
 
 | Variable | Default |

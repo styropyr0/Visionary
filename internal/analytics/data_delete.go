@@ -48,6 +48,8 @@ var dataKinds = []dataKind{
 		tables: []dataTable{{"app_logs", true}, {"log_patterns", true}}},
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.",
 		tables: []dataTable{{"client_events", false}}},
+	{Key: "replay", Label: "Session replays", Description: "Recorded page activity from the browser SDK.",
+		tables: []dataTable{{"replay_chunks", false}, {"replay_sessions", false}}},
 	{Key: "uptime", Label: "Uptime results", Description: "Check results and their timings. The checks themselves stay.",
 		tables: []dataTable{{"uptime_results", false}}},
 	{Key: "alerts", Label: "Alert history", Description: "Past alert firings. The rules stay.",
