@@ -303,3 +303,102 @@ table.data.up-table td {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+
+/* Browser checks: the steps editor in the form, and one run in its drawer. */
+.drawer.up-drawer-wide { width: min(760px, 100vw); }
+.up-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.up-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.up-step-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.up-step-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.up-step-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 28px;
+}
+.up-step-fields .up-step-label { font-size: 12px; }
+.up-browser-ok { align-items: flex-start; }
+.up-browser-ok svg { color: var(--text-3); margin-top: calc((1.45em - 16px) / 2); }
+.up-browser-ok span { line-height: 1.45; }
+
+.up-run { display: flex; flex-direction: column; gap: 12px; }
+.up-run .kv { margin: 0; }
+.up-run-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.up-run-steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.up-run-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  line-height: 1.45;
+}
+.up-run-step + .up-run-step { border-top: 1px solid var(--border); }
+.up-run-step > svg { flex: none; margin-top: calc((1.45em - 14px) / 2); }
+.up-run-step.passed > svg { color: var(--good-text); }
+.up-run-step.failed > svg { color: var(--critical-text); }
+.up-run-step.skipped { color: var(--text-3); }
+.up-run-step-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.up-shot img {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.up-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

@@ -75,7 +75,9 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
 - **Frontend:** Web Vitals, page loads, client-side API latency next to
   server-side latency, JS and mobile crashes, sessions, devices and countries.
 - **Uptime:** HTTP checks with timing phases, incidents, certificate expiry,
-  and an optional public status page.
+  and an optional public status page; browser checks that play scripted
+  steps (sign in, click through, check what is shown) in a headless Chrome,
+  with Web Vitals, console and network errors and failure screenshots.
 - **CI:** GitHub Actions runs and jobs from a signed webhook, runs from any
   other CI and JUnit test results posted with a server key: success rate,
   p50/p95 duration and queue time per workflow and branch, slow and failing
@@ -141,6 +143,10 @@ docker run -d -p 8090:8090 \
 Or keep the variables in a file: copy [`.env.example`](.env.example) to
 `.env`, fill it in, and run `docker run -d -p 8090:8090 --env-file .env
 ghcr.io/styropyr0/visionary:latest`.
+
+The image has no browser, so [browser checks](#browser-checks) stay paused
+in it. For them, build the variant with Chromium (about 400 MB larger):
+`docker build --target browser -t visionary:browser .`
 
 **From source** (Go 1.26 and Node 22). The dashboard is built first, because
 the server embeds it:
@@ -313,11 +319,35 @@ Help drawer on each page shows it too.
   no code. The first check also creates an "Uptime check down" rule for every
   check, sent to your first channel; a check can have its own alert settings
   or none, in its form.
+- **Browser checks:** pick Browser steps in a new uptime check. See
+  [Browser checks](#browser-checks).
 - **Public status page:** turn it on in Settings → Status page, then mark
   checks as public.
 - **Deploy markers:** set `VISIONARY_RELEASE` on the service, or let the SDK
   read the platform's commit (Railway, Render, Vercel, Heroku, GitHub
   Actions).
+
+### Browser checks
+
+A browser check plays steps in a headless Chrome, Chromium or Edge on the
+server, driven over the DevTools protocol (no Node or Playwright): go to a
+URL, click (CSS selector or visible text), type (values can be
+`{{secret.NAME}}`, kept on the server and masked in results), press a key,
+choose an option, wait for an element, text or the next page, check text,
+the URL or an element count, pause, or run a JavaScript check. Each run gets
+a fresh private window and records each step's time, LCP, CLS and TTFB,
+console errors, failed requests and a screenshot of a failure. Runs share
+the schedule, incidents, alerts and status page of HTTP checks, and are kept
+as long as uptime results.
+
+The server finds the browser in Settings → Server → Other → Browser for
+browser checks, then `VISIONARY_CHROME`, then the usual install locations and
+`PATH`. Without one, browser checks are paused and Uptime says how to install
+it (`apt install chromium`, or Chrome from google.com/chrome). One browser
+process serves every run, two at a time by default (Browser checks at once),
+in a pool separate from HTTP checks; a run that hangs gets the browser
+restarted. The browser's traffic goes through the same private-address guard
+as HTTP checks.
 
 ## Troubleshooting
 
@@ -821,7 +851,7 @@ to the browser: the page only shows whether one is set. Settings marked
 | CI | GitHub webhook secret | none: the webhook is refused until it is set |
 | Ingest | server keys, client keys, allowed web origins (wildcards like `https://*.example.com`), frontend events per IP and per key per minute, OpenTelemetry requests per second, host agent reports per second, keep OpenTelemetry spans and errors, span threshold outside requests, spans kept per request | any origin; 120 and 6000; 50; 50; on; 100 ms; 100 |
 | Security detectors | see [Security monitoring](#security-monitoring) | |
-| Other | chart summaries, uptime checks may reach private addresses, check for new versions | on; off; on |
+| Other | chart summaries, uptime checks may reach private addresses, browser for browser checks, browser checks at once, check for new versions | on; off; found automatically; 2; on |
 
 ## Security monitoring
 
@@ -1034,9 +1064,11 @@ rollups run inside the server, and a second replica would repeat them.
 - **Ingest endpoints** need a key, cap body sizes (compressed and
   decompressed) and rate-limit per IP and per key.
 - **Uptime checks** cannot reach private, loopback or cloud metadata addresses,
-  including through DNS or redirects, unless you allow it.
-- **Secrets** (webhook URLs, SMTP passwords, check headers, API keys in
-  Settings → Server) are masked in the API and never logged.
+  including through DNS or redirects, unless you allow it. Browser checks
+  send all their traffic through a local proxy that applies the same rule.
+- **Secrets** (webhook URLs, SMTP passwords, check headers, browser check
+  secrets, API keys in Settings → Server) are masked in the API and never
+  logged.
 
 ## Cost
 

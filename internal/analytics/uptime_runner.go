@@ -18,8 +18,9 @@ import (
 
 // The runner keeps a schedule of enabled checks, reloaded every 30s and right
 // after any change through the API, and feeds due checks to a fixed pool of
-// workers. A check never runs twice at once; when every worker is busy, due
-// checks wait for the next tick instead of piling up.
+// workers. Browser checks have their own, smaller pool, so a slow page never
+// holds up HTTP checks. A check never runs twice at once; when every worker is
+// busy, due checks wait for the next tick instead of piling up.
 
 const (
 	uptimeTick       = time.Second
@@ -35,16 +36,17 @@ const (
 var uptimeRunners sync.Map // *Server -> *uptimeRunner
 
 type uptimeRunner struct {
-	s    *Server
-	set  uptimeSettings
-	wake chan struct{}
+	s       *Server
+	set     uptimeSettings
+	wake    chan struct{}
+	browser *browserPool
 
 	mu      sync.Mutex
 	running map[int64]bool
 }
 
 func newUptimeRunner(s *Server, set uptimeSettings) *uptimeRunner {
-	return &uptimeRunner{s: s, set: set, wake: make(chan struct{}, 1), running: map[int64]bool{}}
+	return &uptimeRunner{s: s, set: set, wake: make(chan struct{}, 1), running: map[int64]bool{}, browser: newBrowserPool(s, set.browserWorkers)}
 }
 
 // allowPrivate reads the setting on every check, so allowing private
@@ -77,19 +79,26 @@ type scheduled struct {
 
 func (u *uptimeRunner) run(ctx context.Context) {
 	jobs := make(chan UptimeCheck)
+	browserJobs := make(chan UptimeCheck)
 	var wg sync.WaitGroup
-	for range u.set.workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for c := range jobs {
-				u.execute(ctx, c)
-			}
-		}()
+	work := func(n int, ch chan UptimeCheck) {
+		for range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for c := range ch {
+					u.execute(ctx, c)
+				}
+			}()
+		}
 	}
+	work(u.set.workers, jobs)
+	work(max(1, u.set.browserWorkers), browserJobs)
 	defer func() {
 		close(jobs)
+		close(browserJobs)
 		wg.Wait()
+		u.browser.close()
 	}()
 
 	schedule := map[int64]*scheduled{}
@@ -106,8 +115,17 @@ func (u *uptimeRunner) run(ctx context.Context) {
 			if now.Before(e.next) || u.isRunning(e.check.ID) {
 				continue
 			}
+			ch := jobs
+			if e.check.Kind == "browser" {
+				// Without a browser the check waits, rather than failing.
+				if !u.browser.available() {
+					e.next = now.Add(time.Minute)
+					continue
+				}
+				ch = browserJobs
+			}
 			select {
-			case jobs <- e.check:
+			case ch <- e.check:
 				u.setRunning(e.check.ID, true)
 				e.next = now.Add(jittered(e.check.IntervalS))
 			default:
@@ -188,12 +206,34 @@ func (u *uptimeRunner) execute(ctx context.Context, c UptimeCheck) {
 			u.s.logger.Error("uptime check panicked", "check_id", c.ID, "panic", fmt.Sprint(p))
 		}
 	}()
+	if c.Kind == "browser" {
+		u.executeBrowser(ctx, c)
+		return
+	}
 	res := u.probeWithRetry(ctx, c)
 	if ctx.Err() != nil {
 		return
 	}
 	if err := u.record(ctx, c, res); err != nil && ctx.Err() == nil {
 		u.s.logger.Warn("uptime result not saved", "check_id", c.ID, "err", err)
+	}
+}
+
+func (u *uptimeRunner) executeBrowser(ctx context.Context, c UptimeCheck) {
+	res, run, err := u.runBrowser(ctx, c)
+	if err != nil || ctx.Err() != nil {
+		// No browser (or it would not start): nothing ran, so nothing is
+		// recorded and no incident opens.
+		return
+	}
+	if err := u.record(ctx, c, res); err != nil {
+		if ctx.Err() == nil {
+			u.s.logger.Warn("uptime result not saved", "check_id", c.ID, "err", err)
+		}
+		return
+	}
+	if err := u.recordBrowser(ctx, c, res, run); err != nil && ctx.Err() == nil {
+		u.s.logger.Warn("browser run not saved", "check_id", c.ID, "err", err)
 	}
 }
 
@@ -211,6 +251,8 @@ type uptimeResult struct {
 	TLSMs         *float64 `json:"tls_ms"`
 	TTFBMs        *float64 `json:"ttfb_ms"`
 	CertExpiresAt string   `json:"cert_expires_at,omitempty"`
+	LCPMs         *float64 `json:"lcp_ms,omitempty"`
+	CLS           *float64 `json:"cls,omitempty"`
 
 	blocked bool // refused by the address guard; retrying cannot help
 }
@@ -432,6 +474,10 @@ func (u *uptimeRunner) record(ctx context.Context, c UptimeCheck, r uptimeResult
 		"dns_ms", "connect_ms", "tls_ms", "ttfb_ms", "cert_expires_at"}
 	vals := []any{r.CreatedAt, c.ID, c.Name, redactURL(c.URL), boolInt(r.OK), r.Status, r.DurationMs, errText, boolInt(r.Degraded),
 		boolInt(r.Retried), optional(r.DNSMs), optional(r.ConnectMs), optional(r.TLSMs), optional(r.TTFBMs), cert}
+	if c.Kind == "browser" {
+		cols = append(cols, "lcp_ms", "cls")
+		vals = append(vals, optional(r.LCPMs), optional(r.CLS))
+	}
 	// NULLs are written as literals: D1 sends parameters as strings, which
 	// would turn nil into ''.
 	marks := make([]string, len(vals))

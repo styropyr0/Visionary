@@ -12,6 +12,7 @@ import { UptimeDetail } from "./Uptime.detail";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
+import { BrowserNotice } from "./Uptime.steps";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -102,7 +103,7 @@ function UptimeList() {
             text="This server calls your URLs on a schedule and records whether they answered as expected, and how fast."
             topic="checks"
           >
-            <SetupOption title="Watch an endpoint" text="A health route, your home page, or a third-party API you rely on. Failures open incidents and alert your channels.">
+            <SetupOption title="Watch an endpoint" text="A health route, your home page, or a third-party API you rely on; or, with browser steps, a sign-in or checkout played in a headless browser. Failures open incidents and alert your channels.">
               {canEdit ? (
                 <button type="button" className="btn primary sm" onClick={() => setEditing("new")}>
                   <Plus size={14} />
@@ -123,6 +124,7 @@ function UptimeList() {
           <div className="grid">
             <Tiles data={data} loading={list.loading} />
             <CoverageBanner data={data} onDone={reload} />
+            {data.checks.some((c) => c.check.kind === "browser" && c.check.enabled) && <BrowserNotice />}
             <section className="panel span-12" aria-busy={list.loading || undefined}>
               {list.loading && <div className="progress" aria-hidden />}
               <header className="panel-head">
@@ -150,14 +152,16 @@ function UptimeList() {
                     {data.checks.map(({ check: c, state: s, alert }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
-                          <StateBadge state={s.state} />
+                          <span title={s.no_browser ? "Waiting for a browser on the server" : undefined}>
+                            <StateBadge state={s.state} />
+                          </span>
                         </td>
                         <td className="up-name">
                           <a href={`#/uptime?check=${c.id}`} title={c.name} onClick={(e) => e.stopPropagation()}>
                             {c.name}
                           </a>
                           <span className="mono dim" title={c.url}>
-                            {c.method} {c.url}
+                            {c.kind === "browser" ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
                           </span>
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>

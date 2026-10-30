@@ -21,11 +21,13 @@ type checkWithAlert struct {
 	Alert *checkAlertInput `json:"alert"`
 }
 
-// UptimeCheck is one HTTP probe. Header values with secret-looking names are
+// UptimeCheck is one HTTP probe, or a scripted browser check (kind browser).
+// Header values with secret-looking names, and every browser secret, are
 // masked in API responses; sending the mask back keeps the stored value.
 type UptimeCheck struct {
 	ID              int64             `json:"id"`
 	Name            string            `json:"name"`
+	Kind            string            `json:"kind"`
 	URL             string            `json:"url"`
 	Method          string            `json:"method"`
 	ExpectStatus    string            `json:"expect_status"`
@@ -40,6 +42,9 @@ type UptimeCheck struct {
 	StatusShowURL   bool              `json:"status_show_url"`
 	CreatedAt       string            `json:"created_at"`
 	UpdatedAt       string            `json:"updated_at"`
+	Steps           []BrowserStep     `json:"steps,omitempty"`
+	Secrets         map[string]string `json:"secrets,omitempty"`
+	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 }
 
 const (
@@ -58,7 +63,7 @@ var (
 )
 
 const uptimeCheckCols = `id, name, url, method, expect_status, body_contains, headers, interval_s, timeout_ms, degraded_ms,
-  follow_redirects, enabled, on_status_page, status_show_url, created_at, updated_at`
+  follow_redirects, enabled, on_status_page, status_show_url, created_at, updated_at, kind`
 
 func scanUptimeCheck(row []any) UptimeCheck {
 	c := UptimeCheck{
@@ -77,6 +82,10 @@ func scanUptimeCheck(row []any) UptimeCheck {
 		StatusShowURL:   toInt(row[13]) == 1,
 		CreatedAt:       toString(row[14]),
 		UpdatedAt:       toString(row[15]),
+		Kind:            toString(row[16]),
+	}
+	if c.Kind == "" {
+		c.Kind = "http"
 	}
 	_ = json.Unmarshal([]byte(toString(row[6])), &c.Headers)
 	if c.Headers == nil {
@@ -92,9 +101,12 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	}
 	out := make([]UptimeCheck, 0, len(rows.Rows))
 	for _, row := range rows.Rows {
-		if len(row) == 16 {
+		if len(row) == 17 {
 			out = append(out, scanUptimeCheck(row))
 		}
+	}
+	if err := s.loadBrowserConfigs(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -106,10 +118,12 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 	if err != nil {
 		return UptimeCheck{}, err
 	}
-	if len(rows.Rows) == 0 || len(rows.Rows[0]) != 16 {
+	if len(rows.Rows) == 0 || len(rows.Rows[0]) != 17 {
 		return UptimeCheck{}, errCheckNotFound
 	}
-	return scanUptimeCheck(rows.Rows[0]), nil
+	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
+	err = s.loadBrowserConfigs(ctx, checks)
+	return checks[0], err
 }
 
 // normalize fills defaults and validates. prev is the stored check on update,
@@ -118,6 +132,14 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
 		return errors.New("name must be 1–120 characters")
+	}
+	switch c.Kind {
+	case "", "http":
+		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
+	case "browser":
+		return c.normalizeBrowser(prev)
+	default:
+		return fmt.Errorf("unknown check kind %q", c.Kind)
 	}
 	c.URL = strings.TrimSpace(c.URL)
 	if len(c.URL) > 2048 {
@@ -212,6 +234,13 @@ func (c UptimeCheck) masked() UptimeCheck {
 		h[k] = v
 	}
 	c.Headers = h
+	if c.Secrets != nil {
+		sec := make(map[string]string, len(c.Secrets))
+		for k := range c.Secrets {
+			sec[k] = uptimeMask
+		}
+		c.Secrets = sec
+	}
 	return c
 }
 
@@ -270,17 +299,21 @@ func (s *Server) saveUptimeCheck(ctx context.Context, c *UptimeCheck) error {
 	now := uptimeNow()
 	c.UpdatedAt = now
 	args := []any{c.Name, c.URL, c.Method, c.ExpectStatus, c.BodyContains, string(headers), c.IntervalS, c.TimeoutMs, c.DegradedMs,
-		boolInt(c.FollowRedirects), boolInt(c.Enabled), boolInt(c.OnStatusPage), boolInt(c.StatusShowURL)}
+		boolInt(c.FollowRedirects), boolInt(c.Enabled), boolInt(c.OnStatusPage), boolInt(c.StatusShowURL), c.Kind}
 	if c.ID == 0 {
 		c.CreatedAt = now
 		c.ID, err = s.db.InsertID(ctx, `INSERT INTO uptime_checks (name, url, method, expect_status, body_contains, headers, interval_s,
-  timeout_ms, degraded_ms, follow_redirects, enabled, on_status_page, status_show_url, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+  timeout_ms, degraded_ms, follow_redirects, enabled, on_status_page, status_show_url, kind, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+	} else {
+		err = s.db.Exec(ctx, `UPDATE uptime_checks SET name = ?, url = ?, method = ?, expect_status = ?, body_contains = ?, headers = ?,
+  interval_s = ?, timeout_ms = ?, degraded_ms = ?, follow_redirects = ?, enabled = ?, on_status_page = ?, status_show_url = ?,
+  kind = ?, updated_at = ? WHERE id = ?`, append(args, now, c.ID)...)
+	}
+	if err != nil {
 		return err
 	}
-	return s.db.Exec(ctx, `UPDATE uptime_checks SET name = ?, url = ?, method = ?, expect_status = ?, body_contains = ?, headers = ?,
-  interval_s = ?, timeout_ms = ?, degraded_ms = ?, follow_redirects = ?, enabled = ?, on_status_page = ?, status_show_url = ?,
-  updated_at = ? WHERE id = ?`, append(args, now, c.ID)...)
+	return s.saveBrowserConfig(ctx, *c)
 }
 
 // --- handlers ---
@@ -445,6 +478,14 @@ func checkChanges(a, b UptimeCheck) []string {
 	}
 	ha, _ := json.Marshal(a.Headers)
 	hb, _ := json.Marshal(b.Headers)
+	sa, _ := json.Marshal(a.Steps)
+	sb, _ := json.Marshal(b.Steps)
+	ka, _ := json.Marshal(a.Secrets)
+	kb, _ := json.Marshal(b.Secrets)
+	add("kind", a.Kind != b.Kind)
+	add("steps", string(sa) != string(sb))
+	add("secrets", string(ka) != string(kb))
+	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
 	add("name", a.Name != b.Name)
 	add("url", a.URL != b.URL)
 	add("method", a.Method != b.Method)
@@ -509,6 +550,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.Exec(r.Context(), `DELETE FROM uptime_results WHERE check_id = ?`, c.ID); err != nil {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
+	s.deleteBrowserData(r.Context(), c.ID)
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)
@@ -526,6 +568,10 @@ func (s *Server) handleUptimeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	run := runnerFor(s)
+	if c.Kind == "browser" {
+		s.handleBrowserRunNow(w, r, run, c)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Duration(c.TimeoutMs)*time.Millisecond+5*time.Second)
 	defer cancel()
 	res := run.probeWithRetry(ctx, c)

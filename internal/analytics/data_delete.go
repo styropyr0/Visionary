@@ -49,7 +49,7 @@ var dataKinds = []dataKind{
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.",
 		tables: []dataTable{{"client_events", false}}},
 	{Key: "uptime", Label: "Uptime results", Description: "Check results and their timings. The checks themselves stay.",
-		tables: []dataTable{{"uptime_results", false}}},
+		tables: []dataTable{{"uptime_results", false}, {"uptime_browser_results", false}}},
 	{Key: "alerts", Label: "Alert history", Description: "Past alert firings. The rules stay.",
 		tables: []dataTable{{"alert_events", false}, {"alert_deliveries", false}}},
 	{Key: "security", Label: "Security findings", Description: "Findings from the detectors and host events.", Service: true,

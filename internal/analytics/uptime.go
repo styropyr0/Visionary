@@ -146,6 +146,9 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/checks/{id}/incidents", s.authed(s.handleUptimeIncidents))
 	mux.Handle("GET /api/uptime/checks/{id}/alert", s.authed(s.handleUptimeAlertGet))
 	mux.Handle("PUT /api/uptime/checks/{id}/alert", s.authed(s.handleUptimeAlertSet))
+	mux.Handle("GET /api/uptime/checks/{id}/runs", s.authed(s.handleBrowserRuns))
+	mux.Handle("GET /api/uptime/checks/{id}/runs/{run}", s.authed(s.handleBrowserRun))
+	mux.Handle("GET /api/uptime/browser", s.authed(s.handleUptimeBrowser))
 	mux.Handle("GET /api/uptime/checks/{id}/{panel}", s.authed(s.handleUptimePanel))
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /status.json", s.handleStatusJSON)
@@ -165,17 +168,19 @@ func (s *Server) uptimePrompt() string {
 - status: HTTP status of the final response, 0 when there was none (DNS, connect, TLS or timeout errors). error: why it failed, NULL when ok.
 - duration_ms: total time including reading the body. Phases of the last request: dns_ms, connect_ms, tls_ms (NULL for plain HTTP), ttfb_ms (request sent to first response byte).
 - degraded: 1 when ok but slower than the check's latency threshold. retried: 1 when the first attempt failed. cert_expires_at: expiry of the TLS certificate (text, NULL for HTTP).
-- Uptime % is 100.0 * SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) / COUNT(*). An incident is a run of consecutive ok = 0 rows of one check_id ordered by created_at.`
+- Uptime % is 100.0 * SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) / COUNT(*). An incident is a run of consecutive ok = 0 rows of one check_id ordered by created_at.
+- Browser checks (scripted steps in a headless browser) write the same rows: url is the first page, status the HTTP status of the last page opened, duration_ms the whole script, ttfb_ms the last page's time to first byte, error names the step that failed. They also fill lcp_ms (Largest Contentful Paint, ms) and cls (Cumulative Layout Shift, unitless), NULL for HTTP checks; dns_ms, connect_ms, tls_ms and cert_expires_at are NULL for them.`
 }
 
 // uptimeSettings are the runner's environment knobs.
 type uptimeSettings struct {
-	allowPrivate bool
-	workers      int
+	allowPrivate   bool
+	workers        int
+	browserWorkers int
 }
 
 func (s *Server) uptimeSettings() uptimeSettings {
-	return uptimeSettings{allowPrivate: s.confBool("uptime_allow_private"), workers: 8}
+	return uptimeSettings{allowPrivate: s.confBool("uptime_allow_private"), workers: 8, browserWorkers: s.confInt("uptime_browser_workers")}
 }
 
 func uptimeNow() string { return time.Now().UTC().Format(tsLayout) }
