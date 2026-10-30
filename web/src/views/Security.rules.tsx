@@ -836,7 +836,7 @@ function PreviewResult({ preview }: { preview: RulePreview }) {
     () =>
       localResult(
         ["at", "group", "count", "summary"],
-        preview.hits.map((h) => [h.at, Object.entries(h.group).map(([k, v]) => `${k}=${v}`).join(" ") + (h.value ? ` → ${h.value}` : ""), h.count, h.suppressed ? `${h.summary} (suppressed)` : h.summary]),
+        (preview.hits ?? []).map((h) => [h.at, Object.entries(h.group).map(([k, v]) => `${k}=${v}`).join(" ") + (h.value ? ` → ${h.value}` : ""), h.count, h.suppressed ? `${h.summary} (suppressed)` : h.summary]),
       ),
     [preview],
   );
@@ -855,7 +855,7 @@ function PreviewResult({ preview }: { preview: RulePreview }) {
         {suppressed > 0 ? `; ${formatCount(suppressed)} more suppressed.` : preview.signals > 0 ? "." : ""}
         {preview.note && <span className="dim"> {preview.note}</span>}
       </p>
-      {preview.hits.length > 0 && <DataTable result={result} columns={columns} sortable={false} maxHeight={280} />}
+      {(preview.hits ?? []).length > 0 && <DataTable result={result} columns={columns} sortable={false} maxHeight={280} />}
     </div>
   );
 }

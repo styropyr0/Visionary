@@ -45,6 +45,9 @@ func (s *Server) handleTestDetectionRule(w http.ResponseWriter, r *http.Request)
 		s.fail(w, dbErr(err))
 		return
 	}
+	if hits == nil {
+		hits = []previewHit{}
+	}
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].At > hits[j].At })
 	groups := map[string]bool{}
 	signals := 0

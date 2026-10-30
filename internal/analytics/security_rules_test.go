@@ -190,6 +190,18 @@ func TestRuleNewValue(t *testing.T) {
 	s := securityTestServer(t, nil)
 	ctx := context.Background()
 	now := time.Now().UTC()
+
+	// With nothing to learn from yet, a rule stays unlearned rather than
+	// flagging everything that comes first.
+	early := addRule(t, s, fromTemplate(t, "app_user_new_ip_admin_route"))
+	s.runRules(ctx, now.Add(-time.Hour))
+	if res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM security_known WHERE kind = ?`, ruleKnownKind(early.ID)); err != nil || toInt(res.Rows[0][0]) != 0 {
+		t.Fatalf("learned from nothing: %v %v", res, err)
+	}
+	if err := s.db.Exec(ctx, `DELETE FROM security_rules WHERE id = ?`, early.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	addReqs(t, s,
 		req{at: now.Add(-48 * time.Hour), path: "/api/admin/users", route: "/api/admin/users", status: 200, ip: "10.0.0.1", handle: "bob"},
 		req{at: now.Add(-2 * time.Minute), path: "/api/admin/users", route: "/api/admin/users", status: 200, ip: "10.0.0.1", handle: "bob"},

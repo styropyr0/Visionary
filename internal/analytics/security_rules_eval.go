@@ -423,13 +423,17 @@ func (s *Server) evalNewValues(ctx context.Context, r *detectionRule, run *ruleR
 		if len(res.Rows) == 0 {
 			// First run: learn what each group had over the learning period.
 			// With no history at all, this run's values are learned too
-			// rather than all flagged.
+			// rather than all flagged, and with nothing yet, the next run
+			// tries again.
 			past, err := s.newValueRows(ctx, r, cursor.Add(-r.learn()), cursor, ruleLearnLimit)
 			if err != nil {
 				return nil, err
 			}
 			if len(past) == 0 {
 				past = pairs
+			}
+			if len(past) == 0 {
+				return nil, nil
 			}
 			for _, p := range past {
 				if err := s.knowValue(ctx, kind, p.key, p.value, p.last); err != nil {
@@ -662,6 +666,9 @@ ORDER BY created_at DESC LIMIT `+strconv.Itoa(limit), args...)
 	}
 	if out != nil && len(steps) > 1 {
 		sort.SliceStable(out.Rows, func(i, j int) bool { return toString(out.Rows[i][1]) > toString(out.Rows[j][1]) })
+	}
+	if out != nil && out.Rows == nil {
+		out.Rows = [][]any{}
 	}
 	return out, nil
 }
