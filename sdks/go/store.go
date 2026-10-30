@@ -12,10 +12,12 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
-// stmt is one write with typed args (nil for NULL).
+// stmt is one write with typed args (nil for NULL). rows counts the rows a
+// multi-row INSERT carries.
 type stmt struct {
 	sql  string
 	args []any
+	rows int
 }
 
 // store is where rows go: D1 over REST, or any database/sql connection.
@@ -142,15 +144,26 @@ func (s sqlStore) execScript(ctx context.Context, script string) error {
 	return nil
 }
 
-// batch writes all statements in one transaction.
+// batch writes all statements in one transaction. Statements that repeat are
+// prepared once; one-off ones (multi-row INSERTs) run directly.
 func (s sqlStore) batch(ctx context.Context, stmts []stmt) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	uses := map[string]int{}
+	for _, st := range stmts {
+		uses[st.sql]++
+	}
 	prepared := map[string]*sql.Stmt{}
 	for _, st := range stmts {
+		if uses[st.sql] == 1 {
+			if _, err := tx.ExecContext(ctx, s.d.Rebind(st.sql), st.args...); err != nil {
+				return err
+			}
+			continue
+		}
 		ps, ok := prepared[st.sql]
 		if !ok {
 			if ps, err = tx.PrepareContext(ctx, s.d.Rebind(st.sql)); err != nil {
@@ -244,6 +257,15 @@ func OpenURL(raw string) (*sql.DB, Dialect, error) {
 		dsn = strings.TrimPrefix(strings.TrimPrefix(raw, u.Scheme+"://"), "/")
 		if strings.HasPrefix(raw, u.Scheme+":///") && !strings.Contains(dsn, ":") {
 			dsn = "/" + dsn // absolute path on Unix
+		}
+		// The writers and the Visionary server share the file: wait for its
+		// lock instead of failing at once.
+		if !strings.Contains(dsn, "_pragma=") {
+			sep := "?"
+			if strings.Contains(dsn, "?") {
+				sep = "&"
+			}
+			dsn += sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 		}
 	default:
 		return nil, "", fmt.Errorf("visionary: unsupported database URL scheme %q", u.Scheme)

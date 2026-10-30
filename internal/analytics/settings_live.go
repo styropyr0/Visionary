@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	sdk "github.com/styropyr0/visionary/sdks/go"
 	"github.com/styropyr0/visionary/sdks/go/logrules"
 )
 
@@ -102,6 +103,8 @@ type liveSettings struct {
 	Retention   map[string]int `json:"retention"` // days by kind; 0 keeps forever
 	StatusPage  bool           `json:"status_page"`
 	StatusTitle string         `json:"status_title"`
+	// Partitioning is "daily" or "off" once saved (Settings → Data).
+	Partitioning string `json:"partitioning"`
 	// Config holds the stored config.* values by key (Settings → Server);
 	// never sent as is, since some are secrets.
 	Config map[string]string `json:"-"`
@@ -169,6 +172,7 @@ func (s *Server) refreshLive(ctx context.Context) error {
 	l.Logs, l.LogServer = parseLogSettings(m)
 	l.StatusPage = m[settingStatusPage][0] == "true"
 	l.StatusTitle = m[settingStatusTitle][0]
+	l.Partitioning = m[settingPartitioning][0]
 	for name, v := range m {
 		if key, ok := strings.CutPrefix(name, settingConfig); ok {
 			l.Config[key] = v[0]
@@ -207,8 +211,8 @@ func (s *Server) liveStart(ctx context.Context) {
 }
 
 // retentionLoop deletes rows past each kind's retention, 90 s after start
-// and then every 6 hours, 5000 at a time. Rollups keep their own pace in the
-// rollup job.
+// and then every 6 hours, 5000 at a time; partitioned tables first drop the
+// whole days past it. Rollups keep their own pace in the rollup job.
 func (s *Server) retentionLoop(ctx context.Context) {
 	timer := time.NewTimer(90 * time.Second)
 	defer timer.Stop()
@@ -217,6 +221,13 @@ func (s *Server) retentionLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+		}
+		if s.q.d == sdk.Postgres {
+			for _, t := range partitionTables {
+				if days := s.partitionRetention(t); days > 0 {
+					s.dropOldPartitions(ctx, t, days)
+				}
+			}
 		}
 		for _, k := range retentionKinds {
 			days := s.retentionDays(k.Key)

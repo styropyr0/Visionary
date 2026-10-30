@@ -1085,6 +1085,7 @@ export const HELP: Record<Route, PageHelp> = {
       "API keys: Read calls the HTTP API as a viewer and never changes anything; Editor and Admin call it with those roles' rights, for Terraform and scripts; Server and Client ingest send data; SCIM provisions people.",
       "Configuration exports alert rules, channels, silences, uptime checks, saved panels, dashboards, saved log searches and hidden pages as one YAML or JSON file, matched by name. Channel URLs and keys, secret headers and browser secrets stay behind. Importing shows a preview of what is created, updated or unchanged before anything is written, and never deletes.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
+      "Time partitioning (Data, PostgreSQL only) keeps one partition per day for the busiest tables, so retention drops whole days and charts read only theirs. It pays off from a few million rows a day; converting a table with rows copies it first, so do it at a quiet hour.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
     setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas", "workspaces", "terraform"],

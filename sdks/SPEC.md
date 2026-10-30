@@ -36,6 +36,11 @@ Create them at startup with the exact SQL in `sdks/go/schema/<dialect>/requests.
 SDK package; do not hand-edit the schema. MySQL has no `CREATE INDEX IF NOT
 EXISTS`: ignore error 1061 (duplicate key name) when creating indexes.
 
+On PostgreSQL the server may partition `api_logs`, `spans`, `app_logs`,
+`metrics` and `client_events` by day (Settings → Data). The SDK's
+`CREATE ... IF NOT EXISTS` statements and plain INSERTs work unchanged; the
+primary key is then `(id, created_at)`, so never write `ON CONFLICT (id)`.
+
 ## Writing rows
 
 Build each row as **typed values** (string, integer, float, or null). Then:
@@ -45,8 +50,19 @@ Build each row as **typed values** (string, integer, float, or null). Then:
 - **D1:** the REST API takes string params, so send every value as a string
   (`""` for null) and wrap each placeholder in `NULLIF(?, '')`.
 
-Batches: in SQL backends, run a batch's inserts in one transaction (or one
-multi-row statement); in D1, one `batch` call.
+Batches:
+
+- **D1:** one INSERT per row, at most 50 statements per `batch` call.
+- **SQL backends:** group the batch's rows by table and send each table's
+  rows as one multi-row statement, `INSERT INTO t (cols) VALUES (...), (...)`,
+  split so that no statement binds more than 30000 parameters (SQLite allows
+  32766, PostgreSQL and MySQL 65535). Run all of a batch's statements in one
+  transaction. Prepare only statements that repeat; a multi-row INSERT is
+  usually sent once. One statement per row is about three times slower on
+  PostgreSQL and SQLite, and drops rows from a few hundred requests a second.
+- **SQLite from a URL:** open it with a busy timeout (5 s) and WAL, since the
+  SDK's writers and the Visionary server share the file. Without the timeout
+  a writer that finds the file locked fails at once and drops its batch.
 
 ## Talking to D1
 
@@ -145,8 +161,16 @@ A single background worker (thread/goroutine):
 
 - Bounded queue of 5000 entries. When full, drop the entry and count it; log a
   warning with the dropped count on the next flush. Never block the request.
-- Flush when 50 entries are queued or every 3 s, whichever is first, as one
-  `batch` call (one INSERT per entry, the statement below).
+- Flush when a batch is full or every 3 s, whichever is first. A batch is 50
+  entries on D1 (one `batch` call, one INSERT per row) and 500 on SQL
+  backends (multi-row INSERTs, see Writing rows); an app may set up to 2000.
+- On PostgreSQL and MySQL up to 4 batches may be written at once, each on its
+  own connection, while the worker keeps filling the next. SQLite and D1
+  take one at a time. User lookups (`LookupUser` in Go) may then run
+  concurrently.
+- Keep counters of rows queued, written and dropped (queue full or a batch
+  that failed every retry), for load tests and health checks (Go:
+  `Agent.WriterStats()`).
 - On failure retry the batch up to 3 attempts total, sleeping 1 s then 2 s;
   then log an error and drop the batch.
 - `close()`/shutdown drains the queue and flushes, bounded by a timeout.
@@ -772,7 +796,7 @@ values (at first the defaults) when the read fails:
 ### Writer
 
 A separate background worker from the requests writer, so a flood of lines
-never crowds out request rows: the same batching (50 rows or 3 s, retries),
+never crowds out request rows: the same batching (a batch or 3 s, retries),
 with a queue of 10000 lines, dropped and counted when full. With
 `VISIONARY_LOG_RETENTION_DAYS` set it also purges `app_logs` the same way.
 
@@ -858,7 +882,7 @@ row; `unit` from the describe call, else NULL.
 
 ### Writer
 
-A separate background worker, like logs: the same batching (50 rows or 3 s,
+A separate background worker, like logs: the same batching (a batch or 3 s,
 retries), a queue of 20000 rows, dropped and counted when full. On shutdown,
 write the last interval before flushing. With `VISIONARY_LOG_RETENTION_DAYS`
 set it also purges `metrics` the same way.

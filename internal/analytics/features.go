@@ -70,6 +70,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.replicasRoutes(mux)
 	s.workspacesRoutes(mux)
 	s.configRoutes(mux)
+	s.partitionRoutes(mux)
 }
 
 // Start launches the features' background work. It returns after the first
@@ -96,6 +97,7 @@ func (s *Server) Start(ctx context.Context) {
 	s.tracesStart(ctx)
 	s.replayStart(ctx)
 	s.pullSignOuts(ctx)
+	s.partitionsStart(ctx)
 	s.leasesStart(ctx)
 }
 
