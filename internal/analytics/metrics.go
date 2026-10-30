@@ -13,7 +13,7 @@ import (
 
 func init() {
 	allowedTables["METRICS"] = true
-	chartRefs = append(chartRefs, regexp.MustCompile(`^metrics/series$`))
+	chartRefs = append(chartRefs, regexp.MustCompile(`^metrics/(series|promql)$`))
 }
 
 func (s *Server) metricsSchema() []string { return []string{s.q.d.MetricsSchema()} }
@@ -23,6 +23,7 @@ func (s *Server) metricsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/metrics/names", s.authed(s.handleMetricNames))
 	mux.Handle("GET /api/metrics/labels", s.authed(s.handleMetricLabels))
 	mux.Handle("GET /api/metrics/series", s.authed(s.handleMetricSeries))
+	s.promRoutes(mux)
 }
 
 func (s *Server) metricsPrompt() string {
@@ -32,5 +33,7 @@ func (s *Server) metricsPrompt() string {
 - value REAL: counters hold the increase over the row's interval (SUM(value) is the total over a range; divide by seconds for a rate), gauges the last value (average or take the latest per series, never sum over time), histograms the mean of the interval.
 - count INTEGER, sum, min, max REAL: histograms only (NULL otherwise): observations in the interval, their sum, smallest and largest. Average = SUM(sum) / SUM(count).
 - buckets TEXT: histograms only, JSON {"bounds": [upper bounds], "counts": [per bucket, one more than bounds for values above the last]}; percentiles need these merged, so prefer averages, min and max in SQL.
-- Find what exists with SELECT name, kind, COUNT(DISTINCT series) FROM metrics WHERE created_at >= ... GROUP BY name, kind.`
+- Find what exists with SELECT name, kind, COUNT(DISTINCT series) FROM metrics WHERE created_at >= ... GROUP BY name, kind.
+
+` + promqlPrompt()
 }

@@ -28,7 +28,8 @@ import (
 //	applogs.go   application logs: ingest, search, patterns, archive
 //	traces.go    distributed traces across services, trace search, the service map
 //	incidents.go declared incidents: roles, timeline, status updates, postmortems
-//	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts
+//	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts,
+//	             PromQL and the Prometheus HTTP API (promql*.go)
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
 //	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
 

@@ -278,6 +278,13 @@ func (s *Server) checkRule(ctx context.Context, in ruleInput) (alertRule, error)
 		} else {
 			sp.MetricQuery = nil
 		}
+		if sp.Metric == "promql" {
+			if err := checkPromRule(sp); err != nil {
+				return rule, err
+			}
+		} else {
+			sp.PromQL = ""
+		}
 		if ct := sp.ClearThreshold; ct != nil {
 			loose := (sp.Op == ">" || sp.Op == ">=") && *ct > sp.Threshold || (sp.Op == "<" || sp.Op == "<=") && *ct < sp.Threshold
 			if loose {

@@ -34,7 +34,9 @@ import { useSession, type DashSource } from "../lib/team";
 interface Step {
   id: number;
   purpose: string;
+  /** The SQL, or the PromQL when lang says so. */
   sql: string;
+  lang?: "sql" | "promql";
   status: "running" | "done" | "error";
   error?: string;
   ms?: number;
@@ -50,6 +52,8 @@ interface AnalystPanel {
   query: string;
   viz: Viz;
   result: Result;
+  /** The query is PromQL: the panel goes on a dashboard as a PromQL panel. */
+  promql?: boolean;
 }
 
 interface Turn {
@@ -472,6 +476,7 @@ function StepView({ step, expandable }: { step: Step; expandable: boolean }) {
         </button>
         {open && (
           <div className="step-detail">
+            {step.lang === "promql" && <div className="section-label">PromQL</div>}
             <pre className="code mono">{step.sql}</pre>
             {step.error && <div className="form-error">{step.error}</div>}
             {preview && preview.rows.length > 0 && <DataTable result={preview} sortable={false} />}
@@ -497,6 +502,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
   const isTable = panel.viz.type === "table";
   // A dashboard holds saved panels, so the answer is saved first (once).
   const toDashboard = async (): Promise<DashSource> => {
+    if (panel.promql) return { kind: "builtin", ref: "metrics/promql", params: { query: panel.query }, viz: panel.viz, title: panel.title, description: panel.description };
     if (savedId.current === null) {
       const created = await api<SavedPanel>("/api/panels", {
         method: "POST",
@@ -518,8 +524,8 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         table={<DataTable result={panel.result} maxHeight={height} defaultUnit={panel.viz.unit} />}
         dashboard={toDashboard}
         extraActions={
-          // Viewers can explore but not save.
-          canEdit ? (
+          // Viewers can explore but not save; saved panels hold SQL only.
+          canEdit && !panel.promql ? (
             <button type="button" className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
               <BookmarkPlus size={15} />
             </button>

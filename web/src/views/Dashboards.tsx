@@ -29,6 +29,7 @@ import { VizView } from "../components/VizView";
 import { DashGrid, resolveLayout } from "../components/team/DashGrid";
 import { TvMode } from "../components/team/TvMode";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { PromQLEditor } from "../components/PromQLEditor";
 import { copyText } from "../lib/clipboard";
 import "./Dashboards.css";
 
@@ -400,8 +401,8 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
         <AddPanel
           saved={saved.data?.panels ?? []}
           onClose={() => setAdding(false)}
-          onAdd={(kind, ref, w, h) => {
-            const panels = [...draft.layout.panels, { id: newPanelId(), kind, ref, ...placeAtBottom(draft.layout.panels, w, h) }];
+          onAdd={(kind, ref, w, h, extra) => {
+            const panels = [...draft.layout.panels, { id: newPanelId(), kind, ref, ...extra, ...placeAtBottom(draft.layout.panels, w, h) }];
             updateLayout({ panels });
             setAdding(false);
           }}
@@ -533,8 +534,16 @@ function VariableSelect({ name, range, value, onChange }: { name: VarName; range
 
 // ---------- Editing ----------
 
-function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () => void; onAdd: (kind: DashPanel["kind"], ref: string, w: number, h: number) => void }) {
-  const [tab, setTab] = useState<"saved" | "builtin">(saved.length ? "saved" : "builtin");
+function AddPanel({
+  saved,
+  onClose,
+  onAdd,
+}: {
+  saved: SavedPanel[];
+  onClose: () => void;
+  onAdd: (kind: DashPanel["kind"], ref: string, w: number, h: number, extra?: Pick<DashPanel, "title" | "params" | "viz">) => void;
+}) {
+  const [tab, setTab] = useState<"saved" | "builtin" | "promql">(saved.length ? "saved" : "builtin");
   const groups = ["API overview", "Performance", "System", "Logs"] as const;
   return (
     <Modal title="Add a panel" onClose={onClose}>
@@ -545,7 +554,11 @@ function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () 
         <button type="button" className={tab === "builtin" ? "on" : ""} onClick={() => setTab("builtin")}>
           Built-in panels
         </button>
+        <button type="button" className={tab === "promql" ? "on" : ""} onClick={() => setTab("promql")}>
+          PromQL
+        </button>
       </div>
+      {tab === "promql" && <AddPromQL onAdd={(title, query) => onAdd("builtin", "metrics/promql", 6, 6, { title, params: { query }, viz: PROMQL_VIZ })} />}
       {tab === "saved" && saved.length === 0 && <p className="dim">No saved panels yet: ask a question in Explore and save the chart.</p>}
       <div className="dash-pick">
         {tab === "saved" &&
@@ -569,6 +582,45 @@ function AddPanel({ saved, onClose, onAdd }: { saved: SavedPanel[]; onClose: () 
           ))}
       </div>
     </Modal>
+  );
+}
+
+const PROMQL_VIZ = { type: "timeseries", x: "t", y: ["value"], series: "series", unit: "none" } as const satisfies DashPanel["viz"];
+
+/** A panel that charts a PromQL query; the server checks it when the dashboard is saved and when it runs. */
+function AddPromQL({ onAdd }: { onAdd: (title: string, query: string) => void }) {
+  const [title, setTitle] = useState("");
+  const [query, setQuery] = useState("");
+  const [err, setErr] = useState("");
+  const submit = () => {
+    if (!query.trim()) {
+      setErr("Write a query.");
+      return;
+    }
+    if (query.length > 2000) {
+      setErr("Keep the query under 2000 characters.");
+      return;
+    }
+    onAdd(title.trim() || query.trim().slice(0, 80), query.trim());
+  };
+  return (
+    <div className="dash-promql">
+      <label className="field">
+        <span>Title</span>
+        <input className="input" value={title} placeholder="Requests per second by route" onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <div className="field">
+        <span>Query</span>
+        <PromQLEditor value={query} onChange={setQuery} onRun={submit} />
+      </div>
+      {err && <div className="form-error">{err}</div>}
+      <div>
+        <button type="button" className="btn primary" onClick={submit}>
+          <Plus size={14} />
+          Add panel
+        </button>
+      </div>
+    </div>
   );
 }
 
