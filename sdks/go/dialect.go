@@ -116,3 +116,19 @@ func insertSQL(table string, columns []string, stringParams bool) string {
 	}
 	return "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ") VALUES (" + strings.Join(marks, ", ") + ")"
 }
+
+// insertRowsSQL builds one INSERT carrying n rows of columns, for SQL
+// backends.
+func insertRowsSQL(table string, columns []string, n int) string {
+	row := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(columns)), ", ") + ")"
+	var b strings.Builder
+	b.Grow(len(table) + 16*len(columns) + n*(len(row)+2) + 32)
+	b.WriteString("INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ") VALUES ")
+	for i := range n {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(row)
+	}
+	return b.String()
+}

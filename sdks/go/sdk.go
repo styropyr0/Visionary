@@ -173,7 +173,8 @@ type RequestsConfig struct {
 	// Go 1.22+ ServeMux pattern when available, otherwise the path.
 	Route func(r *http.Request) string
 	// LookupUser fills in Handle and Role for a user ID, on the background
-	// writer. Keep it cheap (a cache); it is called once per user per batch.
+	// writer. Keep it cheap (a cache); it is called once per user per batch,
+	// and on PostgreSQL and MySQL from up to four batches at once.
 	LookupUser func(ctx context.Context, id string) (User, bool)
 }
 
@@ -496,4 +497,45 @@ func envList(k string) []string {
 		}
 	}
 	return out
+}
+
+// WriterStats is a snapshot of the background writers for request rows,
+// logs and metrics, summed.
+type WriterStats struct {
+	// Queued rows are waiting for the database.
+	Queued int
+	// Written and Dropped count rows since Start; dropped ones met a full
+	// queue or a write that failed three times.
+	Written, Dropped int64
+}
+
+// WriterStats reports how far behind the database the writers are, for load
+// tests and health checks.
+func (a *Agent) WriterStats() WriterStats {
+	var st WriterStats
+	if a == nil {
+		return st
+	}
+	for _, w := range []*writer{a.writer, a.logWriter(), a.metricsWriter()} {
+		if w != nil {
+			st.Queued += len(w.queue)
+			st.Written += w.written.Load()
+			st.Dropped += w.lost.Load()
+		}
+	}
+	return st
+}
+
+func (a *Agent) logWriter() *writer {
+	if a.logs == nil {
+		return nil
+	}
+	return a.logs.w
+}
+
+func (a *Agent) metricsWriter() *writer {
+	if a.metrics == nil {
+		return nil
+	}
+	return a.metrics.w
 }

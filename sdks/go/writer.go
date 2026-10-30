@@ -8,11 +8,20 @@ import (
 	"time"
 )
 
-// maxStatementsPerCall is D1's per-batch limit; SQL backends use it too, so
-// one slow transaction never holds a large lock.
+// maxStatementsPerCall is D1's per-batch limit, where every row is its own
+// statement.
 const maxStatementsPerCall = 50
 
-// writer is the one background goroutine that batches every row the SDK
+// SQL backends get each table's rows as multi-row INSERTs in one transaction,
+// kept under every backend's bound-parameter limit (SQLite's is 32766).
+const (
+	maxParamsPerStatement = 30000
+	defaultSQLBatch       = 500
+	maxSQLBatch           = 2000
+	parallelFlushes       = 4
+)
+
+// writer is the background goroutine that batches every row the SDK
 // produces besides system samples: request logs (with their spans),
 // standalone spans and errors. Nothing on a request path ever waits for it.
 type writer struct {
@@ -33,6 +42,9 @@ type writer struct {
 	// queue holds *entry, *spanRecord and *errorRecord values.
 	queue   chan any
 	dropped atomic.Int64
+	// lost and written count rows since start, for WriterStats.
+	lost    atomic.Int64
+	written atomic.Int64
 	stop    chan struct{}
 	done    chan struct{}
 	once    sync.Once
@@ -42,8 +54,12 @@ func newWriter(cfg RequestsConfig, requests bool, ident identity, db store, logg
 	if cfg.QueueSize <= 0 {
 		cfg.QueueSize = 5000
 	}
-	if cfg.BatchSize <= 0 || cfg.BatchSize > 50 {
-		cfg.BatchSize = 50
+	if db.stringParams() {
+		if cfg.BatchSize <= 0 || cfg.BatchSize > maxStatementsPerCall {
+			cfg.BatchSize = maxStatementsPerCall
+		}
+	} else if cfg.BatchSize <= 0 || cfg.BatchSize > maxSQLBatch {
+		cfg.BatchSize = defaultSQLBatch
 	}
 	if cfg.FlushInterval <= 0 {
 		cfg.FlushInterval = 3 * time.Second
@@ -94,6 +110,7 @@ func (w *writer) enqueue(row any) {
 	case w.queue <- row:
 	default:
 		w.dropped.Add(1)
+		w.lost.Add(1)
 	}
 }
 
@@ -111,14 +128,31 @@ func (w *writer) run() {
 	ticker := time.NewTicker(w.cfg.FlushInterval)
 	defer ticker.Stop()
 
+	// Full batches go to a few flushers; while all are busy the queue
+	// absorbs the load.
+	work := make(chan []any)
+	var flushers sync.WaitGroup
+	for range w.flushers() {
+		flushers.Add(1)
+		go func() {
+			defer flushers.Done()
+			for b := range work {
+				w.write(b)
+			}
+		}()
+	}
+	defer func() {
+		close(work)
+		flushers.Wait()
+	}()
+
 	batch := make([]any, 0, w.cfg.BatchSize)
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
-		w.write(batch)
-		clear(batch)
-		batch = batch[:0]
+		work <- batch
+		batch = make([]any, 0, w.cfg.BatchSize)
 	}
 	for {
 		select {
@@ -149,39 +183,104 @@ func (w *writer) run() {
 	}
 }
 
+// flushers is how many batches may be written at once. SQLite and D1 take
+// one writer at a time; PostgreSQL and MySQL insert in parallel.
+func (w *writer) flushers() int {
+	if w.db.stringParams() || w.db.dialect() == SQLite {
+		return 1
+	}
+	return parallelFlushes
+}
+
 func (w *writer) write(batch []any) {
 	ctx, cancel := context.WithTimeout(quiet(context.Background()), 60*time.Second)
 	defer cancel()
 
 	users := w.lookupUsers(ctx, batch)
-	stmts := make([]stmt, 0, len(batch))
+	reqs := rowGroup{table: "api_logs", columns: requestColumns, insert: w.insertRequest}
+	spans := rowGroup{table: "spans", columns: spanColumns, insert: w.insertSpan}
+	errs := rowGroup{table: "errors", columns: errorColumns, insert: w.insertError}
+	logs := rowGroup{table: "app_logs", columns: logColumns, insert: w.insertLog}
+	metrics := rowGroup{table: "metrics", columns: metricColumns, insert: w.insertMetric}
 	for _, row := range batch {
 		switch r := row.(type) {
 		case *entry:
-			stmts = append(stmts, stmt{sql: w.insertRequest, args: w.requestParams(r, users)})
+			reqs.rows = append(reqs.rows, w.requestParams(r, users))
 			for _, s := range r.Spans {
-				stmts = append(stmts, stmt{sql: w.insertSpan, args: w.spanParams(s)})
+				spans.rows = append(spans.rows, w.spanParams(s))
 			}
 		case *spanRecord:
-			stmts = append(stmts, stmt{sql: w.insertSpan, args: w.spanParams(r)})
+			spans.rows = append(spans.rows, w.spanParams(r))
 		case *errorRecord:
-			stmts = append(stmts, stmt{sql: w.insertError, args: w.errorParams(r)})
+			errs.rows = append(errs.rows, w.errorParams(r))
 		case *logRecord:
-			stmts = append(stmts, stmt{sql: w.insertLog, args: w.logParams(r)})
+			logs.rows = append(logs.rows, w.logParams(r))
 		case *metricRecord:
-			stmts = append(stmts, stmt{sql: w.insertMetric, args: w.metricParams(r)})
+			metrics.rows = append(metrics.rows, w.metricParams(r))
 		}
 	}
-	// A request's spans can push a batch past one call's limit; send it in
-	// chunks, each retried on its own.
+	d1 := w.db.stringParams()
+	var stmts []stmt
+	for _, g := range []*rowGroup{&reqs, &spans, &errs, &logs, &metrics} {
+		stmts = g.statements(stmts, d1)
+	}
+	// D1 takes 50 statements a call, so a request's spans can push a batch
+	// into several calls, each retried on its own. SQL backends write the
+	// whole batch in one transaction.
+	perCall := len(stmts)
+	if d1 {
+		perCall = maxStatementsPerCall
+	}
 	for len(stmts) > 0 {
-		n := min(len(stmts), maxStatementsPerCall)
+		n := min(len(stmts), perCall)
 		if !w.send(ctx, stmts[:n]) {
-			w.logger.Error("visionary: batch write failed; rows dropped", "count", len(stmts))
+			lost := rowCount(stmts)
+			w.logger.Error("visionary: batch write failed; rows dropped", "count", lost)
+			w.lost.Add(lost)
 			return
 		}
+		w.written.Add(rowCount(stmts[:n]))
 		stmts = stmts[n:]
 	}
+}
+
+// rowGroup is one table's rows in a batch.
+type rowGroup struct {
+	table   string
+	columns []string
+	// insert is the single-row statement D1 runs once per row.
+	insert string
+	rows   [][]any
+}
+
+// statements appends the group's inserts: one per row for D1, otherwise
+// multi-row INSERTs as large as the parameter limit allows.
+func (g *rowGroup) statements(out []stmt, d1 bool) []stmt {
+	if d1 {
+		for _, r := range g.rows {
+			out = append(out, stmt{sql: g.insert, args: r, rows: 1})
+		}
+		return out
+	}
+	per := max(1, maxParamsPerStatement/len(g.columns))
+	for rows := g.rows; len(rows) > 0; {
+		n := min(len(rows), per)
+		args := make([]any, 0, n*len(g.columns))
+		for _, r := range rows[:n] {
+			args = append(args, r...)
+		}
+		out = append(out, stmt{sql: insertRowsSQL(g.table, g.columns, n), args: args, rows: n})
+		rows = rows[n:]
+	}
+	return out
+}
+
+func rowCount(stmts []stmt) int64 {
+	var n int64
+	for _, st := range stmts {
+		n += int64(max(st.rows, 1))
+	}
+	return n
 }
 
 // send writes stmts, retrying up to 3 attempts in total.
