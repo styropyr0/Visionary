@@ -108,6 +108,12 @@ func (s *Server) handleListChannels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"channels": out})
 }
 
+func (s *Server) handleGetChannel(w http.ResponseWriter, r *http.Request) {
+	if c, ok := s.channelFromPath(w, r); ok {
+		writeJSON(w, http.StatusOK, c.view())
+	}
+}
+
 func (s *Server) handleCreateChannel(w http.ResponseWriter, r *http.Request) {
 	if !s.can(r, "edit") {
 		s.forbidden(w)

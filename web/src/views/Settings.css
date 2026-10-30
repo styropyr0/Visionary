@@ -984,3 +984,63 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Configuration: export and import ---------- */
+
+.cio-doc {
+  width: 100%;
+  min-height: 140px;
+}
+
+.cio-actions,
+.cio-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cio-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cio-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cio-badge.create {
+  color: var(--good-text);
+}
+
+.cio-badge.update {
+  background: var(--accent-wash);
+  color: var(--text-1);
+}
+
+.cio-badge.skip {
+  color: var(--warning-text);
+}
+
+.cio-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--warning-text);
+}
+
+.cio-warning svg {
+  flex: none;
+  margin-top: 2px;
+}

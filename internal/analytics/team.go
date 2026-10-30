@@ -43,6 +43,7 @@ func (s *Server) teamRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/team/audit", s.authed(s.handleAudit))
 	mux.Handle("GET /api/team/keys", s.authed(s.handleListKeys))
 	mux.Handle("POST /api/team/keys", s.authed(s.handleCreateKey))
+	mux.Handle("GET /api/team/keys/{id}", s.authed(s.handleGetKey))
 	mux.Handle("DELETE /api/team/keys/{id}", s.authed(s.handleRevokeKey))
 
 	mux.Handle("GET /api/dashboards", s.authed(s.handleListDashboards))
