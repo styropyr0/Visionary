@@ -85,7 +85,17 @@ FROM client_events WHERE `+where+` GROUP BY session_id ORDER BY last DESC LIMIT 
 		s.fail(w, dbErr(err))
 		return
 	}
-	writeJSON(w, http.StatusOK, newResult(rows, 100, "", tr))
+	res := newResult(rows, 100, "", tr)
+	ids := make([]any, len(res.Rows))
+	for i, row := range res.Rows {
+		ids[i] = row[0]
+	}
+	replays := s.replaySessions(r.Context(), ids)
+	res.Columns = append(res.Columns, "replay")
+	for i, row := range res.Rows {
+		res.Rows[i] = append(row, replays[toString(row[0])])
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 type timelineItem struct {
@@ -190,6 +200,7 @@ FROM client_events WHERE session_id = ? AND created_at >= ? ORDER BY created_at 
 		return
 	}
 	info["started"], info["last"] = items[0].At, items[len(items)-1].At
+	info["replay"] = s.replaySessions(ctx, []any{id})[id]
 	writeJSON(w, http.StatusOK, map[string]any{"session": info, "items": items})
 }
 

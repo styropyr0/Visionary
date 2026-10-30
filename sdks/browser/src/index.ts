@@ -3,18 +3,20 @@ import { errorEvent, trackErrors } from "./errors";
 import { trackPageLoad, trackRouteChanges } from "./navigation";
 import { captureConsole, makeLogger } from "./logs";
 import { trackNetwork } from "./network";
+import { replayError, startReplay } from "./replay-load";
 import { Transport } from "./transport";
 import type { Attrs, ClientEvent, InitOptions, LogLevel, Report } from "./types";
 import { bareUrl, onHidden, randomId, safe } from "./util";
 import { startVitals } from "./vitals";
 
-export type { Attrs, InitOptions, LogLevel } from "./types";
+export type { Attrs, InitOptions, LogLevel, ReplayOptions } from "./types";
 
 let transport: Transport | null = null;
 let started = false;
 
 const report: Report = (e) => {
   transport?.push({ ts: new Date().toISOString(), ...e } as ClientEvent);
+  if (e.kind === "error") replayError();
 };
 
 const sendLog = makeLogger(report);
@@ -88,6 +90,17 @@ export function init(options: InitOptions): void {
     trackPageLoad(report);
     trackRouteChanges(report);
     startVitals(report, bareUrl(location.href));
+    if (options.replay) {
+      startReplay({
+        url: url.replace(/client$/, "replay"),
+        key: options.key,
+        sid,
+        app: transport.envelope.app,
+        user: () => transport?.envelope.user_id,
+        fetch: originalFetch,
+        options: options.replay,
+      });
+    }
     // Vitals are reported on hide, so this listener goes last.
     onHidden(() => transport?.flush(true));
   })();

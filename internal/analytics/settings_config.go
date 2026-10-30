@@ -99,6 +99,8 @@ var confDefs = []confDef{
 	{Key: "client_origins", Group: "ingest", Label: "Allowed web origins", Help: "Comma-separated, e.g. https://app.example.com. Empty allows any.", Kind: confText},
 	{Key: "client_rate_per_ip", Group: "ingest", Label: "Frontend events per IP per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "120", Max: 1000000},
 	{Key: "client_rate_per_key", Group: "ingest", Label: "Frontend events per key per minute", Help: "0 turns the limit off.", Kind: confInt, Default: "6000", Max: 10000000},
+	{Key: "replay", Group: "ingest", Label: "Accept session replays", Help: "Stores the page recordings the browser SDK sends when its replay option is on. Inputs are masked on the device; see Help on Frontend.", Kind: confBool, Default: "false"},
+	{Key: "replay_max_mb", Group: "ingest", Label: "Session replay storage (MB)", Help: "When replays take more than this, the oldest are deleted. 0 means no cap; Settings → Data sets how long they are kept.", Kind: confInt, Default: "2048", Max: 10000000},
 	{Key: "otlp_rate", Group: "ingest", Label: "OpenTelemetry requests per second", Kind: confInt, Default: "50", Max: 100000},
 	{Key: "otlp_grpc", Group: "ingest", Label: "Accept OpenTelemetry over gRPC", Help: "Serves OTLP/gRPC on the port below, for exporters set to OTEL_EXPORTER_OTLP_PROTOCOL=grpc. OTLP/HTTP on the main port always works. Plaintext: put TLS in front with a proxy that speaks HTTP/2.", Kind: confBool, Default: "false", Restart: true},
 	{Key: "otlp_grpc_addr", Group: "ingest", Label: "OpenTelemetry gRPC address", Help: "host:port or :port to listen on.", Kind: confText, Default: ":4317", Restart: true},

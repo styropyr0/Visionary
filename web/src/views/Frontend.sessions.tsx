@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Globe, Server, Waypoints } from "lucide-react";
+import { Globe, MonitorPlay, Server, Waypoints } from "lucide-react";
 import { api, rangeQuery, type Result } from "../lib/api";
 import { formatCount, formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -12,6 +12,7 @@ import { asLevel } from "../lib/applogs";
 import { traceHref } from "../lib/traces";
 import { LevelBadge, LogLineDrawer } from "./AppLogs";
 import { LogDetail } from "./Logs";
+import { ReplayPlayer, type ReplayMarker } from "./Frontend.replay";
 
 interface TimelineItem {
   at: string;
@@ -30,7 +31,7 @@ interface TimelineItem {
 }
 
 interface Timeline {
-  session: Record<string, string>;
+  session: Record<string, string> & { replay?: boolean };
   items: TimelineItem[];
 }
 
@@ -43,6 +44,15 @@ const KIND_LABEL: Record<string, string> = {
   custom: "Event",
   log: "Log",
   request: "Request",
+  server_log: "Server log",
+};
+
+/** Timeline kinds marked on the replay's scrubber. */
+const MARKED: Record<string, string> = {
+  page_load: "Page",
+  api: "API call",
+  error: "Error",
+  request: "Server request",
   server_log: "Server log",
 };
 
@@ -82,7 +92,12 @@ export function SessionsPanel({ app }: { app: string }) {
               <tbody>
                 {rows.map((r) => (
                   <tr key={String(r.session_id)} className="clickable" onClick={() => setOpen(String(r.session_id))}>
-                    <td className="mono">{String(r.session_id).slice(0, 12)}</td>
+                    <td className="mono">
+                      <span className="fe-session-id">
+                        {String(r.session_id).slice(0, 12)}
+                        {r.replay === true && <MonitorPlay size={13} className="fe-replay-icon" aria-label="Has a replay" />}
+                      </span>
+                    </td>
                     <td className="mono">{r.user_id ? String(r.user_id) : <span className="dim">—</span>}</td>
                     <td>{String(r.device ?? "")}</td>
                     <td className="num">{formatCount(toNumber(r.events) ?? 0)}</td>
@@ -109,6 +124,19 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const { can } = useSession();
   const [line, setLine] = useState<number | null>(null);
   const [request, setRequest] = useState<number | null>(null);
+  const [tab, setTab] = useState<"timeline" | "replay">("timeline");
+  const markers = useMemo<ReplayMarker[]>(
+    () =>
+      (q.data?.items ?? [])
+        .filter((it) => it.kind in MARKED)
+        .map((it) => ({
+          at: it.at,
+          kind: it.side === "server" ? "server_log" : it.kind,
+          label: `${MARKED[it.kind]}: ${it.name || it.message || it.url || ""}`,
+          bad: (it.status ?? 0) >= 500 || (it.kind === "api" && it.status === 0) || it.kind === "error" || it.level === "error" || it.level === "fatal",
+        })),
+    [q.data],
+  );
   if (line !== null) return <LogLineDrawer id={line} canEdit={can("edit")} onClose={() => setLine(null)} />;
   if (request !== null) return <LogDetail id={request} onClose={() => setRequest(null)} />;
   const start = q.data ? new Date(q.data.session.started).getTime() : 0;
@@ -126,6 +154,18 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             <dt>Started</dt>
             <dd>{formatFull(new Date(q.data.session.started))}</dd>
           </dl>
+          {q.data.session.replay && (
+            <div className="tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === "timeline"} className={tab === "timeline" ? "on" : ""} onClick={() => setTab("timeline")}>
+                Timeline
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "replay"} className={tab === "replay" ? "on" : ""} onClick={() => setTab("replay")}>
+                Replay
+              </button>
+            </div>
+          )}
+          {tab === "replay" && q.data.session.replay && <ReplayPlayer id={id} markers={markers} />}
+          {tab === "timeline" && (
           <ol className="fe-timeline">
             {q.data.items.map((it, i) => {
               const clickable = (it.kind === "request" && it.log_id) || ((it.kind === "log" || it.kind === "server_log") && it.log_id);
@@ -165,6 +205,7 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               );
             })}
           </ol>
+          )}
         </>
       )}
     </Drawer>

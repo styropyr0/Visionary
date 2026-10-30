@@ -43,6 +43,26 @@ export interface InitOptions {
   captureConsole?: boolean;
   /** The lowest console level sent when captureConsole is on. Default "info". */
   logLevel?: LogLevel;
+  /** Session replay; off unless set. The recorder is loaded only for sessions it records. */
+  replay?: ReplayOptions;
+}
+
+export interface ReplayOptions {
+  /** Share of sessions recorded from the start, 0 to 1. Default 0. */
+  sampleRate?: number;
+  /** Share of the other sessions whose last minute is sent when an error happens, 0 to 1. Default 0. */
+  onErrorSampleRate?: number;
+  /**
+   * Input values are recorded as asterisks. Default true. Passwords, emails,
+   * phone numbers, card fields and hidden inputs are never recorded either way.
+   */
+  maskInputs?: boolean;
+  /** Record all text as asterisks. Default false; data-visionary-mask masks one element's text. */
+  maskAllText?: boolean;
+  /** Elements recorded as an empty box, besides those with data-visionary-block. */
+  blockSelector?: string;
+  /** Where the script-tag build loads the recorder from. Default: visionary-replay.min.js next to visionary.min.js. */
+  src?: string;
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
