@@ -32,6 +32,7 @@ import (
 //	             PromQL and the Prometheus HTTP API (promql*.go)
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
 //	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
+//	config_*.go  configuration as one YAML or JSON file: export, dry run, import
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
@@ -62,6 +63,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.metricsRoutes(mux)
 	s.ssoRoutes(mux)
 	s.ciRoutes(mux)
+	s.configRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work

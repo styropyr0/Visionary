@@ -14,6 +14,7 @@ func (s *Server) alertsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/alerts/meta", s.authed(s.handleAlertsMeta))
 	mux.Handle("GET /api/alerts/rules", s.authed(s.handleListRules))
 	mux.Handle("POST /api/alerts/rules", s.authed(s.handleCreateRule))
+	mux.Handle("GET /api/alerts/rules/{id}", s.authed(s.handleGetRule))
 	mux.Handle("PUT /api/alerts/rules/{id}", s.authed(s.handleUpdateRule))
 	mux.Handle("DELETE /api/alerts/rules/{id}", s.authed(s.handleDeleteRule))
 	mux.Handle("POST /api/alerts/rules/{id}/mute", s.authed(s.handleMuteRule))
@@ -30,11 +31,13 @@ func (s *Server) alertsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/alerts/events.csv", s.authed(s.handleEventsCSV))
 	mux.Handle("GET /api/alerts/silences", s.authed(s.handleListSilences))
 	mux.Handle("POST /api/alerts/silences", s.authed(s.handleCreateSilence))
+	mux.Handle("GET /api/alerts/silences/{id}", s.authed(s.handleGetSilence))
 	mux.Handle("PUT /api/alerts/silences/{id}", s.authed(s.handleUpdateSilence))
 	mux.Handle("DELETE /api/alerts/silences/{id}", s.authed(s.handleDeleteSilence))
 	mux.Handle("GET /api/alerts/slos", s.authed(s.handleListSLOs))
 	mux.Handle("GET /api/alerts/channels", s.authed(s.handleListChannels))
 	mux.Handle("POST /api/alerts/channels", s.authed(s.handleCreateChannel))
+	mux.Handle("GET /api/alerts/channels/{id}", s.authed(s.handleGetChannel))
 	mux.Handle("PUT /api/alerts/channels/{id}", s.authed(s.handleUpdateChannel))
 	mux.Handle("DELETE /api/alerts/channels/{id}", s.authed(s.handleDeleteChannel))
 	mux.Handle("POST /api/alerts/channels/{id}/test", s.authed(s.handleTestChannel))
@@ -449,6 +452,24 @@ func (s *Server) handleCreateRule(w http.ResponseWriter, r *http.Request) {
 	s.recordHistory(r, "create", nil, &rule)
 	s.audit(r, "alert.rule.create", rule.Name, map[string]any{"id": rule.ID, "kind": rule.Kind, "metric": rule.Spec.Metric})
 	writeJSON(w, http.StatusCreated, rule)
+}
+
+func (s *Server) handleGetRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid rule id")
+		return
+	}
+	rule, err := s.getRule(r.Context(), id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if rule == nil {
+		writeError(w, http.StatusNotFound, "rule not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, rule)
 }
 
 // badInput is a validation error, answered with 400 and its message.
