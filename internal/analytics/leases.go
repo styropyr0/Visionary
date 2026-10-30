@@ -272,7 +272,8 @@ func (s *Server) leaseRound(ctx context.Context) {
 // startJob runs j until its context ends; ls.mu is held.
 func (s *Server) startJob(ctx context.Context, j *leaseJob) {
 	ls := s.leases()
-	jctx, cancel := context.WithCancel(ctx)
+	// Leased jobs work for everyone, never within a workspace.
+	jctx, cancel := context.WithCancel(unscoped(ctx))
 	j.cancel, j.stopping, j.since = cancel, false, time.Now()
 	s.logger.Info("leases: running", "lease", j.name)
 	ls.wg.Add(1)

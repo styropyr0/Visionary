@@ -390,6 +390,16 @@ func (s *Server) requestRole(r *http.Request) role {
 	return rl
 }
 
+// requireAllServices answers 403 inside a workspace, for things that span
+// every service, such as detection rules.
+func (s *Server) requireAllServices(w http.ResponseWriter, r *http.Request) bool {
+	if scopeFrom(r.Context()) == nil {
+		return true
+	}
+	writeError(w, http.StatusForbidden, "This covers every service; switch to All services, or ask someone who sees all of them.")
+	return false
+}
+
 // workspaceView is the session's part about workspaces: where it can switch
 // and which one is active (0: all of them).
 func (s *Server) workspaceView(r *http.Request) map[string]any {

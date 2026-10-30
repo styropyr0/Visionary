@@ -472,7 +472,7 @@ func sessionName(r *http.Request) string {
 // handleCreateDetectionRule saves a new rule, or one from a template when
 // the body names one.
 func (s *Server) handleCreateDetectionRule(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "edit") {
+	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
 	}
 	var body struct {
@@ -533,7 +533,7 @@ func (s *Server) ruleFromPath(w http.ResponseWriter, r *http.Request) *detection
 }
 
 func (s *Server) handleUpdateDetectionRule(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "edit") {
+	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
 	}
 	old := s.ruleFromPath(w, r)
@@ -563,7 +563,7 @@ func (s *Server) handleUpdateDetectionRule(w http.ResponseWriter, r *http.Reques
 
 // handlePatchDetectionRule turns a rule on or off.
 func (s *Server) handlePatchDetectionRule(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "edit") {
+	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
 	}
 	rule := s.ruleFromPath(w, r)
@@ -587,7 +587,7 @@ func (s *Server) handlePatchDetectionRule(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleDeleteDetectionRule(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "edit") {
+	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
 	}
 	rule := s.ruleFromPath(w, r)
@@ -606,7 +606,7 @@ func (s *Server) handleDeleteDetectionRule(w http.ResponseWriter, r *http.Reques
 // handleSuppressDetectionRule adds one field = value suppression to a rule,
 // from a signal's drawer.
 func (s *Server) handleSuppressDetectionRule(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "edit") {
+	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
 	}
 	rule := s.ruleFromPath(w, r)

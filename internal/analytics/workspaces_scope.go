@@ -69,6 +69,7 @@ const (
 	byRule                     // alert history: rules of the workspaces
 	byCheck                    // uptime results: checks of the workspaces
 	byTarget                   // EXPLAIN plans: databases an allowed service queries
+	byReplay                   // replay chunks: sessions of an allowed app
 	ownedOnly                  // alert rules and uptime checks: the workspaces' own
 	ownedShared                // dashboards and saved views: the workspaces' own and unassigned ones
 	affected                   // incidents: their affected services
@@ -91,6 +92,7 @@ var scopedTables = map[string]scopeRule{
 	"CI_FLAKY_TESTS":  {byService, "service"},
 	"ROLLUP_REQUESTS": {byService, "service"}, "HOST_INVENTORY": {byService, "service"},
 	"SECURITY_EVENTS": {byService, "service"}, "CLIENT_EVENTS": {byService, "app"},
+	"REPLAY_SESSIONS": {byService, "app"}, "REPLAY_CHUNKS": {by: byReplay},
 	"ROLLUP_SYSTEM":  {by: byInstance},
 	"HOST_PROCESSES": {by: byHost}, "HOST_MOUNTS": {by: byHost}, "HOST_UNITS": {by: byHost},
 	"HOST_CONTAINERS": {by: byHost}, "CONTAINER_METRICS": {by: byHost}, "CONTAINER_EVENTS": {by: byHost},
@@ -100,10 +102,12 @@ var scopedTables = map[string]scopeRule{
 	"ALERT_RULES":      {by: ownedOnly}, "UPTIME_CHECKS": {by: ownedOnly},
 	"ALERT_STATE": {by: byRule}, "ALERT_EVENTS": {by: byRule}, "ALERT_INCIDENTS": {by: byRule},
 	"ALERT_DELIVERIES": {by: byRule}, "ALERT_RULE_HISTORY": {by: byRule},
-	"UPTIME_RESULTS": {by: byCheck},
-	"DASHBOARDS":     {by: ownedShared}, "LOG_VIEWS": {by: ownedShared},
+	"UPTIME_RESULTS": {by: byCheck}, "UPTIME_BROWSER_CHECKS": {by: byCheck}, "UPTIME_BROWSER_RESULTS": {by: byCheck},
+	"DASHBOARDS": {by: ownedShared}, "LOG_VIEWS": {by: ownedShared},
 	"EXPLAIN_REQUESTS": {by: byTarget},
 	"LOG_ARCHIVES":     {by: hidden}, "SECURITY_KNOWN": {by: hidden},
+	// Detection rules span every service; their signals are security_events.
+	"SECURITY_RULES": {by: hidden},
 }
 
 // ownedTables get the workspace of whoever creates a row in them.
@@ -153,6 +157,8 @@ func (sc *wsScope) buildPreds() {
 			p = "rule_id IN (SELECT id FROM alert_rules WHERE " + owned + ")"
 		case byCheck:
 			p = "check_id IN (SELECT id FROM uptime_checks WHERE " + owned + ")"
+		case byReplay:
+			p = "session_id IN (SELECT session_id FROM replay_sessions WHERE " + sc.serviceMatch("app") + ")"
 		case byTarget:
 			p = "target IN (SELECT target FROM spans WHERE " + sc.serviceMatch("service") + ")"
 		default:

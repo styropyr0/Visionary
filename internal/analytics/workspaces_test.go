@@ -1,7 +1,10 @@
 package analytics
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
@@ -191,6 +194,16 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO dashboards (name, description, layout, created_by, created_at, updated_at, workspace_id) VALUES (?, ?, '{"panels":[],"variables":[]}', ?, ?, ?, ?)`,
 			m+" dash", m+" board", m+"-author", ts, ts, svc.num)
 		exec(`INSERT INTO log_views (name, query, created_by, created_at, workspace_id) VALUES (?, ?, ?, ?, ?)`, m+" view", "service:"+svc.name, m+"-author", ts, svc.num)
+		exec(`INSERT INTO replay_sessions (session_id, started_at, created_at, app, user_id, url, reason, chunks, bytes) VALUES (?, ?, ?, ?, ?, ?, 'error', 1, 10)`,
+			svc.num, ts, ts, svc.web, m+"-uid", "https://"+m+".example/x")
+		exec(`INSERT INTO replay_chunks (session_id, seq, created_at, ended_at, events, bytes, payload) VALUES (?, 0, ?, ?, 1, 10, ?)`, svc.num, ts, ts, gzipB64(`[{"text":"`+m+` typed"}]`))
+		exec(`INSERT INTO uptime_browser_checks (check_id, steps, secrets) VALUES (?, ?, '{}')`, svc.num, `[{"action":"goto","url":"https://`+m+`.example/login","label":"`+m+` step"}]`)
+		exec(`INSERT INTO uptime_browser_results (created_at, check_id, ok, failed_step, steps, console, network) VALUES (?, ?, 0, 0, ?, ?, '[]')`,
+			ts, svc.num, `[{"label":"`+m+` step","ok":false,"error":"`+m+` timeout"}]`, `["`+m+` console"]`)
+		exec(`INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count) VALUES (?, 'rule', ?, 'high', ?, ?, ?, ?, ?, ?, 3)`,
+			ts, "rule_"+svc.num, svc.host, svc.name, m+"-attacker", "10.3.0."+svc.num, "/"+m+"/admin", `{"rule":"`+m+` rule"}`)
+		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,
+			m+" detection", "rule_"+svc.num, `{"logic":"threshold","source":"api","threshold":5,"window":"5m","where":"path LIKE '/`+m+`%'"}`, ts, ts)
 	}
 	exec(`INSERT INTO dashboards (name, layout, created_at, updated_at) VALUES ('Shared board', '{"panels":[],"variables":[]}', ?, ?)`, ts, ts)
 	// Rows without a service are seen only by people who see everything.
@@ -243,7 +256,22 @@ func (f *wsFixture) get(key, target string, timeout time.Duration) *httptest.Res
 	r.Header.Set("Authorization", "Bearer "+key)
 	w := httptest.NewRecorder()
 	f.h.ServeHTTP(w, r)
+	// Replay chunks come gzipped; read what they hold.
+	if w.Header().Get("Content-Encoding") == "gzip" {
+		if zr, err := gzip.NewReader(bytes.NewReader(w.Body.Bytes())); err == nil {
+			plain, _ := io.ReadAll(zr)
+			w.Body = bytes.NewBuffer(plain)
+		}
+	}
 	return w
+}
+
+func gzipB64(s string) string {
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	_, _ = zw.Write([]byte(s))
+	_ = zw.Close()
+	return base64.StdEncoding.EncodeToString(b.Bytes())
 }
 
 func (f *wsFixture) post(key, target, body string) *httptest.ResponseRecorder {
@@ -315,7 +343,7 @@ var leakExcluded = map[string]string{
 // every direct link is tried too. None holds the marker.
 var pathValues = map[string]string{
 	"{id}": "1", "{fingerprint}": "f00d0001", "{request_id}": "req1", "{trace_id}": secretTrace,
-	"{host}": leak + "-host", "{account}": "acct1", "{ip}": "10.0.0.1", "{name}": "service",
+	"{host}": leak + "-host", "{account}": "acct1", "{ip}": "10.0.0.1", "{name}": "service", "{seq}": "0", "{run}": "1",
 }
 
 // panelRoutes expand {panel} into every panel the route knows.
@@ -446,6 +474,13 @@ func TestWorkspaceLeaks(t *testing.T) {
 	}
 	t.Logf("%d calls, %d answered for the scoped key; the unscoped key saw the hidden service in %d", len(calls), ok, seen)
 
+	// The newer features' hidden rows are really there for the unscoped key.
+	for _, p := range []string{"/api/rum/replay/1", "/api/rum/replay/1/chunk/0", "/api/uptime/checks/1/runs", "/api/uptime/checks/1/runs/1", "/api/security/rules", "/api/security/findings"} {
+		w := f.get(f.unscoped, p+"?"+ranges[0], 10*time.Second)
+		if !strings.Contains(w.Body.String(), leak) {
+			t.Errorf("unscoped %s shows no hidden row (%d): %.200s", p, w.Code, w.Body)
+		}
+	}
 	// The scoped key does see its own service.
 	w := f.get(f.scoped, "/api/applogs?"+ranges[0], 10*time.Second)
 	if !strings.Contains(w.Body.String(), "payok line failed") {
@@ -495,6 +530,10 @@ func TestWorkspaceWrites(t *testing.T) {
 	if len(res.Rows) != 1 || toInt(res.Rows[0][0]) != 2 {
 		t.Errorf("new dashboard's workspace: %v", res.Rows)
 	}
+	// Detection rules cover every service, so they're changed from outside workspaces.
+	if code := do("DELETE", "/api/security/rules/1", "", s.handleDeleteDetectionRule, map[string]string{"id": "1"}); code != http.StatusForbidden {
+		t.Errorf("workspace editor deleted a detection rule: %d", code)
+	}
 	// Editors in a workspace aren't admins of the server.
 	if code := do("GET", "/api/team/keys", "", s.handleListKeys, nil); code != http.StatusForbidden {
 		t.Errorf("workspace editor listed API keys: %d", code)
@@ -531,6 +570,7 @@ func TestEveryTableClassified(t *testing.T) {
 		"ANALYTICS_PANELS": true, "VISIONARY_SETTINGS": true, "VISIONARY_USERS": true, "VISIONARY_API_KEYS": true,
 		"VISIONARY_SCIM_GROUPS": true, "AUDIT_LOG": true, "ALERT_CHANNELS": true, "ALERT_SILENCES": true,
 		"ROLLUP_STATE": true, "SECURITY_SUPPRESSIONS": true, "WORKSPACES": true, "SQLITE_SEQUENCE": true,
+		"VISIONARY_LEASES": true, "VISIONARY_REPLICAS": true, "VISIONARY_CHANGES": true, "VISIONARY_ONCE": true,
 	}
 	res, err := f.s.db.Query(context.Background(), `SELECT name FROM sqlite_master WHERE type = 'table'`)
 	if err != nil {
