@@ -79,6 +79,7 @@ parent) of `INTERNAL`/unspecified kind with `http.request.method` or
 | `request_size`, `response_size` | `http.request.body.size` / `http.request_content_length`; `http.response.body.size` / `http.response_content_length`; else 0 |
 | `service`, `version` | resource |
 | `db_count`, `db_ms`, `http_count`, `http_ms` | the request's `db` and `http` spans (below), counted and summed; 0 when there were none, NULL when *Keep OpenTelemetry spans* is off |
+| `trace_id`, `span_id`, `parent_span_id` | the span's trace id, span id and parent span id (hex); `parent_span_id` NULL for a root span |
 
 Bodies, `error_code` and `error_key` are not part of OpenTelemetry and stay
 NULL.
@@ -99,7 +100,10 @@ request's `request_id` with `offset_ms` from the request start, and follow the
 contract's rules per request: stored for every request, at most
 *Spans kept per request* in start order, while the totals count every call. Spans
 outside any request are stored when they themselves take at least
-*Span threshold outside requests*, with `request_id` NULL.
+*Span threshold outside requests*, with `request_id` NULL. Every span row
+keeps the span's `trace_id`, `span_id` and `parent_span_id`, so a trace that
+crosses services (OpenTelemetry ones, and Visionary SDK ones that propagate
+`traceparent`) is one trace in the trace view and the service map.
 
 Exporters send spans as they end, so children usually arrive before their
 request span and sometimes in an earlier export. Spans whose request has not

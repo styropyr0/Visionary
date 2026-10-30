@@ -169,17 +169,23 @@ INSERT INTO api_logs (
 	user_id, user_handle, user_role, request_headers, request_content_type, request_body,
 	request_body_truncated, request_size, response_content_type, response_body,
 	response_body_truncated, response_size, error_code, error_key,
-	service, version, db_count, db_ms, http_count, http_ms, login_account
-) VALUES (31 placeholders)
+	service, version, db_count, db_ms, http_count, http_ms, login_account,
+	trace_id, span_id, parent_span_id
+) VALUES (34 placeholders)
 ```
 
-The last seven columns were added later (`AddedRequestColumns` in
+The last ten columns were added later (`AddedRequestColumns` in
 `sdks/go/migrate.go`); add them to old tables at startup exactly as described for
 `system_metrics` below. `service` and `version` are the service name and release
 (see Telemetry); `db_count`/`db_ms` and `http_count`/`http_ms` are the number and
 total duration of database and outbound HTTP calls the request made (0 when it
 made none, NULL when the SDK cannot see that kind of call); `login_account` is
-the account a sign-in tried.
+the account a sign-in tried; `trace_id`, `span_id` and `parent_span_id` place the
+request in its distributed trace (see Trace context). After adding the columns,
+create `idx_api_logs_trace_id ON api_logs (trace_id)` (`TraceIndex` in
+`migrate.go`; MySQL without `IF NOT EXISTS`, ignoring error 1061). The index is
+not in `requests.sql`, because on an older table the column only exists after
+the upgrade.
 
 Types: `status`, `*_truncated` (0/1), `*_size` are integers; `duration_ms` a
 float; everything else text.
@@ -359,6 +365,12 @@ Columns:
 | `status` | `ok` or `error` (`http`: `error` on a transport error or a 5xx response) |
 | `error` | short error message, at most 500 characters |
 | `row_count` | rows returned or affected when the driver reports it |
+| `trace_id`, `span_id`, `parent_span_id` | the call's place in its trace (see Trace context) |
+
+The last three columns were added later (`AddedSpanColumns` in
+`sdks/go/migrate.go`): insert them after `row_count`, add them to old tables at
+startup like the request columns, then create
+`idx_spans_trace_id ON spans (trace_id)`.
 
 Sanitizing statements: replace string literals (`'...'`, with doubled quotes
 inside) and numeric literals with `?`, collapse `IN (?, ?, ...)` to `IN (?)`,
@@ -410,6 +422,73 @@ GraphQL operations are spans of kind `graphql`, recorded around execution:
 `detail` is the document with string and number literals replaced by `?`.
 The dashboard measures depth and field count from it, so SDKs need no GraphQL
 library.
+
+### Trace context (distributed tracing)
+
+Requests and calls in different services that belong to one piece of work
+share a trace, following W3C Trace Context
+(<https://www.w3.org/TR/trace-context/>). The dashboard's trace view, trace
+search and service map read only the three columns below, so an SDK that
+fills them and propagates the headers joins traces with every other SDK and
+with OpenTelemetry services. The Go SDK is the reference
+(`sdks/go/tracecontext.go`, `middleware.go`, `spans.go`, `transport.go`).
+
+Ids are lower-case hex: `trace_id` 32 characters, `span_id` and
+`parent_span_id` 16. Generate them from a good random source (a seeded PRNG
+is fine; they are not secrets), never all zero.
+
+**Incoming request** (the middleware):
+
+1. Read `traceparent`. It is valid when it splits on `-` into at least four
+   fields: version (2 hex, not `ff`), trace id (32 hex), parent id (16 hex),
+   flags (2 hex), all lower case, with neither id all zeros; version `00` has
+   exactly four fields, later versions may have more (read the first four).
+2. Valid: the request continues that trace. `trace_id` = its trace id,
+   `parent_span_id` = its parent id, flags kept as received, and the
+   `tracestate` header kept as received (passed on unchanged, never parsed).
+   Invalid or missing: the request starts a trace with a new `trace_id`,
+   `parent_span_id` NULL, flags `01`, no tracestate.
+3. Either way the request gets a new `span_id`: it is the server span of
+   this service. Write all three on its `api_logs` row.
+4. The request's span is the current span for everything the handler does.
+   Do this even when the request is not logged (path prefix, logging off), so
+   outbound calls still carry the trace on.
+
+An SDK running inside an active OpenTelemetry span (the app also uses an
+OpenTelemetry SDK that already handled the header) should take the trace id
+and parent from that span instead of parsing the header itself; with no
+OpenTelemetry in the process, the header is the source.
+
+**Spans:** every span row gets its own new `span_id`, the same `trace_id` as
+its parent, and `parent_span_id` = the current span when it started: the
+request's span, or the custom or background span it runs inside. Custom
+spans that wrap other calls make themselves the current span for the code
+inside them (Go: `StartSpanContext` returns a context; scope-based SDKs push
+and pop it with the span). A call made outside any request or span starts a
+new trace (`parent_span_id` NULL) so the service it reaches can still be
+followed.
+
+**Background work** (`visionary.Go` and the other helpers above) keeps the
+request's trace: the background span's parent is the span that started it,
+and calls inside it are its children, even after the response was sent.
+
+**Outbound HTTP:** the instrumented client sets, on the request it sends,
+`traceparent: 00-<trace_id>-<span_id of the http span>-<flags>`, and
+`tracestate` when one was received and the request has none. A
+`traceparent` the application set itself is left alone. Never modify the
+caller's request object in place where the platform forbids it (Go
+`RoundTripper`: clone it). When span capture is off the header is still
+sent, naming the current span as the parent.
+
+**Log lines** (`app_logs.trace_id`, `span_id`): the current span's trace and
+span id, unless the line carries its own `trace_id`/`span_id` attributes.
+
+Errors are linked to traces through their `request_id`; the `errors` table
+has no trace columns. A browser or mobile SDK propagates the same way: it
+starts a trace per recorded `api` call, sends `traceparent` with a new span
+id (only to the app's own API origins, since other servers may reject the
+header under CORS), and puts that trace id in the event's `attrs.trace_id`,
+so the backend's request continues the page's trace.
 
 ### Query plans (`explain_requests`, optional)
 
@@ -597,7 +676,7 @@ INSERT INTO app_logs (
 | `message` | the formatted message, secrets scrubbed (below), at most 8 KB (UTF-8, cut on a character boundary) |
 | `attrs` | the line's structured fields as one flat JSON object: nested groups become dotted keys (`user.id`); values are strings, numbers or booleans (anything else as its string form; times RFC 3339); secrets redacted; at most 16 KB: when larger, cut each string value to 1024 bytes plus `…`, and if still larger keep keys in sorted order while they fit, with `"_truncated": true`. NULL when there are none |
 | `request_id` | the request's `request_id` when logged inside a logged request (or an attribute `request_id`) |
-| `trace_id`, `span_id` | the W3C trace id from the request's `traceparent` header (`00-<32 hex>-<16 hex>-<2 hex>`, all-zero ids are none), or the active OpenTelemetry span, or attributes `trace_id`/`span_id` |
+| `trace_id`, `span_id` | attributes `trace_id`/`span_id`, else the current span's (see Trace context): inside a request at least its trace and server span, inside a custom or background span that span, or the active OpenTelemetry span |
 | `user_id` | the request's user (`set_user`), or attribute `user_id` |
 | `session_id` | attribute `session_id` |
 | `code_file`, `code_line`, `code_func` | where the line was logged, when the logger records it cheaply (Go slog PC, Python `pathname`/`lineno`/`funcName`, Logback caller data when enabled, Ruby `caller_locations(…, 1)`); `code_file` is named like CPU profile frames (application files relative to the project, `lib:`/`std:` otherwise). NULL otherwise |
