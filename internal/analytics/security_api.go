@@ -174,6 +174,14 @@ func (s *Server) handleSecurityFinding(w http.ResponseWriter, r *http.Request) {
 	}
 	tr := timeRange{From: at.Add(-back - time.Minute), To: at.Add(st.dedupeFor(kind) + time.Minute)}
 	out := map[string]any{"finding": f, "from": tr.From.Format(time.RFC3339Nano), "to": tr.To.Format(time.RFC3339Nano)}
+	if f["source"] == "rule" {
+		if err := s.findingRule(r.Context(), out, f, at); err != nil {
+			s.fail(w, dbErr(err))
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 	if f["source"] == "audit" {
 		if err := s.findingAudit(r.Context(), out, f, tr); err != nil {
 			s.fail(w, err)

@@ -19,6 +19,7 @@ import (
 //	security_api.go     findings, a finding's related requests, the audit feed
 //	security_alerts.go  the security_events and failed_logins alert metrics
 //	security_digest.go  the security part of the weekly digest
+//	security_rules*.go  the team's own detection rules and their signals
 //
 // security_events itself is created in hosts_schema.go: the host agent writes
 // rows with source 'host', the detectors here write source 'api'. Visionary's
@@ -207,12 +208,15 @@ func (s *Server) securityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/security/report.pdf", s.authed(s.handleSecurityReportPDF))
 	mux.Handle("GET /api/security/panels/{panel}", s.authed(s.handleSecurityPanel))
 	s.securityTriageRoutes(mux)
+	s.securityRulesRoutes(mux)
 }
 
 func (s *Server) securityStart(ctx context.Context) {
 	sec := s.security()
 	go s.auditRoleMapping(ctx)
 	go s.intelLoop(ctx)
+	// The team's own rules run even with the built-in detectors off.
+	go s.rulesLoop(ctx)
 	if !sec.st.enabled {
 		s.logger.Info("security detectors disabled in Settings → Server; the Security page still shows host events and the audit log")
 		return
@@ -242,7 +246,7 @@ func (s *Server) securityLoop(ctx context.Context) {
 func (s *Server) securityPrompt() string {
 	return `Table security_events: one row per security finding. Use it for "was there an attack", brute force, scanners and host security questions.
 - id INTEGER, created_at TEXT (same format as api_logs; when the finding was first seen)
-- source TEXT: 'api' (Visionary's detectors over api_logs), 'host' (the Visionary host agent on a VM, and ssh_bruteforce graded from its events) or 'audit' (Visionary's own audit log)
+- source TEXT: 'api' (Visionary's detectors over api_logs), 'host' (the Visionary host agent on a VM, and ssh_bruteforce graded from its events), 'audit' (Visionary's own audit log), 'logs' (secret_in_logs from the log scanner) or 'rule' (signals from the team's detection rules in security_rules: kind is the rule's rule_* kind, target names the group such as ip=… user=…, detail has rule, logic, tactic and technique (MITRE ATT&CK ids), group and a few samples)
 - kind TEXT. From the API: auth_bruteforce (many failed logins from one IP), credential_stuffing (one IP failing against many accounts), account_targeted (many IPs failing against one account; critical when one of them then signed in), login_as_other (a browser signed in as one user trying to sign in as another account; actor = the signed-in user, target = the account tried), auth_bruteforce_slow / account_targeted_slow / distributed_login_attack (the same over a long window, and many IPs each failing a little), new_login_location, new_login_device, impossible_travel, listed_ip_login (a sign-in from a blocklisted IP), session_spread (one account used from many places at once), risky_account_change (a password, email, MFA or payout change soon after a risky sign-in), enumeration (many records read through one route with an ID), idor_probe (many records refused through such a route), injection_attempt (SQL, script, template, command, JNDI or traversal patterns), route_rate_limit, signup_abuse, otp_abuse, scanner (probe paths such as /.env or /wp-admin, or a scanner user agent), rate_abuse (an IP or user far above its usual request rate), forbidden_spike (a jump in 403s for one user or role). From Visionary's audit log: portal_bruteforce, portal_account_targeted, and portal_* changes (secret_viewed, account_created, account_changed, roles_changed, signin_changed, api_key_created, data_deleted, ip_blocked, two_step_reset). From hosts: ssh_failed, ssh_login, ssh_bruteforce, sudo, port_opened, port_closed, updates_pending (count = updates waiting), reboot, ssh_key_added, ssh_key_removed, file_changed, suspicious_process, container_privileged, container_root, container_new_image
 - status TEXT: NULL or '' while open, else acknowledged, resolved or false_positive; note TEXT is what whoever triaged it wrote
 - severity TEXT: info, warning or critical

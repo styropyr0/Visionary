@@ -13,6 +13,8 @@ import (
 //     a device, the last place with its time), so a new one stands out.
 //   - security_suppressions: "don't flag this again" rules made from false
 //     positives, by kind and IP or account, optionally until a date.
+//   - security_rules: the team's detection rules; spec is the rule as JSON,
+//     kind names its signals and never changes.
 func (s *Server) securitySchema() []string {
 	id, key, ts := "INTEGER PRIMARY KEY AUTOINCREMENT", "TEXT", "TEXT"
 	tail, index := "", "CREATE INDEX IF NOT EXISTS"
@@ -42,6 +44,17 @@ CREATE TABLE IF NOT EXISTS security_suppressions (
     actor      TEXT,
     note       TEXT,
     expires_at {ts}
+){tail};
+CREATE TABLE IF NOT EXISTS security_rules (
+    id         {id},
+    name       TEXT NOT NULL,
+    kind       {key} NOT NULL,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    template   {key},
+    spec       TEXT NOT NULL,
+    created_at {ts} NOT NULL,
+    created_by TEXT,
+    updated_at {ts} NOT NULL
 ){tail}`
 	return []string{strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{tail}", tail, "{index}", index).Replace(ddl)}
 }

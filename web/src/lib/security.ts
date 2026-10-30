@@ -40,11 +40,14 @@ export interface FindingDetail {
   finding: Finding;
   from: string;
   to: string;
-  match?: "ip" | "user" | "role" | "audit";
+  match?: "ip" | "user" | "role" | "audit" | "rule";
   requests?: Result;
   statuses?: Result;
   /** The audit entries behind a finding from Visionary's own audit log. */
   audit?: Result;
+  /** A rule's signal: the rule, and its group's matched events around it. */
+  rule?: DetectionRule;
+  events?: Result;
 }
 
 export interface Suppression {
@@ -224,7 +227,7 @@ export function kindLabel(kind: string): string {
 
 /** Where a finding came from, as a short label. */
 export function sourceLabel(source: string): string {
-  return source === "api" ? "API" : source === "audit" ? "Visionary" : source === "logs" ? "Logs" : titleCase(source);
+  return source === "api" ? "API" : source === "audit" ? "Visionary" : source === "logs" ? "Logs" : source === "rule" ? "Rule" : titleCase(source);
 }
 
 /** Readable names for Visionary's own audit actions. */
@@ -250,6 +253,10 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "security.suppression_created": "Suppression added",
   "security.suppression_deleted": "Suppression removed",
   "security.audit_exported": "Audit log exported",
+  "security.rule_created": "Detection rule added",
+  "security.rule_updated": "Detection rule changed",
+  "security.rule_deleted": "Detection rule deleted",
+  "security.rule_suppressed": "Detection rule suppression added",
 };
 
 export function auditLabel(action: string): string {
@@ -274,4 +281,156 @@ export function useSecurityPanel(name: string, from?: Date, to?: Date) {
   const f = from ?? resolved.from;
   const t = to ?? resolved.to;
   return useQuery<Result>(`sec-${name}?${f.toISOString()}-${t.toISOString()}#${tick}`, (signal) => securityApi.panel(name, f, t, signal));
+}
+
+/** The label a finding shows: a rule's name for its signals, else its kind's. */
+export function findingLabel(f: Pick<Finding, "source" | "kind" | "detail">): string {
+  const name = f.source === "rule" ? f.detail?.rule : undefined;
+  return typeof name === "string" && name ? name : kindLabel(f.kind);
+}
+
+export type RuleSource = "requests" | "logs" | "events" | "audit";
+export type RuleLogic = "threshold" | "new_value" | "sequence" | "anomaly";
+
+export interface RuleSuppression {
+  field: string;
+  value: string;
+  until?: string;
+  note?: string;
+  by?: string;
+}
+
+/** A detection rule, as saved. */
+export interface DetectionRule {
+  id: number;
+  name: string;
+  kind: string;
+  description?: string;
+  enabled: boolean;
+  template?: string;
+  severity: FindingSeverity;
+  tactic?: string;
+  technique?: string;
+  source: RuleSource;
+  filter?: Record<string, string>;
+  logic: RuleLogic;
+  group_by?: string[];
+  window: string;
+  threshold: number;
+  distinct?: string;
+  field?: string;
+  learn?: string;
+  then?: Record<string, string>;
+  factor?: number;
+  suppress?: RuleSuppression[];
+  channels?: number[];
+  runbook?: string;
+  created_at?: string;
+  created_by?: string;
+  updated_at?: string;
+}
+
+export interface RuleView extends DetectionRule {
+  signals: number;
+  last_signal?: string;
+  last_run?: string;
+  error?: string;
+  every: string;
+}
+
+export interface RuleTemplate {
+  id: string;
+  name: string;
+  description: string;
+  severity: FindingSeverity;
+  tactic: string;
+  technique: string;
+  source: RuleSource;
+  filter?: Record<string, string>;
+  logic: RuleLogic;
+  group_by?: string[];
+  window: string;
+  threshold?: number;
+  distinct?: string;
+  field?: string;
+  learn?: string;
+  then?: Record<string, string>;
+  factor?: number;
+  needs?: string;
+  /** The rule made from it, when there is one. */
+  rule_id?: number;
+}
+
+export interface MitreEntry {
+  id: string;
+  name: string;
+}
+
+export interface RulesList {
+  rules: RuleView[];
+  templates: RuleTemplate[];
+  tactics: MitreEntry[];
+  techniques: MitreEntry[];
+  fields: Record<RuleSource, string[]>;
+  filters: Record<RuleSource, string[]>;
+  geo: boolean;
+  can_edit: boolean;
+}
+
+export interface RulePreviewHit {
+  at: string;
+  group: Record<string, string>;
+  value?: string;
+  count: number;
+  summary: string;
+  suppressed?: boolean;
+}
+
+export interface RulePreview {
+  from: string;
+  to: string;
+  hits: RulePreviewHit[];
+  total: number;
+  signals: number;
+  groups: number;
+  note: string;
+}
+
+export const rulesApi = {
+  list: (signal?: AbortSignal) => api<RulesList>("/api/security/rules", { signal }),
+  create: (r: Partial<DetectionRule>) => api<DetectionRule>("/api/security/rules", { method: "POST", json: r }),
+  fromTemplate: (id: string) => api<DetectionRule>("/api/security/rules", { method: "POST", json: { from_template: id } }),
+  update: (id: number, r: Partial<DetectionRule>) => api<DetectionRule>(`/api/security/rules/${id}`, { method: "PUT", json: r }),
+  setEnabled: (id: number, enabled: boolean) => api<DetectionRule>(`/api/security/rules/${id}`, { method: "PATCH", json: { enabled } }),
+  remove: (id: number) => api<void>(`/api/security/rules/${id}`, { method: "DELETE" }),
+  test: (r: Partial<DetectionRule>) => api<RulePreview>("/api/security/rules/test", { method: "POST", json: r }),
+  suppress: (id: number, s: { field: string; value: string; days: number; note?: string }) =>
+    api<DetectionRule>(`/api/security/rules/${id}/suppress`, { method: "POST", json: s }),
+};
+
+export const SOURCE_LABELS: Record<RuleSource, string> = {
+  requests: "Requests",
+  logs: "App logs",
+  events: "Security events",
+  audit: "Visionary audit log",
+};
+
+export const LOGIC_LABELS: Record<RuleLogic, string> = {
+  threshold: "Threshold",
+  new_value: "New value",
+  sequence: "Sequence",
+  anomaly: "Anomaly",
+};
+
+/** "TA0006 Credential Access" from the catalog, or the id alone. */
+export function mitreLabel(id: string | undefined, list: MitreEntry[] | undefined): string {
+  if (!id) return "";
+  const e = list?.find((m) => m.id === id);
+  return e ? `${e.id} ${e.name}` : id;
+}
+
+/** The ATT&CK page for a tactic or technique id. */
+export function mitreHref(id: string): string {
+  if (id.startsWith("TA")) return `https://attack.mitre.org/tactics/${id}/`;
+  return `https://attack.mitre.org/techniques/${id.replace(".", "/")}/`;
 }
