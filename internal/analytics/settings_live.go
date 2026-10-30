@@ -87,6 +87,7 @@ var retentionKinds = []retentionKind{
 	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}},
 	{Key: "alerts", Label: "Alert history", Description: "Past firings and resolutions.", DefaultDays: 365, tables: []string{"alert_events", "alert_deliveries"}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN results asked for from Queries.", DefaultDays: 30, tables: []string{"explain_requests"}},
+	{Key: "ci", Label: "CI runs and tests", Description: "Pipelines, jobs, test results and flaky tests.", DefaultDays: 90, tables: []string{"ci_pipelines", "ci_jobs", "ci_tests", "ci_flaky_tests"}},
 	{Key: "releases", Label: "Deploys", Description: "Version starts: the deploy marks on charts.", DefaultDays: 0, tables: []string{"releases"}},
 	{Key: "audit", Label: "Audit log", Description: "Who changed what in Visionary.", DefaultDays: 365, tables: []string{"audit_log"}},
 	{Key: "rollup_minute", Label: "Per-minute chart summaries", Description: "Pre-aggregated requests and system metrics behind charts of a few days.", DefaultDays: 14},

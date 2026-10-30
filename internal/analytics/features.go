@@ -30,12 +30,13 @@ import (
 //	incidents.go declared incidents: roles, timeline, status updates, postmortems
 //	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
+//	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -59,6 +60,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.incidentsRoutes(mux)
 	s.metricsRoutes(mux)
 	s.ssoRoutes(mux)
+	s.ciRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -89,7 +91,7 @@ func (s *Server) featurePrompt() string {
 	var parts []string
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt(), s.tracesPrompt(), s.incidentsPrompt(), s.metricsPrompt(), s.ownTablesPrompt(ctx)} {
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt(), s.tracesPrompt(), s.incidentsPrompt(), s.metricsPrompt(), s.ciPrompt(), s.ownTablesPrompt(ctx)} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}

@@ -61,6 +61,7 @@ var confGroups = []struct {
 	{"security_abuse", "API abuse", "Scraping, guessing IDs, injection attempts, per-route limits, and sign-up or code-sending floods."},
 	{"security_intel", "Threat intelligence", "Where IP addresses are, who runs them, and whether a blocklist names them."},
 	{"security_response", "Response", "Where Block IP and End sessions on a finding are sent."},
+	{"ci", "CI", "GitHub Actions sends workflow runs and jobs to /api/ingest/ci/github, signed with this secret. Other CI systems post runs and JUnit reports with a server key."},
 	{"logs_archive", "Log archive", "An S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Backblaze B2) that keeps every finished hour of logs as gzipped NDJSON, so they outlive retention. Archived hours can be loaded back from Settings → Logs."},
 	{"other", "Other", ""},
 }
@@ -143,6 +144,8 @@ var confDefs = []confDef{
 
 	{Key: "security_action_webhook", Group: "security_response", Label: "Action webhook", Help: "Block IP and End sessions on a finding POST JSON here, for your firewall, API gateway or app to act on.", Kind: confText},
 	{Key: "security_action_secret", Group: "security_response", Label: "Webhook signing secret", Help: "Signs each call with HMAC-SHA256 in the X-Visionary-Signature header.", Kind: confSecret},
+
+	{Key: "github_webhook_secret", Group: "ci", Label: "GitHub webhook secret", Help: "The secret of the repository or organization webhook that sends Workflow runs and Workflow jobs events. Without it the webhook is refused.", Kind: confSecret},
 
 	{Key: "logs_archive_endpoint", Group: "logs_archive", Label: "Endpoint", Help: "e.g. https://s3.us-east-1.amazonaws.com, https://<account>.r2.cloudflarestorage.com, http://minio:9000. Empty turns the archive off.", Kind: confText},
 	{Key: "logs_archive_bucket", Group: "logs_archive", Label: "Bucket", Kind: confText},
