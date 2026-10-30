@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "../agent.js";
-import { observeRequest } from "../capture.js";
-import { currentRequest, runInRequest } from "../context.js";
+import { enterRequest, observeRequest } from "../capture.js";
+import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
 
 /**
@@ -34,6 +34,6 @@ export function wrap<Req extends IncomingMessage, Res extends ServerResponse>(
       }
       return result;
     };
-    return state ? runInRequest(state, run) : run();
+    return enterRequest(req, run);
   };
 }

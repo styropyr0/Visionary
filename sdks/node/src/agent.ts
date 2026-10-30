@@ -9,6 +9,7 @@ import type { Logger } from "./log.js";
 import { consoleLogger, errMessage } from "./log.js";
 import { LogPipeline, activeLogs, logValues, setActiveLogs } from "./logs/pipeline.js";
 import { parseLevel, secretKeys } from "./logs/rules.js";
+import { collectMetrics, configureMetrics, metricsLimit } from "./metrics.js";
 import { openStore } from "./store/open.js";
 import type { Table, Value } from "./store/sql.js";
 import { insertSQL } from "./store/sql.js";
@@ -27,7 +28,8 @@ import { Retention, Writer } from "./writer.js";
 export const SDK_VERSION: string = typeof __SDK_VERSION__ === "string" ? __SDK_VERSION__ : "0.0.0";
 
 /**
- * Runs request logging, system metrics, spans, errors and app logs for one process.
+ * Runs request logging, system metrics, spans, errors, app logs and custom
+ * metrics for one process.
  * With no database configured it logs one warning and every method is a
  * no-op; it never throws into the application once constructed.
  */
@@ -45,6 +47,8 @@ export class Agent {
   /** Own writer, so a flood of log lines never crowds out request rows. */
   private logs?: LogPipeline;
   private logWriter?: Writer;
+  private metricWriter?: Writer;
+  private metricTimer?: NodeJS.Timeout;
   private readonly schemas = new Map<Schema, Promise<boolean> | true>();
   private readonly schemaReported = new Set<Schema>();
   private readonly limiter = new ErrorLimiter();
@@ -57,6 +61,7 @@ export class Agent {
     this.config = resolveConfig(options);
     this.logger = options.logger ?? consoleLogger;
     this.instance = this.config.instance || hostname();
+    configureMetrics(this.config.metrics, this.config.metricsMaxSeries);
     try {
       this.store = openStore(this.config, this.logger);
     } catch (e) {
@@ -104,17 +109,22 @@ export class Agent {
         (log) => this.logWriter?.push({ log }),
       );
     }
+    if (cfg.metrics) {
+      // One row per series per interval; room for many series at once.
+      this.metricWriter = new Writer(cfg, this.store, () => this.ready("metrics"), this.logger, { queueSize: 20_000 });
+    }
     const tables: [Table, number][] = [];
     if (this.writer) tables.push(["api_logs", cfg.retentionDays], ["spans", cfg.retentionDays], ["errors", cfg.retentionDays]);
     if (this.writer && cfg.profile) tables.push(["profiles", cfg.retentionDays]);
     if (this.recorder) tables.push(["system_metrics", cfg.systemRetentionDays]);
     if (this.logWriter) tables.push(["app_logs", cfg.retentionDays]);
+    if (this.metricWriter) tables.push(["metrics", cfg.retentionDays]);
     this.retention = new Retention(this.store, tables, this.logger);
   }
 
   /** True when anything is collected (a database and at least one feature). */
   get active(): boolean {
-    return !!this.writer || !!this.recorder || !!this.logWriter;
+    return !!this.writer || !!this.recorder || !!this.logWriter || !!this.metricWriter;
   }
 
   /** Whether a request to path gets an api_logs row. */
@@ -143,7 +153,6 @@ export class Agent {
           standalone: (row) => this.pushSpan(row, null),
           late: (row, requestId) => this.pushSpan(row, requestId),
         });
-        if (cfg.instrumentHttp) instrumentHttp();
       }
       if (cfg.errors && cfg.captureUncaught) {
         process.on("uncaughtExceptionMonitor", this.onMonitor);
@@ -170,6 +179,15 @@ export class Agent {
       this.logs.start();
       setActiveLogs(this.logs);
     }
+    if (this.metricWriter) {
+      // The table is created at the first write, so services without custom
+      // metrics never get it.
+      this.metricWriter.start();
+      this.metricTimer = setInterval(() => this.flushMetrics(), cfg.metricsInterval * 1000);
+      this.metricTimer.unref();
+    }
+    // Outbound calls carry the trace on even when spans are off.
+    if (cfg.instrumentHttp) instrumentHttp();
     if (this.store && cfg.explain.length > 0) {
       this.explainer = new ExplainWorker(cfg.explain, this.store, this.instance, this.logger);
       this.explainer.start();
@@ -190,6 +208,7 @@ export class Agent {
       process.off("uncaughtExceptionMonitor", this.onMonitor);
       process.off("unhandledRejection", this.onRejection);
       setSpanSink(undefined);
+      if (this.metricTimer) clearInterval(this.metricTimer);
       this.retention?.stop();
       this.profiler?.stop();
       this.explainer?.stop();
@@ -197,7 +216,13 @@ export class Agent {
       if (this.logs && activeLogs() === this.logs) setActiveLogs(undefined);
       if (this.started) {
         const deadline = Date.now() + timeoutMs;
-        await Promise.all([this.writer?.close(timeoutMs), this.logWriter?.close(timeoutMs), this.recorder?.close()]);
+        this.flushMetrics();
+        await Promise.all([
+          this.writer?.close(timeoutMs),
+          this.logWriter?.close(timeoutMs),
+          this.metricWriter?.close(timeoutMs),
+          this.recorder?.close(),
+        ]);
         if (Date.now() > deadline) this.logger.warn("visionary: close took longer than its timeout");
       }
       await this.store?.close().catch(() => undefined);
@@ -255,6 +280,17 @@ export class Agent {
     if (cfg.spans && state.spans.length > 0) {
       for (const row of state.spans.sort((a, b) => a.slot - b.slot)) this.pushSpan(row, state.requestId);
     }
+  }
+
+  /** Queues each series' interval. */
+  private flushMetrics(): void {
+    if (!this.metricWriter) return;
+    const { rows, dropped } = collectMetrics(Date.now());
+    for (const [name, n] of dropped) {
+      this.logger.warn(`visionary: metric series dropped over the limit (metric=${name}, dropped=${n}, limit=${metricsLimit()})`);
+    }
+    const service = this.config.service || null;
+    for (const [at, ...rest] of rows) this.metricWriter.push({ table: "metrics", args: [at!, service, this.instance, ...rest] });
   }
 
   private pushSpan(row: SpanRow, requestId: string | null): void {

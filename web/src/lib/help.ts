@@ -435,6 +435,20 @@ ctx, end := visionary.StartSpanContext(r.Context(), visionary.KindCustom, "build
 err = buildReport(ctx) // its calls nest under "build report"
 end(err)`,
       },
+      node: {
+        note: "Automatic once the integration is in: every request continues an incoming `traceparent` or starts a trace, and `fetch`, `undici`, `http` and `https` send it on (even with spans off). Calls made inside `visionary.span` or `visionary.background` nest under them.",
+        code: `await fetch("http://stock/items/42"); // the stock service continues this trace
+
+await visionary.span("custom", "build report", () => buildReport()); // its calls nest under it`,
+      },
+      python: {
+        note: "Automatic for incoming requests once the middleware is in. Outbound calls send it once `instrument_http()` hooks requests, httpx and urllib3. Calls made inside `visionary.span` or `visionary.background` nest under them.",
+        code: `visionary.instrument_http()  # once at startup
+requests.get("http://stock/items/42")  # the stock service continues this trace
+
+with visionary.span("custom", "build report"):
+    build_report()  # its calls nest under "build report"`,
+      },
     },
   },
   metrics: {
@@ -452,6 +466,26 @@ took := visionary.Histogram("checkout_ms", "method", method)
 took.Observe(float64(time.Since(start).Milliseconds()))
 
 visionary.DescribeMetric("checkout_ms", visionary.MetricOptions{Unit: "ms", Buckets: []float64{50, 100, 250, 500, 1000}})`,
+      },
+      node: {
+        note: "Labels are an object. Calls work before `init()`.",
+        code: `visionary.counter("orders_placed", { region }).add(1);
+visionary.gauge("queue_depth", { queue: "emails" }).set(queue.length);
+
+const took = visionary.histogram("checkout_ms", { method });
+took.observe(Date.now() - start);
+
+visionary.describeMetric("checkout_ms", { unit: "ms", buckets: [50, 100, 250, 500, 1000] });`,
+      },
+      python: {
+        note: "Labels are keyword arguments (or a dict). Calls work before `init()`.",
+        code: `visionary.counter("orders_placed", region=region).add(1)
+visionary.gauge("queue_depth", queue="emails").set(len(queue))
+
+took = visionary.histogram("checkout_ms", method=method)
+took.observe((time.monotonic() - start) * 1000)
+
+visionary.describe_metric("checkout_ms", unit="ms", buckets=[50, 100, 250, 500, 1000])`,
       },
     },
     any: {

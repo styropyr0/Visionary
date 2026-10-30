@@ -74,10 +74,15 @@ export function init(options: InitOptions): void {
 
     const ignore = options.ignoreUrls ?? [];
     const own = new URL(url, location.href).href;
-    trackNetwork(report, (u) => {
-      const abs = bareUrl(u);
-      return abs === own || ignore.some((p) => (typeof p === "string" ? u.includes(p) : p.test(u)));
-    });
+    const traceOrigins = (options.traceOrigins ?? []).map((o) => (typeof o === "string" ? o.replace(/\/+$/, "") : o));
+    trackNetwork(
+      report,
+      (u) => {
+        const abs = bareUrl(u);
+        return abs === own || ignore.some((p) => (typeof p === "string" ? u.includes(p) : p.test(u)));
+      },
+      (origin) => origin === location.origin || traceOrigins.some((o) => (typeof o === "string" ? o === origin : o.test(origin))),
+    );
     trackErrors(report);
     if (options.captureConsole) captureConsole(sendLog, options.logLevel ?? "info");
     trackPageLoad(report);

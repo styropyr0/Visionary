@@ -254,6 +254,19 @@ AWS, Stripe and OpenAI SDKs) are recorded automatically. Each call is a span
 named `POST api.stripe.com`, ending when the response headers arrive. Turn it
 off with `init({ instrumentHttp: false })`.
 
+## Distributed tracing
+
+Requests and calls across services that belong to one piece of work share a
+trace, following [W3C Trace Context](https://www.w3.org/TR/trace-context/).
+Every request handled by an integration continues the trace in its
+`traceparent` header, or starts one, and every outbound call above sends
+`traceparent` (and the `tracestate` it received) naming its span, so the
+service it reaches joins the trace whether it uses a Visionary or an
+OpenTelemetry SDK. A `traceparent` your code set itself is left alone; with
+`spans` off the header is still sent. Calls made inside `span()` or
+`background()` nest under that span, log lines carry the current trace and
+span id, and **Traces** in the dashboard shows the whole trace across services.
+
 ## Redis, queues and your own code
 
 There is no Redis or queue hook. Wrap the call in a span, sync or async:
@@ -293,6 +306,30 @@ new ApolloServer({ typeDefs, resolvers, plugins: [visionary.apolloPlugin()] });
 // any other server
 const result = await visionary.graphqlOperation("query", operationName, source, () => execute(args));
 ```
+
+## Custom metrics
+
+Counters, gauges and histograms of your own, with labels. Values add up in
+memory and every 15 seconds one row per label set goes to the `metrics`
+table, created on the first write; recording never waits for the database.
+They show on **Metrics** in the dashboard, in dashboard panels and in alerts.
+
+```js
+visionary.counter("orders_placed", { region: "eu" }).add(1); // or .inc()
+visionary.gauge("queue_depth", { queue: "emails" }).set(queue.length); // or .add(-1)
+visionary.histogram("checkout_ms").observe(Date.now() - started);
+
+// unit and histogram buckets, before the metric's first use
+visionary.describeMetric("checkout_ms", { unit: "ms", buckets: [50, 100, 250, 500, 1000] });
+```
+
+Keep the handle (`const placed = visionary.counter("orders_placed")`) to skip
+the lookup on hot paths. A counter row holds the increase over the interval,
+a gauge row the last value, a histogram row the count, sum, min, max and
+bucket counts (default buckets suit milliseconds). Each distinct label set is
+a series; past 1000 series per metric name new ones are dropped with a
+warning, so never put user ids or other unbounded values in a label. Calls
+work before `init()`, and do nothing with `VISIONARY_METRICS=false`.
 
 ## Errors
 
@@ -473,7 +510,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `redactRequestFields` | | Keys redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `errorCodeField` | `error.code` | Where error responses keep their code (dotted JSON path). |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `errorKeyField` | `error.key` | The same, for the error key. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `retentionDays` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles and app_logs older than this. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `retentionDays` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles, app_logs and metrics older than this. |
 | `VISIONARY_SYSTEM_METRICS` | `systemMetrics` | `true` | System samples on or off. |
 | `VISIONARY_SYSTEM_INTERVAL` | `systemInterval` (seconds) | `15s` | Time between samples: `15`, `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `systemRetentionDays` | `0` (off) | The same as the log retention, for system_metrics. |
@@ -485,7 +522,10 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_PROFILE` | `profile` | `true` (follow the dashboard) | `false` never profiles. |
 | `VISIONARY_LOGS` | `logs` | `true` | Application log capture, where you route logs to the SDK ([Logs](#logs)). |
 | `VISIONARY_LOG_LEVEL` | `logLevel` | `info` | Lowest log level kept until **Settings → Logs** is read. |
-| | `instrumentHttp` | `true` | Record outbound `fetch`/`undici`/`http`/`https` calls. |
+| `VISIONARY_METRICS` | `metrics` | `true` | Custom metrics on or off ([Custom metrics](#custom-metrics)). |
+| `VISIONARY_METRICS_INTERVAL` | `metricsInterval` (seconds) | `15s` | Time between a series' rows. |
+| `VISIONARY_METRICS_MAX_SERIES` | `metricsMaxSeries` | `1000` | Label sets kept per metric name. |
+| | `instrumentHttp` | `true` | Record outbound `fetch`/`undici`/`http`/`https` calls and send `traceparent` on them. |
 | | `captureUncaught` | `true` | Record uncaught exceptions and crashing rejections. |
 | | `explain` | `[]` | Explainers for query plans (`explainWith(pool)`). |
 | | `dbStats` | | Pool stats for the `db_*` columns (`pgPoolStats(pool)`). |
@@ -514,6 +554,7 @@ truncated bodies.
 | `captureException(err)` | Record a handled error. |
 | `captureConsole()`, `pinoStream(next?)`, `winstonTransport()` | Send application logs to **Logs**. `captureConsole` returns a function that undoes it. |
 | `span(kind, name, fn, { target?, detail? })`, `background(name, fn)` | Custom spans. |
+| `counter(name, labels?)`, `gauge(name, labels?)`, `histogram(name, labels?)`, `describeMetric(name, { unit?, buckets? })` | Custom metrics. |
 | `instrumentPg`, `instrumentMysql2`, `instrumentSqlite`, `prismaExtension()` | Database hooks. |
 | `apolloPlugin()`, `graphqlOperation(type, name, source, fn)` | GraphQL. |
 | `explainWith(db, { target? })` | Query plan explainer. |

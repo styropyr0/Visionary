@@ -9,7 +9,7 @@ import time
 import weakref
 from typing import Callable, Optional
 
-from . import _context, _errors, _logs, _spans
+from . import _context, _errors, _logs, _metrics, _spans
 from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
@@ -41,6 +41,7 @@ class Agent:
         self._profiler: Optional[Profiler] = None
         # Own writer, so a flood of log lines never crowds out request rows.
         self._logs: Optional[_logs.LogPipeline] = None
+        self._metrics: Optional[_metrics.MetricsRecorder] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False
         self.errors_on = False
@@ -71,6 +72,8 @@ class Agent:
             writer = _logs.LogWriter(cfg, self._backend, logger, instance, cfg.log_queue_size)
             self._logs = _logs.LogPipeline(self._backend, writer, logger, cfg.service,
                                            _logs.parse_level(cfg.log_level) or _logs.INFO)
+        if cfg.metrics:
+            self._metrics = _metrics.MetricsRecorder(cfg, self._backend, logger, instance)
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
@@ -84,6 +87,8 @@ class Agent:
             retention["logs"] = cfg.log_retention_days
         if self._system is not None:
             retention["system"] = cfg.system_retention_days
+        if self._metrics is not None:
+            retention["metrics"] = cfg.log_retention_days
         self._retention = Retention(self._backend, logger, retention)
 
     @property
@@ -168,7 +173,7 @@ class Agent:
         """Launch the background threads. Tables are created on them, so a slow
         or unreachable database never delays startup. Safe to call twice."""
         with self._lock:
-            if self._started or self._closed or not self.enabled:
+            if self._started or self._closed or not (self.enabled or self._metrics is not None):
                 return self
             self._started = True
         if self._requests is not None:
@@ -190,6 +195,8 @@ class Agent:
             self._logs.writer.start()
             self._logs.start()
             _logs.set_active(self._logs)
+        if self._metrics is not None:
+            self._metrics.start()
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -221,6 +228,8 @@ class Agent:
             if self._logs is not None:
                 self._logs.close()
                 idle = self._logs.writer.close(deadline.left()) and idle
+            if self._metrics is not None:
+                idle = self._metrics.close(deadline.left()) and idle
             if self._system is not None:
                 idle = self._system.close(deadline.left()) and idle
         # A worker still busy (e.g. stuck connecting) keeps its connection;
@@ -252,6 +261,8 @@ class Agent:
         if self._logs is not None:
             self._logs.writer.restart_after_fork()
             self._logs.restart_after_fork()
+        if self._metrics is not None:
+            self._metrics.restart_after_fork()
 
     def __enter__(self) -> "Agent":
         return self.start()
@@ -303,7 +314,8 @@ def init(config: Optional[Config] = None) -> Agent:
             agent.start()
         except Exception:
             logger.exception("visionary: init failed; collection is off")
-            agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False, logs=False),
+            agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False, logs=False,
+                                 metrics=False),
                           backend=_NoBackend())
         atexit.register(agent.close)
         _default = agent

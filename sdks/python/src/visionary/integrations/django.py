@@ -113,7 +113,8 @@ class VisionaryMiddleware:
                 e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
             rid = e.request_id if e is not None else None
             trace = self.agent.new_trace(rid, t0) if e is not None else None
-            ann, token = _context.begin(trace, _request_info(request, rid), request.headers.get("traceparent"))
+            ann, token = _context.begin(trace, _request_info(request, rid), request.headers.get("traceparent"),
+                                        request.headers.get("tracestate"))
             return _State(e, t0, ann, token)
         except Exception:
             logger.exception("visionary: request capture failed")

@@ -122,15 +122,16 @@ class Visionary:
         try:
             req = request._get_current_object()
             traceparent = request.headers.get("traceparent")
+            tracestate = request.headers.get("tracestate")
             if not agent.should_log(request.path):
-                st.ann, st.token = _context.begin(None, _info(req, None), traceparent)
+                st.ann, st.token = _context.begin(None, _info(req, None), traceparent, tracestate)
                 return
             e = Entry()
             e.started_at = now()
             e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
             st.entry, st.t0 = e, time.perf_counter()
             trace = agent.new_trace(e.request_id, st.t0)
-            st.ann, st.token = _context.begin(trace, _info(req, e.request_id), traceparent)
+            st.ann, st.token = _context.begin(trace, _info(req, e.request_id), traceparent, tracestate)
             cfg = agent.config
             ct = environ.get("CONTENT_TYPE", "")
             if cfg.capture_bodies and capturable(ct):

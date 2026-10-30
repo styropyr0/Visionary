@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "../agent.js";
-import { observeRequest } from "../capture.js";
-import { currentRequest, runInRequest } from "../context.js";
+import { enterRequest, observeRequest } from "../capture.js";
+import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
 
 /** The parts of Koa's context the SDK reads. */
@@ -33,6 +33,6 @@ export function koa(agent?: Agent) {
         throw e;
       }
     };
-    return state ? runInRequest(state, run) : run();
+    return enterRequest(ctx.req, run);
   };
 }

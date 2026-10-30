@@ -22,6 +22,7 @@ ADDED_REQUEST_COLUMNS = [
     ("service", "text"), ("version", "text"),
     ("db_count", "int"), ("db_ms", "real"), ("http_count", "int"), ("http_ms", "real"),
     ("login_account", "text"),
+    ("trace_id", "text"), ("span_id", "text"), ("parent_span_id", "text"),
 ]
 REQUEST_COLUMNS = REQUEST_COLUMNS + [name for name, _ in ADDED_REQUEST_COLUMNS]
 
@@ -65,6 +66,9 @@ SPAN_COLUMNS = [
     "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
     "offset_ms", "duration_ms", "status", "error", "row_count",
 ]
+# spans columns added later, after the ones above (Go: AddedSpanColumns).
+ADDED_SPAN_COLUMNS = [("trace_id", "text"), ("span_id", "text"), ("parent_span_id", "text")]
+SPAN_COLUMNS = SPAN_COLUMNS + [name for name, _ in ADDED_SPAN_COLUMNS]
 ERROR_COLUMNS = [
     "created_at", "service", "instance", "version", "request_id", "method", "route", "path", "user_id",
     "type", "message", "stack", "fingerprint", "handled", "runtime",
@@ -77,6 +81,10 @@ LOG_COLUMNS = [
 RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"]
 # CPU profiles; the Visionary server creates the table, never the SDK.
 PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"]
+METRIC_COLUMNS = [
+    "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min",
+    "max", "buckets",
+]
 SETTINGS_SQL = "SELECT name, value FROM visionary_settings WHERE name LIKE '%s.%%'"
 
 TABLES = {
@@ -87,11 +95,16 @@ TABLES = {
     "releases": ("releases", RELEASE_COLUMNS),
     "profiles": ("profiles", PROFILE_COLUMNS),
     "logs": ("app_logs", LOG_COLUMNS),
+    "metrics": ("metrics", METRIC_COLUMNS),
 }
 
 # Schema file per group, and the columns older tables of that group may lack.
-_SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql", "logs": "logs.sql"}
-_MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS)}
+_SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry": "telemetry.sql", "logs": "logs.sql",
+                 "metrics": "metrics.sql"}
+_MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS),
+               "telemetry": ("spans", ADDED_SPAN_COLUMNS)}
+# Tables indexed on trace_id once the added columns exist (Go: TraceIndex).
+_TRACE_INDEX = {"requests": "api_logs", "telemetry": "spans"}
 
 # Bound as-is on D1, like the Go SDK, so an empty log message doesn't become NULL.
 _D1_REQUIRED = {
@@ -114,12 +127,13 @@ _MYSQL_CHARS = {
     "service": 255, "version": 255, "kind": 255, "name": 255, "target": 255, "type": 255,
     "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255, "login_account": 255,
     "source": 32, "host": 255, "container": 255, "level": 8, "logger": 255, "trace_id": 64, "span_id": 32,
-    "session_id": 255, "code_file": 512, "code_func": 255,
+    "session_id": 255, "code_file": 512, "code_func": 255, "unit": 64,
 }
 _MYSQL_BYTES = {
     "path": 65535, "query": 65535, "user_agent": 65535, "request_headers": 65535,
     "request_body": 16777215, "response_body": 16777215,
     "detail": 65535, "error": 65535, "message": 65535, "stack": 16777215, "attrs": 16777215,
+    "labels": 65535, "buckets": 65535,
 }
 
 
@@ -159,6 +173,13 @@ def missing_column_statements(dialect: str, table: str, added: Sequence[Tuple[st
             for name, kind in added if name not in have]
 
 
+def trace_index_sql(dialect: str, table: str) -> str:
+    """The index on table's trace_id, created after the added columns, since
+    older tables only have the column from then on."""
+    ine = "" if dialect == "mysql" else "IF NOT EXISTS "
+    return "CREATE INDEX %sidx_%s_trace_id ON %s (trace_id)" % (ine, table, table)
+
+
 def is_duplicate_column(e: Exception) -> bool:
     """An ALTER that lost a race with another instance."""
     msg = str(e).lower()
@@ -178,7 +199,7 @@ class Backend:
     dialect = ""
 
     def create_schema(self, table: str) -> None:
-        """Create a schema group ("requests", "system", "telemetry" or "logs"): its
+        """Create a schema group ("requests", "system", "telemetry", "logs" or "metrics"): its
         tables and indexes, then the columns an older table is missing."""
         raise NotImplementedError
 
@@ -198,6 +219,12 @@ class Backend:
                 self._alter(stmt)
             except Exception as e:
                 if not is_duplicate_column(e):
+                    raise
+        if group in _TRACE_INDEX:
+            try:
+                self._alter(trace_index_sql(self.dialect, _TRACE_INDEX[group]))
+            except Exception as e:
+                if _mysql_errno(e) != 1061:
                     raise
 
     def insert(self, table: str, rows: List[Tuple[Any, ...]]) -> None:

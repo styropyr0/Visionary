@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "../agent.js";
-import { observeRequest, trackedState } from "../capture.js";
-import { runInRequest } from "../context.js";
+import { enterRequest, observeRequest, trackedState } from "../capture.js";
 import { resolveAgent } from "../global.js";
 
 /** The parts of Fastify's request and reply the SDK reads. */
@@ -38,22 +37,12 @@ export function fastify(agent?: Agent) {
   const plugin = function visionary(instance: FastifyInstance, _opts: unknown, done: Done): void {
     const a = resolveAgent(agent);
     instance.addHook("onRequest", (request: FastifyRequest, reply: FastifyReply, next: Done) => {
-      const state = observeRequest(
-        a,
-        request.raw,
-        reply.raw,
-        () => fastifyRoute(request),
-        request.raw.url,
-        () => request.user,
-      );
-      if (state) runInRequest(state, () => next());
-      else next();
+      observeRequest(a, request.raw, reply.raw, () => fastifyRoute(request), request.raw.url, () => request.user);
+      enterRequest(request.raw, () => next());
     });
     // Body parsing can resume in another context; re-enter before the handler.
     instance.addHook("preHandler", (request: FastifyRequest, _reply: FastifyReply, next: Done) => {
-      const state = trackedState(request.raw);
-      if (state) runInRequest(state, () => next());
-      else next();
+      enterRequest(request.raw, () => next());
     });
     instance.addHook("onError", (request: FastifyRequest, _reply: FastifyReply, error: unknown, next: Done) => {
       a.recordUnhandled(error, trackedState(request.raw));

@@ -62,7 +62,8 @@ class VisionaryASGIMiddleware:
                     await send(message)
 
                 t0 = time.perf_counter()
-                ann, token = _context.begin(None, _info(scope, None), _traceparent(scope))
+                ann, token = _context.begin(None, _info(scope, None), _header(scope, b"traceparent"),
+                                             _header(scope, b"tracestate"))
                 try:
                     await self.app(scope, receive, send_status)
                 except BaseException as e:
@@ -116,7 +117,8 @@ class VisionaryASGIMiddleware:
             await send(message)
 
         trace = agent.new_trace(e.request_id, t0)
-        ann, token = _context.begin(trace, _info(scope, e.request_id), lookup.get("traceparent"))
+        ann, token = _context.begin(trace, _info(scope, e.request_id), lookup.get("traceparent"),
+                                    lookup.get("tracestate"))
         try:
             await self.app(scope, tee_receive, tee_send)
         except BaseException as exc:
@@ -152,9 +154,9 @@ def _headers(scope: Scope) -> List[Tuple[str, str]]:
     return [(k.decode("latin-1"), v.decode("latin-1")) for k, v in scope.get("headers", [])]
 
 
-def _traceparent(scope: Scope) -> Optional[str]:
+def _header(scope: Scope, name: bytes) -> Optional[str]:
     for k, v in scope.get("headers", []):
-        if k.lower() == b"traceparent":
+        if k.lower() == name:
             return v.decode("latin-1")
     return None
 

@@ -29,6 +29,7 @@ class Entry:
         "request_size", "response_content_type", "response_body",
         "response_truncated", "response_size",
         "db_count", "db_ms", "http_count", "http_ms", "spans",
+        "trace_id", "span_id", "parent_span_id",
     )
 
     def __init__(self) -> None:
@@ -62,6 +63,10 @@ class Entry:
         self.http_count: Optional[int] = None
         self.http_ms: Optional[float] = None
         self.spans: List[Any] = []
+        # The request's place in its trace: it is the server span.
+        self.trace_id = ""
+        self.span_id = ""
+        self.parent_span_id = ""
 
 
 def clip_login(account: str) -> str:

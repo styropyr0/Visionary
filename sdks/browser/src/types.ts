@@ -33,6 +33,12 @@ export interface InitOptions {
   app?: string;
   /** fetch/XHR calls to skip, by substring or pattern of the URL. */
   ignoreUrls?: (string | RegExp)[];
+  /**
+   * Other origins whose fetch/XHR calls get a W3C traceparent header, e.g.
+   * "https://api.example.com" or /\.example\.com$/. The page's own origin
+   * always does. Their CORS must allow the header (Access-Control-Allow-Headers).
+   */
+  traceOrigins?: (string | RegExp)[];
   /** Also send console lines to Logs (they still print). Off by default; at most 120 a minute. */
   captureConsole?: boolean;
   /** The lowest console level sent when captureConsole is on. Default "info". */

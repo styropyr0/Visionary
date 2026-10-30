@@ -2,6 +2,7 @@ import { hostname } from "node:os";
 import type { RequestState } from "../context.js";
 import { currentRequest, isQuiet } from "../context.js";
 import type { Value } from "../store/sql.js";
+import { currentSpan } from "../telemetry/trace.js";
 import { formatTs } from "../util.js";
 import type { AttrValue, LogSettings } from "./rules.js";
 import {
@@ -105,12 +106,6 @@ export function logValues(r: LogRecord, ident: LogIdentity, secrets: Set<string>
   ];
 }
 
-export function traceParentId(h: string | undefined): string {
-  const parts = (h ?? "").trim().split("-");
-  const id = parts[1] ?? "";
-  return parts.length >= 4 && /^[0-9a-f]{32}$/.test(id) && /[^0]/.test(id) ? id : "";
-}
-
 /** Set by the agent started last; the hooks send their lines here. */
 let current: LogPipeline | undefined;
 
@@ -177,12 +172,18 @@ export class LogPipeline {
     // Skip the SDK's own messages, or a failed write's log line would queue behind it.
     if (!s.enabled || isQuiet() || r.message.startsWith("visionary: ")) return;
     if (dropped(s, this.service, r.logger, r.message, r.sev)) return;
+    if (!r.traceId) {
+      const sc = currentSpan() ?? state?.span;
+      if (sc) {
+        r.traceId = sc.traceId;
+        r.spanId ||= sc.spanId;
+      }
+    }
     if (!state) {
       if (r.sev >= floor(s, this.service, "", "", r.at)) this.emit(r);
       return;
     }
     r.requestId ||= state.requestId;
-    r.traceId ||= state.traceId;
     r.userId ||= state.userId;
     if (state.done) {
       // Logged after the request ended, so its route and user are known.

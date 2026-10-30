@@ -7,7 +7,7 @@ import sys
 import threading
 from typing import Any, Callable, Optional
 
-from . import _agent, _context, _spans
+from . import _agent, _context, _spans, _tracecontext
 
 
 class span:
@@ -19,15 +19,17 @@ class span:
 
     ``kind`` is ``db``, ``http``, ``cache``, ``queue``, ``custom`` or
     ``background`` (anything else becomes ``custom``). An exception leaving
-    the block marks the span as failed and propagates unchanged. Does nothing
-    when spans are off.
+    the block marks the span as failed and propagates unchanged. Calls made
+    inside the block are its children in the trace. Does nothing when spans
+    are off.
     """
 
-    __slots__ = ("_args", "_span")
+    __slots__ = ("_args", "_span", "_token")
 
     def __init__(self, kind: str, name: str, target: Optional[str] = None, detail: Optional[str] = None) -> None:
         self._args = (kind, name, target, detail)
         self._span: Optional[_spans.Span] = None
+        self._token: Any = None
 
     def set_error(self, error: Any) -> None:
         """Mark the span failed without raising (e.g. a cache miss you treat as an error)."""
@@ -40,10 +42,15 @@ class span:
 
     def __enter__(self) -> "span":
         self._span = _spans.start(*self._args)
+        if self._span is not None:
+            self._token = _tracecontext.use(self._span.context())
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if self._span is not None:
+            if self._token is not None:
+                _tracecontext.reset(self._token)
+                self._token = None
             self._span.finish(error=exc)
 
     async def __aenter__(self) -> "span":

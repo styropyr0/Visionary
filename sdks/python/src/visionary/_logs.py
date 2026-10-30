@@ -30,7 +30,7 @@ import threading
 import time
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from . import _context, _spans
+from . import _context, _spans, _tracecontext
 from ._config import parse_bool
 from ._entry import format_ts
 from ._profiler import FrameNamer, parse_ts
@@ -508,6 +508,12 @@ class LogPipeline:
             return
         if ann is None:
             ann = _context.current()
+        if not line.trace_id:
+            sc = _tracecontext.current_span() or (ann.span if ann is not None else None)
+            if sc is not None:
+                line.trace_id = sc.trace_id
+                if not line.span_id:
+                    line.span_id = sc.span_id
         if ann is None:
             if line.sev >= s.floor(self._service, "", "", line.created_at):
                 self.emit(line)
@@ -515,8 +521,6 @@ class LogPipeline:
         with ann._lock:
             if not line.request_id and ann.request is not None:
                 line.request_id = ann.request.request_id or ""
-            if not line.trace_id:
-                line.trace_id = ann.trace_id
             if not line.user_id:
                 line.user_id = ann.user_id
             if ann.done:

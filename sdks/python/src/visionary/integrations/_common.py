@@ -23,6 +23,9 @@ def finish(agent: Agent, entry: Entry, t0: float, status: int, trace: Any = None
     """Close out a logged request: duration, status, call totals and spans,
     then queue it, and decide the log lines it held (``ann``)."""
     entry.status = status
+    span = getattr(ann, "span", None)
+    if span is not None:
+        entry.trace_id, entry.span_id, entry.parent_span_id = span.trace_id, span.span_id, ann.parent_span_id
     entry.duration = time.perf_counter() - t0
     _profiler.request_finished(entry.method, entry.route or entry.path, entry.duration)
     agent.finish_logs(ann, entry.route, status, entry.duration, entry.user_id)
