@@ -17,7 +17,7 @@ import (
 //	uptime.go    uptime checks and the public status page
 //	telemetry.go spans, errors and releases sent by the SDKs
 //	rollups.go   pre-aggregated rollups for long ranges
-//	otlp.go      OpenTelemetry (OTLP/HTTP) ingestion
+//	otlp.go      OpenTelemetry ingestion over OTLP/HTTP and OTLP/gRPC
 //	rum.go       browser and mobile ingestion
 //	team.go      roles, API keys, audit log, dashboards
 //	hosts.go     the host agent's reports and the Hosts view

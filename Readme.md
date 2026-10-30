@@ -193,7 +193,7 @@ Pick what matches your app. Each README has a copy-paste quickstart.
 | Browser | `npm install visionary-browser` | server URL + client key | [`sdks/browser`](sdks/browser/README.md) |
 | iOS (Swift) | Swift Package `https://github.com/styropyr0/Visionary.git` | server URL + client key | [`sdks/ios`](sdks/ios/README.md) |
 | Android (Kotlin) | `io.github.styropyr0:visionary-android` | server URL + client key | [`sdks/android`](sdks/android/README.md) |
-| Anything with OpenTelemetry | your OTLP/HTTP exporter | server URL + server key | [`docs/otlp.md`](docs/otlp.md) |
+| Anything with OpenTelemetry | your OTLP/HTTP or OTLP/gRPC exporter | server URL + server key | [`docs/otlp.md`](docs/otlp.md) |
 | A whole Linux machine or its containers | the host agent | server URL + server key | [`cmd/visionary-agent`](cmd/visionary-agent/README.md) |
 
 **Server SDKs** (Go to .NET) write to the database themselves, so the rule is
@@ -246,6 +246,12 @@ OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer <server key>"
 OTEL_SERVICE_NAME=my-api
 ```
+
+For OTLP/gRPC, turn on **Accept OpenTelemetry over gRPC** in Settings →
+Server → Ingest, restart, publish port 4317 as well (`-p 4317:4317` with
+Docker) and use `OTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:4317` with
+`OTEL_EXPORTER_OTLP_PROTOCOL=grpc`. It is plaintext; terminate TLS at a proxy
+that speaks HTTP/2 to it.
 
 **The host agent** installs on a Linux machine as a systemd service:
 
