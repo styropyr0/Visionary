@@ -15,8 +15,8 @@ import (
 
 // The settings the server itself runs on (thresholds, retention, the status
 // page), kept in visionary_settings and edited in Settings. Readers get them
-// from s.live(), refreshed every 30 seconds and right after a change, so
-// several servers on one database agree.
+// from s.live(), refreshed every 30 seconds and right after a change, here
+// and, through visionary_changes, on the other replicas.
 
 // apdexRule is the Apdex threshold T: a default, and overrides for routes
 // that are slow by design (exports, uploads).
@@ -202,7 +202,7 @@ func (s *Server) liveStart(ctx context.Context) {
 			}
 		}
 	}()
-	go s.retentionLoop(ctx)
+	s.leased("retention", s.retentionLoop)
 }
 
 // retentionLoop deletes rows past each kind's retention, 90 s after start

@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS log_archives (
 // applogsStart also adds a trigram index on PostgreSQL when it can, so text search doesn't scan the range.
 func (s *Server) applogsStart(ctx context.Context) {
 	s.syslogStart(ctx)
-	s.applogsPatternsStart(ctx)
-	s.applogsArchiveStart(ctx)
+	s.applogsPatternsStart()
+	s.applogsArchiveStart()
 	if s.q.d != sdk.Postgres {
 		return
 	}

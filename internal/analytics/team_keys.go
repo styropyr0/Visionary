@@ -118,6 +118,7 @@ func (s *Server) reloadKeys(ctx context.Context) {
 }
 
 func (s *Server) invalidateKeys() {
+	s.announce("keys")
 	ks := &s.team().keys
 	ks.mu.Lock()
 	ks.loaded = time.Time{}

@@ -667,6 +667,7 @@ a change needs no redeploy:
 | `VISIONARY_DATABASE_URL` | | The database; see [Database](#database). For D1, `D1_ACCOUNT_ID`, `D1_DATABASE_ID` and `D1_API_TOKEN` instead (and optionally `D1_API_BASE`). |
 | `VISIONARY_ADDR` | `:8090` | Where the server listens. |
 | `VISIONARY_ENABLE_AUTH` | `true` | `false` turns sign-in off: everyone who reaches the server is an admin. For getting back in when sign-in is broken; see below. |
+| `VISIONARY_REPLICA_ID` | host name and port | Names this server among [several replicas](#several-replicas); only needed when two could share a host name and port. |
 
 [`.env.example`](.env.example) has these and nothing else. A build may also
 carry `VISIONARY_VERSION` and `VISIONARY_COMMIT` (or the platform's commit
@@ -755,7 +756,7 @@ check is retried at the same interval instead of on every page. Only an answer
 from the API (the token revoked, the role removed) ends a session early.
 Signing *in* still needs the API.
 
-A change applies at once on the server you saved it on, within 30 seconds on
+A change applies at once on the server you saved it on, within 10 seconds on
 the others, and is written to the audit log. People whose way in changed sign
 in again.
 
@@ -785,7 +786,7 @@ for keys you already hand out and want to keep.
 ### Settings in the dashboard
 
 Everything you'd change while running Visionary is in **Settings**, takes
-effect within 30 seconds on every server sharing the database (a few, marked
+effect within 10 seconds on every server sharing the database (a few, marked
 *After restart*, when the server next starts), and is recorded in the audit
 log.
 
@@ -1007,8 +1008,32 @@ Server → Sessions. The image is distroless, runs as non-root and listens on
 variables (and `VISIONARY_ADDR` if the platform picks the port); the rest is
 in Settings.
 
-Run one Visionary server per database for now: alert rules, uptime checks and
-rollups run inside the server, and a second replica would repeat them.
+### Several replicas
+
+Run two or more servers on one PostgreSQL, MySQL or D1 database behind a load
+balancer; SQLite works for replicas on the same machine only. Work that must
+happen once (alert checks and deliveries, digests, uptime probes, rollups,
+retention, log patterns and archives, security detectors) runs under a lease
+in `visionary_leases`: one replica holds each, renews it every 10 seconds by
+the database's clock, and another takes over within 40 seconds if it stops,
+or at once when it shuts down cleanly. Settings → Server → Replicas lists the
+replicas and the jobs each holds.
+
+- `GET /api/healthz` is liveness; `GET /api/readyz` is readiness, failing
+  while tables are still being created or the database doesn't answer.
+- Edits to settings, alert rules, silences, API keys and uptime checks, and
+  sign-outs, reach the other replicas within about 10 seconds.
+- Per replica: rate limits (the effective limit is the setting times the
+  number of replicas), the OTLP and browser ingest buffers, the OTLP/gRPC and
+  syslog listeners, and **Restart**, which restarts the replica that answered
+  (use `kubectl rollout restart` or restart the containers one by one for all).
+- A replica's id is its host name and port; set `VISIONARY_REPLICA_ID` when
+  two could share them.
+
+Examples: [`deploy/replicas/kubernetes.yaml`](deploy/replicas/kubernetes.yaml)
+(a Deployment of 2 and a Service) and
+[`deploy/replicas/compose.yaml`](deploy/replicas/compose.yaml) (two containers
+behind Caddy).
 
 ## Security
 

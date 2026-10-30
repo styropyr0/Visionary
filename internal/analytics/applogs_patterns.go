@@ -99,8 +99,8 @@ type patternAgg struct {
 	ids                                          []int64
 }
 
-func (s *Server) applogsPatternsStart(ctx context.Context) {
-	go func() {
+func (s *Server) applogsPatternsStart() {
+	s.leased("log-patterns", func(ctx context.Context) {
 		t := time.NewTimer(20 * time.Second)
 		defer t.Stop()
 		for {
@@ -122,7 +122,7 @@ func (s *Server) applogsPatternsStart(ctx context.Context) {
 			}
 			t.Reset(wait)
 		}
-	}()
+	})
 }
 
 var patternMu sync.Map // *Server → *sync.Mutex: one pass at a time

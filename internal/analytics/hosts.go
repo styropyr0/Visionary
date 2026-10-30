@@ -95,7 +95,7 @@ func (s *Server) hostsRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) hostsStart(ctx context.Context) {
-	go s.hostsRetention(ctx)
+	s.leased("host-retention", s.hostsRetention)
 }
 
 func (s *Server) hostsPrompt() string {

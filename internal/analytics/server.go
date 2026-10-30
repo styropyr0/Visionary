@@ -428,6 +428,7 @@ func (s *Server) revoke(sg *signin, token string) {
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if sess, ok := s.auth.read(r); ok {
 		s.auth.markSignedOut(sess)
+		s.shareSignOut(sess)
 		s.revoke(s.signin(), sess.Token)
 		s.auditAs(r, sess, "auth.sign_out", sess.UserID, nil)
 	}

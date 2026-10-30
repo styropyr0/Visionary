@@ -217,7 +217,7 @@ func (s *Server) securityStart(ctx context.Context) {
 		s.logger.Info("security detectors disabled in Settings → Server; the Security page still shows host events and the audit log")
 		return
 	}
-	go s.securityLoop(ctx)
+	s.leased("security-detectors", s.securityLoop)
 }
 
 func (s *Server) securityLoop(ctx context.Context) {

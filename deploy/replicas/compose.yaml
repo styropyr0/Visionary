@@ -1,0 +1,34 @@
+# Two Visionary replicas on one PostgreSQL database, behind Caddy on port 8080.
+# Each background job runs on one replica at a time; stop one and the other
+# takes its jobs over.
+#
+#   docker compose -f compose.yaml up -d
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: visionary
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: visionary
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  visionary-1: &visionary
+    image: ghcr.io/styropyr0/visionary:latest
+    environment:
+      VISIONARY_DATABASE_URL: postgres://visionary:change-me@db:5432/visionary?sslmode=disable
+    depends_on: [db]
+    restart: unless-stopped
+
+  visionary-2: *visionary
+
+  proxy:
+    image: caddy:2
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [visionary-1, visionary-2]
+
+volumes:
+  db:

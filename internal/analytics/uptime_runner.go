@@ -60,8 +60,14 @@ func runnerFor(s *Server) *uptimeRunner {
 	return newUptimeRunner(s, s.uptimeSettings())
 }
 
-// wakeUptime makes the runner reload checks now instead of within 30s.
+// wakeUptime makes the runner reload checks now instead of within 30s,
+// on whichever replica runs it.
 func wakeUptime(s *Server) {
+	s.announce("uptime")
+	wakeUptimeHere(s)
+}
+
+func wakeUptimeHere(s *Server) {
 	if v, ok := uptimeRunners.Load(s); ok {
 		select {
 		case v.(*uptimeRunner).wake <- struct{}{}:

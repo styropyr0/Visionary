@@ -649,6 +649,41 @@ curl -H "Authorization: Bearer <read key>" \\
       note: "An admin opens Settings → Sign-in → Single sign-on, sets the public URL, adds a provider and saves it switched off. Register the redirect URL (OpenID Connect) or upload the metadata (SAML) at the provider, then Test sign-in shows what the provider sends and the role it gives. Switch it on and save. For SCIM, create a key of scope SCIM under API keys and give the provider the SCIM base URL. Locked out? Set VISIONARY_ENABLE_AUTH=false on the server and restart.",
     },
   },
+  replicas: {
+    id: "replicas",
+    title: "Run several replicas",
+    intro:
+      "Two or more servers can share one PostgreSQL, MySQL or D1 database behind a load balancer (SQLite only on one machine). Work that must happen once, such as alert checks and deliveries, digests, uptime probes, rollups and retention, runs on one replica at a time under a lease, and another takes over within 40 seconds if it stops. Settings → Server → Replicas shows which replica holds what. Use /api/readyz as the readiness check and /api/healthz for liveness. Rate limits, ingest buffers and the gRPC and syslog listeners are per replica, and Restart restarts only the replica that answered.",
+    any: {
+      label: "Kubernetes",
+      note: "With Docker Compose, run two containers of the image on the same database behind a proxy such as Caddy or nginx that health-checks /api/readyz; deploy/replicas in the repository has both examples.",
+      code: `apiVersion: apps/v1
+kind: Deployment
+metadata: { name: visionary }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: visionary } }
+  template:
+    metadata: { labels: { app: visionary } }
+    spec:
+      containers:
+        - name: visionary
+          image: ghcr.io/styropyr0/visionary:latest
+          env:
+            - name: VISIONARY_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: visionary-db, key: url } }
+          ports: [{ name: http, containerPort: 8090 }]
+          readinessProbe: { httpGet: { path: /api/readyz, port: http } }
+          livenessProbe: { httpGet: { path: /api/healthz, port: http } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: visionary }
+spec:
+  selector: { app: visionary }
+  ports: [{ port: 80, targetPort: http }]`,
+    },
+  },
   logs: {
     id: "logs",
     title: "Send your application's logs",
@@ -958,14 +993,14 @@ export const HELP: Record<Route, PageHelp> = {
     tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
     what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
     read: [
-      "Changes reach every server sharing the database within 30 seconds; no restart or environment variable is needed.",
+      "Changes reach every replica sharing the database within seconds; no restart or environment variable is needed. Settings → Server → Replicas lists the replicas and the background jobs each runs.",
       "Single sign-on (OpenID Connect or SAML) works next to the other ways in; its people get accounts without a password, checked again every minute, and SCIM can add, change and switch them off. Sign-ins and SCIM changes go to the audit log.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
       "Hidden pages stay reachable by their link; Settings always shows.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
-    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso"],
+    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas"],
   },
   guide: {
     title: "How to use",

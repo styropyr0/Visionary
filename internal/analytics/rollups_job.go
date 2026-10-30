@@ -148,8 +148,7 @@ func (s *Server) rollupsStart(ctx context.Context) {
 		spans: map[string]rollupSpan{},
 	}
 	rollupRuntimes.Store(s, rt)
-	go func() {
-		defer rollupRuntimes.Delete(s)
+	s.leased("rollups", func(ctx context.Context) {
 		timer := time.NewTimer(3 * time.Second)
 		defer timer.Stop()
 		for {
@@ -161,6 +160,21 @@ func (s *Server) rollupsStart(ctx context.Context) {
 			started := time.Now()
 			rt.tick(ctx)
 			timer.Reset(max(tickEvery-time.Since(started), 5*time.Second))
+		}
+	})
+	// Replicas that don't build the rollups still read them, and need to know
+	// how far they reach.
+	go func() {
+		defer rollupRuntimes.Delete(s)
+		tick := time.NewTicker(tickEvery)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				_ = rt.loadSpans(ctx)
+			}
 		}
 	}()
 }

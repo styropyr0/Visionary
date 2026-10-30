@@ -698,7 +698,11 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Configure the server",
-        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within 30 seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
+        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
+      },
+      {
+        title: "Run several replicas",
+        text: "Start two or more servers on the same PostgreSQL, MySQL or D1 database behind a load balancer, with `/api/readyz` as the readiness check. Each background job (alert checks, deliveries, uptime probes, rollups, retention) runs on one replica at a time and moves to another within 40 seconds if that one stops. **Server → Replicas** lists each replica, its version, its last heartbeat and the jobs it holds. **Restart now** restarts only the replica that answered; restart the others from your platform.",
       },
       {
         title: "Tidy the sidebar",
