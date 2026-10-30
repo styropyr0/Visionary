@@ -31,6 +31,7 @@ internal static class Schema
         "request_body_truncated", "request_size", "response_content_type", "response_body",
         "response_body_truncated", "response_size", "error_code", "error_key",
         "service", "version", "db_count", "db_ms", "http_count", "http_ms", "login_account",
+        "trace_id", "span_id", "parent_span_id",
     };
 
     /// <summary>AddedRequestColumns in sdks/go/migrate.go.</summary>
@@ -40,6 +41,13 @@ internal static class Schema
         new("db_count", "int"), new("db_ms", "real"),
         new("http_count", "int"), new("http_ms", "real"),
         new("login_account", "text"),
+        new("trace_id", "text"), new("span_id", "text"), new("parent_span_id", "text"),
+    };
+
+    /// <summary>AddedSpanColumns in sdks/go/migrate.go.</summary>
+    public static readonly AddedColumn[] AddedSpanColumns =
+    {
+        new("trace_id", "text"), new("span_id", "text"), new("parent_span_id", "text"),
     };
 
     private static readonly string[] SystemBaseColumns =
@@ -108,6 +116,7 @@ internal static class Schema
     {
         "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
         "offset_ms", "duration_ms", "status", "error", "row_count",
+        "trace_id", "span_id", "parent_span_id",
     };
 
     public static readonly string[] ErrorColumns =
@@ -127,6 +136,11 @@ internal static class Schema
         "created_at", "service", "instance", "version", "source", "host", "container", "level", "severity", "logger",
         "message", "attrs", "request_id", "trace_id", "span_id", "user_id", "session_id", "code_file", "code_line",
         "code_func", "size",
+    };
+
+    public static readonly string[] MetricColumns =
+    {
+        "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
     };
 
     public static readonly string[] ReleaseColumns =
@@ -152,6 +166,14 @@ internal static class Schema
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();
     }
+
+    /// <summary>
+    /// The index on a table's trace_id (TraceIndex in sdks/go/migrate.go). It runs after the added
+    /// columns, since older tables only have trace_id from then on; MySQL has no IF NOT EXISTS
+    /// here and an existing index is ignored like the schema's.
+    /// </summary>
+    public static string TraceIndex(VisionaryDialect d, string table) =>
+        $"CREATE INDEX {(d == VisionaryDialect.MySql ? "" : "IF NOT EXISTS ")}idx_{table}_trace_id ON {table} (trace_id)";
 
     /// <summary>Splits a schema script into statements.</summary>
     public static List<string> Statements(string script) =>

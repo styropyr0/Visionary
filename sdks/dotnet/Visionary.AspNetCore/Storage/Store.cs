@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -55,6 +56,10 @@ internal static class StoreExtensions
             {
                 // another instance added it first
             }
+        }
+        if (added.Any(c => c.Name == "trace_id"))
+        {
+            await store.ExecScriptAsync(Schema.TraceIndex(store.Dialect, table), ct).ConfigureAwait(false);
         }
     }
 

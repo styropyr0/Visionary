@@ -217,21 +217,4 @@ internal static class LogText
         var w = (word.EndsWith(':') ? word[..^1] : word).ToLowerInvariant();
         return w == Severity.Name(sev) || w == "warning" ? rest : s;
     }
-
-    public static string? TraceParentId(string? header)
-    {
-        var parts = (header ?? "").Trim().Split('-');
-        if (parts.Length < 4 || parts[1].Length != 32 || parts[1].Trim('0').Length == 0)
-        {
-            return null;
-        }
-        foreach (var c in parts[1])
-        {
-            if (c is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
-            {
-                return null;
-            }
-        }
-        return parts[1];
-    }
 }

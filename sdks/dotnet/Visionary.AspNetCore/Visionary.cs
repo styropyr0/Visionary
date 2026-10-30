@@ -10,7 +10,7 @@ namespace Styropyr0.Visionary;
 /// What application code calls: attach the user, name the route, report a handled exception,
 /// or time a custom operation. Every method is a no-op when collection is off.
 /// </summary>
-public static class Visionary
+public static partial class Visionary
 {
     /// <summary>
     /// Attaches the signed-in user to the request being logged; call it from auth code once the
@@ -67,7 +67,8 @@ public static class Visionary
 
     /// <summary>
     /// Times an operation the SDK can't see by itself (a cache or queue call, a database without
-    /// diagnostics); dispose the span when it ends.
+    /// diagnostics); dispose the span when it ends. Until then it is the current span: calls made
+    /// inside it, outbound requests included, nest under it in the trace.
     /// </summary>
     /// <param name="kind">db, http, cache, queue, custom, graphql or background.</param>
     /// <param name="name">Short and low-cardinality, used for grouping, e.g. "GET session".</param>
@@ -93,6 +94,9 @@ public static class Visionary
         var token = VisionaryAgent.Current?.Stopping ?? CancellationToken.None;
         return Task.Run(async () =>
         {
+            // The work keeps the request's trace: its calls nest under this span.
+            var (span, parent) = TraceContext.Child();
+            TraceContext.Current = span;
             var startedAt = DateTime.UtcNow;
             var started = Stopwatch.GetTimestamp();
             string? error = null;
@@ -108,7 +112,7 @@ public static class Visionary
             finally
             {
                 VisionaryAgent.Current?.RecordSpan("background", name, null, null, startedAt,
-                    Stopwatch.GetElapsedTime(started).TotalMilliseconds, error, null);
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds, error, null, TraceContext.Ids(span, parent));
             }
         }, CancellationToken.None);
     }
@@ -123,6 +127,9 @@ public sealed class VisionarySpan : IDisposable
     private readonly string? _detail;
     private readonly DateTime _startedAt = DateTime.UtcNow;
     private readonly long _started = Stopwatch.GetTimestamp();
+    private readonly SpanContext _span;
+    private readonly string? _parentSpanId;
+    private readonly SpanContext? _outer;
     private string? _error;
     private bool _ended;
 
@@ -132,6 +139,9 @@ public sealed class VisionarySpan : IDisposable
         _name = name;
         _target = target;
         _detail = detail;
+        _outer = TraceContext.Current;
+        (_span, _parentSpanId) = TraceContext.Child();
+        TraceContext.Current = _span;
     }
 
     /// <summary>Rows returned or affected, when known.</summary>
@@ -151,7 +161,11 @@ public sealed class VisionarySpan : IDisposable
             return;
         }
         _ended = true;
+        if (TraceContext.Current == _span)
+        {
+            TraceContext.Current = _outer;
+        }
         VisionaryAgent.Current?.RecordSpan(_kind, _name, _target, _detail, _startedAt,
-            Stopwatch.GetElapsedTime(_started).TotalMilliseconds, _error, RowCount);
+            Stopwatch.GetElapsedTime(_started).TotalMilliseconds, _error, RowCount, TraceContext.Ids(_span, _parentSpanId));
     }
 }

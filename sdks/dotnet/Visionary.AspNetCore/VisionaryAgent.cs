@@ -125,11 +125,16 @@ internal sealed class VisionaryAgent : IDisposable
     /// calls, then only when slow; outside any request it is stored only when it is slow itself.
     /// </summary>
     public void RecordSpan(string kind, string name, string? target, string? detail, DateTime startedAt,
-        double durationMs, string? error, long? rowCount)
+        double durationMs, string? error, long? rowCount, SpanIds? ids = null)
     {
         if (!SpansOn || Suppress.Active)
         {
             return;
+        }
+        if (ids is null)
+        {
+            var (child, parent) = TraceContext.Child();
+            ids = TraceContext.Ids(child, parent);
         }
         var span = new SpanRecord
         {
@@ -141,6 +146,9 @@ internal sealed class VisionaryAgent : IDisposable
             DurationMs = Math.Round(Math.Max(0, durationMs), 3),
             Error = Cap(error, 500),
             RowCount = rowCount,
+            TraceId = ids.Value.TraceId,
+            SpanId = ids.Value.SpanId,
+            ParentSpanId = ids.Value.ParentSpanId,
         };
         var state = RequestState.Tracked;
         if (state is not null)

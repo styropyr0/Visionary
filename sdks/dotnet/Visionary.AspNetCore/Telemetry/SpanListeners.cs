@@ -44,18 +44,22 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_agent.SpansOn)
+        if (!_agent.Enabled)
         {
             return Task.CompletedTask;
         }
-        _activities = new ActivityListener
+        // HttpClient is watched even with spans off, so outbound requests still carry the trace.
+        if (_agent.SpansOn)
         {
-            ShouldListenTo = s => DriverSources.ContainsValue(s.Name),
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                Suppress.Active ? ActivitySamplingResult.None : ActivitySamplingResult.AllData,
-            ActivityStopped = OnDriverActivity,
-        };
-        ActivitySource.AddActivityListener(_activities);
+            _activities = new ActivityListener
+            {
+                ShouldListenTo = s => DriverSources.ContainsValue(s.Name),
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                    Suppress.Active ? ActivitySamplingResult.None : ActivitySamplingResult.AllData,
+                ActivityStopped = OnDriverActivity,
+            };
+            ActivitySource.AddActivityListener(_activities);
+        }
         lock (_subscriptions)
         {
             _subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this));
@@ -88,7 +92,7 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
         IDisposable? sub = listener.Name switch
         {
             HttpListenerName => listener.Subscribe(new Observer(OnHttpEvent), IsHttpEnabled),
-            EfListenerName => listener.Subscribe(new Observer(OnEfEvent),
+            EfListenerName when _agent.SpansOn => listener.Subscribe(new Observer(OnEfEvent),
                 (name, _, _) => !Suppress.Active && name is EfCommandExecuted or EfCommandError),
             _ => null,
         };
@@ -112,6 +116,7 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
         public DateTime StartedAt;
         public long Started;
         public string? Error;
+        public SpanIds Ids;
     }
 
     /// <summary>Returning false while suppressed means the SDK's own D1 calls get no activity at all.</summary>
@@ -127,7 +132,7 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
                 case "System.Net.Http.HttpRequestOut.Start":
                     if (Fetch.Get<HttpRequestMessage>(e.Value, "Request") is { } start)
                     {
-                        _calls.AddOrUpdate(start, new HttpCall { StartedAt = DateTime.UtcNow, Started = Stopwatch.GetTimestamp() });
+                        _calls.AddOrUpdate(start, new HttpCall { StartedAt = DateTime.UtcNow, Started = Stopwatch.GetTimestamp(), Ids = OutboundTrace(start) });
                     }
                     break;
                 case "System.Net.Http.Exception":
@@ -169,7 +174,35 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
         var host = uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
         var url = uri.GetLeftPart(UriPartial.Path);
         _agent.RecordSpan("http", $"{method} {uri.Host}", host, $"{method} {url}", call.StartedAt,
-            Stopwatch.GetElapsedTime(call.Started).TotalMilliseconds, error, null);
+            Stopwatch.GetElapsedTime(call.Started).TotalMilliseconds, error, null, call.Ids);
+    }
+
+    /// <summary>
+    /// The http span's ids, matching the traceparent the next service receives. HttpClient's own
+    /// activity is current here and HttpClient sends it after this event, so when it belongs to
+    /// this trace (or there is none yet) the span takes its ids. Otherwise the header is set
+    /// here, which HttpClient then leaves alone, as it does a traceparent the app set itself.
+    /// </summary>
+    internal static SpanIds OutboundTrace(HttpRequestMessage request)
+    {
+        var current = TraceContext.Current;
+        var activity = Activity.Current;
+        if (activity is { OperationName: "System.Net.Http.HttpRequestOut" } &&
+            TraceContext.FromActivity(activity) is { } a &&
+            (current is null || current.Value.TraceId == a.Span.TraceId))
+        {
+            return TraceContext.Ids(a.Span, current?.SpanId ?? a.ParentSpanId);
+        }
+        var (span, parent) = TraceContext.Child();
+        if (!request.Headers.Contains(TraceContext.TraceparentHeader))
+        {
+            request.Headers.TryAddWithoutValidation(TraceContext.TraceparentHeader, span.Traceparent);
+            if (span.State is not null && !request.Headers.Contains(TraceContext.TracestateHeader))
+            {
+                request.Headers.TryAddWithoutValidation(TraceContext.TracestateHeader, span.State);
+            }
+        }
+        return TraceContext.Ids(span, parent);
     }
 
     // ---- Npgsql / MySqlConnector ----

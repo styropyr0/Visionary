@@ -126,7 +126,13 @@ public sealed class VisionaryLoggerProvider : ILoggerProvider, ISupportExternalS
                 AddPairs(attrs, fields);
             }
             Take(r, attrs);
-            if (r.TraceId is null && Activity.Current is { } activity && activity.TraceId != default)
+            // The current Visionary span, else an activity of the app's own.
+            if (r.TraceId is null && TraceContext.Current is { } span)
+            {
+                r.TraceId = span.TraceId;
+                r.SpanId ??= span.SpanId;
+            }
+            else if (r.TraceId is null && Activity.Current is { } activity && activity.TraceId != default)
             {
                 r.TraceId = activity.TraceId.ToHexString();
                 r.SpanId ??= activity.SpanId.ToHexString();

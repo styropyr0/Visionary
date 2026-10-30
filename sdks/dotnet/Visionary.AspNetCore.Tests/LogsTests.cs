@@ -265,7 +265,7 @@ public sealed class LogsTests : IDisposable
         Activity.Current = null;
         try
         {
-            var logs = new RequestLogs(new DefaultHttpContext(), LogText.TraceParentId("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
+            var logs = new RequestLogs(new DefaultHttpContext(), TraceContext.Parse("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")?.TraceId);
             await Task.Run(() =>
             {
                 logs.Enter();
@@ -563,16 +563,6 @@ public sealed class LogsTests : IDisposable
         Assert.Equal("h", LogText.Truncate("héllo", 2));
         Assert.Equal("abc", LogText.Truncate("abc", 5));
         Assert.Equal("a", LogText.Truncate("a😀", 4));
-    }
-
-    [Fact]
-    public void TraceParentId()
-    {
-        Assert.Equal("4bf92f3577b34da6a3ce929d0e0e4736", LogText.TraceParentId("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
-        foreach (var bad in new[] { "", "00-xyz-1-1", "00-00000000000000000000000000000000-00f067aa0ba902b7-01" })
-        {
-            Assert.Null(LogText.TraceParentId(bad));
-        }
     }
 
     [Fact]
