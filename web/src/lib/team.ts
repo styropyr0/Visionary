@@ -90,10 +90,12 @@ export interface Members {
   sign_ins?: SignIn[];
 }
 
-export type KeyScope = "read" | "server" | "client" | "scim";
+export type KeyScope = "read" | "editor" | "admin" | "server" | "client" | "scim";
 
 export const SCOPE_INFO: Record<KeyScope, { label: string; detail: string }> = {
   read: { label: "Read", detail: "Calls the HTTP API with viewer rights (GET, queries, the analyst). Send it as Authorization: Bearer <key>." },
+  editor: { label: "Editor", detail: "The HTTP API with editor rights: change alert rules, channels, silences, uptime checks and dashboards, from Terraform or scripts. Keep it secret." },
+  admin: { label: "Admin", detail: "The HTTP API with admin rights: everything an editor can, plus API keys and importing configuration. Keep it secret." },
   server: { label: "Server ingest", detail: "SDKs and OTLP exporters sending from your servers. Keep it secret." },
   client: { label: "Client ingest", detail: "Browser and mobile apps. It ships inside the app, so treat it as public: it can only send events." },
   scim: { label: "SCIM", detail: "Your identity provider adds, changes and removes people through /scim/v2 (Settings → Sign-in → Single sign-on). Keep it secret." },

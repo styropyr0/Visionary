@@ -28,9 +28,10 @@ import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./S
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
 import { TwoStepCard } from "../components/TwoStep";
 import { LogsTab } from "./Settings.logs";
+import { ConfigIOTab } from "./Settings.configio";
 import "./Settings.css";
 
-type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "logs" | "profiling" | "pages" | "status" | "audit" | "about";
+type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "logs" | "profiling" | "pages" | "status" | "configuration" | "audit" | "about";
 
 const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "preferences", label: "Preferences", admin: false },
@@ -44,6 +45,7 @@ const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "profiling", label: "Profiling", admin: false },
   { key: "pages", label: "Pages", admin: false },
   { key: "status", label: "Status page", admin: false },
+  { key: "configuration", label: "Configuration", admin: true },
   { key: "audit", label: "Audit log", admin: true },
   { key: "about", label: "About", admin: false },
 ];
@@ -87,7 +89,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {session && !admin && (
           <div className="notice settings-note">
             <ShieldCheck size={16} />
-            <span>Sign-in, server settings, API keys, data deletion and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
+            <span>Sign-in, server settings, API keys, data deletion, configuration import and export, and the audit log are for admins. You're signed in as {ROLE_LABEL[session.role] ?? session.role}.</span>
           </div>
         )}
         {current === "members" && <MembersTab />}
@@ -106,6 +108,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {current === "preferences" && <PreferencesTab />}
         {current === "thresholds" && <ThresholdsTab />}
         {current === "status" && <StatusPageTab />}
+        {current === "configuration" && <ConfigIOTab />}
         {current === "audit" && <AuditTab />}
         {current === "about" && <AboutTab />}
       </div>
@@ -381,7 +384,7 @@ function KeysTab() {
         ) : list.length === 0 ? (
           <div className="settings-empty">
             <KeyRound size={18} />
-            <span>No active keys. Create one for scripts (read), SDKs and OTLP (server ingest) or browser and mobile apps (client ingest).</span>
+            <span>No active keys. Create one for scripts (read), Terraform (editor or admin), SDKs and OTLP (server ingest) or browser and mobile apps (client ingest).</span>
           </div>
         ) : (
           <div className="table-wrap">

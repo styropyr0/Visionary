@@ -694,7 +694,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Create keys",
-        text: "**API keys** → **Create key**: server keys for OpenTelemetry and the host agent, client keys for browser and mobile apps, read keys for scripts. A key is shown once.",
+        text: "**API keys** → **Create key**: server keys for OpenTelemetry and the host agent, client keys for browser and mobile apps, read keys for scripts, editor or admin keys for Terraform. A key is shown once.",
       },
       {
         title: "Set targets and retention",
@@ -752,6 +752,35 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Provision with SCIM",
         text: "Under **API keys**, create a key of scope **SCIM**. At the provider, turn on SCIM provisioning with the **SCIM base URL** from Settings and the key as a bearer token (Okta: **API Token**; Entra: **Secret Token**). People it adds show under **People from single sign-on**; switching someone off at the provider signs them out at once. To take roles from SCIM groups, fill in **Groups and roles** under **Provisioning (SCIM)**.",
+      },
+    ],
+  },
+  {
+    id: "config-as-code",
+    group: "Manage",
+    title: "Configuration as code",
+    intro:
+      "Keep alerts, uptime checks and dashboards in git: manage them with Terraform, or move the whole setup between installs as one file from **Settings → Configuration**.",
+    steps: [
+      {
+        title: "Create a key for Terraform",
+        text: "In **Settings → API keys**, create a key with the **Editor** scope, or **Admin** if Terraform should manage API keys too. Give it to the provider as `api_key`, or as `VISIONARY_API_KEY`, with this server's address as `url` or `VISIONARY_URL`.",
+      },
+      {
+        title: "Write the configuration",
+        text: "Require the provider `styropyr0/visionary`. **Help → Configuration as code** on the Settings page has a starting `main.tf` with a channel, a rule and a check. Resources: `visionary_alert_rule`, `visionary_alert_channel`, `visionary_alert_silence`, `visionary_uptime_check` (HTTP, or a browser check with steps), `visionary_dashboard` (its panels as JSON, written with `jsonencode([...])`) and `visionary_api_key`. Data sources: `visionary_services` and `visionary_alert_channel`, which finds a channel by name.",
+      },
+      {
+        title: "Plan and apply",
+        text: "`terraform plan` shows what would change, `terraform apply` makes it so. Channel URLs and keys, and a new key's secret, are kept in the state as sensitive values; a key's secret is only there for the key Terraform created. A channel's kind can't change, so changing it replaces the channel.",
+      },
+      {
+        title: "Bring in what you already have",
+        text: "Take over an existing object with its id, e.g. `terraform import visionary_alert_rule.slow 12`. Ids are in the HTTP API's lists, such as `/api/alerts/rules`. A channel's URL and key are never read back, so set them in the configuration.",
+      },
+      {
+        title: "Export and import a file",
+        text: "Without Terraform, **Settings → Configuration → Export** downloads alert rules, channels, silences, uptime checks, saved panels, dashboards, saved log searches and hidden pages as YAML or JSON, matched by name. Secrets stay behind. On the other install, **Import** → **Preview changes** lists what would be created, updated or left unchanged, and why anything is skipped; **Apply** writes it. Importing never deletes.",
       },
     ],
   },
