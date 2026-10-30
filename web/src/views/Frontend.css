@@ -164,7 +164,7 @@ tr.clickable {
 }
 .fe-tl-item {
   display: grid;
-  grid-template-columns: 76px 20px 86px 1fr;
+  grid-template-columns: 76px 20px 86px 1fr auto;
   gap: 8px;
   align-items: baseline;
   padding: 6px 8px;
@@ -194,6 +194,13 @@ tr.clickable {
   gap: 6px;
   align-items: baseline;
   word-break: break-word;
+}
+.fe-tl-body {
+  grid-column: 4;
+}
+.fe-tl-trace {
+  grid-column: 5;
+  align-self: center;
 }
 .fe-tl-at {
   text-align: right;

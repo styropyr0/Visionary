@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Globe, Server } from "lucide-react";
+import { Globe, Server, Waypoints } from "lucide-react";
 import { api, rangeQuery, type Result } from "../lib/api";
 import { formatCount, formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -9,6 +9,7 @@ import { Drawer } from "../components/Modal";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { useSession } from "../lib/team";
 import { asLevel } from "../lib/applogs";
+import { traceHref } from "../lib/traces";
 import { LevelBadge, LogLineDrawer } from "./AppLogs";
 import { LogDetail } from "./Logs";
 
@@ -25,6 +26,7 @@ interface TimelineItem {
   request_id?: string;
   log_id?: number;
   service?: string;
+  attrs?: Record<string, unknown>;
 }
 
 interface Timeline {
@@ -127,6 +129,7 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           <ol className="fe-timeline">
             {q.data.items.map((it, i) => {
               const clickable = (it.kind === "request" && it.log_id) || ((it.kind === "log" || it.kind === "server_log") && it.log_id);
+              const traceId = typeof it.attrs?.trace_id === "string" ? it.attrs.trace_id : "";
               const failed = (it.status ?? 0) >= 500 || it.kind === "error" || it.level === "error" || it.level === "fatal";
               return (
                 <li
@@ -152,6 +155,12 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                     {it.status !== undefined && it.status !== null && <span className={`fe-tl-status ${failed ? "fe-bad" : "dim"}`}> {String(it.status)}</span>}
                     {it.duration_ms !== undefined && it.duration_ms !== null && <span className="dim"> · {formatMs(Number(it.duration_ms))}</span>}
                   </span>
+                  {traceId && (
+                    <a className="btn sm fe-tl-trace" href={traceHref(traceId)} onClick={(e) => e.stopPropagation()} title="This call with the server requests it reached">
+                      <Waypoints size={13} aria-hidden />
+                      Trace
+                    </a>
+                  )}
                 </li>
               );
             })}
