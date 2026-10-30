@@ -48,8 +48,12 @@ export interface Options {
   errorCodeField?: string;
   errorKeyField?: string;
   /** Fills in handle and role for a user id, on the writer, once per distinct
-   * user per batch. Keep it cheap (a cache). */
+   * user per batch, and on PostgreSQL and MySQL from up to four batches at
+   * once. Keep it cheap (a cache). */
   lookupUser?: (id: string) => LookupResult | Promise<LookupResult>;
+  /** Rows per write on PostgreSQL, MySQL and SQLite (default 500, at most
+   * 2000). D1 always takes 50. */
+  batchSize?: number;
 
   systemMetrics?: boolean;
   /** Seconds between samples (default 15). */
@@ -109,6 +113,7 @@ export interface Config {
   errorCodeField: string;
   errorKeyField: string;
   lookupUser?: Options["lookupUser"];
+  batchSize: number;
   systemMetrics: boolean;
   systemInterval: number;
   systemRetentionDays: number;
@@ -158,6 +163,7 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     errorCodeField: opts.errorCodeField ?? s("VISIONARY_LOG_ERROR_CODE_FIELD", "error.code"),
     errorKeyField: opts.errorKeyField ?? s("VISIONARY_LOG_ERROR_KEY_FIELD", "error.key"),
     lookupUser: opts.lookupUser,
+    batchSize: opts.batchSize ?? 0,
     systemMetrics: opts.systemMetrics ?? parseBool(s("VISIONARY_SYSTEM_METRICS"), true),
     systemInterval: opts.systemInterval ?? parseDuration(s("VISIONARY_SYSTEM_INTERVAL"), 15),
     systemRetentionDays: opts.systemRetentionDays ?? parseInt0(s("VISIONARY_SYSTEM_RETENTION_DAYS"), 0),

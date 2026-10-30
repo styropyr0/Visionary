@@ -6,12 +6,16 @@ import { errMessage } from "./log.js";
 import type { LogRecord } from "./logs/pipeline.js";
 import { Redactor } from "./redact.js";
 import type { Stmt, Table, Value } from "./store/sql.js";
-import { PURGE_CHUNK, TABLE_COLUMNS, insertSQL, purgeSQL } from "./store/sql.js";
+import { PURGE_CHUNK, TABLE_COLUMNS, insertRows, insertSQL, purgeSQL } from "./store/sql.js";
 import type { Store } from "./store/store.js";
 import { formatTs, sleep } from "./util.js";
 
 const QUEUE_SIZE = 5000;
-const BATCH_SIZE = 50;
+/** D1 takes 50 statements a call, one per row. */
+const D1_BATCH = 50;
+const SQL_BATCH = 500;
+const MAX_SQL_BATCH = 2000;
+const PARALLEL_WRITES = 4;
 const FLUSH_MS = 3000;
 
 export type Item = { entry: Entry } | { table: Table; args: Value[] } | { log: LogRecord };
@@ -22,19 +26,33 @@ export interface WriterOptions {
   logRow?: (r: LogRecord) => Value[];
 }
 
+/** Rows waiting for the database, and rows written or dropped since start. */
+export interface WriterStats {
+  queued: number;
+  written: number;
+  dropped: number;
+}
+
 /**
- * Queues rows without blocking and writes them in batches of up to 50, every 3 s or once
- * 50 are waiting. A full queue drops rows and counts them.
+ * Queues rows without blocking and writes them in batches, every 3 s or once
+ * a batch is waiting: 50 rows on D1, 500 on SQL databases as multi-row
+ * INSERTs. PostgreSQL and MySQL take up to 4 batches at once. A full queue
+ * drops rows and counts them.
  */
 export class Writer {
   private queue: Item[] = [];
   private dropped = 0;
+  private written = 0;
+  private lost = 0;
   private timer?: NodeJS.Timeout;
-  private running?: Promise<void>;
+  private kicking = false;
+  private readonly flights = new Set<Promise<void>>();
   private closed = false;
   private readonly redact: Redactor;
   private readonly inserts: Record<Table, string>;
   private readonly queueSize: number;
+  readonly batchSize: number;
+  readonly parallel: number;
 
   constructor(
     private readonly cfg: Config,
@@ -44,6 +62,10 @@ export class Writer {
     private readonly opts: WriterOptions = {},
   ) {
     this.queueSize = opts.queueSize ?? QUEUE_SIZE;
+    const size = cfg.batchSize;
+    this.batchSize = store.stringParams ? D1_BATCH : size > 0 && size <= MAX_SQL_BATCH ? size : SQL_BATCH;
+    // SQLite and D1 take one writer at a time.
+    this.parallel = store.stringParams || store.dialect === "sqlite" ? 1 : PARALLEL_WRITES;
     this.redact = new Redactor(cfg.redactHeaders, cfg.redactFields, cfg.redactRequestFields);
     const tables = Object.keys(TABLE_COLUMNS) as Table[];
     this.inserts = Object.fromEntries(tables.map((t) => [t, insertSQL(t, store.stringParams)])) as Record<Table, string>;
@@ -51,7 +73,7 @@ export class Writer {
 
   start(): void {
     this.timer = setInterval(() => {
-      this.kick();
+      this.kick(true);
       this.reportDrops();
     }, FLUSH_MS);
     this.timer.unref();
@@ -62,10 +84,21 @@ export class Writer {
     if (this.closed) return;
     if (this.queue.length >= this.queueSize) {
       this.dropped++;
+      this.lost++;
       return;
     }
     this.queue.push(item);
-    if (this.queue.length >= BATCH_SIZE) setImmediate(() => this.kick());
+    if (this.queue.length >= this.batchSize && !this.kicking) {
+      this.kicking = true;
+      setImmediate(() => {
+        this.kicking = false;
+        this.kick(false);
+      });
+    }
+  }
+
+  stats(): WriterStats {
+    return { queued: this.queue.length, written: this.written, dropped: this.lost };
   }
 
   /** Drains the queue, waiting at most timeoutMs. */
@@ -73,8 +106,10 @@ export class Writer {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     const drained = (async () => {
-      await this.running;
-      while (this.queue.length > 0) await this.flushOnce();
+      while (this.queue.length > 0 || this.flights.size > 0) {
+        this.kick(true);
+        await Promise.all(this.flights);
+      }
       this.reportDrops();
     })();
     let timer: NodeJS.Timeout | undefined;
@@ -86,14 +121,18 @@ export class Writer {
     if (late) this.logger.warn(`visionary: flush timed out; ${this.queue.length} rows pending`);
   }
 
-  /** Starts a flush unless one is running. */
-  private kick(): void {
-    if (this.running || this.queue.length === 0) return;
-    this.running = (async () => {
-      while (this.queue.length > 0) await this.flushOnce();
-    })()
-      .catch((e) => this.logger.error("visionary: writer failed: " + errMessage(e)))
-      .finally(() => (this.running = undefined));
+  /** Writes full batches (or, with partial, whatever is queued) while a
+   * writer is free; each write that finishes starts the next. */
+  private kick(partial: boolean): void {
+    while (this.flights.size < this.parallel && (this.queue.length >= this.batchSize || (partial && this.queue.length > 0))) {
+      const flight: Promise<void> = this.write(this.queue.splice(0, this.batchSize))
+        .catch((e) => this.logger.error("visionary: writer failed: " + errMessage(e)))
+        .finally(() => {
+          this.flights.delete(flight);
+          this.kick(false);
+        });
+      this.flights.add(flight);
+    }
   }
 
   private reportDrops(): void {
@@ -103,13 +142,12 @@ export class Writer {
     }
   }
 
-  private async flushOnce(): Promise<void> {
-    const batch = this.queue.splice(0, BATCH_SIZE);
-    if (batch.length === 0) return;
+  private async write(batch: Item[]): Promise<void> {
     let stmts: Stmt[];
     try {
       stmts = await this.statements(batch);
     } catch (e) {
+      this.lost += batch.length;
       this.logger.error(`visionary: building rows failed; ${batch.length} dropped: ${errMessage(e)}`);
       return;
     }
@@ -118,24 +156,33 @@ export class Writer {
       try {
         if (!(await this.ready())) throw new Error("tables not ready");
         await this.store.batch(stmts);
+        this.written += batch.length;
         return;
       } catch (e) {
         err = e;
       }
       if (attempt < 3) await sleep(attempt * 1000);
     }
+    this.lost += batch.length;
     this.logger.error(`visionary: batch write failed; ${batch.length} rows dropped: ${errMessage(err)}`);
   }
 
-  private async statements(batch: Item[]): Promise<Stmt[]> {
+  /** One INSERT per row on D1; elsewhere each table's rows as multi-row INSERTs. */
+  async statements(batch: Item[]): Promise<Stmt[]> {
     const users = await this.lookupUsers(batch);
-    return batch.map((item) => {
-      if ("entry" in item) {
-        return { sql: this.inserts.api_logs, args: requestValues(item.entry, this.cfg, this.redact, users) };
-      }
-      if ("log" in item) return { sql: this.inserts.app_logs, args: this.opts.logRow!(item.log) };
-      return { sql: this.inserts[item.table], args: item.args };
+    const rows = batch.map((item): [Table, Value[]] => {
+      if ("entry" in item) return ["api_logs", requestValues(item.entry, this.cfg, this.redact, users)];
+      if ("log" in item) return ["app_logs", this.opts.logRow!(item.log)];
+      return [item.table, item.args];
     });
+    if (this.store.stringParams) return rows.map(([table, args]) => ({ sql: this.inserts[table], args }));
+    const byTable = new Map<Table, Value[][]>();
+    for (const [table, args] of rows) {
+      const group = byTable.get(table);
+      if (group) group.push(args);
+      else byTable.set(table, [args]);
+    }
+    return [...byTable].flatMap(([table, group]) => insertRows(table, group));
   }
 
   /** Resolves each distinct user missing a handle or role once per batch. */

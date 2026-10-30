@@ -29,7 +29,8 @@ export class MysqlStore implements Store {
   static fromUrl(url: string): MysqlStore {
     const mysql = optionalRequire("mysql2/promise");
     if (!mysql?.createPool) throw new Error("visionary: MySQL needs the mysql2 package: npm install mysql2");
-    const pool = mysql.createPool({ uri: url, connectionLimit: 2, timezone: "Z", charset: "utf8mb4", connectTimeout: 10_000 });
+    // Room for the writer's 4 parallel batches and a read.
+    const pool = mysql.createPool({ uri: url, connectionLimit: 5, timezone: "Z", charset: "utf8mb4", connectTimeout: 10_000 });
     return new MysqlStore(pool, true);
   }
 
@@ -118,7 +119,7 @@ function fit(sql: string, args: Value[]): Value[] {
   if (!m || !limits) return args;
   const names = m[2]!.split(", ");
   return args.map((v, i) => {
-    const limit = limits[names[i]!];
+    const limit = limits[names[i % names.length]!];
     if (typeof v !== "string" || !limit) return v;
     if (limit.chars !== undefined) return v.length > limit.chars ? [...v].slice(0, limit.chars).join("") : v;
     return cutBytes(v, limit.bytes!);
