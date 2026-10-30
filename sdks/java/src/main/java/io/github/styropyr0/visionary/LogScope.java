@@ -76,23 +76,4 @@ final class LogScope {
         held = null;
         return out;
     }
-
-    static String traceParentId(String header) {
-        if (header == null) {
-            return null;
-        }
-        String[] parts = header.trim().split("-");
-        if (parts.length < 4 || parts[1].length() != 32) {
-            return null;
-        }
-        boolean zero = true;
-        for (int i = 0; i < 32; i++) {
-            char c = parts[1].charAt(i);
-            if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) {
-                return null;
-            }
-            zero &= c == '0';
-        }
-        return zero ? null : parts[1];
-    }
 }

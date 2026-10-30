@@ -49,12 +49,14 @@ public class VisionaryAutoConfiguration {
         VisionaryConfig cfg = null;
         try {
             cfg = VisionaryConfig.from(environment);
+            Metrics.REGISTRY.enabled = cfg.metrics();
             if (!cfg.databaseConfigured()) {
                 log.warn("visionary: no database configured (set VISIONARY_DATABASE_URL, the D1_* variables, "
                         + "or VISIONARY_USE_APP_DATASOURCE=true); collection is off");
                 return new VisionaryAgent(cfg);
             }
-            if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors() && !cfg.logs()) {
+            if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors() && !cfg.logs()
+                    && !cfg.metrics()) {
                 return new VisionaryAgent(cfg);
             }
             ClassLoader loader = getClass().getClassLoader();

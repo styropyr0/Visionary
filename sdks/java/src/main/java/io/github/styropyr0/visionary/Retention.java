@@ -71,8 +71,8 @@ final class Retention {
                 }
             }
         } catch (Exception e) {
-            // profiles and app_logs may not exist yet; nothing to purge then.
-            if ((table == Table.PROFILES || table == Table.APP_LOGS) && missingTable(e)) {
+            // profiles, app_logs and metrics may not exist yet; nothing to purge then.
+            if ((table == Table.PROFILES || table == Table.APP_LOGS || table == Table.METRICS) && missingTable(e)) {
                 return;
             }
             log.error("visionary: retention purge of " + table.name + " failed after " + total + " rows: " + e);

@@ -38,6 +38,8 @@ final class Table {
             .integer("db_count").real("db_ms")
             .integer("http_count").real("http_ms")
             .text("login_account")
+            .text("trace_id", "span_id", "parent_span_id")
+            .traceIndex()
             .build();
 
     static final Table SYSTEM_METRICS = builder("system_metrics", "system")
@@ -80,6 +82,9 @@ final class Table {
             .real("offset_ms", "duration_ms")
             .text("status", "error")
             .integer("row_count")
+            .added()
+            .text("trace_id", "span_id", "parent_span_id")
+            .traceIndex()
             .build();
 
     static final Table ERRORS = builder("errors", "telemetry")
@@ -103,6 +108,14 @@ final class Table {
             .integer("size")
             .build();
 
+    static final Table METRICS = builder("metrics", "metrics")
+            .text("created_at", "service", "instance", "name", "kind", "unit", "labels", "series")
+            .real("value")
+            .integer("count")
+            .real("sum", "min", "max")
+            .text("buckets")
+            .build();
+
     /** Created by the Visionary server, never by the SDK; written only while profiling. */
     static final Table PROFILES = builder("profiles", null)
             .text("created_at", "service", "instance", "version", "sdk")
@@ -118,14 +131,17 @@ final class Table {
     final List<Type> types;
     /** Columns added after the first release, in insert order. */
     final List<String> addedColumns;
+    /** Whether {@code idx_<name>_trace_id} is created after the added columns. */
+    final boolean traceIndex;
     private final Map<String, Integer> index;
 
-    private Table(String name, String schemaName, Map<String, Type> cols, List<String> added) {
+    private Table(String name, String schemaName, Map<String, Type> cols, List<String> added, boolean traceIndex) {
         this.name = name;
         this.schemaName = schemaName;
         this.columns = List.copyOf(cols.keySet());
         this.types = List.copyOf(cols.values());
         this.addedColumns = List.copyOf(added);
+        this.traceIndex = traceIndex;
         Map<String, Integer> idx = new LinkedHashMap<>();
         for (int i = 0; i < columns.size(); i++) {
             idx.put(columns.get(i), i);
@@ -161,6 +177,7 @@ final class Table {
         private final Map<String, Type> cols = new LinkedHashMap<>();
         private final List<String> added = new ArrayList<>();
         private boolean adding;
+        private boolean traceIndex;
 
         Builder(String name, String schemaName) {
             this.name = name;
@@ -185,6 +202,12 @@ final class Table {
             return this;
         }
 
+        /** Older tables only have trace_id once the added columns are in, so the index follows them. */
+        Builder traceIndex() {
+            traceIndex = true;
+            return this;
+        }
+
         private Builder add(Type type, String... names) {
             for (String n : names) {
                 cols.put(n, type);
@@ -196,7 +219,7 @@ final class Table {
         }
 
         Table build() {
-            return new Table(name, schemaName, cols, added);
+            return new Table(name, schemaName, cols, added, traceIndex);
         }
     }
 }

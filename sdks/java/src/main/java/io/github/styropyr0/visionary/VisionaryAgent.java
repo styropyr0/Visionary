@@ -26,6 +26,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     private final Telemetry telemetry;
     private final SystemSampler system;
     private final AppLogs logs;
+    private final MetricsWriter metrics;
     private final Retention retention;
     private final String summary;
     private volatile boolean running;
@@ -41,6 +42,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.telemetry = null;
         this.system = null;
         this.logs = null;
+        this.metrics = null;
         this.retention = null;
         this.summary = "disabled";
     }
@@ -58,6 +60,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 ? new SystemSampler(store, origin, cfg.systemInterval(), counters, pool)
                 : null;
         this.logs = logs;
+        this.metrics = cfg.metrics()
+                ? new MetricsWriter(store, origin, Metrics.REGISTRY, cfg.metricsInterval(), cfg.metricsMaxSeries())
+                : null;
         this.retention = new Retention(store);
         if (logRequests) {
             retention.add(Table.API_LOGS, cfg.logRetentionDays());
@@ -77,6 +82,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         if (system != null) {
             retention.add(Table.SYSTEM_METRICS, cfg.systemRetentionDays());
         }
+        if (metrics != null) {
+            retention.add(Table.METRICS, cfg.logRetentionDays());
+        }
         this.summary = "writing to " + store.describe()
                 + "; service " + (origin.service() == null ? "(none)" : origin.service())
                 + ", version " + (origin.version() == null ? "(none)" : origin.version())
@@ -88,7 +96,8 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 + "; errors " + (cfg.errors() ? "on" : "off")
                 + "; app logs " + (logs == null ? "off" : cfg.logCapture() ? "on (root logger)"
                         : "where VisionaryLogbackAppender is configured")
-                + "; system metrics " + (system != null ? "every " + cfg.systemInterval().toMillis() + "ms" : "off");
+                + "; system metrics " + (system != null ? "every " + cfg.systemInterval().toMillis() + "ms" : "off")
+                + "; custom metrics " + (metrics != null ? "every " + cfg.metricsInterval().toMillis() + "ms" : "off");
     }
 
     boolean enabled() {
@@ -149,6 +158,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         if (logs != null) {
             AppLogs.ready(logs);
         }
+        if (metrics != null) {
+            metrics.start();
+        }
         retention.start();
         log.info("visionary: " + summary);
     }
@@ -166,6 +178,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
             logs.stop(SHUTDOWN_TIMEOUT);
         }
         writer.close(SHUTDOWN_TIMEOUT);
+        if (metrics != null) {
+            metrics.close(SHUTDOWN_TIMEOUT);
+        }
         if (system != null) {
             system.close(SHUTDOWN_TIMEOUT);
         }

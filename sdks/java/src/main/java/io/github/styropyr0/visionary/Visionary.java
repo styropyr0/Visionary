@@ -42,6 +42,14 @@ import jakarta.servlet.http.HttpServletRequest;
  * Visionary.background("send welcome email", () -> mailer.sendWelcome(user));
  * executor.submit(Visionary.wrap("rebuild search index", () -> index.rebuild(id)));
  * }</pre>
+ *
+ * <p>Count, measure and time things on the Metrics page:
+ *
+ * <pre>{@code
+ * Visionary.counter("orders_placed", "region", "eu").add(1);
+ * Visionary.gauge("queue_depth", "queue", "emails").set(depth);
+ * Visionary.histogram("checkout_ms").observe(tookMs);
+ * }</pre>
  */
 public final class Visionary {
 
@@ -81,7 +89,9 @@ public final class Visionary {
     }
 
     /**
-     * Starts a span; close it (try-with-resources) when the call is done.
+     * Starts a span; close it (try-with-resources) when the call is done. Until
+     * then it is the parent of the calls made on this thread, in the trace view
+     * and in the {@code traceparent} of outbound requests.
      *
      * @param kind {@code db}, {@code http}, {@code cache}, {@code queue}, {@code background} or {@code custom}
      *             (anything else is stored as {@code custom})
@@ -90,7 +100,7 @@ public final class Visionary {
     public static VisionarySpan span(String kind, String name) {
         String k = kind != null && KINDS.contains(kind) ? kind : "custom";
         VisionarySpan span = Telemetry.start(k, name == null || name.isBlank() ? k : name);
-        return span == null ? VisionarySpan.NOOP : span;
+        return span == null ? VisionarySpan.NOOP : span.makeCurrent();
     }
 
     /** Records an exception the application handled ({@code handled = 1}), linked to the current request. */
@@ -109,15 +119,18 @@ public final class Visionary {
     public static Runnable wrap(Runnable task) {
         RequestScope scope = RequestScope.current();
         LogScope logs = LogScope.current();
-        if ((scope == null && logs == null) || task == null) {
+        TraceContext trace = TraceContext.current();
+        if ((scope == null && logs == null && trace == null) || task == null) {
             return task;
         }
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
             LogScope previousLogs = LogScope.enter(logs);
+            TraceContext previousTrace = TraceContext.enter(trace);
             try {
                 task.run();
             } finally {
+                TraceContext.restore(previousTrace);
                 LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
@@ -128,15 +141,18 @@ public final class Visionary {
     public static <T> Callable<T> wrap(Callable<T> task) {
         RequestScope scope = RequestScope.current();
         LogScope logs = LogScope.current();
-        if ((scope == null && logs == null) || task == null) {
+        TraceContext trace = TraceContext.current();
+        if ((scope == null && logs == null && trace == null) || task == null) {
             return task;
         }
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
             LogScope previousLogs = LogScope.enter(logs);
+            TraceContext previousTrace = TraceContext.enter(trace);
             try {
                 return task.call();
             } finally {
+                TraceContext.restore(previousTrace);
                 LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
@@ -194,11 +210,16 @@ public final class Visionary {
         }
         RequestScope scope = RequestScope.current();
         LogScope logs = LogScope.current();
+        TraceContext trace = TraceContext.current();
         String spanName = name == null || name.isBlank() ? "background" : name;
         return () -> {
             RequestScope previous = RequestScope.enter(scope);
             LogScope previousLogs = LogScope.enter(logs);
+            TraceContext previousTrace = TraceContext.enter(trace);
             VisionarySpan span = Telemetry.start("background", spanName);
+            if (span != null) {
+                span.makeCurrent();
+            }
             try {
                 return task.call();
             } catch (Throwable t) {
@@ -210,10 +231,54 @@ public final class Visionary {
                 if (span != null) {
                     span.close();
                 }
+                TraceContext.restore(previousTrace);
                 LogScope.restore(previousLogs);
                 RequestScope.restore(previous);
             }
         };
+    }
+
+    /**
+     * The counter {@code name} with labels as key/value pairs; rows hold the increase
+     * over each interval. Keep the handle for hot paths.
+     *
+     * <pre>{@code
+     * Visionary.counter("orders_placed", "region", "eu").add(1);
+     * }</pre>
+     */
+    public static VisionaryCounter counter(String name, String... labels) {
+        return new VisionaryCounter(Metrics.REGISTRY.get(name, Metrics.COUNTER, Metrics.pairs(labels)));
+    }
+
+    public static VisionaryCounter counter(String name, java.util.Map<String, String> labels) {
+        return new VisionaryCounter(Metrics.REGISTRY.get(name, Metrics.COUNTER, labels));
+    }
+
+    /** The gauge {@code name}; rows hold the last value set, every interval once it has been set. */
+    public static VisionaryGauge gauge(String name, String... labels) {
+        return new VisionaryGauge(Metrics.REGISTRY.get(name, Metrics.GAUGE, Metrics.pairs(labels)));
+    }
+
+    public static VisionaryGauge gauge(String name, java.util.Map<String, String> labels) {
+        return new VisionaryGauge(Metrics.REGISTRY.get(name, Metrics.GAUGE, labels));
+    }
+
+    /** The histogram {@code name}; rows hold each interval's count, sum, min, max and bucket counts. */
+    public static VisionaryHistogram histogram(String name, String... labels) {
+        return new VisionaryHistogram(Metrics.REGISTRY.get(name, Metrics.HISTOGRAM, Metrics.pairs(labels)));
+    }
+
+    public static VisionaryHistogram histogram(String name, java.util.Map<String, String> labels) {
+        return new VisionaryHistogram(Metrics.REGISTRY.get(name, Metrics.HISTOGRAM, labels));
+    }
+
+    /**
+     * Sets a metric's unit ({@code ms}, {@code bytes}; null for none) and histogram
+     * bucket upper bounds (none: the defaults). Call it before the metric's first
+     * use; series created earlier keep their buckets.
+     */
+    public static void describeMetric(String name, String unit, double... buckets) {
+        Metrics.REGISTRY.describe(name, unit, buckets);
     }
 
     /** The pool behind {@link #background}, created on first use. */

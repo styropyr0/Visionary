@@ -45,7 +45,10 @@ record VisionaryConfig(
         boolean profile,
         boolean logs,
         boolean logCapture,
-        String logLevel) {
+        String logLevel,
+        boolean metrics,
+        Duration metricsInterval,
+        int metricsMaxSeries) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -85,7 +88,10 @@ record VisionaryConfig(
                 // Opt-in: adds the Logback appender to the root logger.
                 r.bool("VISIONARY_LOG_CAPTURE", false),
                 // Used until the dashboard's log settings are read.
-                r.string("VISIONARY_LOG_LEVEL", "info"));
+                r.string("VISIONARY_LOG_LEVEL", "info"),
+                r.bool("VISIONARY_METRICS", true),
+                r.duration("VISIONARY_METRICS_INTERVAL", Duration.ofSeconds(15)),
+                r.positiveInt("VISIONARY_METRICS_MAX_SERIES", Metrics.DEFAULT_MAX_SERIES));
     }
 
     /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */
