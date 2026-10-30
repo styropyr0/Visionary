@@ -61,6 +61,8 @@ const (
 type token struct {
 	kind tokKind
 	text string
+	// pos and end are the token's bytes in the statement.
+	pos, end int
 }
 
 // validateReadOnly accepts exactly one SELECT (or WITH ... SELECT) statement
@@ -146,7 +148,32 @@ func checkTables(toks []token) error {
 			ctes[toks[i].text] = true
 		}
 	}
+	refs, err := tableRefs(toks)
+	if err != nil {
+		return err
+	}
+	for _, i := range refs {
+		t := toks[i]
+		if i+1 < len(toks) && toks[i+1].text == "." {
+			return errors.New("schema-qualified tables cannot be queried")
+		}
+		if i+1 < len(toks) && toks[i+1].text == "(" {
+			if !tableFunctions[t.text] {
+				return fmt.Errorf("%s cannot be used as a table", strings.ToLower(t.text))
+			}
+		} else if !allowedTables[t.text] && !ctes[t.text] && !ownTable(t.text) {
+			return fmt.Errorf("unknown table %s: only Visionary's own tables can be queried", strings.ToLower(t.text))
+		}
+	}
+	return nil
+}
 
+// tableRefs returns the index of every identifier standing where a table
+// does: after FROM or JOIN, and after each comma of a FROM list, subqueries
+// included. Workspaces filter exactly these references, so what the guard
+// checks and what a workspace filters cannot disagree.
+func tableRefs(toks []token) ([]int, error) {
+	var refs []int
 	// parens records, per open paren, whether it is an EXTRACT-style call;
 	// fromDepth holds the depth of each open FROM list, where a comma starts
 	// another table reference.
@@ -161,18 +188,9 @@ func checkTables(toks []token) error {
 			case t.text == "(":
 				// a subquery; scanned like the rest
 			case isIdent(t):
-				if i+1 < len(toks) && toks[i+1].text == "." {
-					return errors.New("schema-qualified tables cannot be queried")
-				}
-				if i+1 < len(toks) && toks[i+1].text == "(" {
-					if !tableFunctions[t.text] {
-						return fmt.Errorf("%s cannot be used as a table", strings.ToLower(t.text))
-					}
-				} else if !allowedTables[t.text] && !ctes[t.text] && !ownTable(t.text) {
-					return fmt.Errorf("unknown table %s: only Visionary's own tables can be queried", strings.ToLower(t.text))
-				}
+				refs = append(refs, i)
 			default:
-				return errors.New("unexpected token after FROM")
+				return nil, errors.New("unexpected token after FROM")
 			}
 		}
 		depth := len(parens)
@@ -209,19 +227,27 @@ func checkTables(toks []token) error {
 		}
 	}
 	if expectTable {
-		return errors.New("FROM needs a table")
+		return nil, errors.New("FROM needs a table")
 	}
-	return nil
+	return refs, nil
 }
 
 func isIdent(t token) bool { return t.kind == tokWord || t.kind == tokName }
 
-func tokenize(sql string) ([]token, error) {
+func tokenize(sql string) ([]token, error) { return scanTokens(sql, false) }
+
+// scanTokens splits sql into tokens. lenient is for statements the server
+// built: comments are skipped, and backslashes, semicolons and dollar signs
+// pass where the strict scan refuses them.
+func scanTokens(sql string, lenient bool) ([]token, error) {
 	var toks []token
-	if strings.Contains(sql, "\\") {
+	if !lenient && strings.Contains(sql, "\\") {
 		// MySQL treats a backslash in a literal as an escape, so the database
 		// and this scan could disagree about where a string ends.
 		return nil, errors.New("backslashes are not allowed")
+	}
+	add := func(k tokKind, text string, pos, end int) {
+		toks = append(toks, token{k, text, pos, end})
 	}
 	for i := 0; i < len(sql); {
 		ch := sql[i]
@@ -232,14 +258,14 @@ func tokenize(sql string) ([]token, error) {
 			if end < 0 {
 				return nil, errors.New("unterminated {{placeholder}}")
 			}
-			toks = append(toks, token{tokOther, sql[i : i+end+2]})
+			add(tokOther, sql[i:i+end+2], i, i+end+2)
 			i += end + 2
 		case ch == '\'':
 			end, err := skipQuoted(sql, i, ch, ch)
 			if err != nil {
 				return nil, err
 			}
-			toks = append(toks, token{tokOther, sql[i:end]})
+			add(tokOther, sql[i:end], i, end)
 			i = end
 		case ch == '"' || ch == '`' || ch == '[':
 			closer := ch
@@ -250,15 +276,26 @@ func tokenize(sql string) ([]token, error) {
 			if err != nil {
 				return nil, err
 			}
-			toks = append(toks, token{tokName, strings.ToUpper(sql[i+1 : end-1])})
+			add(tokName, strings.ToUpper(sql[i+1:end-1]), i, end)
 			i = end
-		case ch == '-' && i+1 < len(sql) && sql[i+1] == '-',
-			ch == '/' && i+1 < len(sql) && sql[i+1] == '*',
-			ch == '#':
+		case lenient && ch == '-' && i+1 < len(sql) && sql[i+1] == '-':
+			if end := strings.IndexByte(sql[i:], '\n'); end >= 0 {
+				i += end
+			} else {
+				i = len(sql)
+			}
+		case lenient && ch == '/' && i+1 < len(sql) && sql[i+1] == '*':
+			end := strings.Index(sql[i+2:], "*/")
+			if end < 0 {
+				return nil, errors.New("unterminated comment")
+			}
+			i += end + 4
+		case !lenient && (ch == '-' && i+1 < len(sql) && sql[i+1] == '-' ||
+			ch == '/' && i+1 < len(sql) && sql[i+1] == '*' || ch == '#'):
 			return nil, errors.New("comments are not allowed")
-		case ch == ';':
+		case ch == ';' && !lenient:
 			return nil, errors.New("only one statement is allowed")
-		case ch == '$' && i+1 < len(sql) && (sql[i+1] == '$' || isIdentStart(sql[i+1])):
+		case ch == '$' && !lenient && i+1 < len(sql) && (sql[i+1] == '$' || isIdentStart(sql[i+1])):
 			// PostgreSQL dollar quoting would hide text from the scan.
 			return nil, errors.New("dollar-quoted strings are not allowed")
 		case isIdentStart(ch):
@@ -266,7 +303,7 @@ func tokenize(sql string) ([]token, error) {
 			for j < len(sql) && isIdentPart(sql[j]) {
 				j++
 			}
-			toks = append(toks, token{tokWord, strings.ToUpper(sql[i:j])})
+			add(tokWord, strings.ToUpper(sql[i:j]), i, j)
 			i = j
 		case ch == '(' || ch == ')' || ch == ',' || ch == '.':
 			// A dot between digits is a decimal point, not a qualifier.
@@ -274,12 +311,12 @@ func tokenize(sql string) ([]token, error) {
 				i++
 				continue
 			}
-			toks = append(toks, token{tokPunct, string(ch)})
+			add(tokPunct, string(ch), i, i+1)
 			i++
 		case ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r':
 			i++
 		default:
-			toks = append(toks, token{tokOther, string(ch)})
+			add(tokOther, string(ch), i, i+1)
 			i++
 		}
 	}

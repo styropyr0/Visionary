@@ -69,6 +69,11 @@ func (s *Server) ensureSchema(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
 		}
 	}
+	for table, cols := range workspaceAddedColumns {
+		if err := s.addColumns(ctx, table, cols); err != nil {
+			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
+		}
+	}
 	for table, cols := range alertAddedColumns {
 		if err := s.addColumns(ctx, table, cols); err != nil {
 			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
@@ -185,18 +190,29 @@ func (s *Server) deletePanel(ctx context.Context, id int64) error {
 // knownRoutes lists recent route patterns for the model's prompt and the logs
 // filter, cached for ten minutes.
 func (s *Server) knownRoutes(ctx context.Context) []string {
+	if scopeFrom(ctx) != nil {
+		// The cache holds every service's routes.
+		return s.loadRoutes(ctx)
+	}
 	s.routesMu.Lock()
 	defer s.routesMu.Unlock()
 	if time.Since(s.routesAt) < 10*time.Minute && s.routes != nil {
 		return s.routes
 	}
+	if routes := s.loadRoutes(ctx); routes != nil {
+		s.routes, s.routesAt = routes, time.Now()
+	}
+	return s.routes
+}
+
+func (s *Server) loadRoutes(ctx context.Context) []string {
 	since := time.Now().UTC().Add(-7 * 24 * time.Hour).Format(tsLayout)
 	rows, err := s.db.Query(ctx, `SELECT route FROM api_logs
 WHERE created_at >= ? AND route IS NOT NULL
 GROUP BY route ORDER BY COUNT(*) DESC LIMIT 100`, since)
 	if err != nil {
 		s.logger.Warn("load known routes", "err", err)
-		return s.routes
+		return nil
 	}
 	routes := make([]string, 0, len(rows.Rows))
 	for _, row := range rows.Rows {
@@ -206,7 +222,6 @@ GROUP BY route ORDER BY COUNT(*) DESC LIMIT 100`, since)
 			}
 		}
 	}
-	s.routes, s.routesAt = routes, time.Now()
 	return routes
 }
 
@@ -227,6 +242,15 @@ var sourceTables = map[string]string{
 // that has rows stays known; one that has none (or doesn't exist yet) is
 // asked again next time.
 func (s *Server) sources(ctx context.Context) map[string]bool {
+	if scopeFrom(ctx) != nil {
+		// What the cache knows is about every service.
+		out := make(map[string]bool, len(sourceTables))
+		for key, table := range sourceTables {
+			res, err := s.db.Query(ctx, `SELECT 1 FROM `+table+` LIMIT 1`)
+			out[key] = err == nil && len(res.Rows) > 0
+		}
+		return out
+	}
 	s.seenMu.Lock()
 	defer s.seenMu.Unlock()
 	if s.seen == nil {

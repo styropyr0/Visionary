@@ -779,4 +779,33 @@ export const GUIDE: GuideSection[] = [
       },
     ],
   },
+  {
+    id: "workspaces",
+    group: "Manage",
+    title: "Workspaces",
+    intro:
+      "Workspaces let each team see only its own services. A workspace names services and members, and the server filters every read for its members: pages, Explore, the analyst, dashboards, alerts, exports and the Prometheus API. Admins always see everything, and with no workspaces everyone does.",
+    steps: [
+      {
+        title: "Create a workspace",
+        text: "In **Settings → Workspaces**, click **New workspace**, name it and list its services, one per line: an exact name such as `checkout`, or a pattern with `*` at the start or end such as `payments-*`. The preview shows which services seen in the last 30 days it matches.",
+      },
+      {
+        title: "Add members",
+        text: "Add people, groups and read API keys, each as **Viewer**, **Editor** or **Admin** of the workspace. Groups are what your identity provider sends at sign-in, SCIM group names, or the roles of a delegated sign-in. Inside the workspace that role applies instead of the person's own; a workspace admin manages its members but is never an admin of the whole server.",
+      },
+      {
+        title: "Decide about everyone else",
+        text: "**People outside every workspace** see every service, as before, or nothing until you add them to one. Data without a service name, such as rows from older SDKs, is seen only by people who see everything.",
+      },
+      {
+        title: "Give things a workspace",
+        text: "Under **What belongs to a workspace**, pick a workspace for alert rules, uptime checks, dashboards and saved log views. A workspace's alert rules watch only its services, and its checks and rules are seen only by its members. What someone creates inside a workspace belongs to it.",
+      },
+      {
+        title: "Switch between workspaces",
+        text: "Someone in several workspaces, and every admin, gets a picker under the logo. **All my workspaces** shows them together; picking one narrows every page to its services until you pick again.",
+      },
+    ],
+  },
 ];

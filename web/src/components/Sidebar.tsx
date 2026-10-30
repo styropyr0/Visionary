@@ -33,6 +33,7 @@ import {
 import type { SessionUser } from "../lib/api";
 import { Modal } from "./Modal";
 import { AboutDrawer } from "./AboutDrawer";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { getProject, versionLabel } from "../lib/project";
 import { useQuery } from "../lib/useQuery";
 import { useApp } from "../lib/state";
@@ -253,6 +254,7 @@ export function Sidebar({ route, collapsed, onToggle, onSignOut, user }: Props) 
           </button>
         </div>
       </div>
+      <WorkspaceSwitcher />
       {aboutOpen && <AboutDrawer info={project.data} error={project.error} onRefresh={() => setProjectRun((n) => n + 1)} onClose={() => setAboutOpen(false)} />}
       <nav className="nav" aria-label="Main">
         {shownNav.map(({ group, items }) => (

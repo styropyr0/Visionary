@@ -8,6 +8,74 @@ export type Permission = "view" | "edit" | "admin";
 export interface TeamSession extends SessionInfo {
   role: Role;
   permissions: Record<Permission, boolean>;
+  /** Workspaces this person can switch to: all of them for admins. */
+  workspaces?: WorkspaceRef[];
+  /** The one picked in the sidebar, 0 for all of them. */
+  workspace?: number;
+  /** True when this person sees only some services. */
+  scoped?: boolean;
+}
+
+// ---------- Workspaces ----------
+
+export interface WorkspaceRef {
+  id: number;
+  name: string;
+  role: Role;
+}
+
+export type MemberKind = "user" | "group" | "key";
+
+export interface WorkspaceMember {
+  kind: MemberKind;
+  id: string;
+  role: Role;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  services: string[];
+  members: WorkspaceMember[] | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceList {
+  workspaces: Workspace[];
+  roles: Record<number, Role>;
+  unassigned: "all" | "none";
+  admin: boolean;
+}
+
+export interface WorkspaceItem {
+  id: number;
+  name: string;
+  workspace_id: number | null;
+}
+
+export type WorkspaceItemKind = "alert" | "check" | "dashboard" | "view";
+
+/** Whether a service name matches a workspace pattern, as the server decides it. */
+export function matchService(pattern: string, name: string): boolean {
+  if (!name) return false;
+  if (pattern === "*") return true;
+  const start = pattern.startsWith("*");
+  const end = pattern.endsWith("*");
+  const core = pattern.replace(/^\*|\*$/g, "");
+  if (start && end) return name.includes(core);
+  if (start) return name.endsWith(core);
+  if (end) return name.startsWith(core);
+  return name === pattern;
+}
+
+const WORKSPACE_COOKIE = "visionary_workspace";
+
+/** Picks the workspace the pages show (0: all of yours) and reloads them. */
+export function switchWorkspace(id: number) {
+  document.cookie = id > 0 ? `${WORKSPACE_COOKIE}=${id}; path=/; max-age=31536000; SameSite=Strict` : `${WORKSPACE_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+  window.location.reload();
 }
 
 export const ROLE_LABEL: Record<Role, string> = { viewer: "Viewer", editor: "Editor", admin: "Admin" };

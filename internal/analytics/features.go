@@ -34,12 +34,13 @@ import (
 //	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
 //	replay.go    session replay recorded by the browser SDK
 //	leases.go    several replicas on one database: which one runs each job
+//	workspaces.go workspaces: people scoped to sets of services
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema(), s.workspacesSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -66,6 +67,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.ciRoutes(mux)
 	s.replayRoutes(mux)
 	s.replicasRoutes(mux)
+	s.workspacesRoutes(mux)
 }
 
 // Start launches the features' background work. It returns after the first

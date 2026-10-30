@@ -143,6 +143,9 @@ func (s *Server) ssoComplete(w http.ResponseWriter, r *http.Request, p *ssoProvi
 		ssoFail(w, r, "Signing you in failed; try again.")
 		return
 	}
+	if p.GroupsClaim != "" && id.Groups != nil {
+		s.rememberGroups(r.Context(), a.ID, id.Groups)
+	}
 	sess := s.auth.newSession(&authbridge.Result{
 		Token: ssoPrefix + p.ID + ":" + randomToken(),
 		User:  authbridge.User{ID: ssoPrefix + a.ID, Name: a.Name, Handle: a.Username, Roles: []string{a.Role}},

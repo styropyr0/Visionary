@@ -712,6 +712,15 @@ spec:
   ports: [{ port: 80, targetPort: http }]`,
     },
   },
+  workspaces: {
+    id: "workspaces",
+    title: "Give teams their own services",
+    intro:
+      "A workspace is a set of services (exact names, or patterns such as `payments-*`) and its members: people, identity provider or SCIM groups, and API keys, each with a role there. Members see only those services everywhere: every page, Explore and their own SQL, dashboards, alerts and the Prometheus API. Admins always see everything, and with no workspaces nothing changes.",
+    any: {
+      note: "An admin opens Settings → Workspaces, clicks New workspace, lists the services and watches the preview of what they match, then adds members. Choose what people outside every workspace see: everything, or nothing. Under What belongs to a workspace, give alert rules, uptime checks, dashboards and saved views a workspace. Rows without a service name are seen only by people who see everything.",
+    },
+  },
   logs: {
     id: "logs",
     title: "Send your application's logs",
@@ -1023,17 +1032,18 @@ export const HELP: Record<Route, PageHelp> = {
   },
   settings: {
     title: "Settings",
-    tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
-    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
+    tip: "Your preferences, the team and its workspaces, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
+    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), workspaces that limit people to some services, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
     read: [
       "Changes reach every replica sharing the database within seconds; no restart or environment variable is needed. Settings → Server → Replicas lists the replicas and the background jobs each runs.",
       "Single sign-on (OpenID Connect or SAML) works next to the other ways in; its people get accounts without a password, checked again every minute, and SCIM can add, change and switch them off. Sign-ins and SCIM changes go to the audit log.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
+      "Workspaces are enforced by the server on every read, so a member can't reach another team's services by editing a link or writing SQL. Someone in several workspaces switches under the logo; data without a service name is seen only by people who see everything.",
       "Hidden pages stay reachable by their link; Settings always shows.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
-    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas"],
+    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas", "workspaces"],
   },
   guide: {
     title: "How to use",

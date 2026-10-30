@@ -900,3 +900,87 @@
 .replica-note {
   margin: 8px 14px 12px;
 }
+
+/* Settings → Workspaces */
+
+.ws-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ws-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.settings-role.ws-note {
+  grid-template-columns: 14px 1fr;
+  align-items: start;
+}
+
+.settings-role.ws-note > svg {
+  margin-top: 3px;
+  color: var(--text-3);
+}
+
+.ws-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.ws-member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-member-id {
+  flex: 1;
+  min-width: 160px;
+}
+
+.ws-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ws-item-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ws-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
