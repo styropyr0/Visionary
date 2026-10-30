@@ -3,8 +3,10 @@
 Logs one row per HTTP request into ``api_logs``, the database and outbound
 HTTP calls each request makes into ``spans``, unhandled and reported
 exceptions into ``errors``, and samples host, process and runtime metrics
-into ``system_metrics``, and what the app logs through ``logging`` into
-``app_logs`` (``visionary.capture_logging()``), from background threads.
+into ``system_metrics``, what the app logs through ``logging`` into
+``app_logs`` (``visionary.capture_logging()``), and custom metrics
+(``visionary.counter("orders", region="eu").add(1)``) into ``metrics``, from
+background threads. Requests and outbound calls carry W3C trace context.
 
     import visionary
     agent = visionary.init()            # from VISIONARY_* / D1_* env vars
@@ -21,11 +23,13 @@ from ._context import login_attempt, set_route, set_user
 from ._db import instrument_connection, instrument_cursor
 from ._http import instrument_http
 from ._loghandler import LogHandler, capture_logging
+from ._metrics import Counter, Gauge, Histogram, counter, describe_metric, gauge, histogram
 
 __version__ = "0.2.0"
 
 __all__ = [
-    "Agent", "Config", "LogHandler", "background", "background_span", "capture_exception", "capture_logging",
-    "from_env", "get_agent", "init", "instrument_connection", "instrument_cursor", "instrument_http",
-    "instrument_sqlalchemy", "login_attempt", "set_route", "set_user", "span", "__version__",
+    "Agent", "Config", "Counter", "Gauge", "Histogram", "LogHandler", "background", "background_span",
+    "capture_exception", "capture_logging", "counter", "describe_metric", "from_env", "gauge", "get_agent",
+    "histogram", "init", "instrument_connection", "instrument_cursor", "instrument_http", "instrument_sqlalchemy",
+    "login_attempt", "set_route", "set_user", "span", "__version__",
 ]

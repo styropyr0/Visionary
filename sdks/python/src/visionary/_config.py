@@ -75,6 +75,13 @@ class Config:
     log_level: str = "info"
     log_queue_size: int = 10000
 
+    # Custom metrics (counter, gauge, histogram): every series is written
+    # each metrics_interval seconds; past metrics_max_series label sets per
+    # metric name new ones are dropped.
+    metrics: bool = True
+    metrics_interval: float = 15.0
+    metrics_max_series: int = 1000
+
 
 def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
     """Build a Config from environment variables (see SPEC.md "Environment")."""
@@ -114,6 +121,9 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         profile=parse_bool(s("VISIONARY_PROFILE"), True),
         logs=parse_bool(s("VISIONARY_LOGS"), True),
         log_level=s("VISIONARY_LOG_LEVEL", "info"),
+        metrics=parse_bool(s("VISIONARY_METRICS"), True),
+        metrics_interval=parse_duration(s("VISIONARY_METRICS_INTERVAL"), 15.0),
+        metrics_max_series=parse_int(s("VISIONARY_METRICS_MAX_SERIES"), 1000),
     )
 
 

@@ -11,6 +11,10 @@ did not wait for) keeps the request's id and offset but is not counted in its
 totals. The first ``span_max`` such late spans of a request are queued
 whatever their duration, later ones only when they took at least the
 threshold. ``background`` spans (the work itself) are never counted.
+
+Every span gets its own span id in the trace of the span current when it
+started (the request's, or a custom or background span's); one started
+outside any trace starts a new trace.
 """
 
 from __future__ import annotations
@@ -20,7 +24,8 @@ import threading
 import time
 from typing import Any, List, Optional
 
-from . import _context
+from . import _context, _tracecontext
+from ._tracecontext import SpanContext
 
 KINDS = ("db", "http", "cache", "queue", "custom", "graphql", "background")
 DETAIL_MAX = 10000
@@ -121,10 +126,11 @@ class Span:
     """One call. ``finish`` records it; calling it again does nothing."""
 
     __slots__ = ("kind", "name", "target", "detail", "started_at", "_t0", "offset_ms", "duration_ms",
-                 "status", "error", "row_count", "keep", "_trace", "_agent", "_done")
+                 "status", "error", "row_count", "keep", "_trace", "_agent", "_done",
+                 "trace_id", "span_id", "parent_span_id", "_parent")
 
     def __init__(self, agent: Any, trace: Optional[Trace], kind: str, name: str,
-                 target: Optional[str], detail: Optional[str]) -> None:
+                 target: Optional[str], detail: Optional[str], parent: Optional[SpanContext] = None) -> None:
         self.kind = kind if kind in KINDS else "custom"
         self.name = (name or self.kind)[:255]
         self.target = target or None
@@ -143,6 +149,16 @@ class Span:
             self.offset_ms = round((self._t0 - trace.t0) * 1000.0, 3)
             self.keep = trace.claim()
         self._done = False
+        self.parent_span_id = parent.span_id if parent is not None else None
+        if parent is None:
+            parent = SpanContext(_tracecontext.new_trace_id(), "")
+        self._parent = parent
+        self.trace_id = parent.trace_id
+        self.span_id = _tracecontext.new_span_id()
+
+    def context(self) -> SpanContext:
+        """The span as the parent of the calls made inside it."""
+        return self._parent.child(self.span_id)
 
     @property
     def request_id(self) -> Optional[str]:
@@ -185,7 +201,7 @@ def start(kind: str, name: str, target: Optional[str] = None, detail: Optional[s
         return None
     ann = _context.current()
     trace = ann.trace if ann is not None else None
-    return Span(agent, trace, kind, name, target, detail)
+    return Span(agent, trace, kind, name, target, detail, _tracecontext.current_span())
 
 
 def error_message(error: Any) -> str:

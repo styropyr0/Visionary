@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import threading
-from contextvars import ContextVar, Token
+from contextvars import ContextVar
 from typing import Any, Callable, Optional
+
+from . import _tracecontext
 
 
 class Annotations:
@@ -14,7 +16,7 @@ class Annotations:
     """
 
     __slots__ = ("_lock", "user_id", "user_handle", "user_role", "login_account", "route", "trace", "request",
-                 "trace_id", "failed", "logs", "done")
+                 "trace_id", "span", "parent_span_id", "failed", "logs", "done")
 
     def __init__(self, trace: Any = None, request: Optional["RequestInfo"] = None, trace_id: str = "") -> None:
         self._lock = threading.Lock()
@@ -26,6 +28,10 @@ class Annotations:
         self.trace = trace  # _spans.Trace, or None when spans are off
         self.request = request
         self.trace_id = trace_id
+        # The request's server span, and the caller's span from traceparent
+        # ("" when the request started the trace).
+        self.span: Optional[_tracecontext.SpanContext] = None
+        self.parent_span_id = ""
         # An exception escaped or was captured; held log lines are then kept.
         self.failed = False
         # _logs.Held: lines below the level, held until the request ends.
@@ -77,12 +83,19 @@ class RequestInfo:
 _current: ContextVar[Optional[Annotations]] = ContextVar("visionary_request", default=None)
 
 
-def begin(trace: Any = None, request: Optional[RequestInfo] = None, traceparent: Optional[str] = None) -> tuple:
-    ann = Annotations(trace, request, trace_parent_id(traceparent))
-    return ann, _current.set(ann)
+def begin(trace: Any = None, request: Optional[RequestInfo] = None, traceparent: Optional[str] = None,
+          tracestate: Optional[str] = None) -> tuple:
+    """Start a request: it continues the caller's trace or starts one, and its
+    server span is the current span until ``end``."""
+    span, parent = _tracecontext.request_span(traceparent, tracestate)
+    ann = Annotations(trace, request, span.trace_id)
+    ann.span, ann.parent_span_id = span, parent
+    return ann, (_current.set(ann), _tracecontext.use(span))
 
 
-def end(token: Token) -> None:
+def end(token: Any) -> None:
+    token, span_token = token
+    _tracecontext.reset(span_token)
     try:
         _current.reset(token)
     except ValueError:

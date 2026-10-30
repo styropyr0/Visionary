@@ -208,6 +208,18 @@ without credentials, query or fragment. It fails on a transport error or a
 5xx answer. A call through `requests` makes one span, not a second one for
 urllib3.
 
+## Distributed tracing
+
+Every request continues the W3C trace in its `traceparent` header, or starts
+one, and gets its own span id (stored on `api_logs` with the caller's span as
+its parent). Spans record their own id and parent: the request, or the
+`span`/`background` block they run inside. With `instrument_http()` on, each
+outbound call sends `traceparent` naming its span (and passes `tracestate`
+on), so a service using any Visionary or OpenTelemetry SDK joins the same
+trace; a `traceparent` you set yourself is left alone. Log lines carry the
+current span's trace and span id. **Traces** shows the whole tree across
+services.
+
 ## Database queries
 
 Django's ORM is automatic. For anything else, add one line where the engine
@@ -303,8 +315,8 @@ kept.
 ## Logs
 
 What your service logs through `logging` can show up on **Logs**, each line
-linked to the request it was logged in (request id, trace id from
-`traceparent`, user). Turn it on once logging is configured:
+linked to the request it was logged in (request id, the current span's
+trace and span id, user). Turn it on once logging is configured:
 
 ```python
 import logging
@@ -401,6 +413,27 @@ cfg.db_stats = db_stats
 visionary.init(cfg)
 ```
 
+## Custom metrics
+
+Counters, gauges and histograms of your own, with labels as keyword
+arguments (or a dict), show up on **Metrics**:
+
+```python
+visionary.counter("orders_placed", region="eu").add(1)    # or .inc()
+visionary.gauge("queue_depth", queue="emails").set(len(q))  # or .add(-1)
+visionary.histogram("checkout_ms").observe(took_ms)
+visionary.describe_metric("upload_bytes", unit="bytes", buckets=[1e3, 1e6, 1e9])
+```
+
+Values add up in memory and one row per series is written to `metrics` every
+15 seconds (`VISIONARY_METRICS_INTERVAL`): a counter's increase, a gauge's
+current value, and a histogram's count, sum, min, max and bucket counts
+(OpenTelemetry's default bounds unless `describe_metric` sets others). The
+handles can be kept and reused, are thread-safe, and work before `init()`.
+Each label set is one series; past 1000 per metric name
+(`VISIONARY_METRICS_MAX_SERIES`) new ones are dropped with a warning, so keep
+ids out of labels. The table is created when the first row is written.
+
 ## Service and release
 
 `VISIONARY_SERVICE` names the service, so several can share one database.
@@ -469,7 +502,7 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `redact_request_fields` | | Keys redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error_code_field` | `error.code` | Where error responses keep their code (dotted JSON path). |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error_key_field` | `error.key` | The same, for the error key. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles and app_logs older than this. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles, app_logs and metrics older than this. |
 | `VISIONARY_SYSTEM_METRICS` | `system_metrics` | `true` | System samples on or off. |
 | `VISIONARY_SYSTEM_INTERVAL` | `system_interval` (seconds) | `15s` | Time between samples: `15`, `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `system_retention_days` | `0` (off) | The same as the log retention, for system_metrics. |
@@ -481,6 +514,9 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_PROFILE` | `profile` | `true` (follow the dashboard) | `false` never profiles. |
 | `VISIONARY_LOGS` | `logs` | `true` | Capture of what the app logs (see [Logs](#logs)). |
 | `VISIONARY_LOG_LEVEL` | `log_level` | `info` | Lowest level kept until **Settings → Logs** is read. |
+| `VISIONARY_METRICS` | `metrics` | `true` | Custom metrics on or off (see [Custom metrics](#custom-metrics)). |
+| `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | Time between metrics rows: `15`, `1m`. |
+| `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets per metric name. |
 | | `log_queue_size` | `10000` | Log line queue; when full, new lines are dropped and logged. |
 | | `queue_size` | `5000` | Request queue entries; when full, new entries are dropped and logged. |
 | | `batch_size` | `50` | Rows per write. |
@@ -500,7 +536,8 @@ duration, method, path, route and query string, final status (500 when the
 handler raised), client IP (first `X-Forwarded-For` hop) and user agent, the
 user, request headers, bodies up to the cap with truncation flags and full
 sizes, the error code and key from JSON error bodies, and the request's
-database and HTTP call counts and time.
+database and HTTP call counts and time, and its trace id, span id and parent
+span id.
 
 Bodies are not captured for `multipart/*`, `image/*`, `video/*`, `audio/*`,
 `application/octet-stream`, `application/zip` and `application/pdf`.
@@ -532,7 +569,8 @@ time and kept (up to an hour) while the database is unreachable.
 | `capture_logging(level=None)`, `LogHandler(level=NOTSET, agent=None)` | Send `logging` records to **Logs**. |
 | `span(kind, name, target=None, detail=None)` | Custom span (`with` / `async with`). |
 | `background(name, fn, *args, **kwargs)`, `background_span(name)` | Work after the response. |
-| `instrument_http()` | Hook requests, httpx and urllib3. |
+| `instrument_http()` | Hook requests, httpx and urllib3; they send `traceparent`. |
+| `counter(name, **labels)`, `gauge(...)`, `histogram(...)`, `describe_metric(name, unit=None, buckets=None)` | Custom metrics: `.add(n)`/`.inc()`, `.set(v)`/`.add(d)`, `.observe(v)`. |
 | `instrument_sqlalchemy(engine)`, `instrument_connection(conn, target=None)`, `instrument_cursor(cur, target=None)` | Database hooks. |
 
 ## Troubleshooting

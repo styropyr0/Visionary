@@ -225,6 +225,7 @@ class RequestWriter:
             format_ts(sp.started_at), request_id or None, self._service, self._instance,
             sp.kind, sp.name, sp.target, sp.detail, sp.offset_ms, sp.duration_ms,
             sp.status, sp.error, sp.row_count,
+            sp.trace_id or None, sp.span_id or None, sp.parent_span_id or None,
         )
 
     def _error_row(self, ev: ErrorEvent) -> Tuple[Any, ...]:
@@ -304,6 +305,9 @@ class RequestWriter:
             e.http_count,
             None if e.http_ms is None else round(e.http_ms, 3),
             clip_login(e.login_account) or None,
+            e.trace_id or None,
+            e.span_id or None,
+            e.parent_span_id or None,
         )
 
 
