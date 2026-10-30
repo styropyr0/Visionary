@@ -19,12 +19,14 @@ import (
 
 // Modes. otp and password delegate to an existing API; shared is one team
 // password and accounts a username and password per person, both checked by
-// Visionary itself; none skips sign-in.
+// Visionary itself; sso is single sign-on only (an identity provider, set
+// up apart); none skips sign-in.
 const (
 	TypeOTP      = "otp"
 	TypePassword = "password"
 	TypeShared   = "shared"
 	TypeAccounts = "accounts"
+	TypeSSO      = "sso"
 	TypeNone     = "none"
 
 	// AnyRole in AllowedRoles or the role map matches every user of the
@@ -144,7 +146,7 @@ func (c *Config) Validate(roleMap string) error {
 		c.Location = LocationNone
 		c.Identifier = Identifier{Label: "Username", Input: "text", Normalize: "lowercase"}
 		return nil
-	case TypeNone:
+	case TypeSSO, TypeNone:
 		c.Provider = "Visionary"
 		c.Location = LocationNone
 		return nil

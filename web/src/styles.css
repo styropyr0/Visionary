@@ -2426,6 +2426,36 @@ pre.code {
   margin-left: -2px;
 }
 
+.auth-sso {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-sso-btn {
+  justify-content: center;
+  height: 42px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 .code-boxes {
   display: grid;
   grid-auto-flow: column;

@@ -177,7 +177,7 @@
 
 .scope-picks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -764,6 +764,40 @@
 
 .acct-table td {
   vertical-align: middle;
+}
+
+/* Settings → Sign-in → Single sign-on */
+.sso-provider {
+  border-top: 1px solid var(--border);
+}
+
+.sso-provider-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sso-provider-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sso-url {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.sso-none {
+  font-size: 12.5px;
+}
+
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .acct-disabled td:not(:nth-last-child(-n + 2)) {

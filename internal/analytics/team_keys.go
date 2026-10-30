@@ -19,7 +19,8 @@ import (
 // API keys. A key is "vis_" plus 32 random bytes; only its SHA-256 is stored,
 // with the first characters kept visible so people can tell keys apart.
 // Scopes: "read" uses the HTTP API with viewer rights, "server" sends from
-// SDKs and OTLP, "client" sends from browsers and mobile apps (public).
+// SDKs and OTLP, "client" sends from browsers and mobile apps (public),
+// "scim" lets an identity provider manage people (scim.go).
 
 const (
 	keyPrefix     = "vis_"
@@ -30,7 +31,7 @@ const (
 	keyCacheTTL = 30 * time.Second
 )
 
-var keyScopes = []string{"read", "server", "client"}
+var keyScopes = []string{"read", "server", "client", "scim"}
 
 type cachedKey struct {
 	id      int64
@@ -283,7 +284,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(keyScopes, body.Scope) {
-		writeError(w, http.StatusBadRequest, "scope must be read, server or client")
+		writeError(w, http.StatusBadRequest, "scope must be read, server, client or scim")
 		return
 	}
 	if body.ExpiresDays < 0 || body.ExpiresDays > 3650 {

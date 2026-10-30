@@ -30,7 +30,8 @@ import (
 //
 //   - portal_allow_ips: the dashboard and its API answer only these
 //     addresses. Ingest (SDKs, OpenTelemetry, the host agent, browser
-//     events), the health check and the public status page stay open, and
+//     events), SCIM provisioning (which has its own key), the health check
+//     and the public status page stay open, and
 //     the server's own machine is always allowed. Refusals are audited (at
 //     most once per address every 10 minutes), which detectPortal turns into
 //     portal_ip_blocked findings.
@@ -42,7 +43,7 @@ import (
 func portalOpen(path string) bool {
 	switch {
 	case path == agentapi.Path, path == "/api/healthz", strings.HasPrefix(path, "/v1/"), strings.HasPrefix(path, "/api/ingest/"), path == "/loki/api/v1/push",
-		path == "/status", path == "/status.json", path == "/status.js":
+		path == "/status", path == "/status.json", path == "/status.js", strings.HasPrefix(path, "/scim/v2/"):
 		return true
 	}
 	return false

@@ -125,7 +125,7 @@ func newSignin(raw, roleMap, shared, viewer string) (*signin, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Type == authbridge.TypeAccounts {
+	if cfg.Type == authbridge.TypeAccounts || cfg.Type == authbridge.TypeSSO {
 		// Each account carries its own role.
 		roles, roleMap, viewer = &roleMapping{}, "", ""
 	} else if cfg.Type == authbridge.TypeShared {
@@ -167,6 +167,8 @@ func (s *Server) applySignin(m map[string][2]string) {
 		s.logger.Info("sign-in with a shared team password")
 	case next.cfg.Type == authbridge.TypeAccounts:
 		s.logger.Info("sign-in with Visionary accounts")
+	case next.cfg.Type == authbridge.TypeSSO:
+		s.logger.Info("sign-in with single sign-on only")
 	default:
 		if next.bridge != nil && !next.bridge.CanRecheck() {
 			s.logger.Warn("no profile endpoint; roles are only checked at sign-in")

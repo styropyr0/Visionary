@@ -9,6 +9,7 @@ import { Select } from "../components/Select";
 import { DurationSelect, spanSeconds } from "../components/DurationSelect";
 import { useToast } from "../components/Toast";
 import { Card, Switch } from "./Settings.profiling";
+import { SsoSettings } from "./Settings.sso";
 
 // ---------- Server ----------
 
@@ -346,7 +347,7 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
 
 // ---------- Sign-in ----------
 
-type Mode = "shared" | "accounts" | "password" | "otp";
+type Mode = "shared" | "accounts" | "password" | "otp" | "sso";
 
 interface Endpoint {
   method: string;
@@ -402,6 +403,7 @@ const MODES = [
   { value: "shared", label: "Team password" },
   { value: "password", label: "Your API: username and password" },
   { value: "otp", label: "Your API: one-time code" },
+  { value: "sso", label: "Single sign-on only" },
 ];
 const METHODS = ["POST", "GET", "PUT"].map((m) => ({ value: m, label: m }));
 const INPUTS = [
@@ -473,7 +475,7 @@ export function SigninTab() {
       <SigninState v={v} />
       <Card
         title="How people sign in"
-        description="Give each person their own username and password here, share one team password, or let people sign in with your own API's accounts, which then decides their role."
+        description="Give each person their own username and password here, share one team password, or let people sign in with your own API's accounts, which then decides their role. Single sign-on, below, works next to any of these."
         actions={
           <button type="button" className="btn primary sm" disabled={busy} onClick={save}>
             {busy ? "Saving…" : "Save sign-in"}
@@ -518,12 +520,17 @@ export function SigninTab() {
             <Row label="Accounts" hint="People sign in with the username and password you give them below, and get the role you choose. Save with at least one admin account.">
               <span className="dim">{v.config?.type === "accounts" ? "In use" : "Not in use until you save"}</span>
             </Row>
+          ) : cfg.type === "sso" ? (
+            <Row label="Single sign-on" hint="The sign-in screen shows only the identity providers below. Turn one on before saving; to keep a password as a way back in, choose Accounts instead and add providers below.">
+              <span className="dim">{v.config?.type === "sso" ? "In use" : "Not in use until you save"}</span>
+            </Row>
           ) : (
             <DelegatedForm cfg={cfg} up={up} />
           )}
         </div>
       </Card>
       {cfg.type === "accounts" && <AccountsCard />}
+      <SsoSettings />
       {delegated && (
         <Card
           title="Who gets in, and as what"
@@ -576,7 +583,7 @@ function SigninState({ v }: { v: SigninView }) {
   return null;
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+export function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="pset-row conf-row">
       <div className="conf-what">
@@ -732,17 +739,21 @@ function JsonEditor({ value, placeholder, onChange }: { value: unknown; placehol
 
 // ---------- Accounts ----------
 
-interface Account {
+export interface Account {
   id: string;
   username: string;
   name: string;
-  role: "viewer" | "editor" | "admin";
+  /** Empty for someone SCIM added whose groups give no access yet. */
+  role: "viewer" | "editor" | "admin" | "";
   disabled: boolean;
   created_by: string;
   created_at: string;
   last_sign_in_at?: string;
   password_changed_at: string;
   two_step: boolean;
+  /** Empty for an account with a password; oidc, saml or scim for single sign-on. */
+  source?: string;
+  email?: string;
 }
 
 const ROLES = [
@@ -772,7 +783,7 @@ function AccountsCard() {
   const update = (a: Account, patch: Partial<Account> & { password?: string }, ok: string) =>
     act(() => api(`/api/team/accounts/${a.id}`, { method: "PUT", json: patch }), ok);
 
-  const list = q.data?.accounts ?? [];
+  const list = (q.data?.accounts ?? []).filter((a) => !a.source);
   return (
     <Card
       title="Accounts"

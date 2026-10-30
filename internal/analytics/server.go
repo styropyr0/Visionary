@@ -155,7 +155,9 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 		var next *session
 		var changed bool
 		var err error
-		if sg.cfg.Type == authbridge.TypeAccounts {
+		if isSSOSession(sess) {
+			next, changed, err = s.confirmSSO(r.Context(), sess)
+		} else if sg.cfg.Type == authbridge.TypeAccounts {
 			next, changed, err = s.confirmAccount(r.Context(), sess)
 		} else {
 			next, changed, err = s.auth.confirm(r.Context(), sg, sess)
@@ -202,6 +204,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, _ *http.Request) {
 	if sg.broken != nil {
 		out["error"] = sg.broken.Error()
 	}
+	out["sso"] = s.ssoButtons()
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -289,6 +292,9 @@ func (s *Server) handleAuthComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	case sg.cfg.Type == authbridge.TypeAccounts:
 		s.completeAccount(w, r, body.Identifier, body.Password, body.Code)
+		return
+	case sg.cfg.Type == authbridge.TypeSSO:
+		writeError(w, http.StatusBadRequest, "Sign in with your identity provider's button.")
 		return
 	}
 	cfg := &sg.cfg
@@ -407,7 +413,7 @@ func (s *Server) apiFail(w http.ResponseWriter, err error) {
 
 // revoke logs a token out on the API without holding up the response.
 func (s *Server) revoke(sg *signin, token string) {
-	if token == "" || sg.bridge == nil {
+	if token == "" || sg.bridge == nil || strings.HasPrefix(token, ssoPrefix) {
 		return
 	}
 	go func() {

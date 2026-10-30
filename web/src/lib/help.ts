@@ -428,6 +428,15 @@ OTEL_SERVICE_NAME=my-api`,
       "A rule watches a metric or a query and notifies its channels. Slack, Discord, Teams, Google Chat and webhooks need only their URL; PagerDuty, Opsgenie, Telegram and SMS (Twilio) need their key. Add channels under Alerts → Channels.",
     any: { note: "Email needs an SMTP server: an admin fills in host, port, user, password and from address in Settings → Server → Email. Then add a rule, or start from a preset, and pick the channels it notifies." },
   },
+  sso: {
+    id: "sso",
+    title: "Sign in with your identity provider",
+    intro:
+      "People sign in with Google, Microsoft Entra ID, Okta, Auth0, Keycloak or any OpenID Connect or SAML 2.0 provider, and their groups decide their role. It works next to the other ways in, so a password account can stay as a way back in.",
+    any: {
+      note: "An admin opens Settings → Sign-in → Single sign-on, sets the public URL, adds a provider and saves it switched off. Register the redirect URL (OpenID Connect) or upload the metadata (SAML) at the provider, then Test sign-in shows what the provider sends and the role it gives. Switch it on and save. For SCIM, create a key of scope SCIM under API keys and give the provider the SCIM base URL. Locked out? Set VISIONARY_ENABLE_AUTH=false on the server and restart.",
+    },
+  },
   logs: {
     id: "logs",
     title: "Send your application's logs",
@@ -680,15 +689,16 @@ export const HELP: Record<Route, PageHelp> = {
   settings: {
     title: "Settings",
     tip: "Your preferences, the team, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
-    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
+    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
     read: [
       "Changes reach every server sharing the database within 30 seconds; no restart or environment variable is needed.",
+      "Single sign-on (OpenID Connect or SAML) works next to the other ways in; its people get accounts without a password, checked again every minute, and SCIM can add, change and switch them off. Sign-ins and SCIM changes go to the audit log.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
       "Hidden pages stay reachable by their link; Settings always shows.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
-    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email"],
+    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso"],
   },
   guide: {
     title: "How to use",

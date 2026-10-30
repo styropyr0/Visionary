@@ -73,7 +73,7 @@ export interface SessionUser {
 /** How sign-in works, served by the server from its auth config. */
 export interface AuthConfig {
   provider: string;
-  type: "otp" | "password" | "shared" | "none";
+  type: "otp" | "password" | "shared" | "accounts" | "sso" | "none";
   identifier: {
     label: string;
     placeholder?: string;
@@ -89,6 +89,8 @@ export interface AuthConfig {
   open?: "disabled" | "unconfigured";
   /** A saved setup that can't be used: nobody can sign in until it is fixed. */
   error?: string;
+  /** Single sign-on providers, shown as buttons next to the form. */
+  sso?: { id: string; name: string; kind: "oidc" | "saml" }[];
 }
 
 export interface SessionInfo {
