@@ -29,11 +29,17 @@ import { Uptime } from "./views/Uptime";
 import { Containers } from "./views/Containers";
 import { Security } from "./views/Security";
 import { Guide } from "./views/Guide";
+import { Traces } from "./views/Traces";
 
 
 function readRoute(): Route {
   // "#/dashboards/12?from=..." is the dashboards view; the rest is the view's own.
   const r = window.location.hash.replace(/^#\/?/, "").split(/[?/]/)[0] as Route;
+  // "#/trace/<id>" is short for "#/traces/<id>".
+  if ((r as string) === "trace") {
+    history.replaceState(null, "", window.location.hash.replace(/^#\/?trace\b/, "#/traces"));
+    return "traces";
+  }
   return ROUTES.includes(r) ? r : "overview";
 }
 
@@ -204,6 +210,7 @@ export function App() {
             {route === "saved" && <Saved />}
             {route === "applogs" && <AppLogs />}
             {route === "logs" && <Logs meta={meta.data} />}
+            {route === "traces" && <Traces />}
             {route === "guide" && <Guide />}
             </>
           )}

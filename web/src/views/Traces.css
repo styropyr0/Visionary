@@ -1,0 +1,138 @@
+.tr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tr-id {
+  overflow-wrap: anywhere;
+}
+
+.tr-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.tr-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tr-services {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.tr-service {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.tr-kind {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.tr-request .wf-label {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.tr-bar-request {
+  opacity: 0.55;
+}
+
+.tr-in {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.smap-scroll {
+  overflow: auto;
+  max-height: 560px;
+}
+
+.smap {
+  display: block;
+}
+
+.smap-note {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+}
+
+.smap-box {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.smap-box.dep {
+  fill: var(--surface-1);
+  stroke-dasharray: 4 3;
+}
+
+.smap-node {
+  cursor: pointer;
+}
+
+.smap-node:hover .smap-box,
+.smap-node:focus-visible .smap-box {
+  stroke: var(--text-2);
+}
+
+.smap-node:focus,
+.smap-edge:focus {
+  outline: none;
+}
+
+.smap-name {
+  fill: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.smap-sub {
+  fill: var(--text-3);
+  font-size: 11px;
+}
+
+.smap-sub.bad {
+  fill: var(--critical-text);
+}
+
+.smap-edge {
+  cursor: pointer;
+}
+
+.smap-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.smap-edge.on path:not(.smap-hit),
+.smap-edge:focus-visible path:not(.smap-hit) {
+  filter: drop-shadow(0 0 2px var(--text-3));
+}
+
+.smap-edge-label {
+  fill: var(--text-2);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--surface-1);
+  stroke-width: 3px;
+}

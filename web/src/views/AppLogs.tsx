@@ -18,9 +18,11 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Waypoints,
   X,
   ZoomOut,
 } from "lucide-react";
+import { traceHref } from "../lib/traces";
 import { ConnectCard } from "../components/ConnectCard";
 import { useConnected } from "../lib/meta";
 import { api, type Result } from "../lib/api";
@@ -988,6 +990,12 @@ export function LogLineDrawer({
                 <ExternalLink size={14} />
                 Open its request
               </button>
+            ) : null}
+            {line.trace_id ? (
+              <a className="btn" href={traceHref(String(line.trace_id))}>
+                <Waypoints size={14} />
+                Open its trace
+              </a>
             ) : null}
             {line.pattern ? (
               <button type="button" className="btn" onClick={() => search(`pattern:${line.pattern}`)}>

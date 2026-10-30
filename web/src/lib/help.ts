@@ -414,6 +414,24 @@ OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer <server key>"
 OTEL_SERVICE_NAME=my-api`,
     },
   },
+  tracing: {
+    id: "tracing",
+    title: "Follow requests across services",
+    intro:
+      "A request that calls another service passes its trace on in the W3C `traceparent` header. The service it reaches records the same trace ID, so both requests, their calls and their log lines show up as one trace, and the call becomes an arrow on the service map. Give each service its own `VISIONARY_SERVICE` name. OpenTelemetry services take part as they are: they read and send the same header.",
+    langs: {
+      go: {
+        note: "Automatic once the middleware is in: it continues an incoming `traceparent` or starts a trace, and `visionary.Transport` (and `http.DefaultClient`) send it on. Requests need the handler's context. Wrap your own work with `StartSpanContext` so the calls inside it nest under it; `visionary.Go` keeps the trace for background work.",
+        code: `client := &http.Client{Transport: visionary.Transport(nil)}
+req, _ := http.NewRequestWithContext(r.Context(), "GET", "http://stock/items/42", nil)
+resp, err := client.Do(req) // the stock service continues this trace
+
+ctx, end := visionary.StartSpanContext(r.Context(), visionary.KindCustom, "build report")
+err = buildReport(ctx) // its calls nest under "build report"
+end(err)`,
+      },
+    },
+  },
   analyst: {
     id: "analyst",
     title: "Turn on the analyst",
@@ -650,6 +668,18 @@ export const HELP: Record<Route, PageHelp> = {
       "The breakdown in a request shows each database and outbound call, and Untracked for time no call covers.",
     ],
     setup: ["sdk", "user", "db", "http", "background"],
+  },
+  traces: {
+    title: "Traces",
+    tip: "Follow one request through every service it called, and see which services call which on a map.",
+    what: "A trace is everything one piece of work did across your services: the request that started it, the requests it made to other services, and every database and outbound call along the way, on one timeline with the log lines and errors that carry its trace ID. Search finds traces by service, route, call, duration and errors; the service map draws the services and what they call, with each arrow's rate, failures and p95.",
+    read: [
+      "In a trace, each colour is a service and each row sits under the span it was made in. Outlined bars failed; requests are the paler bars that their calls sit on.",
+      "Duration runs from the first request's start to the end of the last one. Work left running after a response can end later.",
+      "A service shows up in a trace only when its caller sends `traceparent` and it records it. Arrows between services come from those links; calls to a host nothing traced answered go to that host.",
+      "Open a request in a trace for its own breakdown, or a log line's trace from Logs.",
+    ],
+    setup: ["sdk", "tracing", "http", "otlp"],
   },
   dashboards: {
     title: "Dashboards",

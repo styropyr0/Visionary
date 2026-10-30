@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AlertTriangle, Bug, Hourglass } from "lucide-react";
+import { AlertTriangle, Bug, Hourglass, Waypoints } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
 import { records, type RequestTelemetry as Telemetry } from "../../lib/telemetry";
@@ -7,6 +7,7 @@ import { useQuery } from "../../lib/useQuery";
 import { InfoTip } from "../InfoTip";
 import { afterResponse, repeatedNames, toSpans, untracked, Waterfall, type LogMark } from "./Waterfall";
 import { logsHref } from "../../lib/applogs";
+import { traceHref } from "../../lib/traces";
 import "./telemetry.css";
 
 function Totals({ label, count, ms, requestMs }: { label: string; count: number | null; ms: number | null; requestMs: number }) {
@@ -70,8 +71,19 @@ export function RequestTelemetry({ rec }: { rec: Record<string, unknown> }) {
     );
   }
 
+  const traceId = q.data?.trace_id;
+
   return (
     <div className="rt">
+      {traceId && (
+        <div className="rt-logs-note">
+          <span className="dim">Part of a distributed trace: this request with the services it called and the ones that called it.</span>
+          <a className="btn sm" href={traceHref(traceId)}>
+            <Waypoints size={13} aria-hidden />
+            Open trace
+          </a>
+        </div>
+      )}
       {errors.length > 0 && (
         <section className="rt-section">
           <h3 className="rt-title">Errors</h3>

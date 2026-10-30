@@ -455,6 +455,35 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "traces",
+    group: "Investigate",
+    title: "Traces",
+    route: "traces",
+    intro: "One request followed through every service it called, and the map of which services call which.",
+    steps: [
+      {
+        title: "Find a trace",
+        text: "**Search** lists the traces that started in the range. Narrow them by **Services** (a comma list finds traces that touched all of them), **Route**, a call's name or target such as `SELECT users` or `api.stripe.com`, **Min ms**, or **Only with errors**. Click a row to open it.",
+      },
+      {
+        title: "Read a trace",
+        text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in and coloured by service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
+      },
+      {
+        title: "Get there from anywhere",
+        text: "A request in **Requests** or **Performance** has **Open trace** above its calls, and a log line in **Logs** has **Open its trace**. A trace's address is `#/traces/<trace id>`, so you can paste one from a log or another tool.",
+      },
+      {
+        title: "Use the service map",
+        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; the table under it gives each one's rate, failure rate and p95. Click an arrow or a box to search its traces.",
+      },
+      {
+        title: "Connect more services",
+        text: "Calls between services join up when the caller sends `traceparent` and the service it calls records it. See **Help** on this page, **Follow requests across services**.",
+      },
+    ],
+  },
+  {
     id: "dashboards",
     group: "Investigate",
     title: "Dashboards",
