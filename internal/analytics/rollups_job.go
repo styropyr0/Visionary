@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
@@ -72,6 +73,11 @@ type rollupRuntime struct {
 	routes   []string
 	routesAt time.Time
 	sweptAt  time.Time
+
+	// perHour is the requests of the last hour, from the minute rollups;
+	// see busy.
+	perHour   atomic.Int64
+	measureAt time.Time
 }
 
 // rollupRuntimes holds the job state of each running server.
@@ -186,6 +192,7 @@ func (rt *rollupRuntime) tick(ctx context.Context) {
 			rt.warn(ctx, "forward", k.name, err)
 		}
 	}
+	rt.measureLoad(ctx, now)
 	rt.retention(ctx, now)
 	deadline := time.Now().Add(backfillTime)
 	for _, k := range rt.kinds() {
@@ -193,6 +200,30 @@ func (rt *rollupRuntime) tick(ctx context.Context) {
 			rt.warn(ctx, "backfill", k.name, err)
 		}
 	}
+}
+
+// measureLoad counts the last hour's requests every few minutes. D1 skips
+// it: the reads cost more there than the routing saves.
+func (rt *rollupRuntime) measureLoad(ctx context.Context, now time.Time) {
+	if rt.d1 || now.Sub(rt.measureAt) < 5*time.Minute {
+		return
+	}
+	rt.measureAt = now
+	res, err := rt.s.db.Query(ctx, `SELECT COALESCE(SUM(requests), 0) FROM rollup_requests WHERE bucket_s = 60 AND created_at >= ?`,
+		now.Add(-time.Hour).Format(tsLayout))
+	if err == nil && len(res.Rows) > 0 && len(res.Rows[0]) > 0 {
+		rt.perHour.Store(toInt(res.Rows[0][0]))
+	}
+}
+
+// busy reports whether a requests panel over tr would scan so many raw rows
+// that the rollups should answer it, whatever the range's length. Their
+// percentiles are estimates, so quiet services keep exact ones.
+func (rt *rollupRuntime) busy(p *rollupPanel, tr timeRange) bool {
+	if p.needs&needRequests == 0 {
+		return false
+	}
+	return float64(rt.perHour.Load())*tr.To.Sub(tr.From).Hours() >= busyRows
 }
 
 func (rt *rollupRuntime) warn(ctx context.Context, step, kind string, err error) {

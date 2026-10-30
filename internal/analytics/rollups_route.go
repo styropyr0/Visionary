@@ -138,7 +138,7 @@ func (s *Server) runRollup(ctx context.Context, sql string, tr timeRange) (res *
 		return nil, false, nil
 	}
 	p, clause := s.rollupPlan(sql)
-	if p == nil || tr.To.Sub(tr.From) < p.min {
+	if p == nil || (tr.To.Sub(tr.From) < p.min && !rt.busy(p, tr)) {
 		return nil, false, nil
 	}
 	var reqSegs, sysSegs []segment
