@@ -157,6 +157,19 @@ its logs: open a session under Frontend → Recent sessions to see both sides
 on one timeline. For calls to another origin, the API must list
 `X-Request-ID` in `Access-Control-Expose-Headers`.
 
+Calls to the page's own origin also start a distributed trace: they send a
+W3C `traceparent` header and the event keeps its `trace_id`, so the
+backend's request (any Visionary or OpenTelemetry SDK) continues the page's
+trace and **Traces** shows the call end to end. An API on another origin
+gets the header only when you list it, since its CORS must allow it
+(`Access-Control-Allow-Headers: traceparent`):
+
+```js
+Visionary.init({ ..., traceOrigins: ["https://api.example.com", /\.example\.com$/] });
+```
+
+A `traceparent` your code sets itself is left alone.
+
 ### Logs
 
 Send the console's lines to Logs, with the session, user and page (they
@@ -202,7 +215,7 @@ Installing from npm and bundling avoids the `script-src` entry.
 | `page_load` | after the load event | path (ids as `:id`), load time, TTFB, FCP, DOM interactive |
 | `page_load` with `soft: 1` | each `pushState`, `replaceState` or back/forward that changes the path | time until the DOM has been quiet for 100 ms (at most 10 s) |
 | `web_vital` | LCP at the first input or when hidden; CLS and INP when the page is hidden; FCP and TTFB at load | value and rating (Google's thresholds) |
-| `api` | every `fetch` and `XMLHttpRequest` except calls to Visionary | `METHOD /path` with ids as `:id`, status, duration |
+| `api` | every `fetch` and `XMLHttpRequest` except calls to Visionary | `METHOD /path` with ids as `:id`, status, duration, and the server's request id and trace id when known |
 | `error` | uncaught errors, unhandled rejections, `captureException` | type, message, stack |
 | `custom` | `track()` | name, value, attributes |
 
@@ -232,6 +245,7 @@ offline.
 | `user_id` | | The signed-in user, if known at startup. |
 | `sampleRate` | `1` | Share of sessions (browser tabs) that report, 0 to 1. |
 | `ignoreUrls` | `[]` | fetch/XHR URLs to skip, as substrings or regular expressions. |
+| `traceOrigins` | `[]` | Other origins whose calls get `traceparent`, as exact origins or regular expressions. The page's own origin always does. |
 | `app` | `"web"` | App name on every event. |
 | `captureConsole` | `false` | Sends console lines to Logs. |
 | `logLevel` | `"info"` | The lowest console level sent: `debug`, `info`, `warn` or `error`. |
@@ -275,6 +289,7 @@ Open the browser's developer tools, Network tab, and filter on
 | `429 too many requests` | The per-IP or per-key rate limit was hit. | Raise it in **Settings → Server → Ingest** and restart the server, or lower `sampleRate`. |
 | `503 ingest queue full` | The server cannot write fast enough. | Check the server's database; lower `sampleRate`. |
 | Route changes do not show | The app uses a hash router. | Use history mode. |
+| Calls to your API fail with a CORS error after adding `traceOrigins` | The API's CORS preflight does not allow the `traceparent` header. | Add `traceparent` to its `Access-Control-Allow-Headers`, or remove the origin from `traceOrigins`. |
 | Caught errors do not show | The framework catches them before the page does. | Call `captureException` in the error boundary or error handler. |
 
 ## Build
