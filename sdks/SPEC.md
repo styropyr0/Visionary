@@ -32,7 +32,7 @@ dialect filters the same way. `user_id` is text in PostgreSQL and MySQL
 ## Tables
 
 Create them at startup with the exact SQL in `sdks/go/schema/<dialect>/requests.sql`,
-`system.sql` and `telemetry.sql`, statement by statement (split on `;`). Ship copies inside each
+`system.sql` and `telemetry.sql` (`logs.sql` and `metrics.sql` as their sections say), statement by statement (split on `;`). Ship copies inside each
 SDK package; do not hand-edit the schema. MySQL has no `CREATE INDEX IF NOT
 EXISTS`: ignore error 1061 (duplicate key name) when creating indexes.
 
@@ -776,6 +776,93 @@ never crowds out request rows: the same batching (50 rows or 3 s, retries),
 with a queue of 10000 lines, dropped and counted when full. With
 `VISIONARY_LOG_RETENTION_DAYS` set it also purges `app_logs` the same way.
 
+## Custom metrics (`metrics`)
+
+Counters, gauges and histograms the application defines. The SDK adds them up
+in memory and writes one row per series per interval; recording never waits
+for the database. The Go SDK is the reference (`sdks/go/metrics.go`).
+`VISIONARY_METRICS=false` turns it off (every call a no-op).
+
+### API
+
+Each SDK offers the three kinds in its language's idiom, with labels as
+key/value pairs (or a map), returning handles that can be kept and reused:
+
+| SDK | Shape |
+|---|---|
+| Go | `visionary.Counter(name, "k", "v", ...).Add(n)` / `.Inc()`, `visionary.Gauge(...).Set(v)` / `.Add(d)`, `visionary.Histogram(...).Observe(v)`, `visionary.DescribeMetric(name, visionary.MetricOptions{Unit, Buckets})` |
+| Others | the same three and a describe call (unit, buckets), named per the language: `visionary.counter("orders", region="eu").add(1)` in Python, `Visionary.counter("orders", region: "eu").add(1)` in Ruby, `visionary.counter("orders", { region: "eu" }).add(1)` in Node |
+
+They work before the agent starts and when no database is configured
+(nothing is written then). Rules:
+
+- **Name:** trimmed, at most 200 bytes (cut on a character boundary); an
+  empty name records nothing. Names are free text; `snake_case` with a unit
+  suffix (`checkout_ms`, `upload_bytes`) reads best.
+- **Labels:** string keys and values. Empty keys are dropped; keys are cut to
+  100 bytes, values to 200; only the first 20 keys in byte order are kept. A
+  key given without a value gets `""`.
+- **Counter `add(n)`:** ignored unless `n` is positive and finite. **Gauge
+  `set(v)` / `add(d)`:** ignored when not finite; `add` starts from 0.
+  **Histogram `observe(v)`:** ignored when not finite.
+- **Kinds** are separate series: the same name and labels as a counter and as
+  a gauge are two series.
+- **Cardinality:** at most `VISIONARY_METRICS_MAX_SERIES` (1000) series per
+  metric name for the life of the process. A new label set past that records
+  nothing and is counted; each interval with drops logs one warning per name
+  (`visionary: metric series dropped over the limit`, with the name, the count
+  and the limit). Series are never forgotten.
+
+### Labels and series
+
+`labels` is the canonical JSON object of the labels: keys sorted by byte
+order, no whitespace, strings escaped only where JSON requires (`"` as `\"`,
+`\` as `\\`, bytes below 0x20 as `\u00XX` with lower-case hex; everything else,
+non-ASCII and `<>&` included, written as is). No labels is `{}`.
+
+`series` is the first 16 lower-case hex digits of SHA-256 over the UTF-8 bytes
+of the name, a newline and `labels`. Check an implementation against
+`orders_placed` with `{"region":"eu"}`, which gives `da4f5c6244c4f3e4`.
+
+### Rows
+
+The table is created from `sdks/go/schema/<dialect>/metrics.sql` at the first
+interval that has something to write, so services without custom metrics
+never get it. Every `VISIONARY_METRICS_INTERVAL` (15 s), take each series'
+interval and reset it:
+
+| Kind | Written when | `value` | `count`, `sum`, `min`, `max`, `buckets` |
+|---|---|---|---|
+| `counter` | it increased in the interval | the increase | NULL |
+| `gauge` | every interval once it has been set | the current value | NULL |
+| `histogram` | it had observations in the interval | `sum / count` | the interval's observations, their sum, smallest and largest, and `{"bounds":[...],"counts":[...]}` |
+
+Histogram buckets: `bounds` are increasing upper bounds (default
+`0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000`,
+OpenTelemetry's; the describe call sets others, sorted and de-duplicated, for
+series created after it). `counts` has one more entry than `bounds`: entry
+`i` counts values `<= bounds[i]` and above the bound before it; the last
+counts values above every bound. Write `buckets` as compact JSON in that key
+order.
+
+Insert, columns in this order (same placeholder rules as requests):
+
+```sql
+INSERT INTO metrics (
+	created_at, service, instance, name, kind, unit, labels, series, value, count, sum, min, max, buckets
+) VALUES (14 placeholders)
+```
+
+`created_at` is the end of the interval; `service` and `instance` as on every
+row; `unit` from the describe call, else NULL.
+
+### Writer
+
+A separate background worker, like logs: the same batching (50 rows or 3 s,
+retries), a queue of 20000 rows, dropped and counted when full. On shutdown,
+write the last interval before flushing. With `VISIONARY_LOG_RETENTION_DAYS`
+set it also purges `metrics` the same way.
+
 ## Client ingest API (browser and mobile)
 
 Browser and mobile SDKs do not write to the database; they post to the
@@ -867,6 +954,9 @@ for errors.
 | `VISIONARY_PROFILE` | follow the dashboard; `false` never profiles |
 | `VISIONARY_LOGS` | `true` (capture where the app routes its logs; see Application logs) |
 | `VISIONARY_LOG_LEVEL` | `info` (until Settings → Logs is read) |
+| `VISIONARY_METRICS` | `true` (custom metrics; see Custom metrics) |
+| `VISIONARY_METRICS_INTERVAL` | `15s` (plain number = seconds) |
+| `VISIONARY_METRICS_MAX_SERIES` | `1000` (label sets per metric name) |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the

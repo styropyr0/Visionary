@@ -25,6 +25,7 @@ import { listChecks } from "../../lib/uptime";
 import { useQuery } from "../../lib/useQuery";
 import { formatLogTime } from "../../lib/time";
 import { PreviewChart } from "./PreviewChart";
+import { MetricQueryFields } from "./MetricQueryFields";
 import { titleCase } from "../../lib/format";
 import { KIND_LABEL } from "./ChannelsTab";
 import { KINDS, kindLabel } from "../../lib/security";
@@ -120,6 +121,9 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
     if (form.kind === "anomaly") return setSpec({ metric: id });
     if (id === "custom") {
       return setSpec({ metric: id, sql: sp.sql || "SELECT COUNT(*) AS value FROM api_logs WHERE created_at >= {{from}} AND created_at < {{to}} AND status >= 500", op: ">", threshold: 10, scope: {}, clear_threshold: undefined });
+    }
+    if (id === "custom_metric") {
+      return setSpec({ metric: id, metric_query: sp.metric_query ?? { name: "" }, op: m?.op, threshold: m?.threshold ?? 0, scope: { service: sp.scope.service }, clear_threshold: undefined });
     }
     const keep: Record<string, string | undefined> = {};
     for (const s of m?.scopes ?? []) keep[s] = (sp.scope as Record<string, string | undefined>)[s];
@@ -285,6 +289,8 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
             </p>
           </label>
         )}
+
+        {sp.metric === "custom_metric" && form.kind === "threshold" && <MetricQueryFields value={sp.metric_query} onChange={(q) => setSpec({ metric_query: q })} />}
 
         {sp.metric === "custom" && form.kind === "threshold" && (
           <label className="field">

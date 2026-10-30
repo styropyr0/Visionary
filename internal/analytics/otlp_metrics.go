@@ -13,7 +13,8 @@ import (
 
 // Host and process metrics in the OpenTelemetry semantic conventions become
 // system_metrics rows: datapoints of one instance in one 15 s window make one
-// row, and whatever the exporter did not send stays NULL.
+// row, and whatever the exporter did not send stays NULL. Other metrics go
+// to the metrics table (metrics_otlp.go).
 
 const otlpMetricWindow = 15 // seconds
 
@@ -91,6 +92,7 @@ func (o *otlpState) ingestMetrics(ctx context.Context, rms []*metricspb.Resource
 			for _, m := range sm.GetMetrics() {
 				name, filter := otlpMetricName(m.GetName())
 				if name == "" {
+					rejected += o.s.otlpCustomMetric(out, res, m)
 					continue
 				}
 				var points []*metricspb.NumberDataPoint

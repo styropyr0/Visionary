@@ -35,6 +35,8 @@ type ruleSpec struct {
 	Threshold float64    `json:"threshold"`
 	Window    string     `json:"window"`
 	For       string     `json:"for"`
+	// custom_metric rules: the metric, its label filters and aggregation
+	MetricQuery *metricQuery `json:"metric_query,omitempty"`
 	// Repeat re-sends a firing alert this often; empty never repeats.
 	Repeat string `json:"repeat,omitempty"`
 	// Anomaly rules.

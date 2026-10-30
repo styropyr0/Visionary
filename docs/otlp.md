@@ -3,7 +3,7 @@
 Visionary accepts OpenTelemetry traces, metrics and logs over OTLP/HTTP, so any
 service with an OpenTelemetry SDK can report to it without a Visionary SDK. The
 data lands in the same tables the SDKs write (`api_logs`, `spans`, `errors`,
-`releases`, `system_metrics`), so the dashboards and the analyst work
+`releases`, `system_metrics`, `metrics`), so the dashboards and the analyst work
 unchanged.
 
 ## Sending data
@@ -168,9 +168,48 @@ instance's previous row.
 
 The older `process.runtime.<runtime>.*` names (`cpu_time`, `memory`,
 `thread_count`, `gc_count`, `cpu.utilization`, Go's `goroutines` and
-`mem.heap_alloc`) are read when the current name is not sent. HTTP server
-metrics such as `http.server.request.duration` are ignored: requests come from
-spans.
+`mem.heap_alloc`) are read when the current name is not sent.
+
+### Custom metrics (`metrics`)
+
+Every other metric is stored in `metrics` (see the SDK contract,
+`sdks/SPEC.md`), one row per datapoint, with the resource's service and
+instance and the datapoint's attributes as labels:
+
+| OTLP | `kind` | `value` |
+|---|---|---|
+| Sum, monotonic | `counter` | the increase: a delta datapoint as sent, a cumulative one minus the previous datapoint of the series (the first only sets the baseline; a lower value or a later start time is a restart, and counts from zero) |
+| Sum, not monotonic (cumulative) | `gauge` | the value |
+| Gauge | `gauge` | the value |
+| Histogram | `histogram` | the mean; `count`, `sum`, `min`, `max` and the bucket counts, as increases when cumulative |
+| Exponential histogram | `histogram` | as a histogram, its buckets turned into explicit upper bounds |
+
+Summaries and delta up-down counters are skipped. HTTP server metrics such as
+`http.server.request.duration` land here too; the request pages read spans.
+A metric name keeps at most 1000 series (label sets) per server process; new
+ones past that are dropped and counted on the Metrics page.
+
+## Prometheus remote_write
+
+`POST /api/v1/write` takes Prometheus remote_write 1.0 (`prometheus.WriteRequest`,
+snappy-compressed protobuf) with the same server keys, as a Bearer token or
+the Basic auth password:
+
+```yaml
+remote_write:
+  - url: https://visionary.example.com/api/v1/write
+    authorization:
+      credentials: <server key>
+```
+
+The `job` label becomes the service and `instance` the instance; the other
+labels are the series' labels. Series typed `counter` by the metadata
+Prometheus sends, or named `*_total`, are counters (cumulative: stored as
+increases, like OTLP). `*_bucket` series with an `le` label, with their
+`_sum` and `_count` at the same timestamp, become one histogram row. The rest,
+summary quantiles included, are gauges. Stale markers are skipped. It answers
+`204`, `400` for a body that does not decode (not retried), `401`, `415` for
+remote_write 2.0, and `429`/`503` to retry.
 
 ## Storage
 

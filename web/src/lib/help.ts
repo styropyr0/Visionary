@@ -432,6 +432,34 @@ end(err)`,
       },
     },
   },
+  metrics: {
+    id: "metrics",
+    title: "Record custom metrics",
+    intro:
+      "Counters, gauges and histograms your code defines land on the Metrics page. The SDK adds them up in memory and writes each series every 15 seconds, so recording one never waits for the database. Labels are key/value pairs; each distinct set is one series, and a metric keeps at most 1000 of them, so never put user or request ids in a label.",
+    langs: {
+      go: {
+        note: "A counter counts things that happen, a gauge holds a level, a histogram records values such as durations. Keep a handle for hot paths. Units and histogram buckets are optional.",
+        code: `visionary.Counter("orders_placed", "region", region).Add(1)
+visionary.Gauge("queue_depth", "queue", "emails").Set(float64(n))
+
+took := visionary.Histogram("checkout_ms", "method", method)
+took.Observe(float64(time.Since(start).Milliseconds()))
+
+visionary.DescribeMetric("checkout_ms", visionary.MetricOptions{Unit: "ms", Buckets: []float64{50, 100, 250, 500, 1000}})`,
+      },
+    },
+    any: {
+      label: "Prometheus (prometheus.yml)",
+      code: `remote_write:
+  - url: ${origin}/api/v1/write
+    authorization:
+      credentials: <server key>
+
+# OpenTelemetry: metrics that are not host metrics land on Metrics too
+OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`,
+    },
+  },
   analyst: {
     id: "analyst",
     title: "Turn on the analyst",
@@ -591,6 +619,19 @@ export const HELP: Record<Route, PageHelp> = {
       "Containers reported by an SDK show their own usage only; restarts and exits need the host agent.",
     ],
     setup: ["agent", "sdk"],
+  },
+  metrics: {
+    title: "Metrics",
+    tip: "Counters, gauges and histograms your services record, from the SDKs, OpenTelemetry and Prometheus, charted by label.",
+    what: "Every custom metric your services send: from the SDK's Counter, Gauge and Histogram, OpenTelemetry metrics that are not host metrics, and Prometheus remote_write. Pick one to chart it over the range: sum, average, max, min or rate per second, and p50, p95 or p99 for histograms; group by a label, the service or the instance, and filter by label values.",
+    read: [
+      "A counter's row is its increase over the interval, so Sum is how many happened in each bucket and Rate per second divides by the bucket's length.",
+      "A gauge is a level: Average and Max read it per bucket; Sum adds the series together, e.g. queue depth over all queues.",
+      "Percentiles are estimated from the histogram's buckets, so they are as precise as the buckets are narrow.",
+      "Grouping shows the 20 largest groups. A metric keeps at most 1000 label sets; the list says when new ones were dropped.",
+      "Add to dashboard keeps the aggregation, grouping and filters; a dashboard's service variable narrows it. Alerts → New rule → Custom metric alerts on it.",
+    ],
+    setup: ["metrics", "otlp"],
   },
   errors: {
     title: "Errors",

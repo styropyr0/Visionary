@@ -227,6 +227,31 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "metrics",
+    group: "Monitor",
+    title: "Metrics",
+    route: "metrics",
+    intro: "Your own numbers: orders placed, queue depth, checkout time. Record them in code, with OpenTelemetry or from Prometheus, then chart, compare and alert on them.",
+    steps: [
+      {
+        title: "Record a metric",
+        text: "In Go, `visionary.Counter(\"orders_placed\", \"region\", \"eu\").Add(1)`, `visionary.Gauge(...).Set(v)` or `visionary.Histogram(...).Observe(v)`. Prometheus sends to `/api/v1/write` with a server key; OpenTelemetry metrics arrive on their own. **Help** has the snippets.",
+      },
+      {
+        title: "Chart it",
+        text: "Pick the metric in the list. **Aggregation** says how readings combine: **Sum** or **Rate per second** for counters, **Average** or **Max** for gauges, **p95** for histograms. **Group by** splits the chart by a label, the service or the instance.",
+      },
+      {
+        title: "Narrow it",
+        text: "Choose a label and a value, then **Filter**; remove a filter with its ×. **Service** in the top bar keeps one service. The address keeps the whole view, so copy it to share.",
+      },
+      {
+        title: "Keep it and alert on it",
+        text: "**Add to dashboard** on the chart puts it on a dashboard as it is. In **Alerts**, a rule on **Custom metric** watches the same numbers over its window, per label value when grouped.",
+      },
+    ],
+  },
+  {
     id: "errors",
     group: "Monitor",
     title: "Errors",

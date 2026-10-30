@@ -22,11 +22,13 @@ type writer struct {
 	logger   *slog.Logger
 	redact   *redactor
 	requests bool // api_logs is written (and purged)
-	// logsOnly marks the writer of app_logs, which purges only that table.
-	logsOnly   bool
-	logSecrets map[string]bool
+	// logsOnly marks the writer of app_logs, which purges only that table;
+	// metricsOnly the writer of metrics.
+	logsOnly    bool
+	metricsOnly bool
+	logSecrets  map[string]bool
 
-	insertRequest, insertSpan, insertError, insertLog string
+	insertRequest, insertSpan, insertError, insertLog, insertMetric string
 
 	// queue holds *entry, *spanRecord and *errorRecord values.
 	queue   chan any
@@ -67,6 +69,7 @@ func newWriter(cfg RequestsConfig, requests bool, ident identity, db store, logg
 		insertSpan:    insertSQL("spans", spanColumns, sp),
 		insertError:   insertSQL("errors", errorColumns, sp),
 		insertLog:     insertSQL("app_logs", logColumns, sp),
+		insertMetric:  insertSQL("metrics", metricColumns, sp),
 		queue:         make(chan any, cfg.QueueSize),
 		stop:          make(chan struct{}),
 		done:          make(chan struct{}),
@@ -165,6 +168,8 @@ func (w *writer) write(batch []any) {
 			stmts = append(stmts, stmt{sql: w.insertError, args: w.errorParams(r)})
 		case *logRecord:
 			stmts = append(stmts, stmt{sql: w.insertLog, args: w.logParams(r)})
+		case *metricRecord:
+			stmts = append(stmts, stmt{sql: w.insertMetric, args: w.metricParams(r)})
 		}
 	}
 	// A request's spans can push a batch past one call's limit; send it in
@@ -204,6 +209,9 @@ func (w *writer) runRetention(ctx context.Context) {
 	}
 	if w.logsOnly {
 		tables = []string{"app_logs"}
+	}
+	if w.metricsOnly {
+		tables = []string{"metrics"}
 	}
 	runDaily(ctx, func() {
 		for _, t := range tables {

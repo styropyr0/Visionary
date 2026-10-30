@@ -38,6 +38,8 @@ var dataKinds = []dataKind{
 		tables: []dataTable{{"errors", true}}},
 	{Key: "system", Label: "System metrics", Description: "CPU, memory, disk and runtime samples from SDKs and host agents, and their rollups.", Service: true,
 		tables: []dataTable{{"system_metrics", true}}},
+	{Key: "metrics", Label: "Custom metrics", Description: "Counters, gauges and histograms from the SDKs, OpenTelemetry and Prometheus.", Service: true,
+		tables: []dataTable{{"metrics", true}}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled CPU profiles and their flame graphs.", Service: true,
 		tables: []dataTable{{"profiles", true}}},
 	{Key: "releases", Label: "Deploys", Description: "Version starts: the deploy marks on charts.", Service: true,

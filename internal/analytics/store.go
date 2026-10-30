@@ -209,6 +209,7 @@ var sourceTables = map[string]string{
 	"errors":   "errors",
 	"profiles": "profiles",
 	"logs":     "app_logs",
+	"metrics":  "metrics",
 }
 
 // sources reports which kinds of SDK data have ever been written, so empty

@@ -309,6 +309,8 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeLogMatches(ctx, r, now)
 	case "log_new_patterns":
 		return s.observeLogNewPatterns(ctx, r, now)
+	case "custom_metric":
+		return s.observeCustomMetric(ctx, r, now)
 	}
 	m, ok := s.metricByID(r.Spec.Metric)
 	if !ok {
