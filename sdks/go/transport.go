@@ -9,7 +9,9 @@ import (
 // Transport returns an http.RoundTripper that records each outbound request
 // as an http span ("POST api.stripe.com"): the time until the response
 // headers arrive, and an error on a transport failure or a 5xx. A nil base
-// means http.DefaultTransport. Query strings are never stored.
+// means http.DefaultTransport. Query strings are never stored. Each request
+// carries a W3C traceparent naming its span, so a service that reads it
+// (any Visionary or OpenTelemetry SDK) continues the trace.
 //
 //	client := &http.Client{Timeout: 10 * time.Second, Transport: visionary.Transport(nil)}
 //
@@ -42,11 +44,16 @@ func instrumentDefaultClient() {
 type tracedTransport struct{ base http.RoundTripper }
 
 func (t *tracedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	s := beginSpan(req.Context(), KindHTTP)
+	ctx := req.Context()
+	s := beginSpan(ctx, KindHTTP)
 	if s == nil {
+		// Not recorded, but the trace still goes on to the next service.
+		if !isQuiet(ctx) {
+			req = injectTrace(req, currentSpan(ctx))
+		}
 		return t.base.RoundTrip(req)
 	}
-	resp, err := t.base.RoundTrip(req)
+	resp, err := t.base.RoundTrip(injectTrace(req, s.context()))
 	host := req.URL.Host
 	s.rec.name = req.Method + " " + host
 	s.rec.target = host

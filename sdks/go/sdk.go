@@ -356,6 +356,9 @@ func (a *Agent) Start(ctx context.Context) {
 		if err := a.db.execScript(schemaCtx, d.TelemetrySchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create telemetry tables failed", "err", err)
 		}
+		if err := migrateSpans(schemaCtx, a.db); err != nil {
+			a.cfg.Logger.Error("visionary: add spans columns failed", "err", err)
+		}
 		a.writeRelease(schemaCtx)
 	}
 	if a.writer != nil {

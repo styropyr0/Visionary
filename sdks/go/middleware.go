@@ -28,8 +28,10 @@ type annotations struct {
 	requestID string
 	method    string
 	path      string
-	// traceID comes from traceparent, for the request's log lines.
-	traceID string
+	// span is the request's server span; parentSpanID the caller's span
+	// from traceparent, if any.
+	span         spanContext
+	parentSpanID string
 
 	mu    sync.Mutex
 	user  User
@@ -114,7 +116,8 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 		}
 
 		start := time.Now()
-		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path, traceID: traceParentID(r.Header.Get("traceparent"))}
+		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path}
+		ann.span, ann.parentSpanID = requestSpan(r.Header)
 		logIt := a.cfg.Requests.Enabled && a.writer != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix)
 		if logIt {
 			ann.requestID = r.Header.Get(requestIDHeader)
@@ -126,7 +129,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 				ann.trace = &trace{requestID: ann.requestID, start: start, max: a.cfg.SpanMax}
 			}
 		}
-		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, ann))
+		r = r.WithContext(withSpan(context.WithValue(r.Context(), ctxKey{}, ann), ann.span))
 		rec := &captureWriter{ResponseWriter: w, status: http.StatusOK}
 
 		var (
@@ -187,6 +190,9 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 					ResponseBody:        rec.buf.Bytes(),
 					ResponseTruncated:   rec.truncated,
 					ResponseSize:        rec.size,
+					TraceID:             ann.span.traceID,
+					SpanID:              ann.span.spanID,
+					ParentSpanID:        ann.parentSpanID,
 				}
 				if reqCapture != nil {
 					e.RequestBody = reqCapture.buf.Bytes()
@@ -265,20 +271,6 @@ func (c *httpCounters) observe(status int) {
 	if status >= 500 {
 		c.errors.Add(1)
 	}
-}
-
-// traceParentID returns the trace id of a W3C traceparent header, or "".
-func traceParentID(h string) string {
-	parts := strings.Split(strings.TrimSpace(h), "-")
-	if len(parts) < 4 || len(parts[1]) != 32 || strings.Trim(parts[1], "0") == "" {
-		return ""
-	}
-	for _, c := range parts[1] {
-		if !strings.ContainsRune("0123456789abcdef", c) {
-			return ""
-		}
-	}
-	return parts[1]
 }
 
 func newRequestID() string {

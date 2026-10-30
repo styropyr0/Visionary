@@ -25,10 +25,16 @@ const (
 	KindBackground = "background"
 )
 
-var spanColumns = []string{
-	"created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
-	"offset_ms", "duration_ms", "status", "error", "row_count",
-}
+var spanColumns = func() []string {
+	cols := []string{
+		"created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
+		"offset_ms", "duration_ms", "status", "error", "row_count",
+	}
+	for _, c := range AddedSpanColumns {
+		cols = append(cols, c.Name)
+	}
+	return cols
+}()
 
 // dbSeen and httpSeen record whether any hook for that kind of call exists.
 // Until one does, the request's db_* or http_* totals are NULL ("cannot
@@ -65,6 +71,9 @@ type spanRecord struct {
 	// nested marks a call made inside another recorded call (the prepare of
 	// a query): it is a span row but its time is already in the totals.
 	nested bool
+
+	// traceID, spanID and parentID place the call in its trace.
+	traceID, spanID, parentID string
 }
 
 // spanTotals are the per-request aggregates stored on the api_logs row.
@@ -154,7 +163,17 @@ type activeSpan struct {
 	agent *Agent
 	trace *trace
 	rec   spanRecord
-	ended atomic.Bool
+	// parent is the span it was started in (its trace id when it started
+	// a trace), carrying the trace flags and tracestate on.
+	parent spanContext
+	ended  atomic.Bool
+}
+
+// context is the span as the parent of the calls made inside it.
+func (s *activeSpan) context() spanContext {
+	sc := s.parent
+	sc.spanID = s.rec.spanID
+	return sc
 }
 
 // beginSpan starts a span, or returns nil when nothing would record it: span
@@ -168,6 +187,14 @@ func beginSpan(ctx context.Context, kind string) *activeSpan {
 		return nil
 	}
 	s := &activeSpan{agent: a, rec: spanRecord{start: time.Now(), kind: kind, rows: -1}}
+	// A call outside any trace starts one, so the service it reaches can
+	// still be followed.
+	parent := currentSpan(ctx)
+	s.parent = parent
+	if !parent.valid() {
+		s.parent = spanContext{traceID: newTraceID(), flags: "01"}
+	}
+	s.rec.traceID, s.rec.spanID, s.rec.parentID = s.parent.traceID, newSpanID(), parent.spanID
 	if ann != nil && ann.trace != nil {
 		s.trace = ann.trace
 		s.rec.requestID = ann.trace.requestID
@@ -229,6 +256,18 @@ func (a *Agent) spansOn() bool { return a != nil && a.cfg.Spans && a.writer != n
 // Inside a request the span belongs to it; elsewhere it is stored only when
 // it takes at least the span threshold. Safe from any goroutine.
 func StartSpan(ctx context.Context, kind, name string) (end func(err error)) {
+	_, end = StartSpanContext(ctx, kind, name)
+	return end
+}
+
+// StartSpanContext is StartSpan for a span that makes calls of its own: the
+// calls made with the returned context nest under it in the trace, and
+// outbound requests made with it name it as their parent.
+//
+//	ctx, end := visionary.StartSpanContext(ctx, visionary.KindCustom, "build report")
+//	err := buildReport(ctx)
+//	end(err)
+func StartSpanContext(ctx context.Context, kind, name string) (context.Context, func(err error)) {
 	switch kind {
 	case KindDB, KindHTTP, KindCache, KindQueue, KindCustom, KindGraphQL, KindBackground:
 	default:
@@ -237,10 +276,10 @@ func StartSpan(ctx context.Context, kind, name string) (end func(err error)) {
 	markKind(kind)
 	s := beginSpan(ctx, kind)
 	if s == nil {
-		return func(error) {}
+		return ctx, func(error) {}
 	}
 	s.rec.name = truncateRunes(name, 200)
-	return s.end
+	return withSpan(ctx, s.context()), s.end
 }
 
 // spanParams returns the row in spanColumns order.
@@ -283,5 +322,6 @@ func (w *writer) spanParams(s *spanRecord) []any {
 		status,
 		nullable(s.err),
 		rows,
+		nullable(s.traceID), nullable(s.spanID), nullable(s.parentID),
 	}
 }

@@ -47,6 +47,9 @@ type entry struct {
 	ResponseBody        []byte
 	ResponseTruncated   bool
 	ResponseSize        int64
+	TraceID             string
+	SpanID              string
+	ParentSpanID        string
 
 	// Totals is nil when span capture is off; Spans are the rows to store
 	// with the request, at most SpanMax of them.
@@ -132,6 +135,7 @@ func (w *writer) requestParams(e *entry, users map[string]User) []any {
 		nullable(w.ident.version),
 		dbCount, dbMs, httpCount, httpMs,
 		nullable(clipLogin(e.LoginAccount)),
+		nullable(e.TraceID), nullable(e.SpanID), nullable(e.ParentSpanID),
 	}
 }
 

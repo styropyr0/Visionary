@@ -138,6 +138,14 @@ func (l *logger) capture(ctx context.Context, r *logRecord) {
 	if s.Dropped(service, r.logger, r.message, r.sev) {
 		return
 	}
+	if r.traceID == "" {
+		if sc := currentSpan(ctx); sc.valid() {
+			r.traceID = sc.traceID
+			if r.spanID == "" {
+				r.spanID = sc.spanID
+			}
+		}
+	}
 	ann, _ := ctx.Value(ctxKey{}).(*annotations)
 	if ann == nil {
 		if r.sev >= s.Floor(service, "", "", r.at) {
@@ -148,9 +156,6 @@ func (l *logger) capture(ctx context.Context, r *logRecord) {
 	ann.mu.Lock()
 	if r.requestID == "" {
 		r.requestID = ann.requestID
-	}
-	if r.traceID == "" {
-		r.traceID = ann.traceID
 	}
 	if r.userID == "" {
 		r.userID = ann.user.ID

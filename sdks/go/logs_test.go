@@ -246,17 +246,6 @@ func TestLogParamsMatchColumns(t *testing.T) {
 	}
 }
 
-func TestTraceParentID(t *testing.T) {
-	if got := traceParentID("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"); got != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Fatal(got)
-	}
-	for _, bad := range []string{"", "00-xyz-1-1", "00-00000000000000000000000000000000-00f067aa0ba902b7-01"} {
-		if traceParentID(bad) != "" {
-			t.Fatalf("%q accepted", bad)
-		}
-	}
-}
-
 func TestStripStdHeader(t *testing.T) {
 	if got := stripStdHeader("2026/10/28 09:30:12.123456 main.go:42: hello: world", log.LstdFlags|log.Lmicroseconds|log.Lshortfile); got != "hello: world" {
 		t.Fatal(got)

@@ -19,8 +19,7 @@ import (
 // A panic in fn is recorded as the span's error and then re-panics, as it
 // would in a plain goroutine.
 func Go(ctx context.Context, name string, fn func(ctx context.Context) error) {
-	ctx = context.WithoutCancel(ctx)
-	end := StartSpan(ctx, KindBackground, name)
+	ctx, end := StartSpanContext(context.WithoutCancel(ctx), KindBackground, name)
 	go func() {
 		var err error
 		defer func() {
