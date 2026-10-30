@@ -497,6 +497,7 @@ func (s *Server) handleAlertsSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out["firing_rules"], out["firing_series"], out["unacked"] = firingRules, series, unacked
+	out["incidents_active"] = s.activeIncidents(ctx)
 	down, err := s.checksDown(ctx)
 	if err != nil {
 		s.fail(w, err)

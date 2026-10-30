@@ -23,7 +23,9 @@ type statusPage struct {
 	Label     string           `json:"label"`
 	Checks    []statusCheck    `json:"checks"`
 	Incidents []statusIncident `json:"incidents"`
-	UpdatedAt string           `json:"updated_at"`
+	// Notices are the declared incidents published here (incidents_timeline.go).
+	Notices   []statusNotice `json:"notices"`
+	UpdatedAt string         `json:"updated_at"`
 }
 
 type statusCheck struct {
@@ -172,6 +174,8 @@ func (s *Server) buildStatus(ctx context.Context) (*statusPage, error) {
 		page.State, page.Label = "operational", "All systems operational"
 	}
 	sortIncidents(page.Incidents)
+	page.Notices = s.statusNotices(ctx)
+	applyNotices(page)
 	return page, nil
 }
 

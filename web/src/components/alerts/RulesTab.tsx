@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BellOff, BellRing, CheckCheck, Download, Play, Plus, Search, Siren, Upload, X } from "lucide-react";
 import { useToast } from "../Toast";
+import { DeclareLink } from "../DeclareLink";
 import { Modal } from "../Modal";
 import { Select } from "../Select";
 import {
@@ -407,6 +408,7 @@ function RuleRow({ rule, meta, selected, onSelect, onEdit, onChange }: { rule: R
       <td onClick={(e) => e.stopPropagation()}>
         <div className="al-row-actions">
           {rule.enabled && rule.status.firing > 0 && <AckMenu rule={rule} disabled={!meta.can_edit} onChange={onChange} />}
+          {rule.enabled && rule.status.firing > 0 && <DeclareLink kind="alert" target={rule.id} icon />}
           <button type="button" className="icon-btn" title="Evaluate now" aria-label="Evaluate now" onClick={evaluate} disabled={!meta.can_edit}>
             <Play size={14} />
           </button>

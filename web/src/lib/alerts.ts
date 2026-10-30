@@ -391,6 +391,8 @@ export interface AlertsSummary {
   unacked: number;
   checks_down: number;
   down: string[];
+  /** Declared incidents not yet resolved. */
+  incidents_active?: number;
 }
 
 export interface ImportResult {

@@ -27,12 +27,13 @@ import (
 //	data_delete.go deleting collected data by kind, range and service
 //	applogs.go   application logs: ingest, search, patterns, archive
 //	traces.go    distributed traces across services, trace search, the service map
+//	incidents.go declared incidents: roles, timeline, status updates, postmortems
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -53,6 +54,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.dataRoutes(mux)
 	s.applogsRoutes(mux)
 	s.tracesRoutes(mux)
+	s.incidentsRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -83,7 +85,7 @@ func (s *Server) featurePrompt() string {
 	var parts []string
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt(), s.tracesPrompt(), s.ownTablesPrompt(ctx)} {
+	for _, p := range []string{s.telemetryPrompt(), s.rumPrompt(), s.alertsPrompt(), s.uptimePrompt(), s.rollupsPrompt(), s.hostsPrompt(), s.securityPrompt(), s.applogsPrompt(), s.tracesPrompt(), s.incidentsPrompt(), s.ownTablesPrompt(ctx)} {
 		if p = strings.TrimSpace(p); p != "" {
 			parts = append(parts, p)
 		}

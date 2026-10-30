@@ -23,6 +23,7 @@ import {
   Server,
   Settings,
   ShieldAlert,
+  Siren,
   Sparkles,
   Sun,
   Waypoints,
@@ -58,10 +59,11 @@ export type Route =
   | "dashboards"
   | "saved"
   | "alerts"
+  | "incidents"
   | "settings"
   | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "settings", "guide"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "incidents", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -95,6 +97,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     group: "Manage",
     items: [
       { route: "alerts", label: "Alerts", icon: Bell },
+      { route: "incidents", label: "Incidents", icon: Siren },
       { route: "settings", label: "Settings", icon: Settings },
       { route: "guide", label: "How to use", icon: BookOpen },
     ],
@@ -153,7 +156,7 @@ function NavItem({ route, label, icon: Icon, active, badge }: { route: Route; la
   );
 }
 
-/** Firing alerts and down uptime checks, refreshed every 30 seconds while the page is open. */
+/** Firing alerts, down uptime checks and open incidents, refreshed every 30 seconds while the page is open. */
 function useAlertBadges(): Partial<Record<Route, NavBadge>> {
   const [summary, setSummary] = useState<AlertsSummary | null>(null);
   useEffect(() => {
@@ -185,6 +188,10 @@ function useAlertBadges(): Partial<Record<Route, NavBadge>> {
       urgent: summary.unacked > 0,
       title: summary.unacked > 0 ? `${summary.unacked} firing alert${summary.unacked === 1 ? "" : "s"} nobody acknowledged` : `${summary.firing_series} firing, all acknowledged`,
     };
+  }
+  if ((summary.incidents_active ?? 0) > 0) {
+    const n = summary.incidents_active ?? 0;
+    out.incidents = { count: n, urgent: true, title: `${n} open incident${n === 1 ? "" : "s"}` };
   }
   if (summary.checks_down > 0) {
     out.uptime = {

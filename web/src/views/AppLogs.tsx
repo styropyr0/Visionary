@@ -35,6 +35,7 @@ import { CopyButton, Drawer, Modal } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { useToast } from "../components/Toast";
 import { ErrorNotice, linkify } from "../components/ErrorNotice";
+import { DeclareLink } from "../components/DeclareLink";
 import { useSession } from "../lib/team";
 import { useMeta } from "../lib/meta";
 import {
@@ -982,6 +983,7 @@ export function LogLineDrawer({
           </div>
 
           <div className="lg-actions">
+            <DeclareLink kind="log" target={String(line.id)} />
             <button type="button" className="btn" onClick={() => setContext(!context)}>
               {context ? "Hide the lines around it" : "Lines around it"}
             </button>
