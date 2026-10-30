@@ -333,7 +333,7 @@ agent, err := visionary.New(cfg)`,
     id: "statuspage",
     title: "Publish a status page",
     intro:
-      "A public page at /status (and /status.json) shows the checks you mark Show on the public status page, with their uptime and incidents; their URLs only when you tick that too.",
+      "A public page at /status (and /status.json) shows the checks you mark Show on the public status page, with their uptime and incidents; their URLs only when you tick that too. Declared incidents marked for it show there too, with the updates you publish.",
     any: { note: "An admin turns it on and sets its title in Settings → Status page. Then open an uptime check and tick Show on the public status page." },
   },
   agent: {
@@ -676,6 +676,19 @@ export const HELP: Record<Route, PageHelp> = {
       "Email needs an SMTP server in Settings → Server → Email.",
     ],
     setup: ["email"],
+  },
+  incidents: {
+    title: "Incidents",
+    tip: "Declared incidents with a severity, a commander and responders, a timeline, status updates to your channels and the status page, and a postmortem.",
+    what: "Every incident someone declared, with MTTA, MTTM and MTTR and the count by severity over the range. An incident moves from investigating to identified, monitoring and resolved; its timeline collects status and role changes, notes, the updates sent, and on its own the linked alerts firing and resolving, linked checks failing and recovering, and deploys of the affected services.",
+    read: [
+      "Declare from scratch here, or with Declare incident on a firing alert rule, an uptime check, an error issue or a log line: the form fills in and the source is linked.",
+      "Times are measured from when the impact started: acknowledged when someone takes command or moves the incident on, mitigated at monitoring, resolved at resolved.",
+      "A status update goes to the alert channels you pick (retried like alerts) and, if you tick it, to the public status page, where only the title and published updates show.",
+      "The postmortem drafts itself from the timeline and the affected services' traffic; with the AI analyst on, the model writes a first version. Export it as Markdown.",
+      "Editors declare and update incidents; viewers read them; only admins delete one. Every change is in the audit log.",
+    ],
+    setup: ["statuspage", "analyst"],
   },
   settings: {
     title: "Settings",

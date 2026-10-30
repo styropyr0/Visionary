@@ -21,6 +21,7 @@ import { Profiles } from "./views/Profiles";
 import { Saved } from "./views/Saved";
 import { System } from "./views/System";
 import { Alerts } from "./views/Alerts";
+import { Incidents } from "./views/Incidents";
 import { Dashboards } from "./views/Dashboards";
 import { Errors } from "./views/Errors";
 import { Frontend } from "./views/Frontend";
@@ -199,6 +200,7 @@ export function App() {
             {route === "security" && <Security />}
             {route === "dashboards" && <Dashboards />}
             {route === "alerts" && <Alerts meta={meta.data} />}
+            {route === "incidents" && <Incidents />}
             {route === "settings" && <Settings user={user} />}
             {route === "explore" && <Explore meta={meta.data} />}
             {route === "saved" && <Saved />}

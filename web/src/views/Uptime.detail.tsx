@@ -17,6 +17,7 @@ import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, StateBadge } from "./Uptime.parts";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { DeclareLink } from "../components/DeclareLink";
 import { InfoTip } from "../components/InfoTip";
 
 const LATENCY: Viz = { type: "timeseries", x: "t", y: ["p50", "p95"], unit: "ms" };
@@ -101,6 +102,7 @@ export function UptimeDetail({ id }: { id: number }) {
                   <Pencil size={14} />
                   Edit
                 </button>
+                <DeclareLink kind="uptime" target={c.id} />
               </>
             )}
           </>

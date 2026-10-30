@@ -541,6 +541,39 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "incidents",
+    group: "Manage",
+    title: "Incidents",
+    route: "incidents",
+    intro: "When something is broken for users, declare an incident: one place for who is on it, what is known, what was said, and afterwards what to change.",
+    steps: [
+      {
+        title: "Declare it",
+        text: "Click **Declare incident** on this page, or on a firing rule in **Alerts**, a check in **Uptime**, an issue in **Errors** or a line in **Logs**, which fills in the title, severity, services and start time and links the source. Pick **SEV1** (critical) to **SEV4** (low), name the commander, and tick the channels to tell.",
+      },
+      {
+        title: "Assign the roles",
+        text: "Under **Responders**, **Take command** makes you the incident commander; **Assign** adds a communications or operations lead, a scribe or a responder. The commander shows in the list, the notifications and the postmortem.",
+      },
+      {
+        title: "Move it along",
+        text: "The steps under the title move it from **Investigating** to **Identified**, **Monitoring** and **Resolved**, each stamped with its time. The tiles show the time to acknowledge, mitigate and resolve.",
+      },
+      {
+        title: "Keep the timeline",
+        text: "Add a **Note** with a link to a chart, request or trace as you go. Linked alerts firing and resolving, linked checks failing and recovering, and deploys of the affected services appear on their own; untick them to see only what people wrote.",
+      },
+      {
+        title: "Tell people",
+        text: "Switch to **Status update**, write what is affected and what happens next, optionally move the status, and pick the channels and the **Status page**. Each channel's delivery shows on the update.",
+      },
+      {
+        title: "Write the postmortem",
+        text: "On **Postmortem**, **Draft it** fills the summary, impact and timeline from the data, and with the AI analyst on also the root cause, lessons and action items. Edit it, give each action item an owner and tick it off when done, and **Download Markdown** for your wiki.",
+      },
+    ],
+  },
+  {
     id: "settings",
     group: "Manage",
     title: "Settings",

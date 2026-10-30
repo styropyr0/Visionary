@@ -18,6 +18,7 @@ import { StackTrace } from "../components/telemetry/StackTrace";
 import { LogDetail } from "./Logs";
 import { LogsAround } from "./AppLogs";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { DeclareLink } from "../components/DeclareLink";
 import { InfoTip } from "../components/InfoTip";
 import "./Errors.css";
 import { HelpLink } from "../components/Help";
@@ -321,6 +322,7 @@ function IssueView({ fp, q }: { fp: string; q: Q<IssueDetail> }) {
           <Sparkles size={14} />
           Ask the analyst
         </button>
+        <DeclareLink kind="error" target={fp} />
       </header>
 
       <div className="grid">

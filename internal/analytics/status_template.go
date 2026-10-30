@@ -157,6 +157,13 @@ h2 { margin: 32px 0 10px; font-size: 13px; font-weight: 600; color: var(--text-2
 .tag.live { background: var(--critical); color: #fff; }
 .tag.done { background: var(--surface-3); color: var(--text-2); }
 .empty { padding: 16px 18px; color: var(--text-3); }
+.notice { padding: 16px 18px; border-top: 1px solid var(--border); }
+.notice:first-child { border-top: 0; }
+.notice .row { flex-wrap: wrap; }
+.tag.watch { background: var(--warning); color: #111; }
+.update { margin-top: 10px; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13.5px; }
+.update .when { color: var(--text-3); font-size: 12.5px; }
+.update b { font-weight: 600; }
 footer { margin-top: 32px; color: var(--text-3); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 560px) { .bars span:nth-child(-n+60) { display: none; } .legend .from90 { display: none; } .legend .from30 { display: inline; } }
 .legend .from30 { display: none; }
@@ -170,6 +177,16 @@ footer { margin-top: 32px; color: var(--text-3); font-size: 12px; display: flex;
   <span>{{.Label}}</span>
   <span class="sub">Updated {{when .UpdatedAt}}</span>
 </section>
+
+{{with .Notices}}
+<h2>Incidents</h2>
+<section class="card">
+{{range .}}  <div class="notice">
+    <div class="row"><span class="tag {{if .ResolvedAt}}done{{else if eq .Status "monitoring"}}watch{{else}}live{{end}}">{{.StatusLabel}}</span><span class="name">{{.Title}}</span><span class="meta url">since {{when .StartedAt}}{{if .ResolvedAt}}, resolved {{when .ResolvedAt}}{{end}}</span></div>
+{{range .Updates}}    <div class="update"><span class="when">{{when .At}}</span><span><b>{{.Status}}</b> · {{.Body}}</span></div>
+{{end}}  </div>
+{{end}}</section>
+{{end}}
 
 {{with ongoing .Incidents}}
 <h2>Current incidents</h2>
