@@ -7,7 +7,7 @@ export type Severity = "info" | "warning" | "critical";
 export type RuleKind = "threshold" | "anomaly" | "slo";
 export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 
-export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs" | "metrics";
+export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs" | "metrics" | "ci";
 
 export const GROUP_LABEL: Record<MetricGroup, string> = {
   request: "Requests",
@@ -21,6 +21,7 @@ export const GROUP_LABEL: Record<MetricGroup, string> = {
   container: "Containers",
   logs: "Logs",
   metrics: "Custom metrics",
+  ci: "CI",
 };
 
 export interface MetricDef {
@@ -641,4 +642,10 @@ export const RULE_PRESETS: RulePreset[] = [
   { id: "ctr_unhealthy", group: "Containers", label: "Container health check failing", name: "Container unhealthy", severity: "warning", spec: containerEvent("unhealthy", 1, "5m") },
   { id: "ctr_memory", group: "Containers", label: "Container near its memory limit", name: "Container memory above 90% of its limit", severity: "warning", spec: th("container_memory", ">", 90, "5m", "5m") },
   { id: "ctr_throttle", group: "Containers", label: "Container CPU throttled", name: "Container CPU throttled over 25%", severity: "warning", spec: th("container_throttled", ">", 25, "10m", "10m") },
+
+  // CI
+  { id: "ci_failing", group: "CI", label: "Pipelines failing often (over 20% in a day)", name: "Pipeline failure rate above 20%", severity: "warning", spec: th("ci_failure_rate", ">", 20, "24h", "0s") },
+  { id: "ci_slow", group: "CI", label: "Pipelines slow (p95 above 15 minutes)", name: "Pipeline p95 above 15 minutes", severity: "info", spec: th("ci_duration_p95", ">", 900000, "24h", "0s") },
+  { id: "ci_queue", group: "CI", label: "Jobs waiting for runners (p95 above 5 minutes)", name: "CI queue p95 above 5 minutes", severity: "warning", spec: th("ci_queue_p95", ">", 300000, "1h", "0s") },
+  { id: "ci_flaky", group: "CI", label: "A test turned flaky", name: "New flaky test", severity: "info", spec: th("ci_new_flaky_tests", ">", 0, "1h", "0s") },
 ];

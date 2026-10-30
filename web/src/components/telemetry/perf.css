@@ -63,6 +63,13 @@
   font-size: 12px;
 }
 
+.cmp-builds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 12.5px;
+}
+
 .cmp {
   display: flex;
   flex-direction: column;

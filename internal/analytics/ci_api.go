@@ -692,11 +692,11 @@ FROM ci_tests WHERE created_at >= ? AND created_at < ?`+f, base...)
 	if totals == nil {
 		totals = map[string]any{"tests": 0, "results": 0, "failures": 0, "skipped": 0, "failing_tests": 0}
 	}
-	// Getting slower: at least three passing runs in each half, 20% and 5 ms slower.
+	// Getting slower: at least five passing runs in each half, 25% and 20 ms slower.
 	var slower [][]any
 	for _, m := range rowMaps(trend) {
 		b, a := toFloat(m["before_ms"]), toFloat(m["after_ms"])
-		if toInt(m["runs_before"]) < 3 || toInt(m["runs_after"]) < 3 || b <= 0 || a < b*1.2 || a-b < 5 {
+		if toInt(m["runs_before"]) < 5 || toInt(m["runs_after"]) < 5 || b <= 0 || a < b*1.25 || a-b < 20 {
 			continue
 		}
 		slower = append(slower, []any{m["hash"], m["test"], m["service"], b, a, math.Round(1000*(a-b)/b) / 10})

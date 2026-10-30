@@ -332,6 +332,43 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "ci",
+    group: "Monitor",
+    title: "CI",
+    route: "ci",
+    intro: "Your pipelines and tests next to what they shipped: which workflows fail and why, what is slow, which tests are flaky, and how a deploy changed latency and errors.",
+    steps: [
+      {
+        title: "Connect GitHub Actions",
+        text: "In **Settings → Server → CI**, save a long random **GitHub webhook secret**. In the GitHub repository (or organization), open **Settings → Webhooks → Add webhook**: payload URL `https://<this server>/api/ingest/ci/github?service=<service>`, content type `application/json`, the same secret, and under **Let me select individual events** tick **Workflow runs** and **Workflow jobs**. GitHub's **Recent Deliveries** should answer 202; a 401 means the secrets differ.",
+      },
+      {
+        title: "Upload test results",
+        text: "Create a **server** key in **Settings → API keys** and save it as the repository secret `VISIONARY_KEY`. After the step that runs your tests, add the step from **Help → Upload test results**: it posts the JUnit XML with the run's id, branch and commit, even when the tests failed.",
+      },
+      {
+        title: "Other CI systems",
+        text: "GitLab, CircleCI, Buildkite or Jenkins post each run to `/api/ingest/ci/runs` with a server key whenever it changes, and JUnit to `/api/ingest/ci/junit` with the same `provider`, `repo` and `run_id`. **Help** has both requests.",
+      },
+      {
+        title: "Read the pipelines",
+        text: "**Pipelines** shows runs by outcome, the success rate of the busiest workflows and p50, p95 and queue time over the range, then each workflow per branch, the slowest jobs and the jobs failing most. **Workflow**, **Branch** and **Service** in the top bar narrow everything.",
+      },
+      {
+        title: "Open a run",
+        text: "Click a run for its jobs on a timeline, hatched while they waited for a runner; open a job for its steps. Below are its failed tests with their messages (**Flaky** marks known flaky ones), the slowest tests, and under **Deployed as** each release of its commit with requests, p95, 5xx rate and exceptions in the hour before and after.",
+      },
+      {
+        title: "Find flaky and slow tests",
+        text: "**Tests** lists failures by test, the slowest tests and the ones getting slower; **Flaky** ranks flaky tests by score, with their last results and **New** on those first seen in the range. Click a test for its history across branches and commits.",
+      },
+      {
+        title: "Alert on it",
+        text: "In **Alerts → New rule**, the **CI** group has the pipeline failure rate (per workflow), p95 duration, job queue time and new flaky tests, with presets to start from.",
+      },
+    ],
+  },
+  {
     id: "security",
     group: "Monitor",
     title: "Security",

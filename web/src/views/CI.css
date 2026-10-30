@@ -1,0 +1,334 @@
+/* ---------- Outcomes ---------- */
+
+.ci-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.ci-outcome.success,
+.ci-outcome.passed { color: var(--good-text); }
+.ci-outcome.failure,
+.ci-outcome.failed,
+.ci-outcome.error { color: var(--critical-text); }
+.ci-outcome.timed_out { color: var(--warning-text); }
+.ci-outcome.in_progress,
+.ci-outcome.queued { color: var(--accent); }
+.ci-outcome.cancelled,
+.ci-outcome.skipped { color: var(--text-3); }
+
+/* ---------- Lists ---------- */
+
+.ci-filters { margin-top: 12px; }
+
+.ci-runs .ci-run-cell { max-width: 360px; }
+.ci-runs .ci-run-cell a { color: var(--text-1); font-weight: 500; }
+.ci-runs .ci-commit-cell {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-last {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.ci-test-name {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.ci-test-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-test-name .dim { font-size: 11.5px; }
+
+.ci-new {
+  margin-left: 6px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  vertical-align: 1px;
+}
+
+.ci-score { font-weight: 600; }
+
+.ci-strip {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.ci-mark {
+  width: 6px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--good);
+}
+
+.ci-mark.failed,
+.ci-mark.error { background: var(--critical); height: 14px; }
+.ci-mark.passed { height: 8px; margin-top: 6px; }
+.ci-mark.skipped { background: var(--surface-3); height: 4px; margin-top: 10px; }
+
+/* ---------- Test history ---------- */
+
+.ci-drawer-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ci-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ci-history li {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.ci-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12.5px;
+}
+
+.ci-message {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Run detail ---------- */
+
+.ci-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.ci-back:hover { color: var(--text-1); }
+
+.ci-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.ci-head-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ci-head-top h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12.5px;
+}
+
+.ci-head-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ci-tiles { margin-bottom: 12px; }
+
+.ci-section {
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.grid > .ci-section { margin-bottom: 0; }
+
+.ci-tests-grid { align-items: start; }
+
+.ci-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ci-section-text { margin: -4px 0 10px; font-size: 12.5px; }
+
+.ci-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 96px 4px 260px;
+  font-size: 11.5px;
+}
+
+.ci-gantt,
+.ci-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ci-gantt-row {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr) 140px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.ci-gantt-row:hover { background: var(--surface-2); }
+
+.ci-gantt-row.step {
+  min-height: 24px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.ci-gantt-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ci-gantt-pad { width: 13px; flex: none; }
+
+.ci-gantt-row.step .ci-gantt-label { padding-left: 16px; }
+
+.ci-gantt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-gantt-track {
+  position: relative;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.ci-gantt-time {
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ci-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: var(--text-3);
+}
+
+.ci-bar.success { background: var(--good); }
+.ci-bar.failure,
+.ci-bar.timed_out { background: var(--critical); }
+.ci-bar.in_progress { background: var(--accent); }
+.ci-bar.queue {
+  background: repeating-linear-gradient(135deg, var(--surface-3) 0 4px, transparent 4px 8px);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.ci-bar.legend {
+  position: static;
+  display: inline-block;
+  width: 22px;
+  height: 10px;
+  vertical-align: -1px;
+}
+
+.ci-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 11.5px;
+}
+
+.ci-job-tests {
+  padding: 0 4px 4px 47px;
+  font-size: 11.5px;
+}
+
+.ci-change { white-space: nowrap; }
+.ci-change.bad b { color: var(--critical-text); }
+.ci-change.good b { color: var(--good-text); }
+
+.ci-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ci-failed-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ci-failed-head .ci-outcome { margin-top: 2px; }
+.ci-failed-head .num { margin-left: auto; }
+
+@media (max-width: 900px) {
+  .ci-gantt-row { grid-template-columns: 150px minmax(0, 1fr) 80px; }
+  .ci-axis { margin: 0 88px 4px 158px; }
+}

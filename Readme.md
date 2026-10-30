@@ -76,6 +76,11 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   server-side latency, JS and mobile crashes, sessions, devices and countries.
 - **Uptime:** HTTP checks with timing phases, incidents, certificate expiry,
   and an optional public status page.
+- **CI:** GitHub Actions runs and jobs from a signed webhook, runs from any
+  other CI and JUnit test results posted with a server key: success rate,
+  p50/p95 duration and queue time per workflow and branch, slow and failing
+  jobs and tests, flaky tests with a score, and the deploy each commit became
+  with the service's latency and errors before and after it.
 - **Alerts:** thresholds, seasonal anomalies and SLO burn rates over 60+
   metrics (requests, hosts, exceptions, Web Vitals, dependencies, uptime and
   certificates, security, containers), with presets to start from. They go to
@@ -791,7 +796,7 @@ log.
 
 Default retention: request logs, spans, errors, system and container metrics,
 CPU profiles, frontend events and query plans 30 days; host snapshots 14;
-uptime results 90; security findings 180; alert history and the audit log
+uptime results and CI runs and tests 90; security findings 180; alert history and the audit log
 365 (at least 30); deploys forever; per-minute chart summaries 14 days and
 hourly ones 400. The server deletes older rows every 6 hours.
 
@@ -807,6 +812,7 @@ to the browser: the page only shows whether one is set. Settings marked
 | Sessions | session length, re-check roles every, behind a trusted proxy, secure cookie | 12h; 5m; off; auto |
 | Email | SMTP host, port, user, password, from address | port 587 (STARTTLS); from defaults to the user |
 | Alerts | check rules every, digest time zone | 1m; UTC |
+| CI | GitHub webhook secret | none: the webhook is refused until it is set |
 | Ingest | server keys, client keys, allowed web origins (wildcards like `https://*.example.com`), frontend events per IP and per key per minute, OpenTelemetry requests per second, host agent reports per second, keep OpenTelemetry spans and errors, span threshold outside requests, spans kept per request | any origin; 120 and 6000; 50; 50; on; 100 ms; 100 |
 | Security detectors | see [Security monitoring](#security-monitoring) | |
 | Other | chart summaries, uptime checks may reach private addresses, check for new versions | on; off; on |

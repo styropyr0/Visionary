@@ -187,7 +187,7 @@ const KEEP = [7, 14, 30, 60, 90, 180, 365, 730].map((d) => ({ value: String(d), 
 const RETENTION_GROUPS: { title: string; keys: string[] }[] = [
   { title: "Requests and calls", keys: ["requests", "spans", "errors", "profiles", "plans"] },
   { title: "Servers and containers", keys: ["system", "containers", "hosts"] },
-  { title: "Users, checks and deploys", keys: ["frontend", "uptime", "alerts", "releases"] },
+  { title: "Users, checks and deploys", keys: ["frontend", "uptime", "alerts", "releases", "ci"] },
   { title: "Security and audit", keys: ["security", "audit"] },
   { title: "Chart summaries", keys: ["rollup_minute", "rollup_hour"] },
 ];
