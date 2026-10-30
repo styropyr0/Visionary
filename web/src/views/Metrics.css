@@ -19,6 +19,11 @@
   word-break: break-all;
 }
 
+.mt-kind {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
 .mt-dropped {
   color: var(--warning-text);
   font-size: 11.5px;
@@ -36,12 +41,11 @@
 
 .mt-add {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-.mt-add .input {
+.mt-add .combobox {
   width: 160px;
 }
 

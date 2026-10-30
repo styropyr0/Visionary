@@ -131,14 +131,17 @@ function MetricList({ list, loading, selected, onPick }: { list: MetricName[]; l
       render: (v, row) => {
         const m = row[5] as MetricName;
         return (
-          <span className="mt-name">
+          <span className="mt-name" title={`Last reading ${formatRelative(m.last_seen)}`}>
             <span className="mono">{String(v)}</span>
+            <span className="mt-kind">
+              {KIND_LABEL[m.kind] ?? m.kind}
+              {m.unit && m.unit !== "1" ? ` · ${m.unit}` : ""}
+            </span>
             {!!m.dropped && <span className="mt-dropped" title="New label sets past 1000 per metric were dropped">{formatCount(m.dropped)} series dropped</span>}
           </span>
         );
       },
     },
-    { key: "kind", label: "Kind", render: (v) => <span className="pill">{KIND_LABEL[String(v)] ?? String(v)}</span> },
     { key: "series", label: "Series", align: "right", unit: "count" },
     {
       key: "value",
@@ -150,7 +153,6 @@ function MetricList({ list, loading, selected, onPick }: { list: MetricName[]; l
         return <span title={m.kind === "counter" ? "Total in the range" : m.kind === "gauge" ? "Latest reading" : "Mean in the range"}>{formatValue(v, chartUnit(m.unit, ""))}</span>;
       },
     },
-    { key: "last_seen", label: "Last", align: "right", render: (v) => <span className="dim">{formatRelative(String(v))}</span> },
   ];
   return (
     <section className="panel span-4 mt-list" aria-busy={loading || undefined}>
