@@ -29,14 +29,14 @@ type ruleSpec struct {
 	Metric string `json:"metric"`
 	SQL    string `json:"sql,omitempty"`
 	// log search, for log_matches and log_absent rules
-	Query string `json:"query,omitempty"`
+	Query     string     `json:"query,omitempty"`
+	Scope     alertScope `json:"scope"`
+	Op        string     `json:"op,omitempty"`
+	Threshold float64    `json:"threshold"`
+	Window    string     `json:"window"`
+	For       string     `json:"for"`
 	// custom_metric rules: the metric, its label filters and aggregation
 	MetricQuery *metricQuery `json:"metric_query,omitempty"`
-	Scope       alertScope   `json:"scope"`
-	Op          string       `json:"op,omitempty"`
-	Threshold   float64      `json:"threshold"`
-	Window      string       `json:"window"`
-	For         string       `json:"for"`
 	// Repeat re-sends a firing alert this often; empty never repeats.
 	Repeat string `json:"repeat,omitempty"`
 	// Anomaly rules.
