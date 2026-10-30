@@ -66,8 +66,15 @@ function edgeColor(e: MapEdge): string {
   return "var(--border-strong)";
 }
 
+/** Calls per minute, or per hour when fewer than one a minute. */
+function rate(perMin: number): string {
+  if (perMin >= 1) return `${formatCount(perMin)}/min`;
+  const perHour = Math.round(perMin * 60);
+  return perHour >= 1 ? `${formatCount(perHour)}/h` : "<1/h";
+}
+
 export function edgeSummary(e: MapEdge): string {
-  return `${formatCount(e.per_min)}/min · ${formatPercent(e.error_rate)} failed${e.p95 !== null ? ` · p95 ${formatMs(e.p95)}` : ""}`;
+  return `${rate(e.per_min)} · ${formatPercent(e.error_rate)} failed${e.p95 !== null ? ` · p95 ${formatMs(e.p95)}` : ""}`;
 }
 
 /**
@@ -86,7 +93,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
     <div className="smap-scroll">
       <svg className="smap" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Service map">
         <defs>
-          <marker id="smap-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id="smap-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-3)" />
           </marker>
         </defs>
@@ -112,7 +119,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
               <path d={path} fill="none" stroke={edgeColor(e)} strokeWidth={on ? w + 1 : w} markerEnd="url(#smap-arrow)" />
               {!back && (
                 <text x={mx} y={my - 6} textAnchor="middle" className="smap-edge-label">
-                  {formatCount(e.per_min)}/min{e.error_rate > 0 ? ` · ${formatPercent(e.error_rate)}` : ""}
+                  {rate(e.per_min)}{e.error_rate > 0 ? ` · ${formatPercent(e.error_rate)}` : ""}
                 </text>
               )}
               <title>{`${serviceLabel(a.name)} → ${b.name}\n${edgeSummary(e)}\n${formatCount(e.calls)} calls`}</title>

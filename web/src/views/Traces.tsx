@@ -285,7 +285,8 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
       <Panel
         className="span-12"
         title="Service map"
-        description="Each box is a service, or a database, host, cache or queue they call. An arrow is calls from one to the other in the range: thicker is more often, amber or red when some failed. Calls between services come from traces; click an arrow or a box to list the traces behind it."
+        description="Each box is a service, or a database, host, cache or queue they call. An arrow is calls from one to the other in the range: thicker is more often, amber or red when some failed. Calls between services come from traces; click an arrow, a box or a row of the table to list the traces behind it."
+        result={table}
         loading={q.loading}
         error={q.error}
         bodyHeight={360}
@@ -307,15 +308,8 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
             </>
           ))
         }
-      />
-      {table && table.rows.length > 0 && (
-        <Panel
-          className="span-12"
-          title="Calls"
-          description="Every arrow on the map with its rate, failures and p95. Click a row for its traces."
-          result={table}
-          bodyHeight={200}
-          table={
+        table={
+          table && (
             <DataTable
               result={table}
               maxHeight={420}
@@ -343,9 +337,9 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
                 { key: "p95", align: "right", render: (v) => (toNumber(v) === null ? <span className="dim">—</span> : formatMs(toNumber(v)!)), width: 80 },
               ]}
             />
-          }
-        />
-      )}
+          )
+        }
+      />
     </>
   );
 }

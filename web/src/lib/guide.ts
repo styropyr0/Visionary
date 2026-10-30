@@ -475,7 +475,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Use the service map",
-        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; the table under it gives each one's rate, failure rate and p95. Click an arrow or a box to search its traces.",
+        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; **Show table** gives each one's rate, failure rate and p95. Click an arrow or a box to search its traces.",
       },
       {
         title: "Connect more services",
