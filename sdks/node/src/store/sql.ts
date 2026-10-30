@@ -55,6 +55,15 @@ export const ADDED_REQUEST_COLUMNS: [string, Kind][] = [
   ["http_count", "int"],
   ["http_ms", "real"],
   ["login_account", "text"],
+  ["trace_id", "text"],
+  ["span_id", "text"],
+  ["parent_span_id", "text"],
+];
+
+export const ADDED_SPAN_COLUMNS: [string, Kind][] = [
+  ["trace_id", "text"],
+  ["span_id", "text"],
+  ["parent_span_id", "text"],
 ];
 
 export const REQUEST_COLUMNS = [
@@ -83,6 +92,7 @@ export const SYSTEM_COLUMNS = [
 export const SPAN_COLUMNS = [
   "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
   "offset_ms", "duration_ms", "status", "error", "row_count",
+  ...ADDED_SPAN_COLUMNS.map(([name]) => name),
 ];
 
 export const ERROR_COLUMNS = [
@@ -100,7 +110,11 @@ export const LOG_COLUMNS = [
   "code_func", "size",
 ];
 
-export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles" | "app_logs";
+export const METRIC_COLUMNS = [
+  "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
+];
+
+export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles" | "app_logs" | "metrics";
 
 export const TABLE_COLUMNS: Record<Table, string[]> = {
   api_logs: REQUEST_COLUMNS,
@@ -110,6 +124,7 @@ export const TABLE_COLUMNS: Record<Table, string[]> = {
   releases: RELEASE_COLUMNS,
   profiles: PROFILE_COLUMNS,
   app_logs: LOG_COLUMNS,
+  metrics: METRIC_COLUMNS,
 };
 
 /** A typed value: string, number or null. */
@@ -162,6 +177,13 @@ export function statements(script: string): string[] {
     .split(";")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** The index on a table's trace_id, created after the added columns since
+ * older tables only have trace_id from then on. */
+export function traceIndexSQL(dialect: Dialect, table: Table): string {
+  const ine = dialect === "mysql" ? "" : "IF NOT EXISTS ";
+  return `CREATE INDEX ${ine}idx_${table}_trace_id ON ${table} (trace_id)`;
 }
 
 export function sqlType(dialect: Dialect, kind: Kind): string {

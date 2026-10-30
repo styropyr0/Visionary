@@ -2,6 +2,8 @@ import type { RequestState } from "../context.js";
 import { currentRequest, isQuiet } from "../context.js";
 import type { Value } from "../store/sql.js";
 import { formatTs, msBetween, round } from "../util.js";
+import type { SpanContext } from "./trace.js";
+import { currentSpan, newSpanId, newTraceId, runInSpan } from "./trace.js";
 
 /** A span's detail (a statement, a URL, a GraphQL document) is cut here: long
  * enough that the statement can still be planned with EXPLAIN. */
@@ -22,6 +24,9 @@ export interface SpanRow {
   status: "ok" | "error";
   error: string;
   rowCount: number | null;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string;
 }
 
 export interface SpanSink {
@@ -66,10 +71,25 @@ export class ActiveSpan {
   private readonly state: RequestState | undefined;
   private readonly slot: number;
   private ended = false;
+  /** The span it was started in (a new trace when there was none), carrying
+   * the trace flags and tracestate on. */
+  private readonly parent: SpanContext;
+  private readonly parentSpanId: string;
+  readonly spanId = newSpanId();
 
   constructor(private readonly init: SpanInit) {
     this.state = currentRequest();
     this.slot = this.state && !this.state.done ? this.state.nextSlot++ : -1;
+    // A call outside any trace starts one, so the service it reaches can
+    // still be followed.
+    const parent = currentSpan();
+    this.parent = parent ?? { traceId: newTraceId(), spanId: "", flags: "01", state: "" };
+    this.parentSpanId = parent?.spanId ?? "";
+  }
+
+  /** The span as the parent of the calls made inside it. */
+  context(): SpanContext {
+    return { ...this.parent, spanId: this.spanId };
   }
 
   end(error?: unknown, rowCount?: number | null, failed = error !== undefined && error !== null): void {
@@ -107,6 +127,9 @@ export class ActiveSpan {
       status: failed ? "error" : "ok",
       error: failed ? errorText(error) : "",
       rowCount: rowCount ?? null,
+      traceId: this.parent.traceId,
+      spanId: this.spanId,
+      parentSpanId: this.parentSpanId,
     };
     if (late) sink.late(row, state!.requestId);
     else if (state) state.spans.push(row);
@@ -144,13 +167,16 @@ export function spanValues(row: SpanRow, requestId: string | null, service: stri
     row.status,
     row.error || null,
     row.rowCount,
+    row.traceId || null,
+    row.spanId || null,
+    row.parentSpanId || null,
   ];
 }
 
 /**
  * Runs background work the request does not wait for, recorded as one span of
  * kind background from start to finish. Calls made inside it stay in the
- * request's breakdown even after the response is sent. Returns the work's
+ * request's breakdown and its trace even after the response is sent. Returns the work's
  * promise; a rejection is recorded and passed on.
  *
  *     visionary.background("send welcome email", () => mailer.send(user.email));
@@ -161,7 +187,8 @@ export function background<T>(name: string, fn: () => T | Promise<T>): Promise<T
 
 /**
  * Records a span around `fn` (sync or async): a cache or queue call, or any
- * operation worth seeing on the request's timeline.
+ * operation worth seeing on the request's timeline. Calls made inside `fn`
+ * nest under it in the trace.
  *
  *     const user = await visionary.span("cache", "GET user", () => redis.get(key));
  */
@@ -170,7 +197,7 @@ export function span<T>(kind: SpanKind, name: string, fn: () => T, opts: { targe
   if (!s) return fn();
   let result: T;
   try {
-    result = fn();
+    result = runInSpan(s.context(), fn);
   } catch (e) {
     s.end(e);
     throw e;

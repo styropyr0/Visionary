@@ -38,6 +38,10 @@ export interface Entry {
   dbMs: number | null;
   httpCount: number | null;
   httpMs: number | null;
+  /** The request's place in its trace: it is the server span. */
+  traceId: string;
+  spanId: string;
+  parentSpanId: string;
 }
 
 const orNull = (s: string): string | null => s || null;
@@ -94,5 +98,8 @@ export function requestValues(e: Entry, cfg: Config, redact: Redactor, users: Ma
     e.httpCount,
     e.httpMs === null ? null : Math.round(e.httpMs * 1000) / 1000,
     orNull(clipLogin(e.loginAccount)),
+    orNull(e.traceId),
+    orNull(e.spanId),
+    orNull(e.parentSpanId),
   ];
 }

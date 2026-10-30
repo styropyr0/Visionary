@@ -2,9 +2,11 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "./agent.js";
 import { RequestState, requestTally, runInRequest } from "./context.js";
-import { traceParentId } from "./logs/pipeline.js";
+import type { SpanContext } from "./telemetry/trace.js";
+import { requestSpan, runInSpan } from "./telemetry/trace.js";
 
 const TRACKED = Symbol.for("visionary.request");
+const TRACE = Symbol.for("visionary.trace");
 
 const UNCAPTURABLE = [
   "multipart/",
@@ -88,11 +90,21 @@ export function trackedState(req: unknown): RequestState | undefined {
   return (req as Record<symbol, RequestState | undefined> | undefined)?.[TRACKED];
 }
 
+/** Runs fn inside the request's span and, when it is logged, its state. */
+export function enterRequest<T>(req: unknown, fn: () => T): T {
+  const span = (req as Record<symbol, SpanContext | undefined> | undefined)?.[TRACE];
+  const state = trackedState(req);
+  const inState = state ? () => runInRequest(state, fn) : fn;
+  return span ? runInSpan(span, inState) : inState();
+}
+
 /**
  * Starts tracking a request: throughput counters always, and when the path is
  * logged, a RequestState plus copies of the bodies (up to the cap) taken as
- * they stream. The row is queued when the response finishes. Request events
- * run inside the state, so code after body parsing still sees setUser.
+ * they stream. The row is queued when the response finishes. Every request
+ * continues or starts a trace, logged or not. Request events run inside the
+ * span and state (see enterRequest), so code after body parsing still sees
+ * setUser and the trace.
  *
  * `url` is the full original URL (Express rewrites req.url in sub-routers).
  */
@@ -114,8 +126,14 @@ export function observeRequest(
   const q = url.indexOf("?");
   const path = q >= 0 ? url.slice(0, q) : url;
   const query = q >= 0 ? url.slice(q + 1) : "";
+  const { span, parent } = requestSpan(header(req.headers.traceparent), header(req.headers.tracestate));
+  marked[TRACE] = span;
 
   if (!agent.shouldLog(path)) {
+    const emit = req.emit;
+    req.emit = function (this: IncomingMessage, event: string | symbol, ...args: any[]) {
+      return runInSpan(span, () => emit.call(this, event, ...args));
+    } as typeof req.emit;
     let counted = false;
     const done = () => {
       if (!counted) {
@@ -140,7 +158,8 @@ export function observeRequest(
   const state = new RequestState(requestId, Date.now(), startHr, req.method ?? "GET", path);
   state.routeOf = routeOf;
   state.userOf = userOf;
-  state.traceId = traceParentId(header(req.headers.traceparent));
+  state.span = span;
+  state.parentSpanId = parent;
   marked[TRACKED] = state;
   requestTally.started++;
 
@@ -149,7 +168,7 @@ export function observeRequest(
   const emit = req.emit;
   req.emit = function (this: IncomingMessage, event: string | symbol, ...args: any[]) {
     if (event === "data") reqBody.feed(args[0]);
-    return runInRequest(state, () => emit.call(this, event, ...args));
+    return runInSpan(span, () => runInRequest(state, () => emit.call(this, event, ...args)));
   } as typeof req.emit;
 
   const resBody = new BodyCapture(false, cfg.maxBodyBytes);
@@ -216,6 +235,9 @@ export function observeRequest(
       dbMs: null,
       httpCount: null,
       httpMs: null,
+      traceId: span.traceId,
+      spanId: span.spanId,
+      parentSpanId: parent,
     });
   };
   res.once("finish", finish);

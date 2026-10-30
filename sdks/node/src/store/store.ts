@@ -1,18 +1,22 @@
 import type { Dialect } from "../config.js";
 import mysqlLogs from "../../schema/mysql/logs.sql";
+import mysqlMetrics from "../../schema/mysql/metrics.sql";
 import mysqlRequests from "../../schema/mysql/requests.sql";
 import mysqlSystem from "../../schema/mysql/system.sql";
 import mysqlTelemetry from "../../schema/mysql/telemetry.sql";
 import postgresLogs from "../../schema/postgres/logs.sql";
+import postgresMetrics from "../../schema/postgres/metrics.sql";
 import postgresRequests from "../../schema/postgres/requests.sql";
 import postgresSystem from "../../schema/postgres/system.sql";
 import postgresTelemetry from "../../schema/postgres/telemetry.sql";
 import sqliteLogs from "../../schema/sqlite/logs.sql";
+import sqliteMetrics from "../../schema/sqlite/metrics.sql";
 import sqliteRequests from "../../schema/sqlite/requests.sql";
 import sqliteSystem from "../../schema/sqlite/system.sql";
 import sqliteTelemetry from "../../schema/sqlite/telemetry.sql";
 import {
   ADDED_REQUEST_COLUMNS,
+  ADDED_SPAN_COLUMNS,
   ADDED_SYSTEM_COLUMNS,
   type Kind,
   type Stmt,
@@ -22,6 +26,7 @@ import {
   isDuplicateColumn,
   missingColumns,
   statements,
+  traceIndexSQL,
 } from "./sql.js";
 
 /** Where rows go: D1 over REST, or a SQL connection. */
@@ -42,20 +47,22 @@ export interface Store {
   close(): Promise<void>;
 }
 
-export type Schema = "requests" | "system" | "telemetry" | "logs";
+export type Schema = "requests" | "system" | "telemetry" | "logs" | "metrics";
 
 const SCHEMAS: Record<Dialect, Record<Schema, string>> = {
-  sqlite: { requests: sqliteRequests, system: sqliteSystem, telemetry: sqliteTelemetry, logs: sqliteLogs },
-  postgres: { requests: postgresRequests, system: postgresSystem, telemetry: postgresTelemetry, logs: postgresLogs },
-  mysql: { requests: mysqlRequests, system: mysqlSystem, telemetry: mysqlTelemetry, logs: mysqlLogs },
+  sqlite: { requests: sqliteRequests, system: sqliteSystem, telemetry: sqliteTelemetry, logs: sqliteLogs, metrics: sqliteMetrics },
+  postgres: { requests: postgresRequests, system: postgresSystem, telemetry: postgresTelemetry, logs: postgresLogs, metrics: postgresMetrics },
+  mysql: { requests: mysqlRequests, system: mysqlSystem, telemetry: mysqlTelemetry, logs: mysqlLogs, metrics: mysqlMetrics },
 };
 
 const MIGRATIONS: Partial<Record<Schema, [Table, [string, Kind][]]>> = {
   requests: ["api_logs", ADDED_REQUEST_COLUMNS],
   system: ["system_metrics", ADDED_SYSTEM_COLUMNS],
+  telemetry: ["spans", ADDED_SPAN_COLUMNS],
 };
 
-/** Creates a schema's tables and adds the columns an older table is missing. */
+/** Creates a schema's tables, adds the columns an older table is missing,
+ * then the trace index of api_logs and spans. */
 export async function createSchema(store: Store, schema: Schema): Promise<void> {
   await store.execScript(SCHEMAS[store.dialect][schema]);
   const migration = MIGRATIONS[schema];
@@ -69,6 +76,7 @@ export async function createSchema(store: Store, schema: Schema): Promise<void> 
       if (!isDuplicateColumn(e)) throw e;
     }
   }
+  if (table === "api_logs" || table === "spans") await store.execScript(traceIndexSQL(store.dialect, table));
 }
 
 export function insertFor(store: Store, table: Table): string {

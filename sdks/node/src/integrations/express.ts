@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "../agent.js";
-import { observeRequest, trackedState } from "../capture.js";
-import { currentRequest, runInRequest } from "../context.js";
+import { enterRequest, observeRequest, trackedState } from "../capture.js";
+import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
 
 /** The parts of Express's request the SDK reads. */
@@ -52,9 +52,8 @@ export function express(agent?: Agent) {
       // req.route was made non-configurable; read it at the end instead
     }
     const routeOf = () => pattern || expressRoute(r);
-    const state = observeRequest(a, r, res, routeOf, r.originalUrl ?? r.url, () => r.user);
-    if (state) runInRequest(state, () => next());
-    else next();
+    observeRequest(a, r, res, routeOf, r.originalUrl ?? r.url, () => r.user);
+    enterRequest(r, () => next());
   };
 }
 

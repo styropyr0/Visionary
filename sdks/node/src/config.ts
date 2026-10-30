@@ -80,6 +80,12 @@ export interface Options {
   logs?: boolean;
   /** Lowest level kept until Settings → Logs has been read (VISIONARY_LOG_LEVEL, default info). */
   logLevel?: string;
+  /** Write custom metrics (counter, gauge, histogram) to the metrics table. Default true (VISIONARY_METRICS). */
+  metrics?: boolean;
+  /** Seconds between metrics rows of a series (VISIONARY_METRICS_INTERVAL, default 15). */
+  metricsInterval?: number;
+  /** Label sets kept per metric name (VISIONARY_METRICS_MAX_SERIES, default 1000); new ones past it are dropped and counted. */
+  metricsMaxSeries?: number;
 }
 
 export type LookupResult = { handle?: string; role?: string } | null | undefined;
@@ -118,6 +124,9 @@ export interface Config {
   profile: boolean;
   logs: boolean;
   logLevel: string;
+  metrics: boolean;
+  metricsInterval: number;
+  metricsMaxSeries: number;
 }
 
 type Env = Record<string, string | undefined>;
@@ -164,6 +173,9 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     profile: opts.profile ?? parseBool(s("VISIONARY_PROFILE"), true),
     logs: opts.logs ?? parseBool(s("VISIONARY_LOGS"), true),
     logLevel: opts.logLevel ?? s("VISIONARY_LOG_LEVEL", "info"),
+    metrics: opts.metrics ?? parseBool(s("VISIONARY_METRICS"), true),
+    metricsInterval: positive(opts.metricsInterval ?? parseDuration(s("VISIONARY_METRICS_INTERVAL"), 15), 15),
+    metricsMaxSeries: positive(opts.metricsMaxSeries ?? parseInt0(s("VISIONARY_METRICS_MAX_SERIES"), 1000), 1000),
   };
 }
 

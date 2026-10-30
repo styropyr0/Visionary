@@ -8,7 +8,7 @@ import { RequestState, runInRequest } from "../src/context.js";
 import { wrap } from "../src/integrations/node-http.js";
 import { captureConsole, pinoStream, winstonTransport } from "../src/logs/hooks.js";
 import type { LogRecord } from "../src/logs/pipeline.js";
-import { LogPipeline, logRecord, logValues, setActiveLogs, traceParentId } from "../src/logs/pipeline.js";
+import { LogPipeline, logRecord, logValues, setActiveLogs } from "../src/logs/pipeline.js";
 import { DEBUG, ERROR, INFO, TRACE, WARN, secretKeys } from "../src/logs/rules.js";
 import { LOG_COLUMNS, insertSQL } from "../src/store/sql.js";
 
@@ -187,13 +187,6 @@ test("logValues match the insert's columns", () => {
   assert.equal(row.size, Buffer.byteLength(row.message as string) + Buffer.byteLength(row.attrs as string));
 });
 
-test("traceParentId", () => {
-  assert.equal(traceParentId("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), "4bf92f3577b34da6a3ce929d0e0e4736");
-  for (const bad of ["", undefined, "00-xyz-1-1", "00-00000000000000000000000000000000-00f067aa0ba902b7-01"]) {
-    assert.equal(traceParentId(bad), "");
-  }
-});
-
 test("captureConsole still prints and captures with levels", () => {
   const { p, out } = pipeline([["logs.level", "debug"]]);
   setActiveLogs(p);
@@ -351,9 +344,11 @@ test("requests write their lines to app_logs", { skip: !nodeSqlite?.DatabaseSync
     await agent.close(5000);
   }
   const rows = db
-    .prepare("SELECT message, level, severity, source, service, request_id, trace_id FROM app_logs ORDER BY id")
+    .prepare("SELECT message, level, severity, source, service, request_id, trace_id, span_id FROM app_logs ORDER BY id")
     .all() as Record<string, unknown>[];
-  const requests = db.prepare("SELECT request_id, path FROM api_logs ORDER BY id").all() as Record<string, string>[];
+  const requests = db
+    .prepare("SELECT request_id, path, trace_id, span_id, parent_span_id FROM api_logs ORDER BY id")
+    .all() as Record<string, string | null>[];
   const id = (path: string) => requests.find((r) => r.path === path)!.request_id;
   assert.deepEqual(
     rows.map((r) => [r.message, r.level, r.request_id]),
@@ -364,8 +359,20 @@ test("requests write their lines to app_logs", { skip: !nodeSqlite?.DatabaseSync
       ["outside", "info", null],
     ],
   );
+  // The request continues the caller's trace and its lines name its server span.
+  const ok = requests.find((r) => r.path === "/ok")!;
+  assert.equal(ok.trace_id, trace);
+  assert.equal(ok.parent_span_id, "00f067aa0ba902b7");
+  assert.match(ok.span_id ?? "", /^[0-9a-f]{16}$/);
   assert.equal(rows[0]!.trace_id, trace);
+  assert.equal(rows[0]!.span_id, ok.span_id);
   assert.equal(rows[0]!.source, "node");
   assert.equal(rows[0]!.service, "shop");
-  assert.equal(rows[1]!.trace_id, null);
+  // Without traceparent the request starts its own trace.
+  const fail = requests.find((r) => r.path === "/fail")!;
+  assert.match(fail.trace_id ?? "", /^[0-9a-f]{32}$/);
+  assert.notEqual(fail.trace_id, trace);
+  assert.equal(fail.parent_span_id, null);
+  assert.equal(rows[1]!.trace_id, fail.trace_id);
+  assert.equal(rows[3]!.trace_id, null);
 });
