@@ -11,7 +11,9 @@ import type { Result, Viz } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
-import { formatDuration, formatInterval, formatUptime, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { BrowserRunsPanel, LastRunTile, StepStatsPanel } from "./Uptime.browser";
+import { BrowserNotice } from "./Uptime.steps";
 import { CheckAlertLine, DefaultRuleModal } from "./Uptime.alerts";
 import { useQuery } from "../lib/useQuery";
 import { CheckDrawer } from "./Uptime.form";
@@ -23,6 +25,8 @@ import { InfoTip } from "../components/InfoTip";
 const LATENCY: Viz = { type: "timeseries", x: "t", y: ["p50", "p95"], unit: "ms" };
 const PHASES: Viz = { type: "timeseries", x: "t", y: ["DNS", "Connect", "TLS", "TTFB"], unit: "ms", stack: true };
 const PHASE_COLS: Record<string, string> = { dns: "DNS", connect: "Connect", tls: "TLS", ttfb: "TTFB" };
+const VITALS: Viz = { type: "timeseries", x: "t", y: ["LCP", "TTFB"], unit: "ms" };
+const VITAL_COLS: Record<string, string> = { lcp: "LCP", ttfb: "TTFB", cls: "CLS" };
 const CERT_WARN_DAYS = 14;
 
 const ms = (v: unknown) => (toNumber(v) === null ? <span className="dim">—</span> : formatMs(toNumber(v)!));
@@ -40,8 +44,18 @@ export function UptimeDetail({ id }: { id: number }) {
 
   const summary = useQuery(`up-sum-${key}`, (signal) => getSummary(id, signal));
   const latency = useQuery(`up-lat-${key}`, (signal) => getPanel(id, "latency", resolved.from, resolved.to, signal));
-  const phasesRaw = useQuery(`up-ph-${key}`, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
-  const results = useQuery(`up-res-${key}`, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const phasesRaw = useQuery(summary.data && summary.data.check.kind !== "browser" ? `up-ph-${key}` : null, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
+  const s = summary.data;
+  const c = s?.check;
+  const st = s?.state;
+  const browser = c?.kind === "browser";
+  const results = useQuery(c && !browser ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const runs = useQuery(browser ? `up-runs-${key}` : null, (signal) => getBrowserRuns(id, resolved.from, resolved.to, signal));
+  const vitalsRaw = useQuery(browser ? `up-vit-${key}` : null, (signal) => getPanel(id, "vitals", resolved.from, resolved.to, signal));
+  const vitals = useMemo<Result | undefined>(
+    () => vitalsRaw.data && { ...vitalsRaw.data, columns: vitalsRaw.data.columns.map((c) => VITAL_COLS[c] ?? c) },
+    [vitalsRaw.data],
+  );
   const incidents = useQuery(`up-inc-${key}`, (signal) => getIncidents(id, resolved.from, resolved.to, signal));
   const alert = useQuery(`up-alert-${id}#${tick}#${version}`, (signal) => getCheckAlert(id, signal));
 
@@ -50,10 +64,6 @@ export function UptimeDetail({ id }: { id: number }) {
     () => phasesRaw.data && { ...phasesRaw.data, columns: phasesRaw.data.columns.map((c) => PHASE_COLS[c] ?? c) },
     [phasesRaw.data],
   );
-
-  const s = summary.data;
-  const c = s?.check;
-  const st = s?.state;
 
   const run = async () => {
     setRunning(true);
@@ -122,11 +132,12 @@ export function UptimeDetail({ id }: { id: number }) {
                 <StateBadge state={st.state} large />
                 <div className="up-head-text">
                   <div className="mono up-url">
-                    {c.method} {c.url}
+                    {browser ? `Browser · ${c.url}` : `${c.method} ${c.url}`}
                   </div>
                   <div className="dim">
-                    Every {formatInterval(c.interval_s)} · timeout {c.timeout_ms / 1000}s · expects {c.expect_status}
-                    {c.body_contains && ` and “${c.body_contains}”`}
+                    Every {formatInterval(c.interval_s)} · timeout {c.timeout_ms / 1000}s
+                    {browser ? ` · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
+                    {!browser && c.body_contains && ` and “${c.body_contains}”`}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
                   </div>
@@ -144,6 +155,12 @@ export function UptimeDetail({ id }: { id: number }) {
                   )}
                 </div>
               </div>
+              {st.no_browser && (
+                <div className="up-alert">
+                  <AlertTriangle size={15} />
+                  <span>Paused: the server has no browser to run it with.</span>
+                </div>
+              )}
               {st.state === "down" && (
                 <div className="up-alert">
                   <AlertTriangle size={15} />
@@ -155,6 +172,7 @@ export function UptimeDetail({ id }: { id: number }) {
               )}
             </section>
 
+            {st.no_browser && <BrowserNotice />}
             {(["24h", "7d", "30d", "90d"] as Window[]).map((w) => (
               <div className="span-2 up-tile" key={w}>
                 <StatTile
@@ -179,7 +197,7 @@ export function UptimeDetail({ id }: { id: number }) {
                 footer={s.latency.p50 !== null ? `p50 ${formatMs(s.latency.p50)} · avg ${formatMs(s.latency.avg_ms ?? 0)}` : "No successful checks"}
               />
             </div>
-            <CertTile expires={st.cert_expires_at} https={c.url.startsWith("https:")} />
+            {browser ? <LastRunTile run={runs.data?.runs[0]} /> : <CertTile expires={st.cert_expires_at} https={c.url.startsWith("https:")} />}
 
             <section className="panel span-12">
               <header className="panel-head">
@@ -200,7 +218,7 @@ export function UptimeDetail({ id }: { id: number }) {
             <Panel
               className="span-6"
               title="Response time"
-              description="Median and 95th percentile of successful checks per interval, including reading the body."
+              description={browser ? "Median and 95th percentile of the whole script per interval, for runs that passed." : "Median and 95th percentile of successful checks per interval, including reading the body."}
               result={latency.data}
               loading={latency.loading}
               error={latency.error}
@@ -210,26 +228,51 @@ export function UptimeDetail({ id }: { id: number }) {
               table={latency.data && <DataTable result={latency.data} maxHeight={240} defaultUnit="ms" />}
               dashboard={{ kind: "builtin", ref: `uptime/checks/${id}/latency`, viz: LATENCY, title: s ? `${s.check.name} · Response time` : undefined }}
             />
-            <Panel
-              className="span-6"
-              title="Where the time goes"
-              description="Average time per phase of successful checks: DNS lookup, TCP connect, TLS handshake, and time to first byte after the request is sent."
-              result={phases}
-              loading={phasesRaw.loading}
-              error={phasesRaw.error}
-              bodyHeight={240}
-              note={phases && vizNote(phases, PHASES, tokens)}
-              chart={phases && <VizView result={phases} viz={PHASES} height={240} title="Phases" empty="No successful checks in this range." />}
-              table={
-                phases && (
-                  <DataTable
-                    result={phases}
-                    maxHeight={240}
-                    columns={[{ key: "t" }, ...["DNS", "Connect", "TLS", "TTFB"].map((k) => ({ key: k, align: "right" as const, render: ms }))]}
-                  />
-                )
-              }
-            />
+            {browser && (
+              <Panel
+                className="span-6"
+                title="Web Vitals"
+                description="Largest Contentful Paint and time to first byte of the last page each passing run reached, averaged per interval. The table adds Cumulative Layout Shift."
+                result={vitals}
+                loading={vitalsRaw.loading}
+                error={vitalsRaw.error}
+                bodyHeight={240}
+                note={vitals && vizNote(vitals, VITALS, tokens)}
+                chart={vitals && <VizView result={vitals} viz={VITALS} height={240} title="Web Vitals" empty="No passing runs in this range." />}
+                table={
+                  vitals && (
+                    <DataTable
+                      result={vitals}
+                      maxHeight={240}
+                      columns={[{ key: "t" }, { key: "LCP", align: "right", render: ms }, { key: "TTFB", align: "right", render: ms }, { key: "CLS", align: "right", render: (v) => (toNumber(v) === null ? <span className="dim">—</span> : toNumber(v)!.toFixed(3)) }]}
+                    />
+                  )
+                }
+              />
+            )}
+            {!browser && (
+              <Panel
+                className="span-6"
+                title="Where the time goes"
+                description="Average time per phase of successful checks: DNS lookup, TCP connect, TLS handshake, and time to first byte after the request is sent."
+                result={phases}
+                loading={phasesRaw.loading}
+                error={phasesRaw.error}
+                bodyHeight={240}
+                note={phases && vizNote(phases, PHASES, tokens)}
+                chart={phases && <VizView result={phases} viz={PHASES} height={240} title="Phases" empty="No successful checks in this range." />}
+                table={
+                  phases && (
+                    <DataTable
+                      result={phases}
+                      maxHeight={240}
+                      columns={[{ key: "t" }, ...["DNS", "Connect", "TLS", "TTFB"].map((k) => ({ key: k, align: "right" as const, render: ms }))]}
+                    />
+                  )
+                }
+              />
+            )}
+            {browser && <StepStatsPanel steps={runs.data?.steps} loading={runs.loading} error={runs.error} />}
 
             <Panel
               className="span-12"
@@ -242,16 +285,20 @@ export function UptimeDetail({ id }: { id: number }) {
               table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS, incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
             />
 
-            <Panel
-              className="span-12"
-              title="Recent results"
-              description="The latest 500 checks in this range, newest first."
-              result={results.data}
-              loading={results.loading}
-              error={results.error}
-              bodyHeight={120}
-              table={results.data && <DataTable result={results.data} columns={RESULT_COLS} maxHeight={440} sortable={false} />}
-            />
+            {browser ? (
+              <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
+            ) : (
+              <Panel
+                className="span-12"
+                title="Recent results"
+                description="The latest 500 checks in this range, newest first."
+                result={results.data}
+                loading={results.loading}
+                error={results.error}
+                bodyHeight={120}
+                table={results.data && <DataTable result={results.data} columns={RESULT_COLS} maxHeight={440} sortable={false} />}
+              />
+            )}
           </div>
         )}
       </div>

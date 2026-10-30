@@ -306,7 +306,7 @@ export const GUIDE: GuideSection[] = [
     group: "Monitor",
     title: "Uptime",
     route: "uptime",
-    intro: "Checks this server runs against your endpoints on a schedule, with incidents and a public status page.",
+    intro: "Checks this server runs against your endpoints, or through your pages in a headless browser, on a schedule, with incidents and a public status page.",
     shot: "uptime",
     steps: [
       {
@@ -316,12 +316,16 @@ export const GUIDE: GuideSection[] = [
         caption: "A new check: what to call, what counts as up, and who hears when it is down.",
       },
       {
+        title: "Script a browser check",
+        text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
+      },
+      {
         title: "Watch the list",
         text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it.",
       },
       {
         title: "Open a check",
-        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results.",
+        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
       },

@@ -83,7 +83,7 @@ var retentionKinds = []retentionKind{
 	{Key: "logs", Label: "Logs: trace to info", Description: "Application log lines below warn.", DefaultDays: 7, tables: []string{"app_logs"}, where: "severity <= 3"},
 	{Key: "logs_important", Label: "Logs: warn and above", Description: "Application log lines at warn, error and fatal.", DefaultDays: 30, tables: []string{"app_logs"}, where: "severity >= 4"},
 	{Key: "frontend", Label: "Frontend events", Description: "Web Vitals, page and screen loads, client errors.", DefaultDays: 30, tables: []string{"client_events"}},
-	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results"}},
+	{Key: "uptime", Label: "Uptime results", Description: "Each check's runs and timings.", DefaultDays: 90, tables: []string{"uptime_results", "uptime_browser_results"}},
 	{Key: "security", Label: "Security findings", Description: "Detector findings and host events.", DefaultDays: 180, tables: []string{"security_events"}},
 	{Key: "alerts", Label: "Alert history", Description: "Past firings and resolutions.", DefaultDays: 365, tables: []string{"alert_events", "alert_deliveries"}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN results asked for from Queries.", DefaultDays: 30, tables: []string{"explain_requests"}},

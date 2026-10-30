@@ -330,6 +330,17 @@ agent, err := visionary.New(cfg)`,
       "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form.",
     any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless an admin turns on Settings → Server → Other → Uptime checks may reach private addresses." },
   },
+  browsercheck: {
+    id: "browsercheck",
+    title: "Script a browser check",
+    intro:
+      "A browser check opens your pages in a headless Chrome on this server and plays steps in order: go to a URL, click a button or link (by CSS selector or its visible text), type into a field, press a key, choose an option, wait for an element, text or the next page, check that text is or isn't shown, check the URL or how many elements match, pause, or run a JavaScript check. Each run starts in a fresh private window. Type passwords as {{secret.NAME}}: secrets are kept on the server and masked in results. A run records each step's time, the page's Web Vitals (LCP, CLS, TTFB), console errors and failed requests, and a screenshot when a step fails. It shares the schedule, incidents, alerts and status page of other checks.",
+    any: {
+      note: "The server needs Chrome, Chromium or Edge. It looks in Settings → Server → Other → Browser for browser checks, then VISIONARY_CHROME, then the usual install places; until it finds one, browser checks are paused. The default Docker image has none; build the variant that does:",
+      code: `docker build --target browser -t visionary:browser .`,
+      label: "Docker",
+    },
+  },
   statuspage: {
     id: "statuspage",
     title: "Publish a status page",
@@ -670,12 +681,13 @@ export const HELP: Record<Route, PageHelp> = {
   uptime: {
     title: "Uptime",
     tip: "Checks that call your endpoints from outside on a schedule, with response times, incidents and an optional public status page.",
-    what: "HTTP checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
+    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
     read: [
       "A check fails after its retries, so a single slow answer does not open an incident.",
+      "A browser check's runs show each step, Web Vitals, console and network errors, and a screenshot of the page when a step failed. It is paused while the server has no browser.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
     ],
-    setup: ["checks", "statuspage"],
+    setup: ["checks", "browsercheck", "statuspage"],
   },
   security: {
     title: "Security",

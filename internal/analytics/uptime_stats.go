@@ -19,6 +19,7 @@ type checkState struct {
 	LastError      string     `json:"last_error,omitempty"`
 	CertExpiresAt  string     `json:"cert_expires_at,omitempty"`
 	IncidentSince  string     `json:"incident_since,omitempty"`
+	NoBrowser      bool       `json:"no_browser,omitempty"` // a browser check waiting for a browser on the server
 	Uptime24h      *float64   `json:"uptime_24h"`
 	Days           []dayBar   `json:"days"`
 	Spark          []*float64 `json:"spark"` // hourly average response time, last 24h
@@ -92,6 +93,13 @@ FROM uptime_results r JOIN (
 	for i := range 24 {
 		hourIndex[hourStart.Add(time.Duration(i)*time.Hour).Format("2006-01-02T15")] = i
 	}
+	browserMissing := false
+	for _, c := range checks {
+		if c.Kind == "browser" && c.Enabled {
+			browserMissing = !runnerFor(s).browser.available()
+			break
+		}
+	}
 	for _, c := range checks {
 		st := &checkState{State: "pending", Days: make([]dayBar, days), Spark: make([]*float64, 24)}
 		for d, i := range dayIndex {
@@ -99,6 +107,9 @@ FROM uptime_results r JOIN (
 		}
 		if !c.Enabled {
 			st.State = "paused"
+		}
+		if c.Kind == "browser" && c.Enabled && browserMissing {
+			st.State, st.NoBrowser = "paused", true
 		}
 		out[c.ID] = st
 	}
@@ -266,6 +277,9 @@ FROM uptime_results WHERE check_id = {{check}} AND ok = 1 AND created_at >= {{fr
 GROUP BY 1 ORDER BY 1`,
 	"availability": `SELECT {{t}} AS t, COUNT(*) AS checks, ` + countIf("ok = 0") + ` AS failed
 FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}
+GROUP BY 1 ORDER BY 1`,
+	"vitals": `SELECT {{t}} AS t, AVG(lcp_ms) AS lcp, AVG(ttfb_ms) AS ttfb, AVG(cls) AS cls
+FROM uptime_results WHERE check_id = {{check}} AND ok = 1 AND created_at >= {{from}} AND created_at < {{to}}
 GROUP BY 1 ORDER BY 1`,
 	"results": `SELECT created_at, ok, status, duration_ms, dns_ms, connect_ms, tls_ms, ttfb_ms, degraded, retried, error
 FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}

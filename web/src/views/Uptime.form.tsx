@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Globe, Network, Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
-import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type CheckInput, type UptimeCheck } from "../lib/uptime";
+import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
+import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
 const BLANK: CheckInput = {
   name: "",
+  kind: "http",
   url: "https://",
   method: "GET",
   expect_status: "200-299",
@@ -25,6 +27,18 @@ const BLANK: CheckInput = {
   status_show_url: false,
 };
 
+const BLANK_BROWSER: Partial<CheckInput> = {
+  kind: "browser",
+  interval_s: 300,
+  timeout_ms: 30000,
+  final_screenshot: false,
+};
+
+const FIRST_STEPS: BrowserStep[] = [
+  { action: "goto", value: "https://" },
+  { action: "assert_text", text: "" },
+];
+
 interface Props {
   check?: UptimeCheck;
   onClose: () => void;
@@ -37,6 +51,10 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const toast = useToast();
   const [form, setForm] = useState<CheckInput>(() => (check ? { ...check } : { ...BLANK }));
   const [headers, setHeaders] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.headers ?? {}).map(([k, v]) => ({ k, v })));
+  const [steps, setSteps] = useState<BrowserStep[]>(() => (check?.steps?.length ? check.steps : FIRST_STEPS));
+  const [secrets, setSecrets] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.secrets ?? {}).map(([k, v]) => ({ k, v })));
+  const browser = form.kind === "browser";
+  const setKind = (k: CheckKind) => setForm((f) => (k === "browser" ? { ...f, ...BLANK_BROWSER } : { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms }));
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -53,6 +71,11 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     for (const { k, v } of headers) {
       if (k.trim()) h[k.trim()] = v;
     }
+    const sec: Record<string, string> = {};
+    for (const { k, v } of secrets) {
+      if (k.trim()) sec[k.trim()] = v;
+    }
+    const body = browser ? { ...form, headers: {}, steps, secrets: sec } : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined };
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
@@ -61,7 +84,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
       // is sent untouched too when nobody would hear, so saving fixes that.
       const shared = alert.mode === "default";
       const send = touched || !check || (shared && !!alertGap(current.data?.alert));
-      const { check: saved, alert_error } = await saveCheck({ ...form, headers: h, alert: send ? (shared ? { mode: "default" } : alert) : undefined }, check?.id);
+      const { check: saved, alert_error } = await saveCheck({ ...body, alert: send ? (shared ? { mode: "default" } : alert) : undefined }, check?.id);
       if (alert_error) toast("err", `Saved, but its alert was not: ${alert_error}`);
       else toast("ok", check ? `Saved “${saved.name}”` : `Created “${saved.name}”`);
       onSaved(saved);
@@ -87,7 +110,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const intervalOptions = INTERVALS.map((s) => ({ value: String(s), label: `Every ${formatInterval(s)}` }));
 
   return (
-    <Drawer title={check ? `Edit ${check.name}` : "New uptime check"} onClose={onClose}>
+    <Drawer title={check ? `Edit ${check.name}` : "New uptime check"} onClose={onClose} className={browser ? "up-drawer-wide" : ""}>
       <form
         className="up-form"
         onSubmit={(e) => {
@@ -95,33 +118,56 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           void submit();
         }}
       >
+        {!check && (
+          <div className="field">
+            <span>Kind</span>
+            <div className="segmented" role="radiogroup" aria-label="Kind of check">
+              <button type="button" role="radio" aria-checked={!browser} className={!browser ? "on" : ""} onClick={() => setKind("http")}>
+                <Network size={13} />
+                HTTP request
+              </button>
+              <button type="button" role="radio" aria-checked={browser} className={browser ? "on" : ""} onClick={() => setKind("browser")}>
+                <Globe size={13} />
+                Browser steps
+              </button>
+            </div>
+            <small>{browser ? "Opens your pages in a headless browser and plays steps: sign in, click through, check what is shown." : "One request to a URL, checked for status, body text and response time."}</small>
+          </div>
+        )}
+        {browser && <BrowserNotice always />}
         <label className="field">
           <span>Name</span>
-          <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Checkout API" maxLength={120} required autoFocus />
+          <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
         </label>
-        <div className="up-row">
-          <div className="field" style={{ width: 120 }}>
-            <span>Method</span>
-            <Select label="Method" value={form.method} align="left" onChange={(v) => set("method", v)} options={METHODS.map((m) => ({ value: m, label: m }))} />
-          </div>
-          <label className="field" style={{ flex: 1 }}>
-            <span>URL</span>
-            <input className="input mono" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://api.example.com/health" required />
-          </label>
-        </div>
+        {browser && <StepsEditor steps={steps} onChange={setSteps} />}
+        {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
+        {!browser && (
+          <>
+            <div className="up-row">
+              <div className="field" style={{ width: 120 }}>
+                <span>Method</span>
+                <Select label="Method" value={form.method} align="left" onChange={(v) => set("method", v)} options={METHODS.map((m) => ({ value: m, label: m }))} />
+              </div>
+              <label className="field" style={{ flex: 1 }}>
+                <span>URL</span>
+                <input className="input mono" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://api.example.com/health" required />
+              </label>
+            </div>
 
-        <div className="up-row">
-          <label className="field" style={{ flex: 1 }}>
-            <span>Expected status</span>
-            <input className="input mono" value={form.expect_status} onChange={(e) => set("expect_status", e.target.value)} placeholder="200-299" />
-            <small>A code, range or class, comma separated: 200, 200-299, 2xx,301</small>
-          </label>
-          <label className="field" style={{ flex: 1 }}>
-            <span>Response body contains</span>
-            <input className="input" value={form.body_contains} onChange={(e) => set("body_contains", e.target.value)} placeholder="Optional, e.g. ok" maxLength={512} />
-            <small>Case sensitive; the first 1 MB is searched.</small>
-          </label>
-        </div>
+            <div className="up-row">
+              <label className="field" style={{ flex: 1 }}>
+                <span>Expected status</span>
+                <input className="input mono" value={form.expect_status} onChange={(e) => set("expect_status", e.target.value)} placeholder="200-299" />
+                <small>A code, range or class, comma separated: 200, 200-299, 2xx,301</small>
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Response body contains</span>
+                <input className="input" value={form.body_contains} onChange={(e) => set("body_contains", e.target.value)} placeholder="Optional, e.g. ok" maxLength={512} />
+                <small>Case sensitive; the first 1 MB is searched.</small>
+              </label>
+            </div>
+          </>
+        )}
 
         <div className="up-row">
           <div className="field" style={{ flex: 1 }}>
@@ -130,7 +176,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </div>
           <label className="field" style={{ flex: 1 }}>
             <span>Timeout (seconds)</span>
-            <input className="input" type="number" min={1} max={60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
+            <input className="input" type="number" min={1} max={browser ? 120 : 60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
           </label>
           <label className="field" style={{ flex: 1 }}>
             <span>Degraded above (ms)</span>
@@ -138,7 +184,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
               className="input"
               type="number"
               min={0}
-              max={60000}
+              max={browser ? 120000 : 60000}
               value={form.degraded_ms || ""}
               placeholder="Off"
               onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)}
@@ -146,44 +192,53 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </label>
         </div>
 
-        <div className="field">
-          <span>Request headers</span>
-          {headers.map((h, i) => (
-            <div className="up-row" key={i}>
-              <input className="input mono" style={{ flex: 1 }} value={h.k} placeholder="Header" aria-label="Header name" onChange={(e) => setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, k: e.target.value } : x)))} />
-              <input
-                className="input mono"
-                style={{ flex: 1.4 }}
-                value={h.v}
-                placeholder="Value"
-                aria-label="Header value"
-                type={h.v === MASK ? "password" : "text"}
-                onFocus={() => h.v === MASK && setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: "" } : x)))}
-                onBlur={() => {
-                  const original = check?.headers[h.k];
-                  if (h.v === "" && original === MASK) setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: MASK } : x)));
-                }}
-                onChange={(e) => setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: e.target.value } : x)))}
-              />
-              <button type="button" className="icon-btn" aria-label="Remove header" onClick={() => setHeaders((hs) => hs.filter((_, j) => j !== i))}>
-                <X size={15} />
+        {!browser && (
+          <div className="field">
+            <span>Request headers</span>
+            {headers.map((h, i) => (
+              <div className="up-row" key={i}>
+                <input className="input mono" style={{ flex: 1 }} value={h.k} placeholder="Header" aria-label="Header name" onChange={(e) => setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, k: e.target.value } : x)))} />
+                <input
+                  className="input mono"
+                  style={{ flex: 1.4 }}
+                  value={h.v}
+                  placeholder="Value"
+                  aria-label="Header value"
+                  type={h.v === MASK ? "password" : "text"}
+                  onFocus={() => h.v === MASK && setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: "" } : x)))}
+                  onBlur={() => {
+                    const original = check?.headers[h.k];
+                    if (h.v === "" && original === MASK) setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: MASK } : x)));
+                  }}
+                  onChange={(e) => setHeaders((hs) => hs.map((x, j) => (j === i ? { ...x, v: e.target.value } : x)))}
+                />
+                <button type="button" className="icon-btn" aria-label="Remove header" onClick={() => setHeaders((hs) => hs.filter((_, j) => j !== i))}>
+                  <X size={15} />
+                </button>
+              </div>
+            ))}
+            <div>
+              <button type="button" className="btn ghost sm" onClick={() => setHeaders((hs) => [...hs, { k: "", v: "" }])} disabled={headers.length >= 20}>
+                <Plus size={14} />
+                Add header
               </button>
             </div>
-          ))}
-          <div>
-            <button type="button" className="btn ghost sm" onClick={() => setHeaders((hs) => [...hs, { k: "", v: "" }])} disabled={headers.length >= 20}>
-              <Plus size={14} />
-              Add header
-            </button>
+            <small>Values of headers that look secret (Authorization, tokens, keys, cookies) are stored but never shown again.</small>
           </div>
-          <small>Values of headers that look secret (Authorization, tokens, keys, cookies) are stored but never shown again.</small>
-        </div>
+        )}
 
         <fieldset className="up-checks">
-          <label>
-            <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
-            Follow redirects (up to 5)
-          </label>
+          {browser ? (
+            <label>
+              <input type="checkbox" checked={!!form.final_screenshot} onChange={(e) => set("final_screenshot", e.target.checked)} />
+              Keep a screenshot of the last page when it passes too
+            </label>
+          ) : (
+            <label>
+              <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
+              Follow redirects (up to 5)
+            </label>
+          )}
           <label>
             <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
             Enabled

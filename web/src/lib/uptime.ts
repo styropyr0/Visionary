@@ -1,8 +1,11 @@
 import { api, rangeQuery, type Result } from "./api";
 
+export type CheckKind = "http" | "browser";
+
 export interface UptimeCheck {
   id: number;
   name: string;
+  kind: CheckKind;
   url: string;
   method: string;
   expect_status: string;
@@ -19,6 +22,38 @@ export interface UptimeCheck {
   status_show_url: boolean;
   created_at: string;
   updated_at: string;
+  /** Browser checks only. */
+  steps?: BrowserStep[];
+  /** Browser checks only; values always come back as MASK. */
+  secrets?: Record<string, string>;
+  final_screenshot?: boolean;
+}
+
+export type StepAction =
+  | "goto"
+  | "click"
+  | "type"
+  | "press"
+  | "select"
+  | "wait_selector"
+  | "wait_text"
+  | "wait_navigation"
+  | "assert_text"
+  | "assert_no_text"
+  | "assert_url"
+  | "assert_count"
+  | "wait"
+  | "script";
+
+export interface BrowserStep {
+  action: StepAction;
+  selector?: string;
+  text?: string;
+  value?: string;
+  count?: number;
+  op?: "eq" | "gte" | "lte";
+  ms?: number;
+  label?: string;
 }
 
 export const MASK = "********";
@@ -41,6 +76,8 @@ export interface CheckState {
   last_error?: string;
   cert_expires_at?: string;
   incident_since?: string;
+  /** A browser check waiting for a browser on the server. */
+  no_browser?: boolean;
   uptime_24h: number | null;
   days: DayBar[];
   /** Hourly average response time over the last 24h; null where no check passed. */
@@ -110,13 +147,85 @@ export interface RunResult {
   error?: string;
   degraded: boolean;
   retried: boolean;
+  lcp_ms?: number;
+  cls?: number;
 }
+
+export interface BrowserStatus {
+  available: boolean;
+  path?: string;
+  source?: "setting" | "env" | "found";
+  version?: string;
+  error?: string;
+  help?: string;
+  workers: number;
+}
+
+export interface StepResult {
+  action: StepAction;
+  label: string;
+  status: "passed" | "failed" | "skipped";
+  duration_ms: number;
+  error?: string;
+}
+
+export interface BrowserRunSummary {
+  id: number;
+  created_at: string;
+  ok: boolean;
+  failed_step: number;
+  failed_label: string;
+  duration_ms: number | null;
+  error: string;
+  lcp_ms: number | null;
+  cls: number | null;
+  ttfb_ms: number | null;
+  retried: boolean;
+  screenshot: boolean;
+  final_screenshot: boolean;
+  steps: number;
+}
+
+export interface StepStat {
+  label: string;
+  runs: number;
+  failed: number;
+  avg_ms: number;
+  p95_ms: number;
+}
+
+export interface BrowserRunDetail {
+  id: number;
+  created_at: string;
+  ok: boolean;
+  failed_step: number;
+  steps: StepResult[];
+  console: string[];
+  network: { url: string; status?: number; error?: string; type?: string }[];
+  /** data: URLs, empty when none was taken. */
+  screenshot: string;
+  final_screenshot: string;
+  duration_ms: number | null;
+  error: string;
+  lcp_ms: number | null;
+  cls: number | null;
+  ttfb_ms: number | null;
+  status: number;
+  retried: boolean;
+}
+
+export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });
+
+export const getBrowserRuns = (id: number, from: Date, to: Date, signal?: AbortSignal) =>
+  api<{ runs: BrowserRunSummary[]; steps: StepStat[] }>(`/api/uptime/checks/${id}/runs?${rangeQuery(from, to)}`, { signal });
+
+export const getBrowserRun = (id: number, run: number, signal?: AbortSignal) => api<BrowserRunDetail>(`/api/uptime/checks/${id}/runs/${run}`, { signal });
 
 export const listChecks = (signal?: AbortSignal) => api<CheckList>("/api/uptime/checks", { signal });
 
 export const getSummary = (id: number, signal?: AbortSignal) => api<Summary>(`/api/uptime/checks/${id}/summary`, { signal });
 
-export const getPanel = (id: number, panel: "latency" | "phases" | "results" | "availability", from: Date, to: Date, signal?: AbortSignal) =>
+export const getPanel = (id: number, panel: "latency" | "phases" | "results" | "availability" | "vitals", from: Date, to: Date, signal?: AbortSignal) =>
   api<Result>(`/api/uptime/checks/${id}/${panel}?${rangeQuery(from, to)}`, { signal });
 
 export const getIncidents = (id: number, from: Date, to: Date, signal?: AbortSignal) =>
