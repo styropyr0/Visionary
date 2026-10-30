@@ -25,6 +25,7 @@ import { ErrorNotice } from "../components/ErrorNotice";
 import { PagesTab, ProfilingTab } from "./Settings.profiling";
 import { DataTab } from "./Settings.data";
 import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
+import { PartitionsCard } from "./Settings.partitions";
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
 import { TwoStepCard } from "../components/TwoStep";
 import { LogsTab } from "./Settings.logs";
@@ -100,6 +101,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {current === "data" && (
           <div className="settings-stack">
             <RetentionCard />
+            <PartitionsCard />
             <DataTab />
           </div>
         )}

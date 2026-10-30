@@ -993,6 +993,7 @@ export const HELP: Record<Route, PageHelp> = {
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
       "Hidden pages stay reachable by their link; Settings always shows.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
+      "Time partitioning (Data, PostgreSQL only) keeps one partition per day for the busiest tables, so retention drops whole days and charts read only theirs. It pays off from a few million rows a day; converting a table with rows copies it first, so do it at a quiet hour.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
     setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso"],

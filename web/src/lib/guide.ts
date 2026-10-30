@@ -709,6 +709,10 @@ export const GUIDE: GuideSection[] = [
         text: "**Thresholds** sets the Apdex target and SLO, with routes that have their own. **Data** sets how long each kind of data is kept, and deletes data after a preview.",
       },
       {
+        title: "Partition busy tables",
+        text: "On PostgreSQL, **Data → Time partitioning** splits requests, spans, logs, metrics and frontend events into one partition per day. Retention then drops whole days instead of deleting rows, and charts read only the days they show. Turn it on when the database takes a few million rows a day; below that it changes little. Empty tables convert at once; for a table with rows, **Convert** copies it while writes continue and pauses them only for the final swap, so pick a quiet hour and have room for a second copy.",
+      },
+      {
         title: "Configure the server",
         text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within 30 seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
       },

@@ -64,6 +64,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.ssoRoutes(mux)
 	s.ciRoutes(mux)
 	s.replayRoutes(mux)
+	s.partitionRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work
@@ -88,6 +89,7 @@ func (s *Server) Start(ctx context.Context) {
 	s.applogsStart(ctx)
 	s.tracesStart(ctx)
 	s.replayStart(ctx)
+	s.partitionsStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.
