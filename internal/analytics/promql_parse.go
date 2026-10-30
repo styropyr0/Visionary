@@ -806,6 +806,13 @@ func exprType(e promExpr) string {
 	return ""
 }
 
+func article(t string) string {
+	if t == typVector {
+		return "an " + t
+	}
+	return "a " + t
+}
+
 // checkTypes checks argument and operand types, so evaluation can trust them.
 func checkTypes(e promExpr) error {
 	switch x := e.(type) {
@@ -813,7 +820,7 @@ func checkTypes(e promExpr) error {
 		return checkTypes(x.expr)
 	case *unaryExpr:
 		if t := exprType(x.expr); t != typScalar && t != typVector {
-			return promErrorf(x.pos, "unary minus needs a scalar or an instant vector, not a %s", t)
+			return promErrorf(x.pos, "unary minus needs a scalar or an instant vector, not %s", article(t))
 		}
 		return checkTypes(x.expr)
 	case *callExpr:
@@ -825,7 +832,7 @@ func checkTypes(e promExpr) error {
 				if want == typMatrix && got == typVector {
 					hint = ", e.g. " + x.fn + "(name[5m])"
 				}
-				return promErrorf(a.position(), "%s expects a %s as argument %d, got a %s%s", x.fn, want, i+1, got, hint)
+				return promErrorf(a.position(), "%s expects %s as argument %d, got %s%s", x.fn, article(want), i+1, article(got), hint)
 			}
 			if err := checkTypes(a); err != nil {
 				return err
@@ -834,14 +841,14 @@ func checkTypes(e promExpr) error {
 	case *aggExpr:
 		if x.param != nil {
 			if t := exprType(x.param); t != typScalar {
-				return promErrorf(x.param.position(), "%s expects a scalar parameter, got a %s", x.op, t)
+				return promErrorf(x.param.position(), "%s expects a scalar parameter, got %s", x.op, article(t))
 			}
 			if err := checkTypes(x.param); err != nil {
 				return err
 			}
 		}
 		if t := exprType(x.expr); t != typVector {
-			return promErrorf(x.expr.position(), "%s expects an instant vector, got a %s", x.op, t)
+			return promErrorf(x.expr.position(), "%s expects an instant vector, got %s", x.op, article(t))
 		}
 		return checkTypes(x.expr)
 	case *binaryExpr:
@@ -851,7 +858,7 @@ func checkTypes(e promExpr) error {
 			e promExpr
 		}{{lt, x.lhs}, {rt, x.rhs}} {
 			if side.t != typScalar && side.t != typVector {
-				return promErrorf(side.e.position(), "binary operators need scalars or instant vectors, not a %s", side.t)
+				return promErrorf(side.e.position(), "binary operators need scalars or instant vectors, not %s", article(side.t))
 			}
 		}
 		if (x.op == "and" || x.op == "or" || x.op == "unless") && (lt != typVector || rt != typVector) {

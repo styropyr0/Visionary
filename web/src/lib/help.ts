@@ -460,6 +460,35 @@ visionary.DescribeMetric("checkout_ms", visionary.MetricOptions{Unit: "ms", Buck
 OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`,
     },
   },
+  grafana: {
+    id: "grafana",
+    title: "Use Visionary in Grafana",
+    intro:
+      "Visionary answers the Prometheus HTTP API, so Grafana (or any Prometheus client) can chart your custom metrics and Visionary's own visionary_* series with PromQL. Create a key with the Read scope in Settings → API keys first.",
+    any: {
+      label: "Grafana → Connections → Data sources → Add → Prometheus",
+      code: `Prometheus server URL:  ${origin}/api/prom
+Authentication:         Basic authentication
+  User:                 grafana (any name)
+  Password:             <read key, vis_…>
+HTTP method:            POST (GET works too)
+
+# or, as provisioning (grafana/provisioning/datasources/visionary.yml)
+apiVersion: 1
+datasources:
+  - name: Visionary
+    type: prometheus
+    url: ${origin}/api/prom
+    basicAuth: true
+    basicAuthUser: grafana
+    secureJsonData:
+      basicAuthPassword: <read key>
+
+# Any other client: Authorization: Bearer <read key>
+curl -H "Authorization: Bearer <read key>" \\
+  "${origin}/api/prom/api/v1/query?query=sum(rate(visionary_http_requests_total[5m]))"`,
+    },
+  },
   analyst: {
     id: "analyst",
     title: "Turn on the analyst",
@@ -623,15 +652,19 @@ export const HELP: Record<Route, PageHelp> = {
   metrics: {
     title: "Metrics",
     tip: "Counters, gauges and histograms your services record, from the SDKs, OpenTelemetry and Prometheus, charted by label.",
-    what: "Every custom metric your services send: from the SDK's Counter, Gauge and Histogram, OpenTelemetry metrics that are not host metrics, and Prometheus remote_write. Pick one to chart it over the range: sum, average, max, min or rate per second, and p50, p95 or p99 for histograms; group by a label, the service or the instance, and filter by label values.",
+    what: "Every custom metric your services send: from the SDK's Counter, Gauge and Histogram, OpenTelemetry metrics that are not host metrics, and Prometheus remote_write. Pick one to chart it over the range: sum, average, max, min or rate per second, and p50, p95 or p99 for histograms; group by a label, the service or the instance, and filter by label values. PromQL in the top bar writes any metric math instead, over custom metrics and Visionary's own data.",
     read: [
+      "PromQL: selectors with =, !=, =~ and !~, offset, rate, irate, increase, delta, avg/min/max/sum/count/last_over_time, sum, avg, min, max, count, topk, bottomk and quantile by or without labels, arithmetic and comparisons between vectors with on, ignoring and group_left, and, or, unless, abs, ceil, floor, round, clamp_min, clamp_max and histogram_quantile. No subqueries or @.",
+      "Custom metrics keep their names; their labels plus service and instance are labels. Counters are stored as increases, so rate and increase are exact, and a bare counter reads as its running total over the range. A histogram h is also h_bucket{le}, h_sum and h_count.",
+      "Built-in series: visionary_http_requests_total{service, route, method, status}, visionary_http_request_duration_ms_bucket{service, route, method, le} with _sum and _count, visionary_spans_total{service, kind, status}, visionary_span_duration_ms_bucket{service, kind, le}, visionary_errors_total{service, type, route}, and visionary_system_<column>{service, instance} gauges such as host_cpu_percent, host_mem_percent, proc_rss_mb, goroutines and db_acquired_conns.",
+      "Readings are bucketed so a query reads at most about 11,000 points per series; a chart shows the 50 largest series.",
       "A counter's row is its increase over the interval, so Sum is how many happened in each bucket and Rate per second divides by the bucket's length.",
       "A gauge is a level: Average and Max read it per bucket; Sum adds the series together, e.g. queue depth over all queues.",
       "Percentiles are estimated from the histogram's buckets, so they are as precise as the buckets are narrow.",
       "Grouping shows the 20 largest groups. A metric keeps at most 1000 label sets; the list says when new ones were dropped.",
-      "Add to dashboard keeps the aggregation, grouping and filters; a dashboard's service variable narrows it. Alerts → New rule → Custom metric alerts on it.",
+      "Add to dashboard keeps the aggregation, grouping and filters; a dashboard's service variable narrows it. Alerts → New rule → Custom metric alerts on it; PromQL expression alerts on a query, per series.",
     ],
-    setup: ["metrics", "otlp"],
+    setup: ["metrics", "grafana", "otlp"],
   },
   errors: {
     title: "Errors",

@@ -84,6 +84,8 @@ export interface RuleSpec {
   query?: string;
   /** The metric of custom_metric rules. */
   metric_query?: MetricQuery;
+  /** The expression of promql rules. */
+  promql?: string;
   scope: Scope;
   op?: string;
   threshold: number;

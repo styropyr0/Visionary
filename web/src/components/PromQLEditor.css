@@ -1,0 +1,78 @@
+.pq-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pq-input {
+  width: 100%;
+  min-height: 64px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pq-input.invalid {
+  border-color: var(--critical);
+}
+
+.pq-menu .menu-row {
+  justify-content: space-between;
+}
+
+.pq-hint {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.pq-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--critical-text);
+  font-size: 12.5px;
+}
+
+/* The icon sits on the first line of the message. */
+.pq-error > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.pq-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pq-where {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--button-wash);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre;
+  overflow-x: auto;
+  cursor: pointer;
+}
+
+.pq-where:hover {
+  background: var(--button-wash-hover);
+}
+
+.pq-caret {
+  color: var(--critical-text);
+  font-weight: 700;
+}
+
+.pq-hint-line {
+  margin: 0;
+  font-size: 11.5px;
+}

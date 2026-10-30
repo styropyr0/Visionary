@@ -30,7 +30,7 @@ func checkPromRule(sp *ruleSpec) error {
 		return badInput("the expression: " + err.Error())
 	}
 	if t := exprType(expr); t != typVector && t != typScalar {
-		return badInput("the expression must return a number or an instant vector, not a " + t)
+		return badInput("the expression must return a number or an instant vector, not " + article(t))
 	}
 	sp.Scope = alertScope{}
 	return nil

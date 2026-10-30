@@ -373,3 +373,9 @@
 .saved-dash-new .input {
   flex: 1;
 }
+
+.dash-promql {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

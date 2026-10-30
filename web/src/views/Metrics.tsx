@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChartLine, Plus, Search, X } from "lucide-react";
+import { ChartLine, Code2, List, Play, Plus, Search, X } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
 import { formatCount, formatValue } from "../lib/format";
 import { formatRelative } from "../lib/time";
@@ -22,11 +22,16 @@ import { Combobox } from "../components/Combobox";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { SetupCard, SetupCommand, SetupHelpButton, SetupOption } from "../components/SetupCard";
+import { PromQLEditor } from "../components/PromQLEditor";
+import { usePromChart } from "../lib/promql";
 import "./Metrics.css";
 
 /** The chart's state lives in the hash (#/metrics?name=…&agg=…) so it can be linked. */
 interface MetricsState extends MetricQuery {
   service: string;
+  /** "query" shows the PromQL editor instead of the metric list. */
+  mode: string;
+  query: string;
 }
 
 function readState(): MetricsState {
@@ -37,7 +42,15 @@ function readState(): MetricsState {
   } catch {
     labels = undefined;
   }
-  return { name: p.get("name") ?? "", agg: p.get("agg") ?? "", group: p.get("group") ?? "", labels, service: p.get("service") ?? "" };
+  return {
+    name: p.get("name") ?? "",
+    agg: p.get("agg") ?? "",
+    group: p.get("group") ?? "",
+    labels,
+    service: p.get("service") ?? "",
+    mode: p.get("mode") ?? "",
+    query: p.get("q") ?? "",
+  };
 }
 
 function writeState(s: MetricsState) {
@@ -47,6 +60,8 @@ function writeState(s: MetricsState) {
   if (s.group) p.set("group", s.group);
   if (s.labels && Object.keys(s.labels).length) p.set("labels", JSON.stringify(s.labels));
   if (s.service) p.set("service", s.service);
+  if (s.mode) p.set("mode", s.mode);
+  if (s.mode && s.query) p.set("q", s.query);
   const qs = p.toString();
   window.location.hash = `#/metrics${qs ? `?${qs}` : ""}`;
 }
@@ -69,6 +84,7 @@ export function Metrics() {
   const services = names.data?.services ?? [];
   const list = names.data?.metrics ?? [];
   const empty = names.data && list.length === 0 && !state.service;
+  const querying = state.mode === "query";
 
   return (
     <>
@@ -77,7 +93,17 @@ export function Metrics() {
         section="Monitor"
         actions={
           <>
-            {services.length > 0 && (
+            <div className="segmented" role="radiogroup" aria-label="Mode">
+              <button type="button" role="radio" aria-checked={!querying} className={querying ? "" : "on"} onClick={() => set({ mode: "" })}>
+                <List size={14} />
+                Browse
+              </button>
+              <button type="button" role="radio" aria-checked={querying} className={querying ? "on" : ""} onClick={() => set({ mode: "query" })}>
+                <Code2 size={14} />
+                PromQL
+              </button>
+            </div>
+            {services.length > 0 && !querying && (
               <Select
                 label="Service"
                 value={state.service}
@@ -92,8 +118,10 @@ export function Metrics() {
         }
       />
       <div className="content">
-        {names.error && !names.data && <ErrorNotice title="Could not load metrics" error={names.error} />}
-        {empty ? (
+        {names.error && !names.data && !querying && <ErrorNotice title="Could not load metrics" error={names.error} />}
+        {querying ? (
+          <QueryMode query={state.query} onRun={(query) => set({ query })} />
+        ) : empty ? (
           <MetricsSetup />
         ) : (
           <div className="grid">
@@ -269,6 +297,81 @@ function MetricChart({ state, set, info }: { state: MetricsState; set: (p: Parti
         {info?.unit ? ` · unit ${info.unit}` : ""}
         {labels.data?.truncated ? " · the first 5000 series are read" : ""}
       </p>
+    </div>
+  );
+}
+
+const EXAMPLES: { label: string; query: string }[] = [
+  { label: "Requests per second by route", query: "sum by (route) (rate(visionary_http_requests_total[5m]))" },
+  {
+    label: "5xx share",
+    query: 'sum(rate(visionary_http_requests_total{status=~"5.."}[5m])) / sum(rate(visionary_http_requests_total[5m]))',
+  },
+  { label: "p95 latency", query: "histogram_quantile(0.95, sum by (le) (rate(visionary_http_request_duration_ms_bucket[5m])))" },
+  { label: "CPU by instance", query: "max by (instance) (visionary_system_host_cpu_percent)" },
+];
+
+/** The PromQL editor over the time range: a chart and table of what it returns. */
+function QueryMode({ query, onRun }: { query: string; onRun: (q: string) => void }) {
+  const tokens = useChartTokens();
+  const [draft, setDraft] = useState(query);
+  useEffect(() => setDraft(query), [query]);
+  const chart = usePromChart(query);
+  const viz: Viz = { type: "timeseries", x: "t", y: ["value"], series: "series", unit: "none" };
+  const run = () => onRun(draft.trim());
+  const title = query.length > 80 ? `${query.slice(0, 77)}…` : query || "PromQL";
+  const note = chart.data && (chart.data.truncated ? "Showing the 50 largest series." : vizNote(chart.data, viz, tokens));
+  return (
+    <div className="grid">
+      <section className="panel span-12">
+        <div className="mt-query-body">
+          <PromQLEditor value={draft} onChange={setDraft} onRun={run} error={chart.error && draft.trim() === query ? chart.error : undefined} />
+          <div className="mt-query-actions">
+            <button type="button" className="btn primary" onClick={run} disabled={!draft.trim()}>
+              <Play size={14} />
+              Run query
+            </button>
+            <span className="dim mt-examples-label">Examples</span>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.label}
+                type="button"
+                className="btn ghost"
+                title={ex.query}
+                onClick={() => {
+                  setDraft(ex.query);
+                  onRun(ex.query);
+                }}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+      {query && !chart.error ? (
+        <Panel
+          className="span-12"
+          title={title}
+          description={`PromQL over the time range, one point per ${chart.data?.bucket ? `${chart.data.bucket} s` : "bucket"}. Custom metrics by name; Visionary's own data as visionary_* series.`}
+          result={chart.data}
+          loading={chart.loading}
+          bodyHeight={340}
+          chart={chart.data && <VizView result={chart.data} viz={viz} height={340} title={title} empty="The query returned no series in this time range." />}
+          table={chart.data && <DataTable result={chart.data} maxHeight={340} />}
+          note={note || undefined}
+          dashboard={{ kind: "builtin", ref: "metrics/promql", params: { query }, viz, title }}
+        />
+      ) : (
+        <section className="panel span-12 mt-pick">
+          <div className="panel-state">
+            <div className="state-inner">
+              <Code2 size={18} />
+              <span>{query ? "Fix the query above to chart it." : "Write a PromQL query and run it, or start from an example."}</span>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

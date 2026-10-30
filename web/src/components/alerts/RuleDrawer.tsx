@@ -26,6 +26,7 @@ import { useQuery } from "../../lib/useQuery";
 import { formatLogTime } from "../../lib/time";
 import { PreviewChart } from "./PreviewChart";
 import { MetricQueryFields } from "./MetricQueryFields";
+import { PromQLEditor } from "../PromQLEditor";
 import { titleCase } from "../../lib/format";
 import { KIND_LABEL } from "./ChannelsTab";
 import { KINDS, kindLabel } from "../../lib/security";
@@ -36,7 +37,7 @@ const containerKindLabel = (k: string) => CONTAINER_KINDS[k] ?? titleCase(k);
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
 const UNIT_HINT: Record<string, string> = { rpm: "per min", gb: "GB", mb: "MB", days: "days", minutes: "min" };
 /** Metrics read once per evaluation rather than over a window. */
-const NO_WINDOW = ["instance_silent", "uptime_cert_days"];
+const NO_WINDOW = ["instance_silent", "uptime_cert_days", "promql"];
 
 function blank(meta: AlertsMeta): RuleInput {
   const m = meta.metrics.find((x) => x.id === "error_rate_5xx") ?? meta.metrics[0];
@@ -121,6 +122,9 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
     if (form.kind === "anomaly") return setSpec({ metric: id });
     if (id === "custom") {
       return setSpec({ metric: id, sql: sp.sql || "SELECT COUNT(*) AS value FROM api_logs WHERE created_at >= {{from}} AND created_at < {{to}} AND status >= 500", op: ">", threshold: 10, scope: {}, clear_threshold: undefined });
+    }
+    if (id === "promql") {
+      return setSpec({ metric: id, promql: sp.promql ?? "", op: m?.op, threshold: m?.threshold ?? 0, scope: {}, clear_threshold: undefined });
     }
     if (id === "custom_metric") {
       return setSpec({ metric: id, metric_query: sp.metric_query ?? { name: "" }, op: m?.op, threshold: m?.threshold ?? 0, scope: { service: sp.scope.service }, clear_threshold: undefined });
@@ -291,6 +295,20 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
         )}
 
         {sp.metric === "custom_metric" && form.kind === "threshold" && <MetricQueryFields value={sp.metric_query} onChange={(q) => setSpec({ metric_query: q })} />}
+
+        {sp.metric === "promql" && form.kind === "threshold" && (
+          <div className="field">
+            <span>Expression</span>
+            <PromQLEditor
+              value={sp.promql ?? ""}
+              onChange={(v) => setSpec({ promql: v })}
+              placeholder='sum by (route) (rate(visionary_http_requests_total{status=~"5.."}[5m]))'
+            />
+            <p className="al-hint">
+              Evaluated at each check; every series it returns is compared with the threshold and fires on its own. Put the window in the expression, as in <code>[5m]</code>.
+            </p>
+          </div>
+        )}
 
         {sp.metric === "custom" && form.kind === "threshold" && (
           <label className="field">

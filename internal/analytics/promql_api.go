@@ -551,11 +551,10 @@ const maxChartSeries = 50
 // promResult evaluates query over tr, one point per bucket, as t, series,
 // value rows; the largest 50 series are kept.
 func (s *Server) promResult(ctx context.Context, query string, tr timeRange) (*Result, error) {
+	// Steps on bucket boundaries, like every other chart; the last one is at
+	// or after the end so the newest data shows.
 	start := time.Unix(tr.From.Unix()/tr.Bucket*tr.Bucket, 0)
-	end := time.Unix(tr.To.Unix()/tr.Bucket*tr.Bucket, 0)
-	if end.Before(start) {
-		end = start
-	}
+	end := time.Unix((tr.To.Unix()+tr.Bucket-1)/tr.Bucket*tr.Bucket, 0)
 	started := time.Now()
 	_, v, ev, err := s.runPromQL(ctx, query, start, end, time.Duration(tr.Bucket)*time.Second)
 	if err != nil {

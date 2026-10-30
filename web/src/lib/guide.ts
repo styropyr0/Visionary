@@ -249,6 +249,14 @@ export const GUIDE: GuideSection[] = [
         title: "Keep it and alert on it",
         text: "**Add to dashboard** on the chart puts it on a dashboard as it is. In **Alerts**, a rule on **Custom metric** watches the same numbers over its window, per label value when grouped.",
       },
+      {
+        title: "Query with PromQL",
+        text: "Switch the top bar to **PromQL** and write a query, e.g. `sum by (route) (rate(visionary_http_requests_total[5m]))`. **Tab** completes metric names, functions, labels and values; **Ctrl+Enter** runs it. An error points at the character it is about. Your own metrics keep their names; Visionary's requests, spans, errors and system readings are `visionary_*` series. **Add to dashboard** keeps the query, a dashboard's **Add panel → PromQL** writes one there, and an alert on **PromQL expression** fires per series it returns.",
+      },
+      {
+        title: "Use Visionary in Grafana",
+        text: "Create a key with the **Read** scope in **Settings → API keys**. In Grafana add a **Prometheus** data source with this server's address followed by `/api/prom` as its URL, **Basic authentication** with any user name and the key as password, then **Save & test**. Grafana's metric browser lists the same names; other clients send the key as `Authorization: Bearer`. **Help** has a provisioning file.",
+      },
     ],
   },
   {
