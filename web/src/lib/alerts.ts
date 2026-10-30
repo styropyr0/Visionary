@@ -1,12 +1,13 @@
 import { api, rangeQuery, type Result } from "./api";
 import { formatCount, formatMs, formatPercent } from "./format";
+import type { MetricQuery } from "./metrics";
 
 export type AlertUnit = "ms" | "percent" | "rpm" | "score" | "minutes" | "count" | "burn" | "gb" | "mb" | "days" | "none";
 export type Severity = "info" | "warning" | "critical";
 export type RuleKind = "threshold" | "anomaly" | "slo";
 export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 
-export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs";
+export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs" | "metrics";
 
 export const GROUP_LABEL: Record<MetricGroup, string> = {
   request: "Requests",
@@ -19,6 +20,7 @@ export const GROUP_LABEL: Record<MetricGroup, string> = {
   security: "Security",
   container: "Containers",
   logs: "Logs",
+  metrics: "Custom metrics",
 };
 
 export interface MetricDef {
@@ -80,6 +82,8 @@ export interface RuleSpec {
   sql?: string;
   /** The Logs search of log_matches and log_absent rules. */
   query?: string;
+  /** The metric of custom_metric rules. */
+  metric_query?: MetricQuery;
   scope: Scope;
   op?: string;
   threshold: number;

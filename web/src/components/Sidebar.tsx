@@ -6,6 +6,7 @@ import {
   Bookmark,
   BookOpen,
   Bug,
+  ChartLine,
   Database,
   Flame,
   Gauge,
@@ -46,6 +47,7 @@ export type Route =
   | "profiles"
   | "system"
   | "containers"
+  | "metrics"
   | "errors"
   | "frontend"
   | "uptime"
@@ -59,7 +61,7 @@ export type Route =
   | "settings"
   | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "dashboards", "saved", "alerts", "settings", "guide"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "metrics", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "dashboards", "saved", "alerts", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -72,6 +74,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
       { route: "profiles", label: "CPU profiles", icon: Flame },
       { route: "system", label: "System", icon: Server },
       { route: "containers", label: "Containers", icon: Boxes },
+      { route: "metrics", label: "Metrics", icon: ChartLine },
       { route: "errors", label: "Errors", icon: Bug },
       { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
       { route: "uptime", label: "Uptime", icon: Activity },

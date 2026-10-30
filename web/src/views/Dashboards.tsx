@@ -463,6 +463,8 @@ function DashPanelView({
     for (const n of VAR_NAMES) if (vars[n]) extra[`var.${n}`] = vars[n]!;
   } else if (item.ref.startsWith("system/") && vars.instance) {
     extra.instance = vars.instance;
+  } else if (item.ref === "metrics/series" && vars.service && !item.params?.service) {
+    extra.service = vars.service;
   }
   const qs = rangeQuery(range.from, range.to, extra);
   const path = item.kind === "saved" ? `/api/dashboards/panels/${item.ref}/data` : `/api/${item.ref}`;
