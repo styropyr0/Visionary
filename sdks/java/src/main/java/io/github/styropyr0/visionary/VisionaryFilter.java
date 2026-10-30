@@ -25,6 +25,7 @@ import org.springframework.web.servlet.HandlerMapping;
 final class VisionaryFilter extends OncePerRequestFilter {
 
     private static final String STATIC_CATCH_ALL = "/**";
+    private static final String TRACE_ATTRIBUTE = VisionaryFilter.class.getName() + ".TRACE";
 
     private final HttpCounters counters;
     private final RequestWriter writer;
@@ -50,8 +51,25 @@ final class VisionaryFilter extends OncePerRequestFilter {
         this.maxBodyBytes = cfg == null ? 8192 : cfg.maxBodyBytes();
     }
 
+    /**
+     * Continues the caller's trace or starts one, for every request: outbound calls
+     * carry it on even when the request is not logged.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        TraceContext.Server trace = TraceContext.server(request.getHeader(TraceContext.TRACEPARENT),
+                request.getHeader(TraceContext.TRACESTATE));
+        request.setAttribute(TRACE_ATTRIBUTE, trace);
+        TraceContext previousTrace = TraceContext.enter(trace.context());
+        try {
+            filter(request, response, chain);
+        } finally {
+            TraceContext.restore(previousTrace);
+        }
+    }
+
+    private void filter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         counters.begin();
         ProfileTally.started();
@@ -151,7 +169,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
         if (logs == null || !logs.capturing()) {
             return null;
         }
-        return new LogScope(requestId, LogScope.traceParentId(request.getHeader("traceparent")), () -> {
+        return new LogScope(requestId, trace(request).context().traceId, () -> {
             VisionaryUser u = user(request);
             return u == null ? null : u.id();
         });
@@ -229,7 +247,10 @@ final class VisionaryFilter extends OncePerRequestFilter {
                     response.body(),
                     response.truncated(),
                     response.size(),
-                    collected));
+                    collected,
+                    trace(request).context().traceId,
+                    trace(request).context().spanId,
+                    trace(request).parentSpanId()));
         } catch (RuntimeException e) {
             // Logging must never affect the response.
             logger.debug("visionary: could not capture request", e);
@@ -294,6 +315,10 @@ final class VisionaryFilter extends OncePerRequestFilter {
         }
         // Unmatched paths fall through to the static resource handler's catch-all; that is no route.
         return status == 404 && STATIC_CATCH_ALL.equals(route) ? null : route;
+    }
+
+    private static TraceContext.Server trace(HttpServletRequest request) {
+        return (TraceContext.Server) request.getAttribute(TRACE_ATTRIBUTE);
     }
 
     private static VisionaryUser user(HttpServletRequest request) {

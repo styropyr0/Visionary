@@ -3,8 +3,10 @@
 Add one NuGet package and two lines to an ASP.NET Core app, and every request
 shows up in the [Visionary](../../Readme.md) dashboard: route, status, time,
 user, redacted bodies, the database and `HttpClient` calls it made, and any
-exception. You also get host, process and GC metrics, the app's `ILogger`
-lines with one more line, and CPU profiles with an optional second package.
+exception. You also get host, process and GC metrics, traces that follow a
+request into the services it calls, custom counters, gauges and histograms,
+the app's `ILogger` lines with one more line, and CPU profiles with an
+optional second package.
 
 - [Quick start](#quick-start)
 - [Integration recipes](#integration-recipes)
@@ -241,6 +243,37 @@ typed clients) is seen through the runtime's `HttpHandlerDiagnosticListener`.
 `GET api.stripe.com`), with status `error` on transport failures and 5xx
 responses. Each request row gets `http_count` and `http_ms`.
 
+### Traces across services
+
+**When:** one service calls another and you want both requests as one trace,
+and the call as an arrow on the service map. Nothing to add beyond
+`UseVisionary()`; give each service its own `VISIONARY_SERVICE`.
+
+A request continues the trace in its W3C `traceparent` header, or starts one.
+ASP.NET Core's request `Activity` has already read the header, so the request
+takes its ids (the same ones OpenTelemetry would report). Every `HttpClient`
+call sends `traceparent` (and the caller's `tracestate`) naming its `http`
+span, so the service it reaches continues the trace. HttpClient's own
+propagation does this from `Activity.Current`; the SDK sets the header itself
+only when that activity is not of this trace (outside a request, or with no
+activity at all). A `traceparent` the app set on the request is left alone.
+
+```csharp
+app.MapGet("/orders/{id}", async (int id, IHttpClientFactory clients) =>
+{
+    using var span = Visionary.StartSpan("custom", "price order");
+    // the stock service continues this trace; its request nests under "price order"
+    return await clients.CreateClient().GetStringAsync($"http://stock/items/{id}");
+});
+```
+
+**Records:** `trace_id`, `span_id` and `parent_span_id` on the request row and
+on every span. A custom span is the parent of the calls made while it is open;
+`Visionary.Background` work keeps the request's trace, its calls nesting under
+the `background` span. Log lines get the current span's `trace_id` and
+`span_id`. This works with request logging off too, so a request the SDK does
+not log still passes its trace on.
+
 ### Custom spans (Redis, queues, CPU work)
 
 **When:** time inside a request shows as **Untracked** in its breakdown. That
@@ -265,7 +298,8 @@ using (var span = Visionary.StartSpan("cache", "GET session", "redis/sessions"))
 `StartSpan(kind, name, target, detail)`: `kind` is `db`, `http`, `cache`,
 `queue`, `custom`, `graphql` or `background`. Keep `name` low-cardinality.
 `detail` is optional; never put parameter values or secrets in it. Set
-`span.RowCount` when you know it. The span is recorded when disposed.
+`span.RowCount` when you know it. The span is recorded when disposed; until
+then calls made inside it are its children in the trace.
 
 ### Background work
 
@@ -302,6 +336,40 @@ its `db_*`/`http_*` totals and are kept whatever their duration, up to
 `VISIONARY_SPAN_THRESHOLD_MS`. `background` spans never count in the totals.
 Outside a request the span has no `request_id` and is kept when it takes at
 least the threshold.
+
+### Custom metrics
+
+**When:** you want to count or measure something of your own: orders placed,
+queue depth, checkout time. They land on the dashboard's **Metrics** page.
+
+```csharp
+Visionary.Counter("orders_placed", ("region", region)).Add(1);
+Visionary.Gauge("queue_depth", ("queue", "emails")).Set(depth);
+
+var took = Visionary.Histogram("checkout_ms", ("method", method));  // keep handles for hot paths
+took.Observe(elapsed.TotalMilliseconds);
+
+Visionary.DescribeMetric("checkout_ms", unit: "ms", buckets: new double[] { 50, 100, 250, 500, 1000 });
+```
+
+A counter counts things that happen (`Add(n)` ignores anything but a positive
+number, `Inc()` adds 1), a gauge holds a level (`Set`, or `Add` to move it), a
+histogram records values such as durations (`Observe`). Labels are key/value
+tuples, or an `IReadOnlyDictionary<string, string?>`. The calls work before
+the host starts and never wait for the database.
+
+**Records:** values add up in memory and one `metrics` row per series is
+written every `VISIONARY_METRICS_INTERVAL` (15 s): a counter's increase, a
+gauge's current value (every interval once set), a histogram's count, sum,
+min, max and bucket counts (default bounds 0 to 10000, OpenTelemetry's). The
+table is created at the first interval with something to write. Each distinct
+label set is one series; a metric keeps at most `VISIONARY_METRICS_MAX_SERIES`
+(1000) of them, and new ones past it are dropped with a warning, so never put
+user or request ids in a label.
+
+**System.Diagnostics.Metrics:** name your meters in `VISIONARY_METRICS_METERS`
+(`MetricsMeters`) and their counters, up-down counters, gauges and histograms
+are recorded the same way, with the measurement's tags as labels.
 
 ### Errors
 
@@ -425,8 +493,9 @@ app.MapPost("/orders", (Order o, ILogger<Program> log) =>
 });
 ```
 
-Each line carries the request's `request_id`, `trace_id` (the current
-`Activity`, else the `traceparent` header) and user. The message is the
+Each line carries the request's `request_id`, `trace_id` and `span_id` (the
+current span, see [Traces across services](#traces-across-services), else the
+current `Activity`) and user. The message is the
 formatted text, with the exception's `ToString()` appended when there is one;
 the category is the `logger`. Message template values and scope values become
 `attrs` (`OrderId`, `Total`); `request_id`, `trace_id`, `span_id`, `user_id`
@@ -529,7 +598,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | `RedactRequestFields` | empty | Comma list of keys to redact in request bodies only |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `ErrorCodeField` | `error.code` | Dotted path to the error code in JSON error bodies |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `ErrorKeyField` | `error.key` | Dotted path to the error key |
-| `VISIONARY_LOG_RETENTION_DAYS` | `LogRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows |
+| `VISIONARY_LOG_RETENTION_DAYS` | `LogRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles`, `app_logs` and `metrics` rows |
 | `VISIONARY_SYSTEM_METRICS` | `SystemMetrics` | `true` | Write `system_metrics` samples |
 | `VISIONARY_SYSTEM_INTERVAL` | `SystemInterval` | `15s` | Sample interval: a plain number is seconds; also `500ms`, `1m`, `1h30m` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `SystemRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `system_metrics` rows |
@@ -540,6 +609,10 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_PROFILE` | `Profile` | `true` | Profile when the dashboard asks (needs `AddVisionaryProfiling()`); `false` never profiles |
 | `VISIONARY_LOGS` | `Logs` | `true` | Copy `ILogger` lines into `app_logs` (needs `builder.Logging.AddVisionary()`); `false` never captures |
 | `VISIONARY_LOG_LEVEL` | `LogLevel` | `info` | Lowest level kept until Settings → Logs is read |
+| `VISIONARY_METRICS` | `Metrics` | `true` | Write custom metrics; `false` makes `Counter`, `Gauge` and `Histogram` no-ops |
+| `VISIONARY_METRICS_INTERVAL` | `MetricsInterval` | `15s` | How often each series is written (a plain number is seconds) |
+| `VISIONARY_METRICS_MAX_SERIES` | `MetricsMaxSeries` | `1000` | Label sets per metric name |
+| `VISIONARY_METRICS_METERS` | `MetricsMeters` | empty | `System.Diagnostics.Metrics` meters to record as custom metrics, comma-separated |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
@@ -603,7 +676,7 @@ the Go SDK in [`sdks/go`](../go) is the reference implementation.
   redacted (JSON and form encoded, even when cut off). Bodies are copied as
   they stream past, so streaming responses still stream and `SendFileAsync`
   keeps its zero-copy path for binary content. Plus `db_count`, `db_ms`,
-  `http_count`, `http_ms`.
+  `http_count`, `http_ms`, and `trace_id`, `span_id`, `parent_span_id`.
 - `spans`: rows are kept for every request, at most `VISIONARY_SPAN_MAX` each.
   Calls outside a request are kept when they take at least
   `VISIONARY_SPAN_THRESHOLD_MS`. The package's own writes are never recorded
@@ -617,6 +690,9 @@ the Go SDK in [`sdks/go`](../go) is the reference implementation.
   reads `/proc`; Windows uses Win32 counters; whatever a platform lacks is
   NULL.
 - `profiles`: with the profiling package, only while profiling is on.
+- `metrics`: custom metrics, one row per series per interval, written by a
+  background service of their own (20000 rows per interval at most); the last
+  interval is written on shutdown.
 
 ### How profiling works
 
@@ -677,6 +753,11 @@ Visionary.CaptureException(e);                   // a handled error (handled = 1
 Visionary.CaptureException(ctx, e);              // the same, for a specific request
 using var span = Visionary.StartSpan(kind, name, target, detail);   // a manual span
 _ = Visionary.Background(name, async ct => { ... });               // work that outlives the request
+
+Visionary.Counter("orders_placed", ("region", "eu")).Add(1);    // custom metrics
+Visionary.Gauge("queue_depth").Set(n);
+Visionary.Histogram("checkout_ms").Observe(ms);
+Visionary.DescribeMetric("checkout_ms", unit: "ms", buckets: new double[] { 100, 500 });
 ```
 
 To try an unreleased commit, pack it into a local feed:

@@ -576,15 +576,6 @@ class LogsTest {
     }
 
     @Test
-    void traceParent() {
-        assertEquals("4bf92f3577b34da6a3ce929d0e0e4736",
-                LogScope.traceParentId("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
-        for (String bad : new String[] {null, "", "00-xyz-1-1", "00-00000000000000000000000000000000-00f067aa0ba902b7-01"}) {
-            assertNull(LogScope.traceParentId(bad), bad);
-        }
-    }
-
-    @Test
     void codeFileIsNamedLikeProfileFrames() {
         FrameNamer namer = new FrameNamer(List.of("com.example.demo"), getClass().getClassLoader());
         assertEquals("com/example/demo/web/Orders.java", namer.file("com.example.demo.web.Orders$1", null));

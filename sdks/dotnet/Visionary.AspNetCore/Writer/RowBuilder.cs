@@ -20,6 +20,7 @@ internal sealed class RowBuilder
     private readonly string _releaseInsert;
     private readonly string _profileInsert;
     private readonly string _logInsert;
+    private readonly string _metricInsert;
 
     public RowBuilder(VisionaryAgent agent)
     {
@@ -31,6 +32,7 @@ internal sealed class RowBuilder
         _releaseInsert = Schema.InsertSql("releases", Schema.ReleaseColumns, strings);
         _profileInsert = Schema.InsertSql("profiles", Schema.ProfileColumns, strings);
         _logInsert = Schema.InsertSql("app_logs", Schema.LogColumns, strings);
+        _metricInsert = Schema.InsertSql("metrics", Schema.MetricColumns, strings);
     }
 
     public static string Timestamp(DateTime t) => t.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
@@ -117,6 +119,9 @@ internal sealed class RowBuilder
             e.Totals?.HttpCount,
             e.Totals?.HttpMs,
             Null(e.LoginAccount),
+            Null(e.TraceId),
+            Null(e.SpanId),
+            Null(e.ParentSpanId),
         };
     }
 
@@ -154,6 +159,24 @@ internal sealed class RowBuilder
 
     private static readonly string LogHost = VisionaryAgent.HostName();
 
+    public Stmt Metric(MetricRecord r) => new(_metricInsert, new object?[]
+    {
+        Timestamp(r.At),
+        _agent.Service,
+        _agent.Instance,
+        r.Name,
+        r.Kind,
+        Null(r.Unit),
+        r.Labels,
+        r.Series,
+        r.Value,
+        r.Count,
+        r.Sum,
+        r.Min,
+        r.Max,
+        r.Buckets,
+    });
+
     private object?[] Span(SpanRecord s) => new object?[]
     {
         Timestamp(s.StartedAt),
@@ -169,6 +192,9 @@ internal sealed class RowBuilder
         s.Error is null ? "ok" : "error",
         Null(s.Error),
         s.RowCount,
+        Null(s.TraceId),
+        Null(s.SpanId),
+        Null(s.ParentSpanId),
     };
 
     private object?[] Error(ErrorRecord r) => new object?[]

@@ -136,7 +136,7 @@ internal sealed class TelemetryWriter : BackgroundService
             }
             if (TelemetryTables)
             {
-                await store.CreateAsync("telemetry", null, null, timeout.Token).ConfigureAwait(false);
+                await store.CreateAsync("telemetry", "spans", Schema.AddedSpanColumns, timeout.Token).ConfigureAwait(false);
             }
             _schemaReady = true;
         }

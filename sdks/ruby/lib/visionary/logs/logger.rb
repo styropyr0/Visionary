@@ -195,11 +195,10 @@ module Visionary
         !local.nil? && n < local
       end
 
-      # Falls back to the active OpenTelemetry span when the request brought no traceparent.
+      # Falls back to the active OpenTelemetry span outside any Visionary span.
       def otel(rec)
         return unless defined?(::OpenTelemetry::Trace)
-        ctx = RequestContext.current
-        return if ctx&.trace_id
+        return if TraceContext.current
         sc = ::OpenTelemetry::Trace.current_span.context
         return unless sc.valid?
         rec.trace_id = sc.hex_trace_id

@@ -75,12 +75,15 @@ module Visionary
         return if !s.enabled || rec.message.start_with?("visionary: ")
         return if s.dropped?(@service, rec.logger, rec.message, rec.sev)
 
+        if rec.trace_id.nil? && (sc = TraceContext.current)
+          rec.trace_id = sc.trace_id
+          rec.span_id ||= sc.span_id
+        end
         unless ctx
           emit(rec) if rec.sev >= s.floor(@service, "", "", rec.at)
           return
         end
         rec.request_id ||= ctx.request_id
-        rec.trace_id ||= ctx.trace_id
         rec.user_id ||= blank(ctx.user[0])
         return emit(rec) if rec.sev >= s.hold_below(@service, rec.at)
         return if ctx.hold_log(rec, MAX_HELD)

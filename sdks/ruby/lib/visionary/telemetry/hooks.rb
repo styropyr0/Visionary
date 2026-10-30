@@ -66,13 +66,28 @@ module Visionary
     end
 
     # Outbound HTTP spans from Net::HTTP (and the many clients built on it).
+    # Each request carries a W3C traceparent naming its span, so a service
+    # that reads it continues the trace; the headers are taken off the
+    # caller's request object again afterwards.
     module NetHTTPHook
       def request(req, body = nil, &block)
-        rec = Visionary.telemetry
         # Net::HTTP#request calls itself again once the connection is up;
         # that inner call is the one measured.
-        return super unless rec&.spans_on && started? && !Telemetry.internal?
+        return super unless started? && !Telemetry.internal?
 
+        rec = Visionary.telemetry
+        unless rec&.spans_on
+          # Not recorded, but the trace still goes on to the next service.
+          added = TraceContext.inject(req, TraceContext.current)
+          begin
+            return super
+          ensure
+            added.each { |h| req.delete(h) }
+          end
+        end
+
+        trace = TraceContext.child
+        added = TraceContext.inject(req, trace[0])
         t0 = Telemetry.now_ms
         status = "ok"
         error = nil
@@ -85,11 +100,12 @@ module Visionary
           error = "#{e.class}: #{e.message}"
           raise
         ensure
-          Telemetry::NetHTTPHook.record(rec, self, req, t0, status, error)
+          added.each { |h| req.delete(h) }
+          Telemetry::NetHTTPHook.record(rec, self, req, t0, status, error, trace)
         end
       end
 
-      def self.record(rec, http, req, t0, status, error)
+      def self.record(rec, http, req, t0, status, error, trace = nil)
         host = http.address.to_s
         scheme = http.use_ssl? ? "https" : "http"
         port = http.port == (http.use_ssl? ? 443 : 80) ? "" : ":#{http.port}"
@@ -98,7 +114,7 @@ module Visionary
         rec.span(
           kind: "http", name: "#{req.method} #{host}", target: host,
           detail: "#{req.method} #{scheme}://#{host}#{port}#{path}",
-          start_mono: t0, duration_ms: Telemetry.now_ms - t0, status: status, error: error
+          start_mono: t0, duration_ms: Telemetry.now_ms - t0, status: status, error: error, trace: trace
         )
       rescue StandardError
         nil

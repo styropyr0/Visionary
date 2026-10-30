@@ -83,6 +83,12 @@ enum Dialect {
         };
     }
 
+    /** The trace index of a table; MySQL has no IF NOT EXISTS here (error 1061 when it exists). */
+    String traceIndex(String table) {
+        return "CREATE INDEX " + (this == MYSQL ? "" : "IF NOT EXISTS ") + "idx_" + table + "_trace_id ON "
+                + table + " (trace_id)";
+    }
+
     /** An ALTER that lost a race with another instance adding the same column. */
     static boolean isDuplicateColumn(Exception e) {
         String msg = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);

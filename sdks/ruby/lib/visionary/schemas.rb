@@ -59,6 +59,7 @@ module Visionary
       rescue StandardError => e
         raise unless Schema.duplicate_column?(e)
       end
+      @store.exec_script([Schema.trace_index(dialect, g[:table])]) if g[:trace_index]
     end
   end
 end

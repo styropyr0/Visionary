@@ -197,6 +197,13 @@ final class AppLogs {
         if (s.dropped(service, r.logger, r.message, r.sev)) {
             return;
         }
+        TraceContext trace = TraceContext.current();
+        if (r.traceId == null && trace != null) {
+            r.traceId = trace.traceId;
+            if (r.spanId == null) {
+                r.spanId = trace.spanId;
+            }
+        }
         LogScope scope = LogScope.current();
         if (scope == null) {
             if (r.sev >= s.floor(service, "", "", r.at)) {

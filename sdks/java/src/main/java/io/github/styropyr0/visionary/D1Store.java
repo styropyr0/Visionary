@@ -51,6 +51,9 @@ final class D1Store implements Store {
         if (!table.addedColumns.isEmpty()) {
             addMissingColumns(table);
         }
+        if (table.traceIndex) {
+            post(queryUri, Map.of("sql", Dialect.D1.traceIndex(table.name), "params", List.of()));
+        }
     }
 
     /** Upgrades a table created by an older release in place. */

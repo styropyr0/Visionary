@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Custom metrics in `metrics`: `Visionary.counter(name, **labels).add(n)`,
+  `Visionary.gauge(...).set(v)`, `Visionary.histogram(...).observe(v)` and
+  `Visionary.describe_metric(name, unit:, buckets:)`. Added up in memory and
+  written one row per series every interval by a writer thread of their own;
+  at most 1000 label sets per name. `VISIONARY_METRICS`,
+  `VISIONARY_METRICS_INTERVAL`, `VISIONARY_METRICS_MAX_SERIES`.
+- Distributed tracing: requests continue an incoming W3C `traceparent` or
+  start a trace, `Net::HTTP` sends `traceparent` (and `tracestate`) on, and
+  `api_logs` and `spans` get `trace_id`, `span_id` and `parent_span_id`
+  (added to existing tables at startup). Calls inside `Visionary.span` and
+  `Visionary.background` nest under them; log lines carry the current span.
 - Application logs in `app_logs`: `Visionary.logger(inner = nil)` (a Logger
   that forwards every call to `inner` unchanged and also captures) and
   `Visionary.capture_rails_logger` (broadcasts `Rails.logger`). Lines link to

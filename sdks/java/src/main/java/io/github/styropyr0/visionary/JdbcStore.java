@@ -83,6 +83,15 @@ final class JdbcStore implements Store {
                 if (!table.addedColumns.isEmpty()) {
                     addMissingColumns(st, table);
                 }
+                if (table.traceIndex) {
+                    try {
+                        st.execute(dialect.traceIndex(table.name));
+                    } catch (SQLException e) {
+                        if (dialect != Dialect.MYSQL || e.getErrorCode() != MYSQL_DUPLICATE_KEY_NAME) {
+                            throw e;
+                        }
+                    }
+                }
             }
             return null;
         });

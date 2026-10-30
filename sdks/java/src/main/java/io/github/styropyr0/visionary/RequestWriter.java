@@ -326,6 +326,9 @@ final class RequestWriter {
             t == null ? null : t.httpCount(),
             t == null ? null : Values.round(t.httpMs(), 3),
             e.loginAccount() == null ? null : Values.cap(e.loginAccount().strip(), 255),
+            e.traceId(),
+            e.spanId(),
+            e.parentSpanId(),
         };
     }
 
@@ -353,6 +356,9 @@ final class RequestWriter {
             s.failed ? "error" : "ok",
             Values.cap(s.error, 500),
             rows < 0 ? null : rows,
+            s.context == null ? null : s.context.traceId,
+            s.context == null ? null : s.context.spanId,
+            s.parentSpanId,
         };
     }
 

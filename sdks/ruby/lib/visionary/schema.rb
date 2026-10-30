@@ -17,7 +17,7 @@ module Visionary
     # api_logs columns added after the first release, in insert order.
     ADDED_REQUEST_COLUMNS = [
       %w[service text], %w[version text], %w[db_count int], %w[db_ms real], %w[http_count int], %w[http_ms real],
-      %w[login_account text]
+      %w[login_account text], %w[trace_id text], %w[span_id text], %w[parent_span_id text]
     ].freeze
 
     SYSTEM_BASE_COLUMNS = %w[
@@ -58,6 +58,9 @@ module Visionary
       created_at request_id service instance kind name target detail offset_ms duration_ms status error row_count
     ].freeze
 
+    # spans columns added after the first release, in insert order.
+    ADDED_SPAN_COLUMNS = [%w[trace_id text], %w[span_id text], %w[parent_span_id text]].freeze
+
     ERROR_COLUMNS = %w[
       created_at service instance version request_id method route path user_id
       type message stack fingerprint handled runtime
@@ -74,22 +77,29 @@ module Visionary
       code_func size
     ].freeze
 
+    METRIC_COLUMNS = %w[
+      created_at service instance name kind unit labels series value count sum min max buckets
+    ].freeze
+
     TABLES = {
       "api_logs" => REQUEST_COLUMNS + ADDED_REQUEST_COLUMNS.map(&:first),
       "system_metrics" => SYSTEM_BASE_COLUMNS + ADDED_SYSTEM_COLUMNS.map(&:first),
-      "spans" => SPAN_COLUMNS,
+      "spans" => SPAN_COLUMNS + ADDED_SPAN_COLUMNS.map(&:first),
       "errors" => ERROR_COLUMNS,
       "releases" => RELEASE_COLUMNS,
       "profiles" => PROFILE_COLUMNS,
-      "app_logs" => LOG_COLUMNS
+      "app_logs" => LOG_COLUMNS,
+      "metrics" => METRIC_COLUMNS
     }.freeze
 
-    # Which script creates a table, and the columns older copies may lack.
+    # Which script creates a table, the columns older copies may lack, and
+    # whether it gets the trace_id index once they are there.
     GROUPS = {
-      requests: { file: "requests.sql", table: "api_logs", added: ADDED_REQUEST_COLUMNS },
+      requests: { file: "requests.sql", table: "api_logs", added: ADDED_REQUEST_COLUMNS, trace_index: true },
       system: { file: "system.sql", table: "system_metrics", added: ADDED_SYSTEM_COLUMNS },
-      telemetry: { file: "telemetry.sql", table: nil, added: [] },
-      logs: { file: "logs.sql", table: "app_logs", added: [] }
+      telemetry: { file: "telemetry.sql", table: "spans", added: ADDED_SPAN_COLUMNS, trace_index: true },
+      logs: { file: "logs.sql", table: "app_logs", added: [] },
+      metrics: { file: "metrics.sql", table: "metrics", added: [] }
     }.freeze
 
     PURGE_CHUNK = 5000
@@ -122,6 +132,13 @@ module Visionary
       when "int" then %w[postgres mysql].include?(dialect) ? "BIGINT" : "INTEGER"
       else { "postgres" => "DOUBLE PRECISION", "mysql" => "DOUBLE" }.fetch(dialect, "REAL")
       end
+    end
+
+    # Not in the shipped scripts: on an older table trace_id only exists
+    # after the upgrade. MySQL has no IF NOT EXISTS here (error 1061 is ignored).
+    def trace_index(dialect, table)
+      ine = dialect == "mysql" ? "" : "IF NOT EXISTS "
+      "CREATE INDEX #{ine}idx_#{table}_trace_id ON #{table} (trace_id)"
     end
 
     # ALTER statements for the added columns missing from existing names.

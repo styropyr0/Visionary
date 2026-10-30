@@ -61,7 +61,7 @@ public sealed class VisionaryOptions
     public int MaxBodyBytes { get; set; } = 8192;
 
     /// <summary>VISIONARY_LOG_RETENTION_DAYS (default 0, off: the Visionary server applies Settings → Retention).
-    /// Above 0 the SDK also deletes older api_logs, spans, errors, profiles and app_logs rows.</summary>
+    /// Above 0 the SDK also deletes older api_logs, spans, errors, profiles, app_logs and metrics rows.</summary>
     public int LogRetentionDays { get; set; }
 
     /// <summary>VISIONARY_LOG_REDACT_HEADERS: added to the default redacted headers.</summary>
@@ -123,6 +123,21 @@ public sealed class VisionaryOptions
 
     /// <summary>VISIONARY_LOG_LEVEL (default info): the lowest level kept until Settings, Logs has been read.</summary>
     public string LogLevel { get; set; } = "info";
+
+    /// <summary>VISIONARY_METRICS (default true): custom metrics from <see cref="Visionary.Counter(string, ValueTuple{string, string}[])"/> and the like; false makes every call a no-op.</summary>
+    public bool Metrics { get; set; } = true;
+
+    /// <summary>VISIONARY_METRICS_INTERVAL (default 15s): how often each series is written.</summary>
+    public TimeSpan MetricsInterval { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>VISIONARY_METRICS_MAX_SERIES (default 1000): label sets per metric name; new ones past it are dropped and counted.</summary>
+    public int MetricsMaxSeries { get; set; } = 1000;
+
+    /// <summary>
+    /// VISIONARY_METRICS_METERS: System.Diagnostics.Metrics meters (by name, comma-separated) whose
+    /// counters, up-down counters, gauges and histograms are recorded as custom metrics too.
+    /// </summary>
+    public List<string> MetricsMeters { get; set; } = new();
 
     /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
     internal bool ProfilingAdded { get; set; }
@@ -204,6 +219,10 @@ public sealed class VisionaryOptions
         Profile = Bool("VISIONARY_PROFILE", true);
         Logs = Bool("VISIONARY_LOGS", true);
         LogLevel = Get("VISIONARY_LOG_LEVEL") ?? "info";
+        Metrics = Bool("VISIONARY_METRICS", true);
+        MetricsInterval = Duration(Get("VISIONARY_METRICS_INTERVAL"), TimeSpan.FromSeconds(15));
+        MetricsMeters = List("VISIONARY_METRICS_METERS");
+        MetricsMaxSeries = Int("VISIONARY_METRICS_MAX_SERIES", 1000) is > 0 and var max ? max : 1000;
     }
 
     /// <summary>A plain number is seconds; otherwise a Go-style duration such as 500ms, 15s, 1m or 1h30m.</summary>

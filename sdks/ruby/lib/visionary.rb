@@ -7,10 +7,12 @@ require_relative "visionary/store"
 require_relative "visionary/schemas"
 require_relative "visionary/redactor"
 require_relative "visionary/context"
+require_relative "visionary/trace_context"
 require_relative "visionary/queue"
 require_relative "visionary/writer"
 require_relative "visionary/logs"
 require_relative "visionary/retention"
+require_relative "visionary/metrics"
 require_relative "visionary/system/sources"
 require_relative "visionary/system/cgroup"
 require_relative "visionary/system/recorder"
@@ -24,8 +26,8 @@ require_relative "visionary/fork"
 
 # Visionary collects what the Visionary server analyses, straight from a Ruby
 # service: one api_logs row per HTTP request, spans for database and outbound
-# HTTP calls, errors, deploy markers, periodic system_metrics samples and the
-# app's own log lines (app_logs).
+# HTTP calls, errors, deploy markers, periodic system_metrics samples, the
+# app's own log lines (app_logs) and its custom metrics (metrics).
 #
 #   # config.ru (Sinatra, Roda, Hanami, any Rack app)
 #   require "visionary"
@@ -141,25 +143,27 @@ module Visionary
 
     # Measures the block as a span and returns its value. kind is "custom",
     # "cache", "queue", "db", "http", "graphql" or "background"; name should be low-cardinality (the
-    # operation, not its arguments).
+    # operation, not its arguments). Calls made inside the block nest under
+    # it in the trace.
     #
     #   Visionary.span("charge card", kind: "http", target: "api.stripe.com") { stripe.charge(...) }
-    def span(name, kind: "custom", target: nil, detail: nil)
+    def span(name, kind: "custom", target: nil, detail: nil, &block)
       rec = telemetry
       return yield unless rec&.spans_on
 
+      trace = TraceContext.child
       t0 = Telemetry.now_ms
       status = "ok"
       error = nil
       begin
-        yield
+        TraceContext.with(trace[0], &block)
       rescue Exception => e # re-raised; only observed here
         status = "error"
         error = "#{e.class}: #{e.message}"
         raise
       ensure
         rec.span(kind: kind, name: name, target: target, detail: detail, start_mono: t0,
-                 duration_ms: Telemetry.now_ms - t0, status: status, error: error)
+                 duration_ms: Telemetry.now_ms - t0, status: status, error: error, trace: trace)
       end
     end
 
@@ -169,7 +173,8 @@ module Visionary
     # request_id and offset_ms even after the response was sent; those ending
     # after the request was logged are written on their own and never change
     # its totals. Outside a request the span is a lone span (kept when it
-    # takes at least VISIONARY_SPAN_THRESHOLD_MS).
+    # takes at least VISIONARY_SPAN_THRESHOLD_MS). It keeps the request's
+    # trace: calls inside it are children of the background span.
     #
     # If the block raises, the span gets status "error" and the message, and
     # the exception is re-raised in the thread as Ruby normally does: printed
@@ -181,10 +186,36 @@ module Visionary
       raise ArgumentError, "Visionary.background needs a block" unless block
 
       ctx = RequestContext.current # thread locals don't carry over on Ruby 3.1
+      trace = TraceContext.current
       Thread.new do
         RequestContext.current = ctx
+        TraceContext.current = trace
         span(name, kind: "background", &block)
       end
+    end
+
+    # A counter: rows hold its increase over each interval. Labels are a
+    # Hash or keywords; each distinct set is one series. Keep the handle for
+    # hot paths.
+    #
+    #   Visionary.counter("orders_placed", region: "eu").add(1)
+    def counter(name, labels = nil, **kw) = Metrics.counter(name, Metrics.labels(labels, kw))
+
+    # A gauge: rows hold the last value set, every interval once it has been set.
+    #
+    #   Visionary.gauge("queue_depth", queue: "emails").set(jobs.size)
+    def gauge(name, labels = nil, **kw) = Metrics.gauge(name, Metrics.labels(labels, kw))
+
+    # A histogram: rows hold each interval's count, sum, min, max and buckets.
+    #
+    #   Visionary.histogram("checkout_ms", method: "card").observe(took_ms)
+    def histogram(name, labels = nil, **kw) = Metrics.histogram(name, Metrics.labels(labels, kw))
+
+    # Sets a metric's unit and histogram bucket upper bounds. Call it before
+    # the metric's first use; series created earlier keep their buckets.
+    def describe_metric(name, unit: nil, buckets: nil)
+      Metrics.describe(name, unit: unit, buckets: buckets)
+      nil
     end
 
     # Records a handled error (handled = 1). Inside a request it links to it.

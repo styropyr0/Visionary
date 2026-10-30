@@ -34,6 +34,12 @@ public final class VisionarySpan implements AutoCloseable {
     double durationMs;
     /** Rows returned or affected; -1 when unknown. Result sets update it as they are read. */
     volatile long rowCount = -1;
+    /** This span as the parent of calls made inside it; null for the no-op span. */
+    final TraceContext context;
+    /** The span it was started in; null when it started a trace. */
+    final String parentSpanId;
+    private Thread owner;
+    private TraceContext previous;
     private boolean closed;
 
     VisionarySpan(Telemetry telemetry, RequestScope scope, String kind, String name) {
@@ -43,6 +49,26 @@ public final class VisionarySpan implements AutoCloseable {
         this.name = name;
         this.startedAt = telemetry == null ? null : Instant.now();
         this.startNanos = System.nanoTime();
+        if (telemetry == null) {
+            this.context = null;
+            this.parentSpanId = null;
+            return;
+        }
+        // A call outside any trace starts one, so the service it reaches can still be followed.
+        TraceContext parent = TraceContext.current();
+        String spanId = TraceContext.newSpanId();
+        this.context = parent != null ? parent.child(spanId)
+                : new TraceContext(TraceContext.newTraceId(), spanId, "01", null);
+        this.parentSpanId = parent == null ? null : parent.spanId;
+    }
+
+    /** Makes this span the parent of calls made on this thread until it closes. */
+    VisionarySpan makeCurrent() {
+        if (context != null) {
+            owner = Thread.currentThread();
+            previous = TraceContext.enter(context);
+        }
+        return this;
     }
 
     /** What was called: for example {@code redis/sessions} or a host name. */
@@ -92,6 +118,9 @@ public final class VisionarySpan implements AutoCloseable {
                 return;
             }
             closed = true;
+        }
+        if (owner == Thread.currentThread()) {
+            TraceContext.restore(previous);
         }
         durationMs = (System.nanoTime() - startNanos) / 1_000_000.0;
         telemetry.finished(this);

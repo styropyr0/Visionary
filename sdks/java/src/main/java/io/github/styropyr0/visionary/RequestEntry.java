@@ -6,7 +6,8 @@ import java.util.Map;
 /**
  * The raw capture of one request. Redaction, error extraction and user lookup
  * happen on the writer thread, off the request path. {@code telemetry} holds the
- * request's spans and call totals, null when span capture is off.
+ * request's spans and call totals, null when span capture is off. The trace ids
+ * place the request in its distributed trace: it is this service's server span.
  */
 record RequestEntry(
         String requestId,
@@ -30,5 +31,8 @@ record RequestEntry(
         byte[] responseBody,
         boolean responseTruncated,
         long responseSize,
-        RequestScope.Finished telemetry) implements Queued {
+        RequestScope.Finished telemetry,
+        String traceId,
+        String spanId,
+        String parentSpanId) implements Queued {
 }

@@ -225,6 +225,27 @@ query string; a transport error or a 5xx marks it `error`. Clients made with
 seen. A `WebClient` call joins the request only when it is subscribed on the
 request thread, as with `block()`.
 
+### Traces across services (automatic)
+
+Every request continues the trace in its W3C `traceparent` header, or starts
+one, and its row gets `trace_id`, `span_id` and `parent_span_id`. The clients
+above send `traceparent` (and the caller's `tracestate`) on every call, naming
+the call's span as the parent, so a service that reads it (any Visionary or
+OpenTelemetry SDK) joins the same trace. A `traceparent` you set yourself is
+left alone. Calls and log lines inside a `Visionary.span(...)` nest under it
+until it is closed; `Visionary.background`, `Visionary.wrap` and `@Async` keep
+the request's trace. With the OpenTelemetry Java agent in the process, the
+request takes its trace from the active OpenTelemetry span instead.
+
+```java
+try (VisionarySpan span = Visionary.span("custom", "build report")) {
+    report = stock.get().uri("/items/42").retrieve().body(Item.class); // nests under "build report"
+}
+```
+
+Give each service its own `VISIONARY_SERVICE`; the Traces page shows the
+whole trace and the service map draws the calls.
+
 ### Vendor SDKs, caches, queues and your own code
 
 The AWS SDK, Firebase and other libraries with their own HTTP stack, Redis
@@ -369,7 +390,7 @@ no log settings and creates no `app_logs` table. It logs
 
 Each line goes to `app_logs` with its level, logger, message
 (with the exception's stack), and, when logged during a request, its
-`request_id`, `user_id` and the `traceparent` trace id, so the request's page
+`request_id`, `user_id` and the trace and span id of the current span, so the request's page
 shows what it logged. Work handed over with `Visionary.wrap`,
 `Visionary.background` or `@Async` stays linked.
 
@@ -415,6 +436,31 @@ delays request rows.
 Keep it out of an `AsyncAppender`: lines lose their request on another thread.
 `VISIONARY_LOGS=false` turns capture off even where the appender is declared.
 With Log4j 2 instead of Logback no logs are captured.
+
+### Custom metrics
+
+Counters, gauges and histograms your code defines go to the Metrics page:
+
+```java
+Visionary.counter("orders_placed", "region", region).add(1);
+Visionary.gauge("queue_depth", "queue", "emails").set(depth);
+
+VisionaryHistogram took = Visionary.histogram("checkout_ms", "method", method);
+took.observe(elapsedMs);
+
+Visionary.describeMetric("checkout_ms", "ms", 50, 100, 250, 500, 1000); // unit and buckets, optional
+```
+
+Labels are key/value pairs (or a `Map<String, String>`). Values add up in
+memory and one `metrics` row per series is written every 15 seconds
+(`VISIONARY_METRICS_INTERVAL`) by a thread of its own, so recording never
+waits for the database: a counter's increase, a gauge's last value, a
+histogram's count, sum, min, max and bucket counts. Keep a handle for hot
+paths. Each distinct label set is one series, and a metric keeps at most 1000
+(`VISIONARY_METRICS_MAX_SERIES`); new ones past that are dropped with a
+warning, so never put user or request ids in a label. The calls work before
+the agent starts and do nothing without a database. The `metrics` table is
+created at the first write.
 
 ### System metrics (automatic)
 
@@ -474,6 +520,7 @@ deploy.
 | `system_metrics` | host, process, JVM, pool and throughput samples |
 | `profiles` | CPU profiles, only while turned on in the dashboard |
 | `app_logs` | lines logged through Logback, linked to their request |
+| `metrics` | custom counters, gauges and histograms, one row per series per interval |
 
 - **Request id:** an incoming `X-Request-ID` up to 128 characters, else a
   random 32-hex id, echoed on the response.
@@ -550,7 +597,7 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_LOG_REDACT_REQUEST_FIELDS` | none | Fields redacted in request bodies only. |
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error.code` | Dotted path in JSON error responses, stored as `error_code`. |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error.key` | The same, stored as `error_key`. |
-| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off) | Set only when no Visionary server reads this database: the starter then deletes `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows older than this, a minute after start and then daily. `releases` are kept. |
+| `VISIONARY_LOG_RETENTION_DAYS` | `0` (off) | Set only when no Visionary server reads this database: the starter then deletes `api_logs`, `spans`, `errors`, `profiles`, `app_logs` and `metrics` rows older than this, a minute after start and then daily. `releases` are kept. |
 | `VISIONARY_SPANS` | `true` | Record statements and outbound calls. `false` also removes the `DataSource` wrapper and leaves the totals NULL. |
 | `VISIONARY_SPAN_THRESHOLD_MS` | `100` | Keep spans outside requests at least this slow. |
 | `VISIONARY_SPAN_MAX` | `100` | Spans kept per request. |
@@ -559,6 +606,9 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_LOG_CAPTURE` | `false` | Add Visionary's Logback appender to the root logger. Without it, only an appender declared in your Logback configuration captures. See [Logs](#logs-opt-in-with-logback). |
 | `VISIONARY_LOGS` | `true` | `false` ignores the appender even where declared. See [Logs](#logs-opt-in-with-logback). |
 | `VISIONARY_LOG_LEVEL` | `info` | The lowest level kept until Settings → Logs has been read. |
+| `VISIONARY_METRICS` | `true` | Write custom metrics; `false` makes every metric call a no-op. |
+| `VISIONARY_METRICS_INTERVAL` | `15s` | How often each series is written; a plain number is seconds. |
+| `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets kept per metric name. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds, also `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |

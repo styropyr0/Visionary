@@ -26,9 +26,14 @@ module Visionary
 
       path = "#{env['SCRIPT_NAME']}#{env['PATH_INFO']}"
       path = "/" if path.empty?
-      return passthrough(agent, env) unless agent.log_path?(path)
+      # The request's span is current even when it is not logged, so its
+      # outbound calls still carry the trace on.
+      span, parent = TraceContext.request_span(env)
+      TraceContext.with(span) do
+        next passthrough(agent, env) unless agent.log_path?(path)
 
-      log(agent, env, path)
+        log(agent, env, path, span, parent)
+      end
     end
 
     def self.capturable?(content_type)
@@ -91,7 +96,7 @@ module Visionary
       end
     end
 
-    def log(agent, env, path)
+    def log(agent, env, path, span, parent)
       cfg = agent.config
       started_at = Time.now
       t0 = Telemetry.now_ms
@@ -107,7 +112,7 @@ module Visionary
       ctx = RequestContext.new(
         request_id: request_id, method: env["REQUEST_METHOD"].to_s, path: path, started_at: started_at,
         started_mono: t0, span_max: cfg.span_max.to_i, db_visible: Telemetry::ActiveRecordHook.installed?,
-        trace_id: Logs.trace_parent_id(env["HTTP_TRACEPARENT"])
+        span: span, parent_span_id: parent
       )
       agent.http.started
       Profiler::Tally.started!
@@ -165,7 +170,8 @@ module Visionary
         response_size: [self.class.header(res_headers, "content-length").to_i, resp_capture.size].max,
         totals: tel&.spans_on ? ctx.totals : [nil, nil, nil, nil],
         span_rows: tel ? tel.request_span_rows(ctx) : [],
-        error_rows: tel ? ctx.errors.map { |row| tel.error_row(row, ctx, route, user_id) } : []
+        error_rows: tel ? ctx.errors.map { |row| tel.error_row(row, ctx, route, user_id) } : [],
+        trace_id: ctx.trace_id, span_id: ctx.span_id, parent_span_id: ctx.parent_span_id
       )
       agent.enqueue([:request, entry])
     rescue StandardError => e

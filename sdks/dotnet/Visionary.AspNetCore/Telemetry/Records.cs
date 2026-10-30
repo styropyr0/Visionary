@@ -35,6 +35,9 @@ internal sealed record RequestEntry : WriteItem
     public long ResponseSize { get; init; }
     public SpanTotals? Totals { get; init; }
     public IReadOnlyList<SpanRecord> Spans { get; init; } = Array.Empty<SpanRecord>();
+    public string? TraceId { get; init; }
+    public string? SpanId { get; init; }
+    public string? ParentSpanId { get; init; }
 }
 
 /// <summary>Database and outbound HTTP calls a request made; null when spans are off.</summary>
@@ -53,6 +56,9 @@ internal sealed record SpanRecord : WriteItem
     public double DurationMs { get; init; }
     public string? Error { get; init; }
     public long? RowCount { get; init; }
+    public string? TraceId { get; init; }
+    public string? SpanId { get; init; }
+    public string? ParentSpanId { get; init; }
 }
 
 internal sealed record ErrorRecord : WriteItem

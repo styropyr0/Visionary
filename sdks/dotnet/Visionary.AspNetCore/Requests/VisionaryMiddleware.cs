@@ -46,11 +46,13 @@ internal sealed class VisionaryMiddleware
         tally.Start();
         var started = Stopwatch.GetTimestamp();
         var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
+        // Logged or not, the request's span is current so outbound calls carry the trace on.
+        var trace = TraceContext.BeginRequest(ctx);
         // Held for every request, logged or not.
         RequestLogs? logs = null;
         if (_agent.Logs is not null)
         {
-            logs = new RequestLogs(ctx, LogText.TraceParentId(ctx.Request.Headers["traceparent"].ToString()));
+            logs = new RequestLogs(ctx, trace.Span.TraceId);
             logs.Enter();
         }
         var threw = false;
@@ -61,7 +63,7 @@ internal sealed class VisionaryMiddleware
                 await PassThrough(ctx).ConfigureAwait(false);
                 return;
             }
-            await Logged(ctx, path, logs).ConfigureAwait(false);
+            await Logged(ctx, path, logs, trace).ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -106,7 +108,7 @@ internal sealed class VisionaryMiddleware
         HandledByFramework(ctx);
     }
 
-    private async Task Logged(HttpContext ctx, string path, RequestLogs? logs)
+    private async Task Logged(HttpContext ctx, string path, RequestLogs? logs, RequestTrace trace)
     {
         var o = _agent.Options;
         var startedAt = DateTime.UtcNow;
@@ -222,6 +224,9 @@ internal sealed class VisionaryMiddleware
                 ResponseSize = Math.Max(ctx.Response.ContentLength ?? 0, resCapture?.Written ?? 0),
                 Totals = _agent.SpansOn ? totals : null,
                 Spans = _agent.SpansOn ? spans : Array.Empty<SpanRecord>(),
+                TraceId = trace.Span.TraceId,
+                SpanId = trace.Span.SpanId,
+                ParentSpanId = trace.ParentSpanId,
             });
         }
         catch (Exception e)
