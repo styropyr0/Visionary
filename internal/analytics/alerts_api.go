@@ -271,6 +271,13 @@ func (s *Server) checkRule(ctx context.Context, in ruleInput) (alertRule, error)
 		} else {
 			sp.Query = ""
 		}
+		if sp.Metric == "custom_metric" {
+			if err := checkMetricRule(sp); err != nil {
+				return rule, err
+			}
+		} else {
+			sp.MetricQuery = nil
+		}
 		if ct := sp.ClearThreshold; ct != nil {
 			loose := (sp.Op == ">" || sp.Op == ">=") && *ct > sp.Threshold || (sp.Op == "<" || sp.Op == "<=") && *ct < sp.Threshold
 			if loose {

@@ -76,6 +76,7 @@ var retentionKinds = []retentionKind{
 	{Key: "spans", Label: "Calls inside requests", Description: "Queries, outbound calls and custom spans.", DefaultDays: 30, tables: []string{"spans"}},
 	{Key: "errors", Label: "Errors", Description: "Captured exceptions and panics.", DefaultDays: 30, tables: []string{"errors"}},
 	{Key: "system", Label: "System metrics", Description: "CPU, memory and runtime samples from SDKs and host agents.", DefaultDays: 30, tables: []string{"system_metrics"}},
+	{Key: "metrics", Label: "Custom metrics", Description: "Counters, gauges and histograms your services define, from the SDKs, OpenTelemetry and Prometheus.", DefaultDays: 30, tables: []string{"metrics"}},
 	{Key: "containers", Label: "Container metrics", Description: "Per-container samples, restarts, kills and health changes.", DefaultDays: 30, tables: []string{"container_metrics", "container_events"}},
 	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services and containers the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers"}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled flame graphs.", DefaultDays: 30, tables: []string{"profiles"}},
