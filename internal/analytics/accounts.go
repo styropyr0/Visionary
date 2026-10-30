@@ -53,6 +53,11 @@ type account struct {
 	LastSignIn string `json:"last_sign_in_at,omitempty"`
 	PasswordAt string `json:"password_changed_at"`
 	TwoStep    bool   `json:"two_step"`
+	// Source is empty for an account with a password, else oidc, saml or
+	// scim (sso_users.go).
+	Source     string `json:"source"`
+	Email      string `json:"email,omitempty"`
+	ExternalID string `json:"-"`
 	hash       string
 	// totpSecret is sealed (security_portal.go); totpRecovery is a JSON list
 	// of hashes of the unused recovery codes.
@@ -88,7 +93,7 @@ func (s *Server) accountsSchema() []string {
 )`}
 }
 
-const accountColumns = `id, username, name, role, disabled, created_by, created_at, last_sign_in_at, password_at, password_hash, totp_enabled, totp_secret, totp_recovery`
+const accountColumns = `id, username, name, role, disabled, created_by, created_at, last_sign_in_at, password_at, password_hash, totp_enabled, totp_secret, totp_recovery, source, email, external_id`
 
 func accountFrom(r []any) account {
 	return account{
@@ -96,6 +101,7 @@ func accountFrom(r []any) account {
 		Disabled: toInt(r[4]) != 0, CreatedBy: toString(r[5]), CreatedAt: toString(r[6]),
 		LastSignIn: toString(r[7]), PasswordAt: toString(r[8]), hash: toString(r[9]),
 		TwoStep: toInt(r[10]) != 0, totpSecret: toString(r[11]), totpRecovery: toString(r[12]),
+		Source: toString(r[13]), Email: toString(r[14]), ExternalID: toString(r[15]),
 	}
 }
 
@@ -124,9 +130,11 @@ func (s *Server) findAccount(ctx context.Context, column, value string) (*accoun
 	return &a, nil
 }
 
-// enabledAdmins counts the accounts that can still administer Visionary.
+// enabledAdmins counts the accounts that can still administer Visionary
+// with a password. Single sign-on admins don't count: they depend on the
+// identity provider.
 func (s *Server) enabledAdmins(ctx context.Context) (int, error) {
-	res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM visionary_users WHERE role = 'admin' AND disabled = 0`)
+	res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM visionary_users WHERE role = 'admin' AND disabled = 0 AND password_hash <> ''`)
 	if err != nil {
 		if missingTable(err, "visionary_users") {
 			return 0, nil
@@ -378,7 +386,11 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	if body.Disabled != nil {
 		next.Disabled = *body.Disabled
 	}
-	wasAdmin := a.Role == "admin" && !a.Disabled
+	if body.Password != nil && a.Source != "" {
+		writeError(w, http.StatusBadRequest, "single sign-on accounts have no password here; their identity provider signs them in")
+		return
+	}
+	wasAdmin := a.Role == "admin" && !a.Disabled && a.Source == ""
 	if wasAdmin && (next.Role != "admin" || next.Disabled) {
 		if ok, err := s.canLoseAdmin(r.Context()); err != nil {
 			s.fail(w, err)
@@ -411,6 +423,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next.PasswordAt = passwordAt
+	s.touchUser(a.ID)
 	s.audit(r, "team.account_updated", a.Username, map[string]any{
 		"role": next.Role, "disabled": next.Disabled, "password_reset": body.Password != nil,
 	})
@@ -430,7 +443,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such account")
 		return
 	}
-	if a.Role == "admin" && !a.Disabled {
+	if a.Role == "admin" && !a.Disabled && a.Source == "" {
 		if ok, err := s.canLoseAdmin(r.Context()); err != nil {
 			s.fail(w, err)
 			return
@@ -443,6 +456,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.touchUser(a.ID)
 	s.audit(r, "team.account_deleted", a.Username, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

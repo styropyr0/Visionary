@@ -107,6 +107,10 @@ func (s *Server) handlePutSignin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if sg.cfg.Type == authbridge.TypeSSO && len(s.ssoSetup().enabled()) == 0 {
+		writeError(w, http.StatusBadRequest, "turn on a single sign-on provider below first, so someone can sign in")
+		return
+	}
 	// Store what was checked, defaults filled in; secrets apart.
 	cfg := sg.cfg
 	cfg.SharedPassword = ""

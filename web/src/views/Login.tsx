@@ -5,6 +5,7 @@ import {
   AtSign,
   Bell,
   Eye,
+  KeyRound,
   EyeOff,
   LineChart,
   Loader2,
@@ -33,12 +34,19 @@ interface Props {
 export function Login({ notice, onSignedIn }: Props) {
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   const [cfgError, setCfgError] = useState("");
+  // A single sign-on that failed comes back with why, in the address.
+  const [ssoError] = useState(() => new URLSearchParams(window.location.search).get("sso_error") ?? "");
 
   useEffect(() => {
     api<AuthConfig>("/api/auth/config")
       .then(setCfg)
       .catch((e: unknown) => setCfgError(e instanceof Error ? e.message : String(e)));
-  }, []);
+    if (ssoError) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("sso_error");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  }, [ssoError]);
 
   return (
     <main className="auth">
@@ -60,8 +68,10 @@ export function Login({ notice, onSignedIn }: Props) {
               Open Visionary
             </button>
           </div>
+        ) : cfg?.type === "sso" ? (
+          <SsoOnly cfg={cfg} notice={notice} error={ssoError} />
         ) : cfg ? (
-          <SignInForm cfg={cfg} notice={notice} onSignedIn={onSignedIn} />
+          <SignInForm cfg={cfg} notice={notice} ssoError={ssoError} onSignedIn={onSignedIn} />
         ) : cfgError ? (
           <div className="auth-form">
             <div className="auth-alert error" role="alert">
@@ -77,7 +87,53 @@ export function Login({ notice, onSignedIn }: Props) {
   );
 }
 
-function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: string; onSignedIn: (s: SessionInfo) => void }) {
+/** The screen when single sign-on is the only way in: a button per provider. */
+function SsoOnly({ cfg, notice, error }: { cfg: AuthConfig; notice?: string; error: string }) {
+  return (
+    <div className="auth-form">
+      <div className="auth-form-head">
+        <BrandMark />
+        <h1>Sign in to Visionary</h1>
+        <p>Continue with your organization's account.</p>
+      </div>
+      {notice && !error && (
+        <div className="auth-alert info">
+          <ShieldCheck size={15} />
+          <span>{notice}</span>
+        </div>
+      )}
+      {error && (
+        <div className="auth-alert error" role="alert">
+          <AlertTriangle size={15} />
+          <span>{error}</span>
+        </div>
+      )}
+      <SsoButtons cfg={cfg} primary />
+      <div className="auth-meta">
+        <ShieldCheck size={13} />
+        Secured by your identity provider
+      </div>
+    </div>
+  );
+}
+
+/** Links that start single sign-on; the server sends the browser on. */
+function SsoButtons({ cfg, primary }: { cfg: AuthConfig; primary?: boolean }) {
+  const list = cfg.sso ?? [];
+  if (list.length === 0) return primary ? <div className="auth-alert error">No identity provider is turned on. An admin can set one up in Settings → Sign-in.</div> : null;
+  return (
+    <div className="auth-sso">
+      {list.map((p) => (
+        <a key={p.id} className={`btn ${primary ? "primary" : ""} auth-sso-btn`} href={`/api/sso/${encodeURIComponent(p.id)}/start`}>
+          <KeyRound size={15} />
+          Sign in with {p.name}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function SignInForm({ cfg, notice, ssoError, onSignedIn }: { cfg: AuthConfig; notice?: string; ssoError: string; onSignedIn: (s: SessionInfo) => void }) {
   const otp = cfg.type === "otp";
   const shared = cfg.type === "shared";
   const codeLength = cfg.code_length ?? 6;
@@ -90,7 +146,7 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
   const [showPassword, setShowPassword] = useState(false);
   const [digits, setDigits] = useState<string[]>(() => Array(codeLength).fill(""));
   const [sentTo, setSentTo] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(ssoError);
   const [pending, setPending] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const boxes = useRef<(HTMLInputElement | null)[]>([]);
@@ -442,6 +498,15 @@ function SignInForm({ cfg, notice, onSignedIn }: { cfg: AuthConfig; notice?: str
               : "Verify and sign in"}
         {!pending && <ArrowRight size={15} />}
       </button>
+
+      {(cfg.sso?.length ?? 0) > 0 && !twoStep && step === "identifier" && (
+        <>
+          <div className="auth-or" aria-hidden>
+            <span>or</span>
+          </div>
+          <SsoButtons cfg={cfg} />
+        </>
+      )}
 
       <div className="auth-meta">
         <ShieldCheck size={13} />

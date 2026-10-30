@@ -661,4 +661,49 @@ export const GUIDE: GuideSection[] = [
       },
     ],
   },
+  {
+    id: "sso",
+    group: "Manage",
+    title: "Single sign-on and SCIM",
+    intro:
+      "Let people sign in with the account they already have at Google, Microsoft Entra ID, Okta, Auth0, Keycloak or any OpenID Connect or SAML 2.0 provider, and let the provider add and remove them. It all lives in **Settings → Sign-in → Single sign-on**, applies without a restart, and works next to the other ways in.",
+    steps: [
+      {
+        title: "Keep a way back in",
+        text: "Before you start, choose **Accounts** under **How people sign in** and add an admin account for yourself. Its buttons show on the sign-in screen next to the form, so you can still get in if the provider has a bad day. Choose **Single sign-on only** later if you want just the buttons. If you are ever locked out, set `VISIONARY_ENABLE_AUTH=false` on the server and restart it.",
+      },
+      {
+        title: "Add a provider",
+        text: "Check the **Public URL** (the address people open Visionary at), click **Add provider**, pick **OpenID Connect** or **SAML 2.0** and leave it switched off. Save once to get the addresses to register at the provider: the **Redirect URL** for OpenID Connect, the **Entity ID and metadata** and **ACS URL** for SAML.",
+      },
+      {
+        title: "Google",
+        text: "In Google Cloud Console → APIs & Services → Credentials, create an **OAuth client ID** of type **Web application** and add the Redirect URL. In Visionary pick **Google**, paste the client ID and secret. Google sends no groups: set **Everyone else** to a role and list your Workspace domain under **Allowed email domains**.",
+      },
+      {
+        title: "Microsoft Entra ID",
+        text: "In Entra → App registrations, register an app with the Redirect URL as a **Web** platform and create a client secret. The issuer is `https://login.microsoftonline.com/<tenant-id>/v2.0`. For roles, add **App roles** (such as `Visionary.Admin`), assign people to them and map them with the claim `roles`; groups arrive as object IDs in `groups` if you turn on the groups claim. For SAML, create an Enterprise application, upload Visionary's metadata and paste the **App Federation Metadata Url**.",
+      },
+      {
+        title: "Okta",
+        text: "Create an **OIDC Web Application** with the Redirect URL as a sign-in redirect URI; the issuer is your Okta domain (or its authorization server). Under **Sign On**, add a **groups** claim (filter, for example, starts with `visionary`) and map those groups. For SAML, create a SAML 2.0 app with the ACS URL as **Single sign-on URL** and the entity ID as **Audience URI**, add a group attribute statement named `groups`, then paste the app's metadata URL.",
+      },
+      {
+        title: "Auth0 and Keycloak",
+        text: "**Auth0:** create a **Regular Web Application**, add the Redirect URL to **Allowed Callback URLs**; the issuer is `https://<tenant>.auth0.com/`. Roles need a post-login Action that sets a namespaced claim such as `https://example.com/roles`, which you name as the groups claim. **Keycloak:** create an OpenID Connect client with client authentication on and the Redirect URL as a valid redirect URI; the issuer is `https://<host>/realms/<realm>`. Add a **Group Membership** mapper with the claim `groups` and **Full group path** off.",
+      },
+      {
+        title: "Map groups to roles",
+        text: "**Groups and roles** maps the provider's groups to Visionary roles, such as `visionary-admins=admin,engineering=editor`; the highest one wins. **Everyone else** is the role for people in none of them, or **No access** to turn them away. **Allowed email domains** limits who gets in, and **Create accounts** makes an account the first time someone signs in.",
+      },
+      {
+        title: "Test, then switch it on",
+        text: "**Test sign-in** opens the provider in a new tab and, instead of signing you in, shows what the provider sent and the role it would give, or exactly what went wrong. When it looks right, switch the provider on and save. Every sign-in, refusal and change is in the audit log.",
+      },
+      {
+        title: "Provision with SCIM",
+        text: "Under **API keys**, create a key of scope **SCIM**. At the provider, turn on SCIM provisioning with the **SCIM base URL** from Settings and the key as a bearer token (Okta: **API Token**; Entra: **Secret Token**). People it adds show under **People from single sign-on**; switching someone off at the provider signs them out at once. To take roles from SCIM groups, fill in **Groups and roles** under **Provisioning (SCIM)**.",
+      },
+    ],
+  },
 ];

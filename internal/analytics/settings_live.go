@@ -173,6 +173,7 @@ func (s *Server) refreshLive(ctx context.Context) error {
 		}
 	}
 	s.liveSet.p.Store(l)
+	s.applySSO(m)
 	s.applySignin(m)
 	s.applyConfig()
 	return nil
