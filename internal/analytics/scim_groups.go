@@ -114,6 +114,7 @@ func (s *Server) saveGroup(ctx context.Context, g *scimGroup, insert bool) error
 	}
 	members, _ := json.Marshal(g.Members)
 	g.UpdatedAt = nowTS()
+	defer s.dropWorkspaces()
 	if insert {
 		g.CreatedAt = g.UpdatedAt
 		return dbErr(s.db.Exec(ctx, `INSERT INTO visionary_scim_groups (id, display_name, external_id, members, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,

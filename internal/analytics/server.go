@@ -73,7 +73,7 @@ func New(cfg Config, logger *slog.Logger, static fs.FS) (*Server, error) {
 	}
 	logger.Info("database", "backend", conn.Name())
 	q := sqlDialect{conn.Dialect()}
-	s := &Server{cfg: cfg, db: conn, q: q, overview: overviewPanels(q), system: systemPanels(q), logger: logger, static: static}
+	s := &Server{cfg: cfg, db: scopedDB{conn}, q: q, overview: overviewPanels(q), system: systemPanels(q), logger: logger, static: static}
 	a, err := newAuth(s)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 		}
 		sg := s.signin()
 		if sg.open != "" {
-			h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, localSession)))
+			s.serveAs(w, r, localSession, h)
 			return
 		}
 		if sg.broken != nil {
@@ -182,7 +182,7 @@ func (s *Server) authed(h http.HandlerFunc) http.Handler {
 				return
 			}
 		}
-		h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, next)))
+		s.serveAs(w, r, next, h)
 	})
 }
 
@@ -436,7 +436,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.sessionView(sessionFrom(r)))
+	out := s.sessionView(sessionFrom(r))
+	if rl := s.requestRole(r); rl != s.roleOf(sessionFrom(r)) {
+		out["role"] = rl.String()
+		out["permissions"] = map[string]bool{"view": rl >= roleViewer, "edit": rl >= roleEditor, "admin": rl >= roleAdmin}
+	}
+	for k, v := range s.workspaceView(r) {
+		out[k] = v
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // sessionView is what the UI knows about the user: who they are and what

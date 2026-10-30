@@ -151,6 +151,10 @@ func (e *alertEngine) run(ctx context.Context, r alertRule) {
 }
 
 func (e *alertEngine) enabledRules(ctx context.Context) ([]alertRule, error) {
+	if scopeFrom(ctx) != nil {
+		// The cache holds every workspace's rules.
+		return e.s.listRules(ctx, true)
+	}
 	e.mu.Lock()
 	if time.Since(e.rulesAt) < rulesCacheFor && e.rules != nil {
 		r := e.rules
@@ -202,7 +206,7 @@ func (e *alertEngine) evaluate(parent context.Context, r alertRule, now time.Tim
 	ctx, cancel := context.WithTimeout(parent, evalTimeout)
 	defer cancel()
 	s := e.s
-	obs, err := s.observe(ctx, r, now)
+	obs, err := s.observe(s.ruleScope(ctx, r.ID), r, now)
 	e.setErr(r.ID, err)
 	if err != nil {
 		return err
@@ -588,7 +592,8 @@ func (e *alertEngine) recoverLog(what string) {
 // every ten minutes.
 func (e *alertEngine) knownInstances(ctx context.Context, now time.Time) ([]instanceSeen, error) {
 	e.mu.Lock()
-	if time.Since(e.instancesAt) < 10*time.Minute && e.instances != nil {
+	scoped := scopeFrom(ctx) != nil
+	if !scoped && time.Since(e.instancesAt) < 10*time.Minute && e.instances != nil {
 		in := e.instances
 		e.mu.Unlock()
 		return in, nil
@@ -606,7 +611,7 @@ func (e *alertEngine) knownInstances(ctx context.Context, now time.Time) ([]inst
 		}
 	}
 	// An empty list is not cached, so the first instance is seen at once.
-	if len(out) > 0 {
+	if len(out) > 0 && !scoped {
 		e.mu.Lock()
 		e.instances, e.instancesAt = out, time.Now()
 		e.mu.Unlock()
@@ -616,7 +621,7 @@ func (e *alertEngine) knownInstances(ctx context.Context, now time.Time) ([]inst
 
 // sloBudget returns the 30-day totals for an SLO scope, cached five minutes.
 func (e *alertEngine) sloBudget(ctx context.Context, r alertRule, now time.Time, scope string, sargs []any) (int64, int64, string, error) {
-	key := fmt.Sprint(r.Spec.Scope, r.Spec.Target)
+	key := fmt.Sprint(r.Spec.Scope, r.Spec.Target, scopeFrom(ctx).key())
 	e.mu.Lock()
 	c, ok := e.budgets[key]
 	e.mu.Unlock()

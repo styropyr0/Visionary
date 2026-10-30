@@ -32,12 +32,13 @@ import (
 //	             PromQL and the Prometheus HTTP API (promql*.go)
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
 //	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
+//	workspaces.go workspaces: people scoped to sets of services
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.workspacesSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -62,6 +63,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.metricsRoutes(mux)
 	s.ssoRoutes(mux)
 	s.ciRoutes(mux)
+	s.workspacesRoutes(mux)
 }
 
 // Start launches the features' background work. It returns at once; the work

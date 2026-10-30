@@ -226,7 +226,7 @@ func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h
 		Role:    roleViewer.String(),
 		Expires: time.Now().Add(time.Hour).Unix(),
 	}
-	h(w, r.WithContext(context.WithValue(r.Context(), sessionKey{}, sess)))
+	s.serveAs(w, r, sess, h)
 }
 
 func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {

@@ -139,7 +139,7 @@ func sessionFrom(r *http.Request) *session {
 // can(r, "admin") and answers 403 when it is false.
 func (s *Server) can(r *http.Request, action string) bool {
 	need, ok := actionRoles[action]
-	return ok && s.roleOf(sessionFrom(r)) >= need
+	return ok && s.requestRole(r) >= need
 }
 
 // require answers 403 unless the user may perform action.
