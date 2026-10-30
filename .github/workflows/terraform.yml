@@ -1,0 +1,153 @@
+name: Terraform provider
+
+# Tests the provider in terraform/ on pull requests that touch it or the server, and releases
+# it when a tag like terraform/v0.1.0 is pushed. The Terraform registry only reads a repository
+# named terraform-provider-visionary with the provider at its root, so a release pushes
+# terraform/ (with its history) to styropyr0/terraform-provider-visionary, tags it v0.1.0
+# there, and goreleaser builds, signs (GPG) and attaches the binaries to that repository's
+# release, where the registry picks them up. The same tag makes the module resolvable here as
+# github.com/styropyr0/visionary/terraform@v0.1.0.
+#
+# A release can be re-run: it skips (with a notice) a version that is already released.
+# One-time setup: docs/releasing.md, "Terraform provider".
+
+on:
+  push:
+    tags: ["terraform/v*"]
+  pull_request:
+    paths: ["terraform/**", "internal/**", "cmd/visionary/**", ".github/workflows/terraform.yml"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, e.g. terraform/v0.1.0
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: terraform-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform/go.mod
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: go vet ./...
+      - run: go test ./...
+      # Starts a Visionary built from this checkout on a temporary SQLite database.
+      - name: Acceptance tests
+        env:
+          TF_ACC: "1"
+        run: go test ./... -run TestAcc -timeout 20m
+      - name: Docs match the schema
+        run: |
+          go generate ./...
+          git diff --exit-code -- docs || {
+            echo "::error::terraform/docs is out of date: run go generate ./... in terraform/ and commit"
+            exit 1
+          }
+
+  release:
+    name: Release
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      REPO: styropyr0/terraform-provider-visionary
+    steps:
+      - id: v
+        name: Version from tag
+        run: |
+          if [[ ! "$TAG" =~ ^terraform/(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::'$TAG' is not a provider release tag like terraform/v0.1.0"
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+      - id: check
+        name: Skip if already released
+        env:
+          GH_TOKEN: ${{ secrets.TERRAFORM_PROVIDER_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          if gh release view "$VERSION" --repo "$REPO" > /dev/null 2>&1; then
+            echo "::notice::$REPO $VERSION is already released; skipping"
+            echo "status=already released" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - if: steps.check.outputs.status == ''
+        name: Push terraform/ to the provider repository
+        env:
+          TOKEN: ${{ secrets.TERRAFORM_PROVIDER_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          git subtree split --prefix terraform -b provider
+          url="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          git push "$url" provider:refs/heads/main
+          if ! git ls-remote --exit-code --tags "$url" "refs/tags/$VERSION" > /dev/null; then
+            git push "$url" "provider:refs/tags/$VERSION"
+          fi
+      - if: steps.check.outputs.status == ''
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ env.REPO }}
+          ref: refs/tags/${{ steps.v.outputs.version }}
+          token: ${{ secrets.TERRAFORM_PROVIDER_TOKEN }}
+          path: provider
+          fetch-depth: 0
+          persist-credentials: false
+      - if: steps.check.outputs.status == ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: provider/go.mod
+      - if: steps.check.outputs.status == ''
+        id: gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.TERRAFORM_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.TERRAFORM_GPG_PASSPHRASE }}
+      - if: steps.check.outputs.status == ''
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+          workdir: provider
+        env:
+          GITHUB_TOKEN: ${{ secrets.TERRAFORM_PROVIDER_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+      - name: Summary
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          STATUS: ${{ steps.check.outputs.status || 'released' }}
+        run: |
+          {
+            echo "### Terraform provider $VERSION: $STATUS"
+            echo
+            echo "- Release: https://github.com/$REPO/releases/tag/$VERSION"
+            echo "- Registry: https://registry.terraform.io/providers/styropyr0/visionary/latest (it picks the release up within minutes)"
+          } >> "$GITHUB_STEP_SUMMARY"

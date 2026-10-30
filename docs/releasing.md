@@ -349,3 +349,50 @@ cd sdks/android && VERSION=v0.4.0 ./gradlew :visionary:publishReleasePublication
 
 The copied `LICENSE` files are ignored by git. The npm packages copy `LICENSE` themselves when
 packing.
+
+## Terraform provider
+
+The provider in [`terraform/`](../terraform) has its own version and tags, and its own workflow,
+[`terraform.yml`](../.github/workflows/terraform.yml). The Terraform registry only reads a
+public repository named `terraform-provider-visionary` with the provider at its root, so a
+release copies `terraform/` (with its history) to `styropyr0/terraform-provider-visionary`,
+tags it there, and goreleaser builds, signs and attaches the binaries to that repository's
+release. Nobody commits to that repository by hand.
+
+### One-time setup
+
+1. Create the public, empty repository `styropyr0/terraform-provider-visionary`.
+2. Create a fine-grained personal access token with **Contents: read and write** on that
+   repository only, and store it as the `TERRAFORM_PROVIDER_TOKEN` secret of
+   `styropyr0/Visionary`.
+3. Signing key: the registry needs the release's checksums signed with an RSA key (it does not
+   take ECC keys). The Maven Central key from step 7 above works, or make one the same way.
+   Store the armored private key in `TERRAFORM_GPG_PRIVATE_KEY` and its passphrase in
+   `TERRAFORM_GPG_PASSPHRASE`.
+4. At https://registry.terraform.io, sign in with GitHub, add the public key
+   (`gpg --armor --export ABCDEF0123456789`) under **Settings → Signing keys** for the
+   `styropyr0` namespace, then **Publish → Provider** and pick the repository. The registry
+   needs a first release to show anything, so do this after the first tag below.
+
+### Releasing
+
+```sh
+git tag -a terraform/v0.1.0 -m "Terraform provider v0.1.0"
+git push origin terraform/v0.1.0
+```
+
+The workflow runs the provider's unit and acceptance tests (against a Visionary built from the
+tag), checks that `terraform/docs` matches the schema, then releases `v0.1.0` in the provider
+repository. The registry picks it up within minutes. `terraform/v*` tags do not start the SDK,
+JitPack or image workflows. To re-run a release, use
+`gh workflow run terraform.yml --ref terraform/v0.1.0 -f tag=terraform/v0.1.0`; a version that
+is already released is skipped with a notice.
+
+### Locally
+
+```sh
+cd terraform
+go vet ./... && go test ./...
+TF_ACC=1 go test ./... -run TestAcc   # needs the terraform CLI; builds and starts Visionary
+go generate ./...                      # regenerates docs/ from the schema and examples/
+```
