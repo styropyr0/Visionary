@@ -28,7 +28,8 @@ import (
 //	applogs.go   application logs: ingest, search, patterns, archive
 //	traces.go    distributed traces across services, trace search, the service map
 //	incidents.go declared incidents: roles, timeline, status updates, postmortems
-//	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts
+//	metrics.go   custom metrics: SDK rows, OTLP, Prometheus remote_write, charts,
+//	             PromQL and the Prometheus HTTP API (promql*.go)
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.

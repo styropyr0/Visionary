@@ -37,6 +37,8 @@ type ruleSpec struct {
 	For       string     `json:"for"`
 	// custom_metric rules: the metric, its label filters and aggregation
 	MetricQuery *metricQuery `json:"metric_query,omitempty"`
+	// promql rules: the expression
+	PromQL string `json:"promql,omitempty"`
 	// Repeat re-sends a firing alert this often; empty never repeats.
 	Repeat string `json:"repeat,omitempty"`
 	// Anomaly rules.

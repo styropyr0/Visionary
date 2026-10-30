@@ -50,6 +50,7 @@ type modelStep struct {
 	Action    string       `json:"action"`
 	Purpose   string       `json:"purpose"`
 	SQL       string       `json:"sql"`
+	PromQL    string       `json:"promql"`
 	Answer    string       `json:"answer"`
 	Panels    []modelPanel `json:"panels"`
 	Followups []string     `json:"followups"`
@@ -59,6 +60,7 @@ type modelPanel struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	SQL         string `json:"sql"`
+	PromQL      string `json:"promql"`
 	Viz         Viz    `json:"viz"`
 }
 
@@ -69,6 +71,8 @@ type AnalystPanel struct {
 	Query       string  `json:"query"`
 	Viz         Viz     `json:"viz"`
 	Result      *Result `json:"result"`
+	// PromQL marks Query as a PromQL expression rather than SQL.
+	PromQL bool `json:"promql,omitempty"`
 }
 
 // sse writes server-sent events and flushes each one.
@@ -156,9 +160,19 @@ func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRan
 			}
 			queries++
 			id := queries
-			out.send("step", map[string]any{"id": id, "purpose": fallback(step.Purpose, "Looking at the data"), "sql": strings.TrimSpace(step.SQL)})
+			text, lang := strings.TrimSpace(step.SQL), "sql"
+			if strings.TrimSpace(step.PromQL) != "" {
+				text, lang = strings.TrimSpace(step.PromQL), "promql"
+			}
+			out.send("step", map[string]any{"id": id, "purpose": fallback(step.Purpose, "Looking at the data"), "sql": text, "lang": lang})
 			started := time.Now()
-			res, err := s.runTemplate(ctx, step.SQL, tr, false)
+			var res *Result
+			var err error
+			if lang == "promql" {
+				res, err = s.analystPromQL(ctx, text, tr)
+			} else {
+				res, err = s.runTemplate(ctx, step.SQL, tr, false)
+			}
 			if err != nil {
 				var qe *queryError
 				if !errors.As(err, &qe) {
@@ -191,6 +205,20 @@ func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRan
 // rather than failing the answer.
 func (s *Server) sendPanels(ctx context.Context, panels []modelPanel, tr timeRange, out sse) {
 	for _, p := range limit(panels, maxPanels) {
+		if q := strings.TrimSpace(p.PromQL); q != "" {
+			res, err := s.analystPromQL(ctx, q, tr)
+			if err != nil {
+				s.logger.Info("analyst panel dropped", "title", p.Title, "err", err)
+				continue
+			}
+			viz := p.Viz
+			viz.X, viz.Y, viz.Series = "t", []string{"value"}, "series"
+			if viz.Type == "" || viz.Type == "bar" || viz.Type == "pie" {
+				viz.Type = "timeseries"
+			}
+			out.send("panel", AnalystPanel{Title: fallback(p.Title, "Chart"), Description: p.Description, Query: q, Viz: normalizeViz(viz, res.Columns), Result: res, PromQL: true})
+			continue
+		}
 		res, err := s.runTemplate(ctx, p.SQL, tr, false)
 		if err != nil {
 			s.logger.Info("analyst panel dropped", "title", p.Title, "err", err)
@@ -413,6 +441,7 @@ Table system_metrics: one row per server instance every ~15 seconds. May be empt
 How to work
 - Reply with exactly one JSON object each turn.
 - To look at data: {"action": "query", "purpose": "<what you are checking, under 12 words>", "sql": "<SQL>"}. You get back the columns and up to 40 rows.
+- For questions about metrics (custom metrics, request rates, latency percentiles, system gauges) you may write PromQL instead: put "promql": "<expression>" in place of "sql", in a query or a panel. It is evaluated over the dashboard range, one point per bucket, as t, series, value rows. See PromQL below.
 - You have up to ` + fmt.Sprint(maxInvestigations) + ` queries. Use them: start broad to find when or where, then narrow. Simple chart requests may need none.
 - You see at most 40 rows of each result, plus a summary of every numeric column over all rows (min, avg, max and when the max happened). Never select raw rows to scan by eye: aggregate per bucket, and to find peaks ORDER BY the measure DESC LIMIT 10.
 - When the question names a period ("last 2 days", "yesterday", "this morning"), query that period with explicit timestamps computed from Now, not {{from}}/{{to}}, and mention that you did.

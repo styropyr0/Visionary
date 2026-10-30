@@ -198,6 +198,14 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 		}
 		out.Result, out.Note = res, note
 
+	case sp.Metric == "promql":
+		out.Threshold = ptr(sp.Threshold)
+		res, note, err := s.previewPromQL(ctx, sp, day[0], tr)
+		if err != nil {
+			return nil, err
+		}
+		out.Result, out.Note = res, note
+
 	case sp.Metric == "log_new_patterns":
 		out.Unit, out.Threshold = "count", ptr(sp.Threshold)
 		t := strings.ReplaceAll(s.q.bucketOf("3600"), "created_at", "first_seen")

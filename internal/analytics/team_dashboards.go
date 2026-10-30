@@ -258,7 +258,12 @@ func validatePanelSource(p *dashPanel) error {
 		return errors.New("a panel takes at most 8 parameters")
 	}
 	for k, v := range p.Params {
-		if !paramKey.MatchString(k) || k == "from" || k == "to" || len(v) > 256 || strings.ContainsFunc(v, func(r rune) bool { return r < 0x20 }) {
+		// A PromQL query may be longer, and span lines.
+		limit, ctl := 256, func(r rune) bool { return r < 0x20 }
+		if k == "query" {
+			limit, ctl = 2000, func(r rune) bool { return r < 0x20 && r != '\n' && r != '\t' }
+		}
+		if !paramKey.MatchString(k) || k == "from" || k == "to" || len(v) > limit || strings.ContainsFunc(v, ctl) {
 			return fmt.Errorf("invalid panel parameter %q", k)
 		}
 	}
