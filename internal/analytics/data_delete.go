@@ -56,6 +56,8 @@ var dataKinds = []dataKind{
 		tables: []dataTable{{"security_events", true}}},
 	{Key: "hosts", Label: "Host agent data", Description: "Processes, mounts, services, containers and their metrics and events.",
 		tables: []dataTable{{"host_processes", false}, {"host_mounts", false}, {"host_units", false}, {"host_containers", false}, {"container_metrics", false}, {"container_events", false}}},
+	{Key: "ci", Label: "CI runs and tests", Description: "Pipelines, jobs, test results and flaky tests.", Service: true,
+		tables: []dataTable{{"ci_pipelines", true}, {"ci_jobs", true}, {"ci_tests", true}, {"ci_flaky_tests", true}}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN plans asked for from the Queries page.",
 		tables: []dataTable{{"explain_requests", false}}},
 }

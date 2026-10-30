@@ -1,4 +1,5 @@
 import type { Route } from "../components/Sidebar";
+import { junitStep } from "./ci";
 
 /**
  * What each page shows and how to fill it, for the sidebar tips and the help
@@ -559,6 +560,43 @@ Visionary.DescribeMetric("checkout_ms", unit: "ms", buckets: new double[] { 50, 
 OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`,
     },
   },
+  ci: {
+    id: "ci",
+    title: "Connect GitHub Actions",
+    intro:
+      "GitHub sends every workflow run and job to this server as it moves from queued to finished. In the repository (or organization) open Settings → Webhooks → Add webhook: the payload URL below, content type `application/json`, a long random secret, and under “Let me select individual events” tick “Workflow runs” and “Workflow jobs”. Save the same secret in Settings → Server → CI. `?service=` names the service the runs belong to; without it, the repository's name is used.",
+    any: {
+      label: "Payload URL",
+      code: `${origin}/api/ingest/ci/github?service=my-api`,
+    },
+  },
+  junit: {
+    id: "junit",
+    title: "Upload test results",
+    intro:
+      "Add a step after your tests that posts their JUnit XML with a server key from Settings → API keys (saved as the `VISIONARY_KEY` secret). pytest (`--junitxml=junit.xml`), Jest with jest-junit, Maven Surefire and Gradle, go-junit-report and most other runners write it. The run id ties the results to the run; several `-F file=@…` send several reports, and gzip'd files are fine. Surefire's reruns that passed count as flaky.",
+    any: {
+      label: "GitHub Actions step",
+      code: junitStep(origin),
+    },
+  },
+  cirun: {
+    id: "cirun",
+    title: "Or post runs from any CI",
+    intro:
+      "GitLab, CircleCI, Buildkite, Jenkins or a script post each run as JSON with a server key, as often as it changes; the same `provider`, `repo` and `run_id` update one run. `status` takes your CI's words (`running`, `success`, `failed`, `canceled`...), times are RFC 3339, and `jobs` is optional. Send a list or `{\"runs\": [...]}` for several. Tests go to the JUnit endpoint with the same `provider`, `repo` and `run_id`.",
+    any: {
+      label: "curl",
+      code: `curl -X POST ${origin}/api/ingest/ci/runs \\
+  -H "Authorization: Bearer <server key>" \\
+  -d '{"provider": "gitlab", "repo": "shop/api", "workflow": "pipeline", "run_id": "9001",
+       "number": 412, "branch": "main", "default_branch": "main", "commit": "<sha>",
+       "actor": "ann", "status": "success", "service": "api", "url": "https://gitlab.example.com/...",
+       "queued_at": "2026-10-30T09:00:00Z", "started_at": "2026-10-30T09:00:40Z", "finished_at": "2026-10-30T09:12:00Z",
+       "jobs": [{"id": 1, "name": "test", "status": "success",
+                 "started_at": "2026-10-30T09:01:00Z", "finished_at": "2026-10-30T09:11:00Z"}]}'`,
+    },
+  },
   analyst: {
     id: "analyst",
     title: "Turn on the analyst",
@@ -770,6 +808,19 @@ export const HELP: Record<Route, PageHelp> = {
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
     ],
     setup: ["checks", "statuspage"],
+  },
+  ci: {
+    title: "CI",
+    tip: "Your CI pipelines and tests: success rate, duration and queue time, failing and slow jobs and tests, flaky tests, and the deploy each commit became.",
+    what: "Every workflow run GitHub Actions or your CI sent, with its jobs and the test results uploaded for it. Pipelines shows the success rate per workflow over time, p50 and p95 duration, how long runs waited for a runner, the slowest and most failing jobs, and the runs themselves. Tests shows failures by test, the slowest tests and those getting slower; Flaky lists tests that passed and failed on the same code. A run opens with its jobs on a timeline, its failed tests and, when a release's version names its commit, the deploy with the service's traffic before and after.",
+    read: [
+      "The success rate counts runs that passed or failed; cancelled and skipped runs say nothing about the code and are left out.",
+      "Queue time is the wait from a run being queued until its first job started on a runner; a growing queue means too few runners.",
+      "A test is flaky when it passed and failed on one commit (a retry that passed, or a rerun Surefire reported), or failed on its own between passes on the default branch at least twice. Its score is the share of the commits it ran on where it flaked.",
+      "A run links to a deploy when a release's version is, or contains, a commit SHA prefix of 7 or more characters: `a1b2c3d`, `1.4.0+a1b2c3d`, or git describe's `v1.4.0-3-ga1b2c3d`. Compare versions on Performance links back to the run that built each version.",
+      "Alerts → New rule → CI watches the pipeline failure rate and p95 duration per workflow, job queue time and new flaky tests. Settings → Data keeps CI data 90 days by default.",
+    ],
+    setup: ["ci", "junit", "cirun"],
   },
   security: {
     title: "Security",

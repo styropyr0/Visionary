@@ -28,6 +28,7 @@ import {
   Sparkles,
   Sun,
   Waypoints,
+  Workflow,
 } from "lucide-react";
 import type { SessionUser } from "../lib/api";
 import { Modal } from "./Modal";
@@ -53,6 +54,7 @@ export type Route =
   | "errors"
   | "frontend"
   | "uptime"
+  | "ci"
   | "security"
   | "explore"
   | "applogs"
@@ -65,7 +67,7 @@ export type Route =
   | "settings"
   | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "metrics", "errors", "frontend", "uptime", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "incidents", "settings", "guide"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "metrics", "errors", "frontend", "uptime", "ci", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "incidents", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -82,6 +84,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
       { route: "errors", label: "Errors", icon: Bug },
       { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
       { route: "uptime", label: "Uptime", icon: Activity },
+      { route: "ci", label: "CI", icon: Workflow },
       { route: "security", label: "Security", icon: ShieldAlert },
     ],
   },

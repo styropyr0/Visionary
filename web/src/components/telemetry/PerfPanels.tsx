@@ -11,6 +11,8 @@ import { SpanDetailDrawer } from "./SpanDetail";
 import "./telemetry.css";
 import "./perf.css";
 import { HelpLink } from "../Help";
+import { useQuery } from "../../lib/useQuery";
+import { ciApi, outcomeOf, OUTCOME_LABEL, runHref, type CIRun } from "../../lib/ci";
 
 const NO_SPANS = (
   <>
@@ -295,6 +297,31 @@ interface VersionRow {
 }
 
 /** Two versions side by side: overall and per route, over the dashboard range. */
+/** The CI runs that built the two versions, found by the commit each version names. */
+function VersionBuilds({ a, b }: { a: string; b: string }) {
+  const q = useQuery(`ci-builds?${a}|${b}`, (signal) => ciApi.builds([a, b], signal).catch(() => ({ builds: {} as Record<string, CIRun> })));
+  const builds = q.data?.builds ?? {};
+  const found = [a, b].filter((v) => builds[v]);
+  if (found.length === 0) return null;
+  return (
+    <div className="cmp-builds dim">
+      {found.map((v) => {
+        const run = builds[v];
+        return (
+          <span key={v}>
+            <span className="mono">{shortVersion(v)}</span> built by{" "}
+            <a href={runHref(run.id)}>
+              {run.workflow || "CI run"}
+              {run.number ? ` #${run.number}` : ""}
+            </a>{" "}
+            ({(OUTCOME_LABEL[outcomeOf(run)] ?? outcomeOf(run)).toLowerCase()})
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CompareVersionsPanel({ className }: { className: string }) {
   const versions = useTelemetry("versions");
   const list = useMemo<VersionRow[]>(
@@ -365,6 +392,7 @@ export function CompareVersionsPanel({ className }: { className: string }) {
         ) : (
           <div className="cmp">
             {pickers}
+            <VersionBuilds a={a} b={b} />
             <div className="cmp-summary">
               <div>
                 <div className="cmp-label">All routes, p50</div>

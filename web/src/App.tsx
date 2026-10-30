@@ -32,6 +32,7 @@ import { Metrics } from "./views/Metrics";
 import { Security } from "./views/Security";
 import { Guide } from "./views/Guide";
 import { Traces } from "./views/Traces";
+import { CI } from "./views/CI";
 
 
 function readRoute(): Route {
@@ -205,6 +206,7 @@ export function App() {
             {route === "errors" && <Errors />}
             {route === "frontend" && <Frontend />}
             {route === "uptime" && <Uptime />}
+            {route === "ci" && <CI />}
             {route === "security" && <Security />}
             {route === "dashboards" && <Dashboards />}
             {route === "alerts" && <Alerts meta={meta.data} />}
