@@ -22,7 +22,8 @@ module Visionary
                   :error_code_field, :error_key_field,
                   :system_metrics, :system_interval, :system_retention_days, :disk_path,
                   :service, :version, :spans, :span_threshold_ms, :span_max, :errors,
-                  :profile, :logs, :log_level, :log_queue_size
+                  :profile, :logs, :log_level, :log_queue_size,
+                  :metrics, :metrics_interval, :metrics_max_series
 
     # Runs on the writer thread, once per distinct user per batch, for users
     # missing a handle or role: ->(id) { [handle, role] } or nil.
@@ -71,6 +72,11 @@ module Visionary
       # The lowest level kept until Settings → Logs has been read.
       @log_level = "info"
       @log_queue_size = 10_000
+      # Custom metrics (Visionary.counter, gauge, histogram): seconds between
+      # rows, and label sets kept per metric name.
+      @metrics = true
+      @metrics_interval = 15.0
+      @metrics_max_series = 1000
     end
 
     def self.from_env(env = ENV)
@@ -104,6 +110,9 @@ module Visionary
       c.profile = parse_bool(s.("VISIONARY_PROFILE"), true)
       c.logs = parse_bool(s.("VISIONARY_LOGS"), true)
       c.log_level = s.("VISIONARY_LOG_LEVEL").then { |v| Logs.parse_level(v).positive? ? v.downcase : "info" }
+      c.metrics = parse_bool(s.("VISIONARY_METRICS"), true)
+      c.metrics_interval = parse_duration(s.("VISIONARY_METRICS_INTERVAL"), 15.0)
+      c.metrics_max_series = parse_int(s.("VISIONARY_METRICS_MAX_SERIES"), 1000)
       c
     end
 

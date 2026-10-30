@@ -12,6 +12,7 @@ module Visionary
     def self.internal!
       Thread.current[INTERNAL] = true
       RequestContext.current = nil
+      TraceContext.current = nil
     end
 
     def self.internal? = Thread.current[INTERNAL] == true
@@ -41,11 +42,16 @@ module Visionary
         @limiter = Errors::Limiter.new
       end
 
-      # start_mono is the CLOCK_MONOTONIC start in ms, duration in ms.
-      def span(kind:, name:, start_mono:, duration_ms:, target: nil, detail: nil, status: "ok", error: nil, row_count: nil)
+      # start_mono is the CLOCK_MONOTONIC start in ms, duration in ms. trace
+      # is [SpanContext, parent span id] from TraceContext.child when the
+      # caller made the span current or sent its id; else a child of the
+      # current span.
+      def span(kind:, name:, start_mono:, duration_ms:, target: nil, detail: nil, status: "ok", error: nil,
+               row_count: nil, trace: nil)
         return unless @spans_on && @writer
         return if Telemetry.internal?
 
+        sc, parent_id = trace || TraceContext.child
         ctx = RequestContext.current
         duration_ms = duration_ms.to_f
         started_at = Time.now - ((Telemetry.now_ms - start_mono) / 1000.0)
@@ -54,7 +60,8 @@ module Visionary
           detail: detail && cut(detail.to_s, SQLText::MAX_DETAIL), started_at: started_at,
           offset_ms: ctx ? (start_mono - ctx.started_mono).round(3) : nil,
           duration_ms: duration_ms.round(3), status: status, error: error && cut(error.to_s, 500),
-          row_count: row_count, request_id: ctx&.request_id
+          row_count: row_count, request_id: ctx&.request_id,
+          trace_id: sc.trace_id, span_id: sc.span_id, parent_span_id: parent_id
         )
         if ctx
           # A late span (its request was already logged) is written on its
@@ -70,7 +77,8 @@ module Visionary
 
       def span_row(span)
         [Visionary.timestamp(span.started_at), span.request_id, @cfg.service, @instance, span.kind, span.name,
-         span.target, span.detail, span.offset_ms, span.duration_ms, span.status, span.error, span.row_count]
+         span.target, span.detail, span.offset_ms, span.duration_ms, span.status, span.error, span.row_count,
+         span.trace_id, span.span_id, span.parent_span_id]
       end
 
       # Rows for a finished request's spans, kept for every request.

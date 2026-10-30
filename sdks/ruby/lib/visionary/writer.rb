@@ -7,7 +7,7 @@ module Visionary
     :request_id, :started_at, :method, :path, :route, :query, :status, :duration_ms, :ip, :user_agent,
     :user_id, :user_handle, :user_role, :login_account, :headers, :request_content_type, :request_body, :request_truncated,
     :request_size, :response_content_type, :response_body, :response_truncated, :response_size,
-    :totals, :span_rows, :error_rows,
+    :totals, :span_rows, :error_rows, :trace_id, :span_id, :parent_span_id,
     keyword_init: true
   )
 
@@ -16,7 +16,8 @@ module Visionary
   # [:span, row], [:error, row], [:release, row] or [:profile, row].
   class Writer
     INSERTS = {
-      request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles", log: "app_logs"
+      request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles", log: "app_logs",
+      metric: "metrics"
     }.freeze
 
     def initialize(cfg, store, schemas, logger)
@@ -189,7 +190,7 @@ module Visionary
         nz(@redactor.headers(e.headers)), nz(e.request_content_type), nz(req_body), e.request_truncated ? 1 : 0,
         e.request_size, nz(e.response_content_type), nz(resp_body), e.response_truncated ? 1 : 0, e.response_size,
         nz(code), nz(key), @cfg.service, @cfg.version, db_count, db_ms, http_count, http_ms,
-        nz(clip_login(e.login_account))
+        nz(clip_login(e.login_account)), e.trace_id, e.span_id, e.parent_span_id
       ]
     end
 

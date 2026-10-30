@@ -12,11 +12,17 @@ module Visionary
   class RequestContext
     KEY = :visionary_request
 
-    attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible, :trace_id
+    attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible, :trace_id,
+                :span_id, :parent_span_id
 
-    def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:, trace_id: nil)
+    # span is the request's server span (a TraceContext::SpanContext);
+    # parent_span_id the caller's span from traceparent, if any.
+    def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:, trace_id: nil,
+                   span: nil, parent_span_id: nil)
       @request_id = request_id
-      @trace_id = trace_id
+      @trace_id = span ? span.trace_id : trace_id
+      @span_id = span&.span_id
+      @parent_span_id = parent_span_id
       @method = method
       @path = path
       @started_at = started_at
@@ -148,5 +154,6 @@ module Visionary
 
   # One database, HTTP, cache, queue, custom, graphql or background call.
   Span = Struct.new(:kind, :name, :target, :detail, :started_at, :offset_ms, :duration_ms,
-                    :status, :error, :row_count, :request_id, keyword_init: true)
+                    :status, :error, :row_count, :request_id, :trace_id, :span_id, :parent_span_id,
+                    keyword_init: true)
 end

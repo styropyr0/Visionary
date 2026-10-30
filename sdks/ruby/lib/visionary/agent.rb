@@ -47,6 +47,7 @@ module Visionary
       @profiler = Profiler.new(cfg, @instance, @store, @writer, @logger) if cfg.profile && @writer
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
       @logs = Logs::Pipeline.new(cfg, @instance, @store, @schemas, @logger) if cfg.logs
+      @metrics = Metrics::Recorder.new(cfg, @instance, @store, @schemas, @logger) if cfg.metrics
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)
       end
@@ -59,10 +60,11 @@ module Visionary
       tables["system_metrics"] = cfg.system_retention_days if @system
       tables["profiles"] = cfg.log_retention_days if @profiler
       tables["app_logs"] = cfg.log_retention_days if @logs
+      tables["metrics"] = cfg.log_retention_days if @metrics
       @retention = Retention.new(@store, @logger, tables)
     end
 
-    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil?)
+    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil? || !@metrics.nil?)
 
     def log_path?(path) = @config.log_requests && !@writer.nil? && path.start_with?(@config.path_prefix.to_s)
 
@@ -97,6 +99,7 @@ module Visionary
         @logger.info("visionary: recording system metrics every #{@config.system_interval}s as #{@instance}")
       end
       @logs&.start
+      @metrics&.start
       @retention.start
       @profiler&.start
       install_hooks
@@ -116,6 +119,7 @@ module Visionary
       @profiler&.close
       idle = @writer ? @writer.close(timeout) : true
       idle = @logs.close([deadline - mono, 0].max) && idle if @logs
+      idle = @metrics.close([deadline - mono, 0].max) && idle if @metrics
       idle = @system.close([deadline - mono, 0].max) && idle if @system
       @store.close if idle && @store
     rescue StandardError => e
@@ -135,6 +139,7 @@ module Visionary
       @system&.after_fork
       @writer&.after_fork
       @logs&.after_fork
+      @metrics&.after_fork
       @retention&.after_fork if @retention&.needed?
       @profiler&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")
@@ -153,9 +158,10 @@ module Visionary
       nil
     end
 
+    # Net::HTTP carries the trace on even when spans are off.
     def install_hooks
-      return unless @telemetry&.spans_on
       Telemetry::NetHTTPHook.install
+      return unless @telemetry&.spans_on
       Telemetry::ActiveRecordHook.install if defined?(::ActiveRecord::Base) && defined?(::ActiveSupport::Notifications)
     rescue StandardError => e
       @logger.warn("visionary: span hooks not installed: #{e.message}")

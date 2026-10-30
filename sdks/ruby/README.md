@@ -3,8 +3,9 @@
 Add one gem to a Rails or Rack app and every request shows up in the
 [Visionary](../../Readme.md) dashboard: route, status, time, user, redacted
 bodies, the database and HTTP calls it made, and any exception. You also get
-the app's own log lines linked to their request, host and process metrics,
-and CPU profiles when you turn them on in the dashboard.
+the app's own log lines linked to their request, traces that follow a request
+across services, your own counters, gauges and histograms, host and process
+metrics, and CPU profiles when you turn them on in the dashboard.
 
 - [Quick start](#quick-start)
 - [Integration recipes](#integration-recipes)
@@ -215,6 +216,27 @@ Clients that don't use `Net::HTTP` (Faraday with another adapter, `httpx`,
 `typhoeus`) are not seen. Wrap their calls in a custom span with
 `kind: "http"`.
 
+### Traces across services
+
+**When:** one service calls another and you want to follow a request through
+both. Nothing to add beyond the middleware in each service, each with its own
+`VISIONARY_SERVICE`.
+
+The middleware continues the trace in an incoming W3C `traceparent` header,
+or starts one, and every `Net::HTTP` request made while it runs (or inside a
+`span` or `background` block it started) sends `traceparent` on, naming its
+`http` span as the parent, plus the `tracestate` that came in. A
+`traceparent` the app set itself is left alone, the request object is left
+as it was, and the header is sent even with `VISIONARY_SPANS=false` or on a
+path that is not logged. When the app also runs OpenTelemetry, the request
+joins the active OpenTelemetry span's trace.
+
+**Records:** `trace_id`, `span_id` and `parent_span_id` on the request's
+`api_logs` row and on every span: calls made inside `Visionary.span` or
+`Visionary.background` are children of that span. Log lines get the trace
+and span they were logged in. The dashboard's Traces page and service map
+read them, and OpenTelemetry services join the same traces.
+
 ### Custom spans (Redis, queues, CPU work)
 
 **When:** time inside a request shows as **Untracked** in its breakdown. That
@@ -262,6 +284,8 @@ It runs the block in a new thread and returns the `Thread`.
   totals.
 - Outside a request the span has no `request_id` and is stored only when it
   takes at least `VISIONARY_SPAN_THRESHOLD_MS`.
+- It stays in the request's trace: calls inside it are children of the
+  `background` span.
 
 On Ruby 3.2+ any thread or fiber started during a request inherits it, so a
 plain `Thread.new` is attributed too. `background` also carries the request
@@ -326,10 +350,38 @@ comes with its debug lines. Because of that the capturing logger reports
 **Records:** an `app_logs` row per kept line: level, message (secrets such as
 passwords, bearer tokens, JWTs and AWS keys replaced), attrs (nested keys
 dotted, redacted fields `[REDACTED]`), the request's `request_id`, `user_id`
-and W3C `trace_id` (from `traceparent`), and where it was logged
+and the W3C `trace_id` and `span_id` of the request or span it was logged
+in, and where it was logged
 (`code_file`, `code_line`, `code_func`). Exceptions are logged as
 `Class: message` and the backtrace. The SDK's own `visionary: ` lines are
 never captured. `VISIONARY_LOGS=false` turns capture off.
+
+### Custom metrics
+
+**When:** you want numbers of your own on the Metrics page: orders placed,
+queue depth, checkout time.
+
+```ruby
+Visionary.counter("orders_placed", region: "eu").add(1)    # things that happen
+Visionary.gauge("queue_depth", queue: "emails").set(jobs.size) # a level
+took = Visionary.histogram("checkout_ms", method: "card")  # values such as durations
+took.observe(elapsed_ms)
+
+Visionary.describe_metric("checkout_ms", unit: "ms", buckets: [50, 100, 250, 500, 1000])
+```
+
+Labels are keywords or a Hash; each distinct set is one series. Keep the
+handle for hot paths. `counter#add` (or `inc`) takes positive numbers;
+`gauge#set` and `gauge#add` any finite number; `histogram#observe` any
+finite number. Recording works before the agent starts and never waits for
+the database.
+
+**Records:** one `metrics` row per series every `VISIONARY_METRICS_INTERVAL`
+(15 s): a counter's increase, a gauge's value (every interval once set), a
+histogram's count, sum, min, max and bucket counts. The table is created the
+first time there is something to write. A metric keeps at most
+`VISIONARY_METRICS_MAX_SERIES` (1000) label sets; new ones past that are
+dropped and a warning is logged, so never put user or request ids in a label.
 
 ### Error codes from JSON responses
 
@@ -496,6 +548,9 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_PROFILE` | `profile` | `true` | Follow the dashboard's Profiling setting; `false` never profiles |
 | `VISIONARY_LOGS` | `logs` | `true` | Capture log lines the app routes to the SDK (see [Logs](#logs)) |
 | `VISIONARY_LOG_LEVEL` | `log_level` | `info` | Lowest level kept until Settings → Logs has been read |
+| `VISIONARY_METRICS` | `metrics` | `true` | Record custom metrics; `false` makes `counter`, `gauge` and `histogram` no-ops |
+| `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | How often each series is written |
+| `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets kept per metric name |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
@@ -559,8 +614,8 @@ Visionary SDK follows the same contract,
 ### What is written
 
 - `api_logs`: one row per request: method, route pattern, status, timing,
-  user, redacted headers and bodies, error codes, and `db_count`, `db_ms`,
-  `http_count`, `http_ms`.
+  user, redacted headers and bodies, error codes, `db_count`, `db_ms`,
+  `http_count`, `http_ms`, and `trace_id`, `span_id`, `parent_span_id`.
 - `spans`: database, outbound HTTP, custom and background spans. Rows are
   stored for every request, at most `VISIONARY_SPAN_MAX` per request. Spans
   outside requests are stored when they take at least
@@ -571,6 +626,8 @@ Visionary SDK follows the same contract,
 - `profiles`: CPU profiles, only while they are on in the dashboard.
 - `app_logs`: the log lines the app routes to the SDK, written by a writer
   thread of their own so a flood of lines never delays request rows.
+- `metrics`: custom counters, gauges and histograms, one row per series per
+  `VISIONARY_METRICS_INTERVAL`, on a writer thread of their own.
 
 Request bodies are captured as the app reads them. Multipart, image, video,
 audio, octet-stream, zip and PDF bodies are not captured.
@@ -647,6 +704,10 @@ Visionary.set_route("/users/:id")                # route pattern, for routers Vi
 Visionary.login_attempt(params[:email])          # the account a sign-in request tried
 Visionary.span(name, kind: "custom", target: nil, detail: nil) { ... }   # a manual span
 Visionary.background(name) { ... }               # a thread that stays with the request
+Visionary.counter("orders", region: "eu").add(1) # custom metrics: counter, gauge, histogram
+Visionary.gauge("queue_depth").set(n)
+Visionary.histogram("checkout_ms").observe(ms)
+Visionary.describe_metric(name, unit: "ms", buckets: [...])   # unit and histogram buckets
 Visionary.capture_exception(e)                   # a handled error (handled = 1)
 Visionary.logger(inner = nil)                    # a Logger that also writes app_logs
 Visionary.capture_rails_logger                   # copy Rails.logger to app_logs
