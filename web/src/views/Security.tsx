@@ -8,8 +8,10 @@ import { useQuery } from "../lib/useQuery";
 import { formatFull, formatLogTime } from "../lib/time";
 import {
   auditLabel,
+  findingLabel,
   investigateQuestion,
   kindLabel,
+  rulesApi,
   sourceLabel,
   KINDS,
   rowObjects,
@@ -17,6 +19,7 @@ import {
   useSecurityPanel,
   type Finding,
   type FindingFilters,
+  type SecurityMeta,
 } from "../lib/security";
 import { DataTable, type Column } from "../components/DataTable";
 import { Drawer } from "../components/Modal";
@@ -29,6 +32,7 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
 import { AccountDrawer, AuditExport, FindingActions, IntelPanel, IPCard, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
+import { RULE_DETAIL, RulesTab, SignalDetail } from "./Security.rules";
 import "./Security.css";
 import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
@@ -46,23 +50,26 @@ function useHash(): string {
 export function Security() {
   const hash = useHash();
   if (/^#\/security\/report/.test(hash)) return <SecurityReport />;
-  return <SecurityPage />;
+  return <SecurityPage hash={hash} />;
 }
 
 const EMPTY: FindingFilters = { source: "", kind: "", severity: "", host: "", ip: "", status: "" };
 
-function SecurityPage() {
+type SecTab = "overview" | "signals" | "rules";
+
+const TABS: { key: SecTab; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "signals", label: "Signals" },
+  { key: "rules", label: "Rules" },
+];
+
+function SecurityPage({ hash }: { hash: string }) {
+  const params = new URLSearchParams(hash.split("?")[1] ?? "");
+  const tab: SecTab = TABS.some((t) => t.key === params.get("tab")) ? (params.get("tab") as SecTab) : "overview";
   const { resolved, tick } = useApp();
   const meta = useQuery(`sec-meta#${tick}`, (signal) => securityApi.meta(signal));
-  const summary = useSecurityPanel("summary");
-  const failed = useSecurityPanel("failed_logins");
-  const [filters, setFilters] = useState<FindingFilters>(EMPTY);
   const [selected, setSelected] = useState<Finding | null>(null);
   const [account, setAccount] = useState<string | null>(null);
-
-  const s = rowObjects(summary.data)[0] ?? {};
-  const n = (k: string) => toNumber(s[k]);
-  const hosts = meta.data?.hosts ?? 0;
   const reportHref = `#/security/report?from=${encodeURIComponent(resolved.from.toISOString())}&to=${encodeURIComponent(resolved.to.toISOString())}`;
 
   return (
@@ -76,192 +83,28 @@ function SecurityPage() {
               Report
             </a>
             <TimeRangePicker />
-            <RefreshControl busy={summary.loading} />
+            <RefreshControl busy={meta.loading} />
           </>
         }
       />
       <div className="content">
-        <div className="grid">
-          {meta.data && !meta.data.enabled && (
-            <div className="span-12 notice">
-              <ShieldAlert size={16} />
-              <span>The API detectors are off (Settings → Server → Security detectors). Host events and the audit log still show here.</span>
-            </div>
-          )}
-          {meta.data?.error && (
-            <div className="span-12 notice">
-              <ShieldAlert size={16} />
-              <span>The last detector run failed: {meta.data.error}</span>
-            </div>
-          )}
-          <StatTile
-            label="Findings"
-            description="Security findings first seen in this range, from the API detectors and the host agent."
-            value={n("findings") === null ? "—" : formatCount(n("findings")!)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-            footer={n("findings") !== null ? `${formatCount(n("critical") ?? 0)} critical · ${formatCount(n("warning") ?? 0)} warning · ${formatCount(n("info") ?? 0)} info` : undefined}
-          />
-          <StatTile
-            label="Failed logins"
-            description="Rejected sign-ins on login routes: 401, 403, or an error key that says the credentials were wrong."
-            value={n("failed_logins") === null ? "—" : formatCount(n("failed_logins")!)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-            footer="On login-like routes"
-          />
-          <StatTile
-            label="Scanner IPs"
-            description="IPs that asked for probe paths such as /.env or /wp-admin, or sent a scanner's user agent."
-            value={n("scanner_ips") === null ? "—" : formatCount(n("scanner_ips")!)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-          />
-          <StatTile
-            label="Blocked or forbidden"
-            description="Share of requests answered 401, 403 or 429."
-            value={n("blocked_rate") === null ? "—" : formatPercent(n("blocked_rate")!)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-            footer={n("blocked") !== null ? `${formatCount(n("blocked")!)} of ${formatCount(n("requests") ?? 0)} requests` : undefined}
-          />
-          <StatTile
-            label="Pending updates"
-            description="Hosts whose latest report has security updates waiting."
-            value={hosts === 0 ? "—" : formatCount(n("pending_update_hosts") ?? 0)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-            footer={hosts === 0 ? "No host agent yet" : `of ${formatCount(hosts)} host(s)`}
-          />
-          <StatTile
-            label="SSH failures"
-            description="Failed SSH logins reported by the host agent."
-            value={hosts === 0 && !n("ssh_failures") ? "—" : formatCount(n("ssh_failures") ?? 0)}
-            delta={null}
-            deltaLabel=""
-            upIs="bad"
-            loading={summary.loading}
-            footer={hosts === 0 ? "No host agent yet" : "Across all hosts"}
-          />
-
-          <Section
-            title="Findings"
-            text={`Each row is one finding. API findings are written at most once per kind and IP or account every ${meta.data?.dedupe ?? "10m"}; their count grows while the activity goes on.`}
-          />
-          <FindingsTable filters={filters} setFilters={setFilters} onSelect={setSelected} />
-
-          <Section title="Response" text="What the detectors skip, and where they get the place, network and reputation of an address." />
-          <SuppressionsPanel />
-          <IntelPanel />
-
-          <Section title="Sign-ins and access" text="Failed logins and auth errors over time, and the IPs, paths and clients behind them." />
-          <ChartPanel
-            name="failed_logins"
-            q={failed}
-            title="Failed logins"
-            description="Sign-in attempts on login routes, failed and succeeded."
-            viz={{ type: "timeseries", x: "t", y: ["failed", "succeeded"], unit: "count" }}
-            span="span-6"
-          />
-          <SecurityChart
-            name="auth_errors"
-            title="Auth errors"
-            description="4xx responses by kind: 401 (not signed in), 403 (not allowed), 429 (rate limited) and the rest."
-            viz={{ type: "timeseries", x: "t", y: ["unauthorized_401", "forbidden_403", "rate_limited_429", "other_4xx"], unit: "count", stack: true }}
-            span="span-6"
-          />
-          <SecurityChart
-            name="findings_over_time"
-            title="Findings over time"
-            description="Findings first seen per interval, by severity."
-            label={titleCase}
-            viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "count", stack: true }}
-            span="span-6"
-          />
-          <SecurityTable
-            name="findings_by_kind"
-            title="Findings by kind"
-            description="How many findings of each kind, and how many occurrences they stand for."
-            span="span-6"
-            columns={[
-              { key: "kind", render: (v) => kindLabel(String(v)) },
-              { key: "source", render: (v) => <span className="pill">{sourceLabel(String(v))}</span> },
-              { key: "findings", align: "right", unit: "count" },
-              { key: "occurrences", align: "right", unit: "count" },
-              { key: "critical", align: "right", unit: "count" },
-              { key: "last_seen", label: "Last seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
-            ]}
-          />
-          <SecurityTable
-            name="top_ips"
-            title="Top offending IPs"
-            description="IPs with the most failed logins and probe requests, then client errors. Click one to see its requests."
-            span="span-12"
-            onRowClick={(row, r) => openLogs(String(row[r.columns.indexOf("ip")]))}
-            columns={[
-              { key: "ip", label: "IP", render: (v) => <span className="mono">{String(v)}</span> },
-              { key: "requests", align: "right", unit: "count" },
-              { key: "failed_logins", label: "Failed logins", align: "right", unit: "count" },
-              { key: "unauthorized", label: "401", align: "right", unit: "count" },
-              { key: "forbidden", label: "403", align: "right", unit: "count" },
-              { key: "probes", align: "right", unit: "count" },
-              { key: "client_errors", label: "4xx", align: "right", unit: "count" },
-              { key: "paths", align: "right", unit: "count" },
-              { key: "last_seen", label: "Last seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
-            ]}
-          />
-          <SecurityTable
-            name="probed_paths"
-            title="Top probed paths"
-            description="Requests for paths that only scanners ask for. Any 2xx answer deserves a look."
-            span="span-6"
-            columns={[
-              { key: "path", render: (v) => <span className="mono">{String(v)}</span> },
-              { key: "hits", align: "right", unit: "count" },
-              { key: "ips", label: "IPs", align: "right", unit: "count" },
-              {
-                key: "answered_2xx",
-                label: "2xx",
-                align: "right",
-                render: (v) => ((toNumber(v) ?? 0) > 0 ? <span className="flag bad">{formatCount(toNumber(v)!)}</span> : <span className="dim">0</span>),
-              },
-            ]}
-          />
-          <SecurityTable
-            name="top_agents"
-            title="Top user agents by failures"
-            description="User agents with the most 4xx responses. Known scanners are marked."
-            span="span-6"
-            columns={[
-              {
-                key: "user_agent",
-                label: "User agent",
-                render: (v, row) => (
-                  <span className="sec-agent">
-                    {toNumber(row[4]) === 1 && <span className="sec-sev critical">scanner</span>}
-                    <span className="mono">{v ? String(v) : "—"}</span>
-                  </span>
-                ),
-              },
-              { key: "failures", label: "4xx", align: "right", unit: "count" },
-              { key: "ips", label: "IPs", align: "right", unit: "count" },
-              { key: "failed_logins", label: "Failed logins", align: "right", unit: "count" },
-            ]}
-          />
-
-          <HostSecurity hosts={hosts} />
-          <AuditSection admin={meta.data?.is_admin ?? false} />
-        </div>
+        <nav className="tabs" role="tablist" aria-label="Security">
+          {TABS.map((t) => (
+            <button
+              type="button"
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              className={tab === t.key ? "on" : ""}
+              onClick={() => (window.location.hash = t.key === "overview" ? "#/security" : `#/security?tab=${t.key}`)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        {tab === "overview" && <SecurityOverview meta={meta.data} onSelect={setSelected} />}
+        {tab === "signals" && <SignalsTab onSelect={setSelected} />}
+        {tab === "rules" && <RulesTab openRule={Number(params.get("rule")) || undefined} />}
       </div>
       {account && (
         <AccountDrawer
@@ -287,6 +130,224 @@ function SecurityPage() {
   );
 }
 
+function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; onSelect: (f: Finding) => void }) {
+  const summary = useSecurityPanel("summary");
+  const failed = useSecurityPanel("failed_logins");
+  const [filters, setFilters] = useState<FindingFilters>(EMPTY);
+  const s = rowObjects(summary.data)[0] ?? {};
+  const n = (k: string) => toNumber(s[k]);
+  const hosts = meta?.hosts ?? 0;
+  return (
+    <div className="grid">
+      {meta && !meta.enabled && (
+        <div className="span-12 notice">
+          <ShieldAlert size={16} />
+          <span>The API detectors are off (Settings → Server → Security detectors). Host events and the audit log still show here.</span>
+        </div>
+      )}
+      {meta?.error && (
+        <div className="span-12 notice">
+          <ShieldAlert size={16} />
+          <span>The last detector run failed: {meta.error}</span>
+        </div>
+      )}
+      <StatTile
+        label="Findings"
+        description="Security findings first seen in this range, from the API detectors and the host agent."
+        value={n("findings") === null ? "—" : formatCount(n("findings")!)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+        footer={n("findings") !== null ? `${formatCount(n("critical") ?? 0)} critical · ${formatCount(n("warning") ?? 0)} warning · ${formatCount(n("info") ?? 0)} info` : undefined}
+      />
+      <StatTile
+        label="Failed logins"
+        description="Rejected sign-ins on login routes: 401, 403, or an error key that says the credentials were wrong."
+        value={n("failed_logins") === null ? "—" : formatCount(n("failed_logins")!)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+        footer="On login-like routes"
+      />
+      <StatTile
+        label="Scanner IPs"
+        description="IPs that asked for probe paths such as /.env or /wp-admin, or sent a scanner's user agent."
+        value={n("scanner_ips") === null ? "—" : formatCount(n("scanner_ips")!)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+      />
+      <StatTile
+        label="Blocked or forbidden"
+        description="Share of requests answered 401, 403 or 429."
+        value={n("blocked_rate") === null ? "—" : formatPercent(n("blocked_rate")!)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+        footer={n("blocked") !== null ? `${formatCount(n("blocked")!)} of ${formatCount(n("requests") ?? 0)} requests` : undefined}
+      />
+      <StatTile
+        label="Pending updates"
+        description="Hosts whose latest report has security updates waiting."
+        value={hosts === 0 ? "—" : formatCount(n("pending_update_hosts") ?? 0)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+        footer={hosts === 0 ? "No host agent yet" : `of ${formatCount(hosts)} host(s)`}
+      />
+      <StatTile
+        label="SSH failures"
+        description="Failed SSH logins reported by the host agent."
+        value={hosts === 0 && !n("ssh_failures") ? "—" : formatCount(n("ssh_failures") ?? 0)}
+        delta={null}
+        deltaLabel=""
+        upIs="bad"
+        loading={summary.loading}
+        footer={hosts === 0 ? "No host agent yet" : "Across all hosts"}
+      />
+
+      <Section
+        title="Findings"
+        text={`Each row is one finding. API findings are written at most once per kind and IP or account every ${meta?.dedupe ?? "10m"}; their count grows while the activity goes on.`}
+      />
+      <FindingsTable filters={filters} setFilters={setFilters} onSelect={onSelect} />
+
+      <Section title="Response" text="What the detectors skip, and where they get the place, network and reputation of an address." />
+      <SuppressionsPanel />
+      <IntelPanel />
+
+      <Section title="Sign-ins and access" text="Failed logins and auth errors over time, and the IPs, paths and clients behind them." />
+      <ChartPanel
+        name="failed_logins"
+        q={failed}
+        title="Failed logins"
+        description="Sign-in attempts on login routes, failed and succeeded."
+        viz={{ type: "timeseries", x: "t", y: ["failed", "succeeded"], unit: "count" }}
+        span="span-6"
+      />
+      <SecurityChart
+        name="auth_errors"
+        title="Auth errors"
+        description="4xx responses by kind: 401 (not signed in), 403 (not allowed), 429 (rate limited) and the rest."
+        viz={{ type: "timeseries", x: "t", y: ["unauthorized_401", "forbidden_403", "rate_limited_429", "other_4xx"], unit: "count", stack: true }}
+        span="span-6"
+      />
+      <SecurityChart
+        name="findings_over_time"
+        title="Findings over time"
+        description="Findings first seen per interval, by severity."
+        label={titleCase}
+        viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "count", stack: true }}
+        span="span-6"
+      />
+      <SecurityTable
+        name="findings_by_kind"
+        title="Findings by kind"
+        description="How many findings of each kind, and how many occurrences they stand for."
+        span="span-6"
+        columns={[
+          { key: "kind", render: (v) => kindLabel(String(v)) },
+          { key: "source", render: (v) => <span className="pill">{sourceLabel(String(v))}</span> },
+          { key: "findings", align: "right", unit: "count" },
+          { key: "occurrences", align: "right", unit: "count" },
+          { key: "critical", align: "right", unit: "count" },
+          { key: "last_seen", label: "Last seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
+        ]}
+      />
+      <SecurityTable
+        name="top_ips"
+        title="Top offending IPs"
+        description="IPs with the most failed logins and probe requests, then client errors. Click one to see its requests."
+        span="span-12"
+        onRowClick={(row, r) => openLogs(String(row[r.columns.indexOf("ip")]))}
+        columns={[
+          { key: "ip", label: "IP", render: (v) => <span className="mono">{String(v)}</span> },
+          { key: "requests", align: "right", unit: "count" },
+          { key: "failed_logins", label: "Failed logins", align: "right", unit: "count" },
+          { key: "unauthorized", label: "401", align: "right", unit: "count" },
+          { key: "forbidden", label: "403", align: "right", unit: "count" },
+          { key: "probes", align: "right", unit: "count" },
+          { key: "client_errors", label: "4xx", align: "right", unit: "count" },
+          { key: "paths", align: "right", unit: "count" },
+          { key: "last_seen", label: "Last seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
+        ]}
+      />
+      <SecurityTable
+        name="probed_paths"
+        title="Top probed paths"
+        description="Requests for paths that only scanners ask for. Any 2xx answer deserves a look."
+        span="span-6"
+        columns={[
+          { key: "path", render: (v) => <span className="mono">{String(v)}</span> },
+          { key: "hits", align: "right", unit: "count" },
+          { key: "ips", label: "IPs", align: "right", unit: "count" },
+          {
+            key: "answered_2xx",
+            label: "2xx",
+            align: "right",
+            render: (v) => ((toNumber(v) ?? 0) > 0 ? <span className="flag bad">{formatCount(toNumber(v)!)}</span> : <span className="dim">0</span>),
+          },
+        ]}
+      />
+      <SecurityTable
+        name="top_agents"
+        title="Top user agents by failures"
+        description="User agents with the most 4xx responses. Known scanners are marked."
+        span="span-6"
+        columns={[
+          {
+            key: "user_agent",
+            label: "User agent",
+            render: (v, row) => (
+              <span className="sec-agent">
+                {toNumber(row[4]) === 1 && <span className="sec-sev critical">scanner</span>}
+                <span className="mono">{v ? String(v) : "—"}</span>
+              </span>
+            ),
+          },
+          { key: "failures", label: "4xx", align: "right", unit: "count" },
+          { key: "ips", label: "IPs", align: "right", unit: "count" },
+          { key: "failed_logins", label: "Failed logins", align: "right", unit: "count" },
+        ]}
+      />
+
+      <HostSecurity hosts={hosts} />
+      <AuditSection admin={meta?.is_admin ?? false} />
+    </div>
+  );
+}
+
+/** Signals: what the detection rules found, with the findings list's filters and triage. */
+function SignalsTab({ onSelect }: { onSelect: (f: Finding) => void }) {
+  const { tick } = useApp();
+  const [filters, setFilters] = useState<FindingFilters>({ ...EMPTY, source: "rule" });
+  const rules = useQuery(`sec-rules#${tick}`, (signal) => rulesApi.list(signal));
+  const kinds = (rules.data?.rules ?? []).map((r) => ({ value: r.kind, label: r.name }));
+  const on = (rules.data?.rules ?? []).filter((r) => r.enabled).length;
+  return (
+    <div className="grid">
+      <Section
+        title="Signals"
+        text={
+          rules.data && rules.data.rules.length === 0 ? (
+            <>
+              No detection rules yet. <a href="#/security?tab=rules">Turn some on in Rules</a>.
+            </>
+          ) : (
+            `What your ${on} active detection rule${on === 1 ? "" : "s"} found. A signal is one finding per rule and group; its count grows while the activity goes on.`
+          )
+        }
+      />
+      <FindingsTable filters={filters} setFilters={setFilters} onSelect={onSelect} fixedSource="rule" kinds={kinds} />
+    </div>
+  );
+}
+
 /** Opens Requests filtered to one IP. */
 function openLogs(ip: string, from?: string, to?: string, setRange?: (r: { kind: "absolute"; from: string; to: string }) => void) {
   if (from && to && setRange) setRange({ kind: "absolute", from, to });
@@ -306,10 +367,16 @@ function FindingsTable({
   filters,
   setFilters,
   onSelect,
+  fixedSource,
+  kinds,
 }: {
   filters: FindingFilters;
   setFilters: (f: FindingFilters) => void;
   onSelect: (f: Finding) => void;
+  /** Shows one source only, without its filter (the Signals tab). */
+  fixedSource?: string;
+  /** The kind filter's choices, when not the built-in kinds. */
+  kinds?: { value: string; label: string }[];
 }) {
   const { resolved, tick } = useApp();
   const [typed, setTyped] = useState({ host: filters.host, ip: filters.ip });
@@ -348,7 +415,7 @@ function FindingsTable({
   const result: Result = useMemo(
     () => ({
       columns: ["id", "created_at", "severity", "kind", "source", "who", "summary", "count", "status"],
-      rows: rows.map((f) => [f.id, f.created_at, f.severity, f.kind, f.source, whoOf(f), f.summary || f.target, f.count, f.status]),
+      rows: rows.map((f) => [f.id, f.created_at, f.severity, findingLabel(f), f.source, whoOf(f), f.summary || f.target, f.count, f.status]),
       truncated: false,
       rows_read: 0,
       duration_ms: 0,
@@ -363,31 +430,35 @@ function FindingsTable({
   const columns: Column[] = [
     { key: "created_at", label: "First seen", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span>, width: 160 },
     { key: "severity", render: (v) => <SeverityBadge severity={String(v)} />, width: 90 },
-    { key: "kind", render: (v) => kindLabel(String(v)), width: 150 },
+    { key: "kind", width: 150 },
     { key: "source", render: (v) => <span className="pill">{sourceLabel(String(v))}</span>, width: 70 },
     { key: "who", label: "Host, IP or account", render: (v) => <span className="mono">{String(v)}</span>, width: 200 },
     { key: "summary", label: "What happened", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
     { key: "count", align: "right", unit: "count", width: 70 },
     { key: "status", render: (v) => <StatusPill status={(v as Finding["status"]) || "open"} />, width: 110 },
   ];
-  const active = Object.values(filters).some(Boolean);
+  const active = Object.entries(filters).some(([k, v]) => v && !(fixedSource && k === "source"));
+  const cleared = fixedSource ? { ...EMPTY, source: fixedSource } : EMPTY;
 
   return (
     <section className="panel span-12 sec-findings" aria-busy={q.loading || undefined}>
       {q.loading && <div className="progress" aria-hidden />}
       <div className="filter-row sec-filters" role="search">
-        <Select
-          label="Source"
-          align="left"
-          value={filters.source}
-          onChange={pick("source")}
-          options={[
-            { value: "", label: "All sources" },
-            { value: "api", label: "API detectors" },
-            { value: "host", label: "Host agent" },
-            { value: "audit", label: "Visionary itself" },
-          ]}
-        />
+        {!fixedSource && (
+          <Select
+            label="Source"
+            align="left"
+            value={filters.source}
+            onChange={pick("source")}
+            options={[
+              { value: "", label: "All sources" },
+              { value: "api", label: "API detectors" },
+              { value: "host", label: "Host agent" },
+              { value: "audit", label: "Visionary itself" },
+              { value: "rule", label: "Detection rules" },
+            ]}
+          />
+        )}
         <Select
           label="Status"
           align="left"
@@ -407,7 +478,7 @@ function FindingsTable({
           value={filters.kind}
           onChange={pick("kind")}
           maxWidth={220}
-          options={[{ value: "", label: "All kinds" }, ...Object.entries(KINDS).map(([k, v]) => ({ value: k, label: v.label }))]}
+          options={[{ value: "", label: kinds ? "All rules" : "All kinds" }, ...(kinds ?? Object.entries(KINDS).map(([k, v]) => ({ value: k, label: v.label })))]}
         />
         <Select
           label="Severity"
@@ -431,7 +502,7 @@ function FindingsTable({
             className="btn ghost"
             onClick={() => {
               setTyped({ host: "", ip: "" });
-              setFilters(EMPTY);
+              setFilters(cleared);
             }}
           >
             Clear filters
@@ -441,7 +512,9 @@ function FindingsTable({
       {q.error && !q.data && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {q.data &&
         (rows.length === 0 ? (
-          <div className="panel-state">No findings in this range{active ? " with these filters" : ""}.</div>
+          <div className="panel-state">
+            No {fixedSource === "rule" ? "signals" : "findings"} in this range{active ? " with these filters" : ""}.
+          </div>
         ) : (
           <DataTable result={result} columns={columns} sortable={false} maxHeight={480} rowKey={(r) => r[0]} onRowClick={(r) => onSelect(byId.get(Number(r[0]))!)} />
         ))}
@@ -462,7 +535,8 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
   const [triaged, setTriaged] = useState<Finding | null>(null);
   const [ipOpen, setIpOpen] = useState(false);
   const f = triaged ?? q.data?.finding ?? finding;
-  const extra = Object.entries(f.detail ?? {}).filter(([k]) => k !== "summary");
+  const isRule = f.source === "rule";
+  const extra = Object.entries(f.detail ?? {}).filter(([k]) => k !== "summary" && !(isRule && RULE_DETAIL.has(k)));
   const investigate = () => {
     window.location.hash = `#/explore?q=${encodeURIComponent(investigateQuestion(f))}`;
   };
@@ -479,7 +553,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
       title={
         <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
           <SeverityBadge severity={f.severity} />
-          {kindLabel(f.kind)}
+          {findingLabel(f)}
         </span>
       }
     >
@@ -511,13 +585,26 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
         )}
       </div>
       <dl className="kv">
-        <dt>Kind</dt>
+        <dt>{isRule ? "Rule" : "Kind"}</dt>
         <dd>
-          {kindLabel(f.kind)}
+          {findingLabel(f)}
           {KINDS[f.kind] && <div className="dim">{KINDS[f.kind].text}</div>}
+          {isRule && q.data?.rule?.description && <div className="dim">{q.data.rule.description}</div>}
         </dd>
         <dt>Source</dt>
-        <dd>{f.source === "api" ? "API detectors" : f.source === "host" ? "Host agent" : f.source === "audit" ? "Visionary's audit log" : f.source === "logs" ? "Log scanner" : f.source}</dd>
+        <dd>
+          {f.source === "api"
+            ? "API detectors"
+            : f.source === "host"
+              ? "Host agent"
+              : f.source === "audit"
+                ? "Visionary's audit log"
+                : f.source === "logs"
+                  ? "Log scanner"
+                  : isRule
+                    ? "Detection rule"
+                    : f.source}
+        </dd>
         <dt>First seen</dt>
         <dd>{formatFull(new Date(f.created_at))}</dd>
         <dt>Occurrences</dt>
@@ -570,11 +657,12 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
           <IPCard ip={f.ip} />
         </>
       )}
-      <div className="section-label">{q.data?.match === "audit" ? "Audit entries" : "Related requests"}</div>
+      {isRule && <SignalDetail finding={f} detail={q.data} onTimeline={onTimeline} />}
+      {!isRule && <div className="section-label">{q.data?.match === "audit" ? "Audit entries" : "Related requests"}</div>}
       {q.error && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {!q.data && !q.error && <div className="panel-state">Loading…</div>}
       {q.data?.audit && <DataTable result={q.data.audit} sortable={false} maxHeight={360} columns={auditColumns} />}
-      {q.data && !q.data.requests && !q.data.audit && <p className="dim">This finding has no IP or account to match requests against.</p>}
+      {q.data && !isRule && !q.data.requests && !q.data.audit && <p className="dim">This finding has no IP or account to match requests against.</p>}
       {q.data?.requests && (
         <>
           <p className="dim" style={{ marginTop: 4 }}>

@@ -403,6 +403,18 @@ export const GUIDE: GuideSection[] = [
         text: "**Don't flag this again** stops that kind of finding for the IP or the account, forever or for a while, and marks the finding a false positive. **Not flagged** lists these rules; add one there by hand or remove one to start flagging again.",
       },
       {
+        title: "Turn on detection rules",
+        text: "**Rules** has a library of ready-made rules, each tagged with its MITRE ATT&CK tactic and technique: brute force and credential stuffing, failed logins then a success, a sign-in from a new country, an admin from a new IP, spikes in 401 and 403, path traversal and SQL injection in paths, mass exports, secrets in logs, SSH failures then a login, sudo by a new user, new SSH keys, new API keys and more. **Turn on** runs one as it is; **Customize** opens it to change first.",
+      },
+      {
+        title: "Write your own rule",
+        text: "**New rule** picks what to read (**Requests**, **App logs** with the Logs search syntax, **Security events** from the host agent and detectors, or **Visionary audit log**), what to match, and the logic: **Threshold** (a count, or a number of different values, at or over N in the window per group), **New value** (a value a group hasn't had in its learning period, such as a new country for a user), **Sequence** (N of one thing, then another, by the same group within the window) or **Anomaly** (a group far above its usual count). Group by up to three fields such as `ip`, `user` or `host`. **Test against the last 24 hours** shows what it would have raised before you save. Pick channels under **Notify** to hear about new signals, or alert on Security findings with source `rule`.",
+      },
+      {
+        title: "Investigate a signal",
+        text: "**Signals** lists what the rules found, with the same filters and triage as findings. Open one for the rule, its MITRE tags, the group's values with links to their requests, logs and account timeline, and every matched event around it, each linked to its request's logs and trace. **Suppress** on a value adds it to the rule's suppressions, so that IP or user stops raising it for as long as you choose.",
+      },
+      {
         title: "Add places and blocklists",
         text: "In **Settings → Server → Threat intelligence**, point **Location database** at a GeoLite2-City or DB-IP City Lite `.mmdb` file on the server to get places on findings and the new-location and impossible-travel checks, and **Network database** at an ASN file to name who runs each address. **Blocklist feeds** takes URLs of IP lists, such as `https://check.torproject.org/torbulkexitlist`; findings from listed addresses go up one level. **Threat intelligence** on the Security page shows whether they loaded.",
       },

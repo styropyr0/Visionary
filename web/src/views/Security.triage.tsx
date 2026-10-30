@@ -6,7 +6,7 @@ import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { useSession } from "../lib/team";
 import { formatFull, formatLogTime } from "../lib/time";
-import { KINDS, STATUS_LABELS, kindLabel, securityApi, type Finding, type FindingStatus, type Suppression } from "../lib/security";
+import { KINDS, STATUS_LABELS, findingLabel, kindLabel, securityApi, type Finding, type FindingStatus, type Suppression } from "../lib/security";
 import { DataTable, type Column } from "../components/DataTable";
 import { Drawer } from "../components/Modal";
 import { Panel } from "../components/Panel";
@@ -84,7 +84,7 @@ export function TriageBox({ finding, onChange }: { finding: Finding; onChange: (
   );
 }
 
-const SUPPRESS_DAYS = [
+export const SUPPRESS_DAYS = [
   { value: "0", label: "Forever" },
   { value: "1", label: "For a day" },
   { value: "7", label: "For a week" },
@@ -153,7 +153,7 @@ export function FindingActions({ finding, onTimeline }: { finding: Finding; onTi
       {suppressing && (
         <div className="sec-suppress">
           <p className="dim">
-            Marks this finding a false positive and stops {kindLabel(finding.kind).toLowerCase()} findings for{" "}
+            Marks this finding a false positive and stops {findingLabel(finding).toLowerCase()} findings for{" "}
             {scope === "ip" ? <span className="mono">{finding.ip}</span> : <span className="mono">{finding.actor}</span>}.
           </p>
           <div className="sec-suppress-row">

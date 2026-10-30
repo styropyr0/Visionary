@@ -157,8 +157,8 @@ func checkSecurityScope(sc alertScope) error {
 	if sc.EventSeverity != "" && severitiesFrom(sc.EventSeverity) == nil {
 		return badInput("minimum severity must be info, warning or critical")
 	}
-	if sc.Source != "" && sc.Source != "api" && sc.Source != "host" {
-		return badInput("source must be api or host")
+	if sc.Source != "" && sc.Source != "api" && sc.Source != "host" && sc.Source != "rule" {
+		return badInput("source must be api, host or rule")
 	}
 	if len(sc.Host) > 255 {
 		return badInput("host is too long")
