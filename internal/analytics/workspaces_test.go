@@ -534,6 +534,25 @@ func TestWorkspaceWrites(t *testing.T) {
 	if code := do("DELETE", "/api/security/rules/1", "", s.handleDeleteDetectionRule, map[string]string{"id": "1"}); code != http.StatusForbidden {
 		t.Errorf("workspace editor deleted a detection rule: %d", code)
 	}
+	// Configuration export and import span every workspace: refused inside
+	// one, even for an admin who narrowed the pages to it.
+	admin := &session{UserID: "acct:root", Name: "Root", Role: "admin"}
+	for _, c := range []struct {
+		method, target string
+		h              http.HandlerFunc
+	}{{"GET", "/api/config/export", s.handleConfigExport}, {"POST", "/api/config/import", s.handleConfigImport}} {
+		r := httptest.NewRequest(c.method, c.target, strings.NewReader(`{}`))
+		r.Header.Set("Content-Type", "application/json")
+		r.AddCookie(&http.Cookie{Name: workspaceCookie, Value: "2"})
+		w := httptest.NewRecorder()
+		s.serveAs(w, r, admin, c.h)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s inside a workspace: %d", c.target, w.Code)
+		}
+		if code := do(c.method, c.target, `{}`, c.h, nil); code != http.StatusForbidden {
+			t.Errorf("%s by a workspace editor: %d", c.target, code)
+		}
+	}
 	// Editors in a workspace aren't admins of the server.
 	if code := do("GET", "/api/team/keys", "", s.handleListKeys, nil); code != http.StatusForbidden {
 		t.Errorf("workspace editor listed API keys: %d", code)

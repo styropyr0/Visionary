@@ -37,7 +37,7 @@ type configImport struct {
 }
 
 func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r, "admin") {
+	if !s.require(w, r, "admin") || !s.requireAllServices(w, r) {
 		return
 	}
 	var body struct {
