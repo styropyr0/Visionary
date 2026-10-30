@@ -49,7 +49,7 @@ module Visionary
     # A traceparent header as a SpanContext, or nil when malformed, version
     # ff or an all-zero id ("no parent").
     def parse(header)
-      parts = header.to_s.strip.split("-", -1)
+      parts = String.new(header.to_s.strip, encoding: Encoding::UTF_8).split("-", -1)
       return nil if parts.size < 4
 
       version, trace, span, flags = parts
@@ -82,7 +82,7 @@ module Visionary
         return [SpanContext.new(otel.trace_id, new_span_id, otel.flags, env["HTTP_TRACESTATE"]), otel.span_id]
       end
       if (sc = parse(env["HTTP_TRACEPARENT"]))
-        state = env["HTTP_TRACESTATE"].to_s
+        state = String.new(env["HTTP_TRACESTATE"].to_s, encoding: Encoding::UTF_8)
         return [SpanContext.new(sc.trace_id, new_span_id, sc.flags, state.empty? ? nil : state), sc.span_id]
       end
       [SpanContext.new(new_trace_id, new_span_id, "01", nil), nil]

@@ -128,6 +128,13 @@ class TraceTest < Minitest::Test
     ].each { |bad| assert_nil T.parse(bad), bad }
   end
 
+  # Rack headers are binary strings, which database drivers store as blobs.
+  def test_parse_returns_utf8_ids
+    sc = T.parse(TP.b)
+    assert_equal Encoding::UTF_8, sc.trace_id.encoding
+    assert_equal Encoding::UTF_8, sc.span_id.encoding
+  end
+
   def test_ids
     assert_match(/\A\h{32}\z/, T.new_trace_id)
     assert_match(/\A\h{16}\z/, T.new_span_id)
