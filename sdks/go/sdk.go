@@ -24,8 +24,10 @@
 //	end := visionary.StartSpan(ctx, visionary.KindCache, "GET session"); end(err)
 //
 // Panics reaching Middleware are recorded and re-panicked; handled errors are
-// recorded with visionary.CaptureError(ctx, err). Everything is configurable
-// through VISIONARY_* environment variables; see FromEnv.
+// recorded with visionary.CaptureError(ctx, err). Custom metrics go to the
+// metrics table: visionary.Counter("orders", "region", "eu").Add(1), and
+// Gauge and Histogram likewise. Everything is configurable through
+// VISIONARY_* environment variables; see FromEnv.
 package visionary
 
 import (
