@@ -158,7 +158,7 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 func (s *Server) uptimeStart(ctx context.Context) {
 	r := newUptimeRunner(s, s.uptimeSettings())
 	uptimeRunners.Store(s, r)
-	go r.run(ctx)
+	s.leased("uptime", r.run)
 }
 
 func (s *Server) uptimePrompt() string {

@@ -29,8 +29,8 @@ func (s *Server) handleServerSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// afterChange makes a change take effect at once on this server; others
-// pick it up within 30 seconds.
+// afterChange makes a change take effect at once on this server; other
+// replicas pick it up within about 10 seconds.
 func (s *Server) afterChange(w http.ResponseWriter, r *http.Request) {
 	if err := s.refreshLive(r.Context()); err != nil {
 		s.fail(w, err)

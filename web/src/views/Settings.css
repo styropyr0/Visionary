@@ -891,3 +891,12 @@
 .lgs-hint {
   font-size: 11.5px;
 }
+
+.replica-leases {
+  white-space: normal;
+  max-width: 360px;
+}
+
+.replica-note {
+  margin: 8px 14px 12px;
+}

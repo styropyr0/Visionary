@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -200,12 +201,13 @@ func (s *Server) checkSecondFactor(ctx context.Context, a *account, code string)
 	if step := totpCheck(secret, code, time.Now()); step >= 0 {
 		p := s.portal()
 		p.mu.Lock()
-		defer p.mu.Unlock()
 		if step <= p.lastStep[a.ID] {
+			p.mu.Unlock()
 			return false, nil // already used
 		}
 		p.lastStep[a.ID] = step
-		return true, nil
+		p.mu.Unlock()
+		return s.firstUse(ctx, "totp:"+a.ID+":"+strconv.FormatInt(step, 10), 5*time.Minute), nil
 	}
 	var hashes []string
 	_ = json.Unmarshal([]byte(a.totpRecovery), &hashes)

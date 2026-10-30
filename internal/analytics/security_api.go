@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -314,6 +316,11 @@ func (s *Server) auditRoleMapping(ctx context.Context) {
 			detail := map[string]any{"mode": sg.cfg.Type, "mapping": sg.roles.entries}
 			if len(res.Rows) == 1 {
 				detail["previous"] = json.RawMessage(toString(res.Rows[0][0]))
+			}
+			// Replicas starting together would each record it.
+			sum := sha256.Sum256(cur)
+			if !s.firstUse(ctx, "role-mapping:"+hex.EncodeToString(sum[:8]), 10*time.Minute) {
+				return
 			}
 			b, _ := json.Marshal(detail)
 			e := auditEntry{at: time.Now().UTC(), userID: "system", userName: "Visionary", action: "team.role_mapping",

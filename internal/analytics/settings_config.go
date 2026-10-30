@@ -428,5 +428,6 @@ func (s *Server) deleteSettings(ctx context.Context, names []string) error {
 			return dbErr(err)
 		}
 	}
+	s.announce("settings")
 	return nil
 }

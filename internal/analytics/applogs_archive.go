@@ -189,8 +189,8 @@ func (s *Server) archiveState() *archiveState {
 	return v.(*archiveState)
 }
 
-func (s *Server) applogsArchiveStart(ctx context.Context) {
-	go func() {
+func (s *Server) applogsArchiveStart() {
+	s.leased("log-archive", func(ctx context.Context) {
 		t := time.NewTimer(2 * time.Minute)
 		defer t.Stop()
 		for {
@@ -217,7 +217,7 @@ func (s *Server) applogsArchiveStart(ctx context.Context) {
 			}
 			t.Reset(archiveEvery)
 		}
-	}()
+	})
 }
 
 func (s *Server) archivePass(ctx context.Context, now time.Time) (int, error) {

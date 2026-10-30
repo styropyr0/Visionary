@@ -46,6 +46,28 @@ const saveConfig = (values: Record<string, string | null>) => api<ConfView>("/ap
 /** Asks the server to restart itself. */
 const restartServer = () => api<{ restarting: boolean }>("/api/settings/restart", { method: "POST", json: {} });
 
+interface Replica {
+  id: string;
+  version: string;
+  addr: string;
+  started_at: string;
+  heartbeat_at: string;
+  seen_ago_s: number;
+  live: boolean;
+  self: boolean;
+  leases: string[];
+}
+
+interface ReplicasView {
+  replicas: Replica[];
+  self: string;
+  /** Leases nobody holds right now. */
+  unheld: string[];
+  lease_ttl_s: number;
+}
+
+const getReplicas = () => api<ReplicasView>("/api/settings/replicas");
+
 /** Fetches one stored secret; the server audits each reveal. */
 const revealSecret = (key: string) => api<{ value: string }>(`/api/settings/config/${encodeURIComponent(key)}/reveal`, { method: "POST", json: {} });
 
@@ -70,6 +92,7 @@ export function ServerTab() {
         <RestartButton pending={view.restart_pending ?? []} labels={view.settings} />
       </div>
       {(view.restart_pending?.length ?? 0) > 0 && <RestartNotice pending={view.restart_pending!} labels={view.settings} />}
+      <ReplicasCard />
       {view.groups.map((g) => (
         <ConfGroup
           key={g.Key}
@@ -83,6 +106,67 @@ export function ServerTab() {
         />
       ))}
     </div>
+  );
+}
+
+/** The servers running on this database and the background jobs each holds. */
+function ReplicasCard() {
+  const [run, setRun] = useState(0);
+  const q = useQuery(`replicas#${run}`, getReplicas);
+  useEffect(() => {
+    const t = window.setInterval(() => setRun((n) => n + 1), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const d = q.data;
+  const live = d?.replicas.filter((r) => r.live).length ?? 0;
+  return (
+    <Card
+      title="Replicas"
+      description={
+        <>
+          Servers on this database. Jobs that must run once, such as alert checks, deliveries and uptime probes, each run on one replica under a lease; another takes over
+          within {(d?.lease_ttl_s ?? 30) + 10} seconds if it stops. Restart above restarts only the replica that answered this page.
+        </>
+      }
+    >
+      {q.error && !d ? (
+        <div className="settings-body">
+          <ErrorNotice title="Could not load replicas" error={q.error} />
+        </div>
+      ) : !d ? (
+        <div className="settings-empty">Loading…</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Replica</th>
+                <th>Version</th>
+                <th>Started</th>
+                <th>Last heartbeat</th>
+                <th>Jobs held</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.replicas.map((r) => (
+                <tr key={r.id} className={r.live ? undefined : "dim"}>
+                  <td className="mono">
+                    {r.id}
+                    {r.self && <span className="conf-tag">This page</span>}
+                    {!r.live && <span className="conf-tag warn">Gone</span>}
+                  </td>
+                  <td className="mono">{r.version || "dev"}</td>
+                  <td title={r.started_at}>{formatRelative(r.started_at)}</td>
+                  <td title={r.heartbeat_at}>{r.seen_ago_s < 2 ? "just now" : `${r.seen_ago_s}s ago`}</td>
+                  <td className="mono replica-leases">{r.leases.length ? r.leases.join(", ") : <span className="dim">none</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {d.unheld.length > 0 && live > 0 && <p className="dim settings-desc replica-note">Waiting for a replica to take: {d.unheld.join(", ")}.</p>}
+        </div>
+      )}
+    </Card>
   );
 }
 

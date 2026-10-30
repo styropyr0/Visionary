@@ -141,6 +141,7 @@ func (s *Server) writeSettings(ctx context.Context, kv map[string]string) error 
 			return dbErr(err)
 		}
 	}
+	s.announce("settings")
 	return nil
 }
 

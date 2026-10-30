@@ -33,12 +33,13 @@ import (
 //	sso.go       single sign-on (OIDC, SAML) and SCIM provisioning
 //	ci.go        CI pipelines, jobs and tests: GitHub Actions webhook, JUnit, flaky tests
 //	replay.go    session replay recorded by the browser SDK
+//	leases.go    several replicas on one database: which one runs each job
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -64,10 +65,12 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.ssoRoutes(mux)
 	s.ciRoutes(mux)
 	s.replayRoutes(mux)
+	s.replicasRoutes(mux)
 }
 
-// Start launches the features' background work. It returns at once; the work
-// stops when ctx ends.
+// Start launches the features' background work. It returns after the first
+// lease round; the work stops when ctx ends. Work that must run on one
+// replica only registers with leased and starts when this replica holds it.
 func (s *Server) Start(ctx context.Context) {
 	if s.schemaPending.Load() {
 		go s.retrySchema(ctx)
@@ -88,6 +91,8 @@ func (s *Server) Start(ctx context.Context) {
 	s.applogsStart(ctx)
 	s.tracesStart(ctx)
 	s.replayStart(ctx)
+	s.pullSignOuts(ctx)
+	s.leasesStart(ctx)
 }
 
 // featurePrompt describes the features' tables to the analyst.

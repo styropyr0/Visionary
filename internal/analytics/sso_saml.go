@@ -369,7 +369,7 @@ func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 		s.ssoError(w, r, test, "the response from "+p.Name+" isn't valid: "+err.Error())
 		return
 	}
-	if !s.sso().firstUse(samlRequestID(relay)) {
+	if id := samlRequestID(relay); !s.sso().firstUse(id) || !s.firstUse(r.Context(), "saml:"+id, ssoFlowTTL) {
 		ssoFail(w, r, "That sign-in was already used. Start again from the sign-in page.")
 		return
 	}
@@ -377,7 +377,7 @@ func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 }
 
 // firstUse reports whether a response to this request hasn't been taken
-// before on this server. Other servers don't know, but any response is
+// before on this server; s.firstUse asks the other replicas. Any response is
 // refused 90 seconds after it was issued.
 func (st *ssoState) firstUse(requestID string) bool {
 	st.mu.Lock()

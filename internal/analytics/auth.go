@@ -67,9 +67,8 @@ type auth struct {
 	mu       sync.Mutex
 	limiters map[string]*loginLimiter
 	// signedOut holds sessions ended by logout until they would have expired,
-	// so a copied cookie stops working at once on this instance. Other
-	// instances reject it at their next role check, when the API refuses the
-	// revoked token.
+	// so a copied cookie stops working at once on this instance, and on the
+	// other replicas within a lease round (shareSignOut).
 	signedOut map[string]time.Time
 	// retryAt holds, per token, when to ask an unreachable API again; until
 	// then the session is served from its cookie without waiting on it.
@@ -249,6 +248,16 @@ func (a *auth) markSignedOut(s *session) {
 		}
 	}
 	a.signedOut[tokenKey(s.Token)] = s.expiresAt()
+}
+
+// addSignedOut takes in a logout another replica answered.
+func (a *auth) addSignedOut(key string, until time.Time) {
+	if time.Now().After(until) {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.signedOut[key] = until
 }
 
 // waitingForAPI reports a token whose last check found the API unreachable,

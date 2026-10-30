@@ -470,6 +470,11 @@ func applyNotices(p *statusPage) {
 
 // dropStatusCache makes the next visit to the status page build it again.
 func dropStatusCache(s *Server) {
+	s.announce("status")
+	dropStatusCacheHere(s)
+}
+
+func dropStatusCacheHere(s *Server) {
 	statusCache.Lock()
 	defer statusCache.Unlock()
 	delete(statusCache.page, s)

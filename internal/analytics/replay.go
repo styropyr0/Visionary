@@ -121,5 +121,5 @@ func (s *Server) replayRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) replayStart(ctx context.Context) {
-	go s.replayLoop(ctx)
+	s.leased("replay", s.replayLoop)
 }

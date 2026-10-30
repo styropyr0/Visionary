@@ -76,9 +76,9 @@ func (s *Server) alertEngine() *alertEngine {
 func (s *Server) alertsStart(ctx context.Context) {
 	e := s.alertEngine()
 	e.ctx = ctx
-	go e.loop(ctx)
-	go s.digestLoop(ctx)
-	go s.deliveryLoop(ctx)
+	s.leased("alerts", e.loop)
+	s.leased("alert-deliveries", s.deliveryLoop)
+	s.leased("digests", s.digestLoop)
 }
 
 func (e *alertEngine) loop(ctx context.Context) {
@@ -171,6 +171,7 @@ func (e *alertEngine) enabledRules(ctx context.Context) ([]alertRule, error) {
 // invalidate makes the next tick reload rules; changed rules are evaluated
 // right away.
 func (e *alertEngine) invalidate(changed int64) {
+	e.s.announce("alerts")
 	e.mu.Lock()
 	e.rulesAt = time.Time{}
 	if changed > 0 {
@@ -523,6 +524,7 @@ func (e *alertEngine) silences(ctx context.Context) []alertSilence {
 }
 
 func (e *alertEngine) invalidateSilences() {
+	e.s.announce("alerts")
 	e.mu.Lock()
 	e.silencesAt = time.Time{}
 	e.mu.Unlock()
