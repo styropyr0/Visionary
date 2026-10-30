@@ -430,6 +430,36 @@ ctx, end := visionary.StartSpanContext(r.Context(), visionary.KindCustom, "build
 err = buildReport(ctx) // its calls nest under "build report"
 end(err)`,
       },
+      ruby: {
+        note: "Automatic once the middleware is in: it continues an incoming `traceparent` or starts a trace, and `Net::HTTP` (Faraday's default adapter, HTTParty) sends it on. Wrap your own work in `Visionary.span` so the calls inside it nest under it; `Visionary.background` keeps the trace for background work.",
+        code: `Net::HTTP.get(URI("http://stock/items/42")) # the stock service continues this trace
+
+Visionary.span("build report") do
+  build_report # its calls nest under "build report"
+end
+
+Visionary.background("send receipt") { Mailer.receipt(order).deliver_now }`,
+      },
+      java: {
+        note: "Automatic with the starter: every request continues an incoming `traceparent` or starts a trace, and `RestClient`, `RestTemplate` and `WebClient` built from Boot's builders send it on. A `Visionary.span(...)` is the parent of the calls made inside it until it is closed; `Visionary.background`, `Visionary.wrap` and `@Async` keep the trace.",
+        code: `@Bean
+RestClient stock(RestClient.Builder builder) { // sends traceparent
+    return builder.baseUrl("http://stock").build();
+}
+
+try (VisionarySpan span = Visionary.span("custom", "build report")) {
+    report = buildReport(); // its calls nest under "build report"
+}`,
+      },
+      dotnet: {
+        note: "Automatic once `app.UseVisionary()` is in: a request continues an incoming `traceparent` (or ASP.NET Core's activity that read it) or starts a trace, and every `HttpClient`, `IHttpClientFactory` clients included, sends it on. A `Visionary.StartSpan` is the parent of the calls made while it is open; `Visionary.Background` keeps the trace for background work.",
+        code: `app.MapGet("/orders/{id}", async (int id, IHttpClientFactory clients) =>
+{
+    using var span = Visionary.StartSpan("custom", "price order");
+    // the stock service continues this trace, nested under "price order"
+    return await clients.CreateClient().GetStringAsync($"http://stock/items/{id}");
+});`,
+      },
     },
   },
   metrics: {
@@ -447,6 +477,36 @@ took := visionary.Histogram("checkout_ms", "method", method)
 took.Observe(float64(time.Since(start).Milliseconds()))
 
 visionary.DescribeMetric("checkout_ms", visionary.MetricOptions{Unit: "ms", Buckets: []float64{50, 100, 250, 500, 1000}})`,
+      },
+      ruby: {
+        note: "A counter counts things that happen, a gauge holds a level, a histogram records values such as durations. Labels are keywords or a Hash. Keep a handle for hot paths. Units and histogram buckets are optional.",
+        code: `Visionary.counter("orders_placed", region: region).add(1)
+Visionary.gauge("queue_depth", queue: "emails").set(jobs.size)
+
+took = Visionary.histogram("checkout_ms", method: method)
+took.observe(elapsed_ms)
+
+Visionary.describe_metric("checkout_ms", unit: "ms", buckets: [50, 100, 250, 500, 1000])`,
+      },
+      java: {
+        note: "A counter counts things that happen, a gauge holds a level, a histogram records values such as durations. Labels are key/value pairs (or a `Map`). Keep a handle for hot paths. Units and histogram buckets are optional.",
+        code: `Visionary.counter("orders_placed", "region", region).add(1);
+Visionary.gauge("queue_depth", "queue", "emails").set(depth);
+
+VisionaryHistogram took = Visionary.histogram("checkout_ms", "method", method);
+took.observe(elapsedMs);
+
+Visionary.describeMetric("checkout_ms", "ms", 50, 100, 250, 500, 1000);`,
+      },
+      dotnet: {
+        note: "A counter counts things that happen, a gauge holds a level, a histogram records values such as durations. Labels are tuples or a dictionary; keep a handle for hot paths. Units and histogram buckets are optional. Meters named in `VISIONARY_METRICS_METERS` (System.Diagnostics.Metrics) are recorded too.",
+        code: `Visionary.Counter("orders_placed", ("region", region)).Add(1);
+Visionary.Gauge("queue_depth", ("queue", "emails")).Set(depth);
+
+var took = Visionary.Histogram("checkout_ms", ("method", method));
+took.Observe(elapsed.TotalMilliseconds);
+
+Visionary.DescribeMetric("checkout_ms", unit: "ms", buckets: new double[] { 50, 100, 250, 500, 1000 });`,
       },
     },
     any: {
