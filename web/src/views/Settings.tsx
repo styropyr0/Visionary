@@ -28,13 +28,15 @@ import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./S
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
 import { TwoStepCard } from "../components/TwoStep";
 import { LogsTab } from "./Settings.logs";
+import { WorkspacesTab } from "./Settings.workspaces";
 import "./Settings.css";
 
-type Tab = "preferences" | "members" | "signin" | "server" | "keys" | "thresholds" | "data" | "logs" | "profiling" | "pages" | "status" | "audit" | "about";
+type Tab = "preferences" | "members" | "workspaces" | "signin" | "server" | "keys" | "thresholds" | "data" | "logs" | "profiling" | "pages" | "status" | "audit" | "about";
 
 const TABS: { key: Tab; label: string; admin: boolean }[] = [
   { key: "preferences", label: "Preferences", admin: false },
   { key: "members", label: "Members & roles", admin: false },
+  { key: "workspaces", label: "Workspaces", admin: false },
   { key: "signin", label: "Sign-in", admin: true },
   { key: "server", label: "Server", admin: true },
   { key: "keys", label: "API keys", admin: true },
@@ -70,7 +72,9 @@ export function Settings({ user }: { user: SessionUser | null }) {
     window.history.replaceState(null, "", `#/settings?tab=${t}`);
   };
 
-  const visible = TABS.filter((t) => !t.admin || admin);
+  // Workspaces shows to admins and to the admins of a workspace.
+  const wsAdmin = admin || (session?.workspaces ?? []).some((w) => w.role === "admin");
+  const visible = TABS.filter((t) => (t.key === "workspaces" ? wsAdmin : !t.admin || admin));
   const current = visible.some((t) => t.key === tab) ? tab : "preferences";
 
   return (
@@ -91,6 +95,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
           </div>
         )}
         {current === "members" && <MembersTab />}
+        {current === "workspaces" && <WorkspacesTab admin={admin} />}
         {current === "signin" && <SigninTab />}
         {current === "server" && <ServerTab />}
         {current === "keys" && <KeysTab />}
