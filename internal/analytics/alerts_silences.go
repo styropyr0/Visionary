@@ -357,6 +357,12 @@ func (s *Server) silenceFromPath(w http.ResponseWriter, r *http.Request) (*alert
 	return nil, false
 }
 
+func (s *Server) handleGetSilence(w http.ResponseWriter, r *http.Request) {
+	if sl, ok := s.silenceFromPath(w, r); ok {
+		writeJSON(w, http.StatusOK, silenceView{alertSilence: *sl, State: silenceState(*sl, time.Now().UTC())})
+	}
+}
+
 func (s *Server) handleUpdateSilence(w http.ResponseWriter, r *http.Request) {
 	if !s.can(r, "edit") {
 		s.forbidden(w)

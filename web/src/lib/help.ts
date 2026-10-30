@@ -654,6 +654,48 @@ curl -H "Authorization: Bearer <read key>" \\
   "${origin}/api/prom/api/v1/query?query=sum(rate(visionary_http_requests_total[5m]))"`,
     },
   },
+  terraform: {
+    id: "terraform",
+    title: "Configuration as code",
+    intro:
+      "Keep alert rules, channels, silences, uptime checks (HTTP and browser), dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
+    any: {
+      label: "main.tf",
+      code: `terraform {
+  required_providers {
+    visionary = { source = "styropyr0/visionary" }
+  }
+}
+
+# or set VISIONARY_URL and VISIONARY_API_KEY
+provider "visionary" {
+  url     = "${origin}"
+  api_key = var.visionary_key
+}
+
+resource "visionary_alert_channel" "ops" {
+  name = "Ops email"
+  kind = "email"
+  to   = ["ops@example.com"]
+}
+
+resource "visionary_alert_rule" "slow" {
+  name      = "Slow API"
+  severity  = "warning"
+  metric    = "latency_p95"
+  op        = ">"
+  threshold = 800
+  window    = "5m"
+  channels  = [visionary_alert_channel.ops.id]
+}
+
+resource "visionary_uptime_check" "home" {
+  name       = "Home page"
+  url        = "https://example.com"
+  interval_s = 60
+}`,
+    },
+  },
   analyst: {
     id: "analyst",
     title: "Turn on the analyst",
@@ -1032,18 +1074,20 @@ export const HELP: Record<Route, PageHelp> = {
   },
   settings: {
     title: "Settings",
-    tip: "Your preferences, the team and its workspaces, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page and the audit log.",
-    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), workspaces that limit people to some services, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, and the audit log.",
+    tip: "Your preferences, the team and its workspaces, API keys, thresholds, retention and deleting data, logs, CPU profiling, which pages show, the status page, configuration export and import, and the audit log.",
+    what: "Preferences are yours alone: start page, the time range and auto-refresh a visit starts with, theme, time zone and clock. The rest is the team's: who can sign in and with which role (including single sign-on and SCIM provisioning), workspaces that limit people to some services, the server's own settings (the AI analyst, sessions, email, ingest keys and limits, security detectors), API keys, the Apdex and SLO thresholds (with routes that have their own), how long each kind of data is kept and deleting it, what logs are kept, dropped and parsed (and the archive), CPU profiling, which pages the sidebar shows, the public status page, the team's configuration as one file, and the audit log.",
     read: [
       "Changes reach every replica sharing the database within seconds; no restart or environment variable is needed. Settings → Server → Replicas lists the replicas and the background jobs each runs.",
       "Single sign-on (OpenID Connect or SAML) works next to the other ways in; its people get accounts without a password, checked again every minute, and SCIM can add, change and switch them off. Sign-ins and SCIM changes go to the audit log.",
       "Admins change the team's settings and see the audit log; editors change alerts and dashboards and can ask for a profile now; viewers only read. Everyone sets their own preferences.",
       "Workspaces are enforced by the server on every read, so a member can't reach another team's services by editing a link or writing SQL. Someone in several workspaces switches under the logo; data without a service name is seen only by people who see everything.",
       "Hidden pages stay reachable by their link; Settings always shows.",
+      "API keys: Read calls the HTTP API as a viewer and never changes anything; Editor and Admin call it with those roles' rights, for Terraform and scripts; Server and Client ingest send data; SCIM provisions people.",
+      "Configuration exports alert rules, channels, silences, uptime checks, saved panels, dashboards, saved log searches and hidden pages as one YAML or JSON file, matched by name. Channel URLs and keys, secret headers and browser secrets stay behind. Importing shows a preview of what is created, updated or unchanged before anything is written, and never deletes.",
       "Deleting data needs a preview first and typing delete to confirm; it is recorded in the audit log and never touches settings, dashboards, alert rules or uptime checks.",
       "To connect your apps, follow the steps below: a server SDK in each service, the browser or mobile SDK with a client key, OpenTelemetry, or the host agent.",
     ],
-    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas", "workspaces"],
+    setup: ["sdk", "connect", "verify", "clientkey", "browser", "ios", "android", "otlp", "agent", "explain", "analyst", "email", "sso", "replicas", "workspaces", "terraform"],
   },
   guide: {
     title: "How to use",

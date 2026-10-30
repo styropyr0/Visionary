@@ -18,9 +18,10 @@ import (
 
 // API keys. A key is "vis_" plus 32 random bytes; only its SHA-256 is stored,
 // with the first characters kept visible so people can tell keys apart.
-// Scopes: "read" uses the HTTP API with viewer rights, "server" sends from
-// SDKs and OTLP, "client" sends from browsers and mobile apps (public),
-// "scim" lets an identity provider manage people (scim.go).
+// Scopes: "read" uses the HTTP API with viewer rights, "editor" and "admin"
+// use it with those roles' rights (for tools such as the Terraform provider),
+// "server" sends from SDKs and OTLP, "client" sends from browsers and mobile
+// apps (public), "scim" lets an identity provider manage people (scim.go).
 
 const (
 	keyPrefix     = "vis_"
@@ -31,7 +32,10 @@ const (
 	keyCacheTTL = 30 * time.Second
 )
 
-var keyScopes = []string{"read", "server", "client", "scim"}
+var keyScopes = []string{"read", "editor", "admin", "server", "client", "scim"}
+
+// keyRoles are the scopes that use the HTTP API, with the role each acts as.
+var keyRoles = map[string]role{"read": roleViewer, "editor": roleEditor, "admin": roleAdmin}
 
 type cachedKey struct {
 	id      int64
@@ -64,8 +68,8 @@ func newKeySecret() (string, error) {
 	return keyPrefix + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// lookupKey finds an active, unexpired key of scope.
-func (s *Server) lookupKey(ctx context.Context, raw, scope string) (cachedKey, bool) {
+// lookupKey finds an active, unexpired key of one of scopes.
+func (s *Server) lookupKey(ctx context.Context, raw string, scopes ...string) (cachedKey, bool) {
 	if !strings.HasPrefix(raw, keyPrefix) || len(raw) > 128 {
 		return cachedKey{}, false
 	}
@@ -80,7 +84,7 @@ func (s *Server) lookupKey(ctx context.Context, raw, scope string) (cachedKey, b
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 	k, ok := ks.byHash[h]
-	if !ok || k.scope != scope || (!k.expires.IsZero() && time.Now().After(k.expires)) {
+	if !ok || !slices.Contains(scopes, k.scope) || (!k.expires.IsZero() && time.Now().After(k.expires)) {
 		return cachedKey{}, false
 	}
 	ks.used[k.id] = time.Now().UTC()
@@ -202,18 +206,19 @@ func bearerKey(r *http.Request) (string, bool) {
 // readPosts are the POST endpoints that only read: read keys may call them.
 var readPosts = []string{"/api/query", "/api/analyst", "/api/applogs/ask", "/api/applogs/explain", "/api/settings/logs/rules/test"}
 
-// keyAuthed serves a request made with a read key as a viewer. Keys never
-// write, whatever the handler would allow.
+// keyAuthed serves a request made with an API key in the key's role. Read
+// keys never write, whatever the handler would allow; editor and admin keys
+// are held to the handlers' own role checks.
 func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h http.HandlerFunc) {
-	k, ok := s.lookupKey(r.Context(), raw, "read")
+	k, ok := s.lookupKey(r.Context(), raw, "read", "editor", "admin")
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "invalid, expired or revoked API key")
 		return
 	}
 	readOnly := r.Method == http.MethodGet || r.Method == http.MethodHead ||
 		(r.Method == http.MethodPost && slices.Contains(readPosts, r.URL.Path))
-	if !readOnly {
-		writeError(w, http.StatusForbidden, "API keys are read-only")
+	if !readOnly && k.scope == "read" {
+		writeError(w, http.StatusForbidden, "read API keys are read-only")
 		return
 	}
 	if needsJSON(r) && !isJSON(r) {
@@ -224,7 +229,7 @@ func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h
 		UserID:  "key:" + strconv.FormatInt(k.id, 10),
 		Name:    "API key " + k.name,
 		Roles:   []string{"api-key"},
-		Role:    roleViewer.String(),
+		Role:    keyRoles[k.scope].String(),
 		Expires: time.Now().Add(time.Hour).Unix(),
 	}
 	s.serveAs(w, r, sess, h)
@@ -234,29 +239,54 @@ func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT id, name, scope, prefix, created_by, created_at, expires_at, last_used_at, revoked_at
-FROM visionary_api_keys ORDER BY id DESC`)
+	rows, err := s.db.Query(r.Context(), `SELECT `+keyColumns+` FROM visionary_api_keys ORDER BY id DESC`)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	keys := make([]map[string]any, 0, len(rows.Rows))
 	for _, row := range rows.Rows {
-		if len(row) != 9 {
-			continue
+		if len(row) == 9 {
+			keys = append(keys, s.keyView(row))
 		}
-		id := toInt(row[0])
-		lastUsed := toString(row[7])
-		if t, ok := s.pendingUse(id); ok {
-			lastUsed = t.Format(tsLayout)
-		}
-		keys = append(keys, map[string]any{
-			"id": id, "name": toString(row[1]), "scope": toString(row[2]), "prefix": toString(row[3]),
-			"created_by": toString(row[4]), "created_at": toString(row[5]), "expires_at": nullable(row[6]),
-			"last_used_at": nullable(lastUsed), "revoked_at": nullable(row[8]),
-		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+}
+
+const keyColumns = `id, name, scope, prefix, created_by, created_at, expires_at, last_used_at, revoked_at`
+
+func (s *Server) keyView(row []any) map[string]any {
+	id := toInt(row[0])
+	lastUsed := toString(row[7])
+	if t, ok := s.pendingUse(id); ok {
+		lastUsed = t.Format(tsLayout)
+	}
+	return map[string]any{
+		"id": id, "name": toString(row[1]), "scope": toString(row[2]), "prefix": toString(row[3]),
+		"created_by": toString(row[4]), "created_at": toString(row[5]), "expires_at": nullable(row[6]),
+		"last_used_at": nullable(lastUsed), "revoked_at": nullable(row[8]),
+	}
+}
+
+func (s *Server) handleGetKey(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r, "admin") {
+		return
+	}
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid key id")
+		return
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT `+keyColumns+` FROM visionary_api_keys WHERE id = ?`, id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if len(rows.Rows) == 0 || len(rows.Rows[0]) != 9 {
+		writeError(w, http.StatusNotFound, "key not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.keyView(rows.Rows[0]))
 }
 
 func nullable(v any) any {
@@ -285,7 +315,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(keyScopes, body.Scope) {
-		writeError(w, http.StatusBadRequest, "scope must be read, server, client or scim")
+		writeError(w, http.StatusBadRequest, "scope must be read, editor, admin, server, client or scim")
 		return
 	}
 	if body.ExpiresDays < 0 || body.ExpiresDays > 3650 {

@@ -35,6 +35,7 @@ import (
 //	replay.go    session replay recorded by the browser SDK
 //	leases.go    several replicas on one database: which one runs each job
 //	workspaces.go workspaces: people scoped to sets of services
+//	config_*.go  configuration as one YAML or JSON file: export, dry run, import
 
 // featureSchemas are the CREATE statements of every feature, run at startup
 // after the core tables exist.
@@ -68,6 +69,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.replayRoutes(mux)
 	s.replicasRoutes(mux)
 	s.workspacesRoutes(mux)
+	s.configRoutes(mux)
 }
 
 // Start launches the features' background work. It returns after the first
