@@ -46,6 +46,9 @@ func (s *Server) ensureSchema(ctx context.Context) error {
 	if err := s.addColumns(ctx, "api_logs", sdk.AddedRequestColumns); err != nil {
 		errs = append(errs, fmt.Errorf("api_logs columns: %w", err))
 	}
+	if err := s.addColumns(ctx, "spans", sdk.AddedSpanColumns); err != nil {
+		errs = append(errs, fmt.Errorf("spans columns: %w", err))
+	}
 	for _, schema := range s.featureSchemas() {
 		if err := s.db.ExecScript(ctx, schema); err != nil {
 			errs = append(errs, err)

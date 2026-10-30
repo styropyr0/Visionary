@@ -29,7 +29,7 @@ func (s *Server) handleRequestTelemetry(w http.ResponseWriter, r *http.Request) 
 	tr := timeRange{}
 	g, ctx := errgroup.WithContext(r.Context())
 	g.Go(func() (err error) {
-		logID, err = s.telemetryQuery(ctx, `SELECT MAX(id) AS id FROM api_logs WHERE request_id = ?`, tr, rid)
+		logID, err = s.telemetryQuery(ctx, `SELECT MAX(id) AS id, MAX(trace_id) AS trace_id FROM api_logs WHERE request_id = ?`, tr, rid)
 		return
 	})
 	g.Go(func() (err error) {
@@ -67,11 +67,11 @@ FROM app_logs WHERE request_id = ?`, []any{rid}
 		s.fail(w, err)
 		return
 	}
-	var id any
-	if len(logID.Rows) > 0 && len(logID.Rows[0]) > 0 {
-		id = logID.Rows[0][0]
+	var id, traceID any
+	if len(logID.Rows) > 0 && len(logID.Rows[0]) > 1 {
+		id, traceID = logID.Rows[0][0], logID.Rows[0][1]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"log_id": id, "spans": spans, "errors": errs, "logs": lines})
+	writeJSON(w, http.StatusOK, map[string]any{"log_id": id, "trace_id": traceID, "spans": spans, "errors": errs, "logs": lines})
 }
 
 // handleSpanGroups ranks span names of one kind (db by default) by total
