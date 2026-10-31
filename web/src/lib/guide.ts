@@ -94,10 +94,9 @@ export const GUIDE: GuideSection[] = [
       },
     ],
   },
-
   {
     id: "overview",
-    group: "Monitor",
+    group: "API",
     title: "API overview",
     route: "overview",
     intro: "The first page to look at: whether traffic, errors and latency are normal, and which routes and users are behind them.",
@@ -119,7 +118,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "performance",
-    group: "Monitor",
+    group: "API",
     title: "Performance",
     route: "performance",
     intro: "Why the API is slow and for whom: satisfaction scores, the routes that cost the most time, and every call a slow request made.",
@@ -150,8 +149,72 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "logs",
+    group: "API",
+    title: "Requests",
+    route: "logs",
+    intro:
+      "Every request your services served, searchable, with its headers, bodies and calls. Rows come from the SDK's middleware or OpenTelemetry server spans; log lines, including nginx access lines, stay in Logs.",
+    shot: "logs",
+    steps: [
+      {
+        title: "Filter",
+        text: "Narrow by status class, method, route, user (ID or @handle) or IP, or search for a path or an exact request ID. Links from other pages arrive with the filters already set.",
+      },
+      {
+        title: "Open a request",
+        text: "Click a row for its status, duration, user and service, the errors it raised, its database and outbound calls, and the **Response body**, **Request body** and **Request headers**, with secrets redacted.",
+        shot: "logs-detail",
+        caption: "One request: every query and outbound call it made, and its body.",
+      },
+      {
+        title: "Go further back",
+        text: "**Load older requests** at the bottom continues the list.",
+      },
+    ],
+  },
+  {
+    id: "traces",
+    group: "API",
+    title: "Traces",
+    route: "traces",
+    intro: "One request followed through every service it called, and the map of which services call which.",
+    shot: "traces",
+    caption: "Traces of the last 24 hours, with the services each one touched.",
+    steps: [
+      {
+        title: "Traces and requests",
+        text: "A trace is built from the same rows as **Requests**: the requests and calls the SDK already writes, each carrying a trace ID. A request shows one service's part; a trace joins the parts of every service the user's action reached. With a single service, a trace and its request's waterfall show the same thing.",
+      },
+      {
+        title: "Find a trace",
+        text: "**Search** lists the traces that started in the range. Narrow them by **Services** (a comma list finds traces that touched all of them), **Route**, a call's name or target such as `SELECT users` or `api.stripe.com`, **Min ms**, or **Only with errors**. Click a row to open it.",
+      },
+      {
+        title: "Read a trace",
+        text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in. Colours mean the kind, the same on every page: slate for a request, blue for a database query, orange for an outbound HTTP call, green for a cache, amber for a queue, dark green for background work; each request row names its service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
+        shot: "trace",
+        caption: "One checkout through four services, with the log lines it wrote.",
+      },
+      {
+        title: "Get there from anywhere",
+        text: "A request in **Requests** or **Performance** has **Open trace** above its calls, and a log line in **Logs** has **Open its trace**. A trace's address is `#/traces/<trace id>`, so you can paste one from a log or another tool.",
+      },
+      {
+        title: "Use the service map",
+        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it; the buttons in the corner zoom, fit the map and put moved boxes back. Click an arrow or a box to search its traces.",
+        shot: "traces-map",
+        caption: "Services, the databases and hosts they call, and the calls between them.",
+      },
+      {
+        title: "Connect more services",
+        text: "Calls between services join up when the caller sends `traceparent` and the service it calls records it. See **Help** on this page, **Follow requests across services**.",
+      },
+    ],
+  },
+  {
     id: "queries",
-    group: "Monitor",
+    group: "API",
     title: "Queries",
     route: "queries",
     intro:
@@ -180,7 +243,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "dependencies",
-    group: "Monitor",
+    group: "API",
     title: "Dependencies",
     route: "dependencies",
     intro: "The third-party APIs your services call, watched like routes of your own.",
@@ -198,7 +261,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "profiles",
-    group: "Monitor",
+    group: "API",
     title: "CPU profiles",
     route: "profiles",
     intro: "Flame graphs of where your services spend CPU while they serve requests.",
@@ -219,8 +282,68 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "errors",
+    group: "Apps",
+    title: "Errors",
+    route: "errors",
+    intro: "Exceptions and panics grouped into issues, with the stack, the versions they appear in and the requests that raised them.",
+    shot: "errors",
+    steps: [
+      {
+        title: "Triage the list",
+        text: "Filter **Status** to **New** or **Regressed** to see what this range brought. Search by type, message or route.",
+      },
+      {
+        title: "Open an issue",
+        text: "Click an issue for its occurrences over time, the versions and instances it appears on, its stack trace, and the routes and users it reached. **View request** on a recent occurrence opens the request that failed.",
+        shot: "errors-issue",
+        caption: "One issue: when it happens, where it comes from and who it reached.",
+      },
+      {
+        title: "Ask why",
+        text: "**Ask the analyst** opens Explore with a question about this issue already written.",
+      },
+    ],
+  },
+  {
+    id: "frontend",
+    group: "Apps",
+    title: "Frontend",
+    route: "frontend",
+    intro: "What your users experience in the browser and in your mobile apps.",
+    shot: "frontend",
+    steps: [
+      {
+        title: "Connect an app",
+        text: "Create a client key in **Settings → API keys**, then add the browser, Android or iOS SDK; **Help** on this page has the snippet. For a website, also add its origin under **Settings → Server → Ingest**.",
+      },
+      {
+        title: "Check Web Vitals",
+        text: "LCP, INP, CLS, FCP and TTFB are rated good, needs improvement or poor at the 75th percentile, per page. **App** in the top bar narrows to Web, Android or iOS.",
+      },
+      {
+        title: "Compare devices and versions",
+        text: "**Breakdown** splits the numbers by app, app version, device, OS or country, so a slow screen on low-end phones stands out.",
+      },
+      {
+        title: "Open a client error",
+        text: "Click a row in **Error groups** for its message, stack trace, device, page and its latest occurrences.",
+      },
+      {
+        title: "Turn on session replay",
+        text: "Switch on **Accept session replays** in **Settings → Server → Ingest**, then pass `replay: { sampleRate: 0.05, onErrorSampleRate: 1 }` to the browser SDK's `init`: 5% of sessions are recorded whole, and the others send their last minute only when an error happens. Inputs are masked in the browser; passwords, emails, phone numbers and card fields are never recorded. Add `data-visionary-mask` to an element to mask its text, or `data-visionary-block` to leave it out. Replays are kept 7 days (**Settings → Data**) and **Session replay storage** caps their size; the oldest go first.",
+      },
+      {
+        title: "Watch a session",
+        text: "In **Recent sessions**, a play icon marks sessions with a replay. Open one and choose **Replay**: play, pause, change the speed, or click the bar. The marks on it are page loads, API calls, errors and server logs; click one to jump just before it. **Skip inactivity** jumps over idle stretches.",
+        shot: "frontend-replay",
+        caption: "A session's replay, with its page loads, API calls and errors on the scrubber.",
+      },
+    ],
+  },
+  {
     id: "system",
-    group: "Monitor",
+    group: "System",
     title: "System",
     route: "system",
     intro: "The machines and processes behind your services: CPU, memory, disk, network, the runtime and the database pool.",
@@ -246,7 +369,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "containers",
-    group: "Monitor",
+    group: "System",
     title: "Containers",
     route: "containers",
     intro: "Docker and Podman containers on the machines the host agent watches, and services on container platforms that report their own limits.",
@@ -265,7 +388,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "metrics",
-    group: "Monitor",
+    group: "System",
     title: "Metrics",
     route: "metrics",
     intro: "Your own numbers: orders placed, queue depth, checkout time. Record them in code, with OpenTelemetry or from Prometheus, then chart, compare and alert on them.",
@@ -301,68 +424,8 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
-    id: "errors",
-    group: "Monitor",
-    title: "Errors",
-    route: "errors",
-    intro: "Exceptions and panics grouped into issues, with the stack, the versions they appear in and the requests that raised them.",
-    shot: "errors",
-    steps: [
-      {
-        title: "Triage the list",
-        text: "Filter **Status** to **New** or **Regressed** to see what this range brought. Search by type, message or route.",
-      },
-      {
-        title: "Open an issue",
-        text: "Click an issue for its occurrences over time, the versions and instances it appears on, its stack trace, and the routes and users it reached. **View request** on a recent occurrence opens the request that failed.",
-        shot: "errors-issue",
-        caption: "One issue: when it happens, where it comes from and who it reached.",
-      },
-      {
-        title: "Ask why",
-        text: "**Ask the analyst** opens Explore with a question about this issue already written.",
-      },
-    ],
-  },
-  {
-    id: "frontend",
-    group: "Monitor",
-    title: "Frontend",
-    route: "frontend",
-    intro: "What your users experience in the browser and in your mobile apps.",
-    shot: "frontend",
-    steps: [
-      {
-        title: "Connect an app",
-        text: "Create a client key in **Settings → API keys**, then add the browser, Android or iOS SDK; **Help** on this page has the snippet. For a website, also add its origin under **Settings → Server → Ingest**.",
-      },
-      {
-        title: "Check Web Vitals",
-        text: "LCP, INP, CLS, FCP and TTFB are rated good, needs improvement or poor at the 75th percentile, per page. **App** in the top bar narrows to Web, Android or iOS.",
-      },
-      {
-        title: "Compare devices and versions",
-        text: "**Breakdown** splits the numbers by app, app version, device, OS or country, so a slow screen on low-end phones stands out.",
-      },
-      {
-        title: "Open a client error",
-        text: "Click a row in **Error groups** for its message, stack trace, device, page and its latest occurrences.",
-      },
-      {
-        title: "Turn on session replay",
-        text: "Switch on **Accept session replays** in **Settings → Server → Ingest**, then pass `replay: { sampleRate: 0.05, onErrorSampleRate: 1 }` to the browser SDK's `init`: 5% of sessions are recorded whole, and the others send their last minute only when an error happens. Inputs are masked in the browser; passwords, emails, phone numbers and card fields are never recorded. Add `data-visionary-mask` to an element to mask its text, or `data-visionary-block` to leave it out. Replays are kept 7 days (**Settings → Data**) and **Session replay storage** caps their size; the oldest go first.",
-      },
-      {
-        title: "Watch a session",
-        text: "In **Recent sessions**, a play icon marks sessions with a replay. Open one and choose **Replay**: play, pause, change the speed, or click the bar. The marks on it are page loads, API calls, errors and server logs; click one to jump just before it. **Skip inactivity** jumps over idle stretches.",
-        shot: "frontend-replay",
-        caption: "A session's replay, with its page loads, API calls and errors on the scrubber.",
-      },
-    ],
-  },
-  {
     id: "uptime",
-    group: "Monitor",
+    group: "Reliability",
     title: "Uptime",
     route: "uptime",
     intro: "Checks this server runs on a schedule against your endpoints, APIs, ports, DNS names, hosts and certificates, or through your pages in a headless browser, and heartbeats your jobs send, with incidents and a public status page.",
@@ -421,8 +484,96 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "alerts",
+    group: "Reliability",
+    title: "Alerts",
+    route: "alerts",
+    intro: "Rules that watch any metric and tell the right people, with acknowledgements, escalation and silences.",
+    shot: "alerts",
+    caption: "Rules, firing and quiet, with their last value and recent trend.",
+    steps: [
+      {
+        title: "Add where alerts go",
+        text: "In **Channels**, **Add channel** and pick Slack, Discord, Microsoft Teams, Google Chat, Webhook, Email, PagerDuty, Opsgenie, Telegram or SMS. **Send test** checks it works. A webhook with a signing secret carries an `X-Visionary-Signature` header to verify.",
+        shot: "alerts-channels",
+        caption: "Channels, each with a test button and its weekly digest setting.",
+      },
+      {
+        title: "Create a rule",
+        text: "Click **New rule** and start from a preset, or a blank rule. Choose a **Threshold**, **Anomaly** or **SLO burn rate** rule, the metric and its scope (route, service, instance…), the condition and window, how long it must hold (**For**), its severity, and the channels to notify. The **Last 24 hours** chart shows when it would have fired.",
+        shot: "alerts-rule",
+        caption: "A rule open for editing: the preview shows it would fire on today's checkout errors.",
+      },
+      {
+        title: "Fine-tune it",
+        text: "Under **When data stops, flapping and resolving**, decide what missing data means and whether to say when it resolves. **Escalation** adds channels after a delay, **Message** sets the title and mentions, and **Depends on** holds it back while another rule fires.",
+      },
+      {
+        title: "Acknowledge what you are handling",
+        text: "When a rule fires, click its double check mark and **Acknowledge**, with an optional note. Reminders and escalation stop, and the channels that were told hear who took it.",
+        shot: "alerts-ack",
+        caption: "Acknowledging a firing rule.",
+      },
+      {
+        title: "Mute or silence",
+        text: "The bell mutes one rule for 30 minutes to a week. For planned work, **Silences** → **New silence** holds back notifications in a maintenance window or in weekly quiet hours, by severity, rule or label.",
+        shot: "alerts-silences",
+        caption: "A weekly quiet window for warnings.",
+      },
+      {
+        title: "Check what was sent",
+        text: "**Activity** lists every firing and resolve with what each channel was told, and whether delivery worked or is being retried. **CSV** downloads it.",
+        shot: "alerts-activity",
+        caption: "Activity: what fired, and each channel's delivery.",
+      },
+      {
+        title: "Get a weekly digest",
+        text: "**Digest** previews this week's summary of traffic, latency, alerts, errors and uptime. Under **Delivery**, pick the channels, weekday and hour, or **Send now**. Email and Telegram channels also get the digest as a PDF, and **PDF** downloads it.",
+      },
+    ],
+  },
+  {
+    id: "incidents",
+    group: "Reliability",
+    title: "Incidents",
+    route: "incidents",
+    intro: "When something is broken for users, declare an incident: one place for who is on it, what is known, what was said, and afterwards what to change.",
+    shot: "incidents",
+    caption: "Open and resolved incidents with their severity, time to resolve and owner.",
+    steps: [
+      {
+        title: "Declare it",
+        text: "Click **Declare incident** on this page, or on a firing rule in **Alerts**, a check in **Uptime**, an issue in **Errors** or a line in **Logs**, which fills in the title, severity, services and start time and links the source. Pick **SEV1** (critical) to **SEV4** (low), name the commander, and tick the channels to tell.",
+      },
+      {
+        title: "Assign the roles",
+        text: "Under **Responders**, **Take command** makes you the incident commander; **Assign** adds a communications or operations lead, a scribe or a responder. The commander shows in the list, the notifications and the postmortem.",
+      },
+      {
+        title: "Move it along",
+        text: "The steps under the title move it from **Investigating** to **Identified**, **Monitoring** and **Resolved**, each stamped with its time. The tiles show the time to acknowledge, mitigate and resolve.",
+      },
+      {
+        title: "Keep the timeline",
+        text: "Add a **Note** with a link to a chart, request or trace as you go. Linked alerts firing and resolving, linked checks failing and recovering, and deploys of the affected services appear on their own; untick them to see only what people wrote.",
+        shot: "incident",
+        caption: "A resolved SEV1: its status steps, times, responders and timeline.",
+      },
+      {
+        title: "Tell people",
+        text: "Switch to **Status update**, write what is affected and what happens next, optionally move the status, and pick the channels and the **Status page**. Each channel's delivery shows on the update.",
+      },
+      {
+        title: "Write the postmortem",
+        text: "On **Postmortem**, **Draft it** fills the summary, impact and timeline from the data, and with the AI analyst on also the root cause, lessons and action items. Edit it, give each action item an owner and tick it off when done, and **Download Markdown** for your wiki.",
+        shot: "incident-postmortem",
+        caption: "The postmortem drafted from the timeline, with action items.",
+      },
+    ],
+  },
+  {
     id: "ci",
-    group: "Monitor",
+    group: "Reliability",
     title: "CI",
     route: "ci",
     intro: "Your pipelines and tests next to what they shipped: which workflows fail and why, what is slow, which tests are flaky, and how a deploy changed latency and errors.",
@@ -465,7 +616,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "security",
-    group: "Monitor",
+    group: "Security",
     title: "Security",
     route: "security",
     intro: "Attacks and account takeovers found in your request log, events from your machines, and who changed what in Visionary, with what to do about each.",
@@ -531,10 +682,9 @@ export const GUIDE: GuideSection[] = [
       },
     ],
   },
-
   {
     id: "explore",
-    group: "Investigate",
+    group: "Analysis",
     title: "Explore",
     route: "explore",
     intro: "Ask a question about your data in plain words and get an answer with charts.",
@@ -561,7 +711,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "applogs",
-    group: "Investigate",
+    group: "Analysis",
     title: "Logs",
     route: "applogs",
     intro: "Every line your services log, from the SDKs, OpenTelemetry, shippers, syslog and the host agent, linked to the request that wrote it.",
@@ -612,72 +762,8 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
-    id: "logs",
-    group: "Investigate",
-    title: "Requests",
-    route: "logs",
-    intro:
-      "Every request your services served, searchable, with its headers, bodies and calls. Rows come from the SDK's middleware or OpenTelemetry server spans; log lines, including nginx access lines, stay in Logs.",
-    shot: "logs",
-    steps: [
-      {
-        title: "Filter",
-        text: "Narrow by status class, method, route, user (ID or @handle) or IP, or search for a path or an exact request ID. Links from other pages arrive with the filters already set.",
-      },
-      {
-        title: "Open a request",
-        text: "Click a row for its status, duration, user and service, the errors it raised, its database and outbound calls, and the **Response body**, **Request body** and **Request headers**, with secrets redacted.",
-        shot: "logs-detail",
-        caption: "One request: every query and outbound call it made, and its body.",
-      },
-      {
-        title: "Go further back",
-        text: "**Load older requests** at the bottom continues the list.",
-      },
-    ],
-  },
-  {
-    id: "traces",
-    group: "Investigate",
-    title: "Traces",
-    route: "traces",
-    intro: "One request followed through every service it called, and the map of which services call which.",
-    shot: "traces",
-    caption: "Traces of the last 24 hours, with the services each one touched.",
-    steps: [
-      {
-        title: "Traces and requests",
-        text: "A trace is built from the same rows as **Requests**: the requests and calls the SDK already writes, each carrying a trace ID. A request shows one service's part; a trace joins the parts of every service the user's action reached. With a single service, a trace and its request's waterfall show the same thing.",
-      },
-      {
-        title: "Find a trace",
-        text: "**Search** lists the traces that started in the range. Narrow them by **Services** (a comma list finds traces that touched all of them), **Route**, a call's name or target such as `SELECT users` or `api.stripe.com`, **Min ms**, or **Only with errors**. Click a row to open it.",
-      },
-      {
-        title: "Read a trace",
-        text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in. Colours mean the kind, the same on every page: slate for a request, blue for a database query, orange for an outbound HTTP call, green for a cache, amber for a queue, dark green for background work; each request row names its service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
-        shot: "trace",
-        caption: "One checkout through four services, with the log lines it wrote.",
-      },
-      {
-        title: "Get there from anywhere",
-        text: "A request in **Requests** or **Performance** has **Open trace** above its calls, and a log line in **Logs** has **Open its trace**. A trace's address is `#/traces/<trace id>`, so you can paste one from a log or another tool.",
-      },
-      {
-        title: "Use the service map",
-        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it; the buttons in the corner zoom, fit the map and put moved boxes back. Click an arrow or a box to search its traces.",
-        shot: "traces-map",
-        caption: "Services, the databases and hosts they call, and the calls between them.",
-      },
-      {
-        title: "Connect more services",
-        text: "Calls between services join up when the caller sends `traceparent` and the service it calls records it. See **Help** on this page, **Follow requests across services**.",
-      },
-    ],
-  },
-  {
     id: "dashboards",
-    group: "Investigate",
+    group: "Analysis",
     title: "Dashboards",
     route: "dashboards",
     intro: "Pages of your own: the panels you care about, arranged on a grid and shared with the team.",
@@ -699,7 +785,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "saved",
-    group: "Investigate",
+    group: "Analysis",
     title: "Saved panels",
     route: "saved",
     intro: "Charts saved from Explore, for the whole team.",
@@ -711,98 +797,9 @@ export const GUIDE: GuideSection[] = [
       },
     ],
   },
-
-  {
-    id: "alerts",
-    group: "Manage",
-    title: "Alerts",
-    route: "alerts",
-    intro: "Rules that watch any metric and tell the right people, with acknowledgements, escalation and silences.",
-    shot: "alerts",
-    caption: "Rules, firing and quiet, with their last value and recent trend.",
-    steps: [
-      {
-        title: "Add where alerts go",
-        text: "In **Channels**, **Add channel** and pick Slack, Discord, Microsoft Teams, Google Chat, Webhook, Email, PagerDuty, Opsgenie, Telegram or SMS. **Send test** checks it works. A webhook with a signing secret carries an `X-Visionary-Signature` header to verify.",
-        shot: "alerts-channels",
-        caption: "Channels, each with a test button and its weekly digest setting.",
-      },
-      {
-        title: "Create a rule",
-        text: "Click **New rule** and start from a preset, or a blank rule. Choose a **Threshold**, **Anomaly** or **SLO burn rate** rule, the metric and its scope (route, service, instance…), the condition and window, how long it must hold (**For**), its severity, and the channels to notify. The **Last 24 hours** chart shows when it would have fired.",
-        shot: "alerts-rule",
-        caption: "A rule open for editing: the preview shows it would fire on today's checkout errors.",
-      },
-      {
-        title: "Fine-tune it",
-        text: "Under **When data stops, flapping and resolving**, decide what missing data means and whether to say when it resolves. **Escalation** adds channels after a delay, **Message** sets the title and mentions, and **Depends on** holds it back while another rule fires.",
-      },
-      {
-        title: "Acknowledge what you are handling",
-        text: "When a rule fires, click its double check mark and **Acknowledge**, with an optional note. Reminders and escalation stop, and the channels that were told hear who took it.",
-        shot: "alerts-ack",
-        caption: "Acknowledging a firing rule.",
-      },
-      {
-        title: "Mute or silence",
-        text: "The bell mutes one rule for 30 minutes to a week. For planned work, **Silences** → **New silence** holds back notifications in a maintenance window or in weekly quiet hours, by severity, rule or label.",
-        shot: "alerts-silences",
-        caption: "A weekly quiet window for warnings.",
-      },
-      {
-        title: "Check what was sent",
-        text: "**Activity** lists every firing and resolve with what each channel was told, and whether delivery worked or is being retried. **CSV** downloads it.",
-        shot: "alerts-activity",
-        caption: "Activity: what fired, and each channel's delivery.",
-      },
-      {
-        title: "Get a weekly digest",
-        text: "**Digest** previews this week's summary of traffic, latency, alerts, errors and uptime. Under **Delivery**, pick the channels, weekday and hour, or **Send now**. Email and Telegram channels also get the digest as a PDF, and **PDF** downloads it.",
-      },
-    ],
-  },
-  {
-    id: "incidents",
-    group: "Manage",
-    title: "Incidents",
-    route: "incidents",
-    intro: "When something is broken for users, declare an incident: one place for who is on it, what is known, what was said, and afterwards what to change.",
-    shot: "incidents",
-    caption: "Open and resolved incidents with their severity, time to resolve and owner.",
-    steps: [
-      {
-        title: "Declare it",
-        text: "Click **Declare incident** on this page, or on a firing rule in **Alerts**, a check in **Uptime**, an issue in **Errors** or a line in **Logs**, which fills in the title, severity, services and start time and links the source. Pick **SEV1** (critical) to **SEV4** (low), name the commander, and tick the channels to tell.",
-      },
-      {
-        title: "Assign the roles",
-        text: "Under **Responders**, **Take command** makes you the incident commander; **Assign** adds a communications or operations lead, a scribe or a responder. The commander shows in the list, the notifications and the postmortem.",
-      },
-      {
-        title: "Move it along",
-        text: "The steps under the title move it from **Investigating** to **Identified**, **Monitoring** and **Resolved**, each stamped with its time. The tiles show the time to acknowledge, mitigate and resolve.",
-      },
-      {
-        title: "Keep the timeline",
-        text: "Add a **Note** with a link to a chart, request or trace as you go. Linked alerts firing and resolving, linked checks failing and recovering, and deploys of the affected services appear on their own; untick them to see only what people wrote.",
-        shot: "incident",
-        caption: "A resolved SEV1: its status steps, times, responders and timeline.",
-      },
-      {
-        title: "Tell people",
-        text: "Switch to **Status update**, write what is affected and what happens next, optionally move the status, and pick the channels and the **Status page**. Each channel's delivery shows on the update.",
-      },
-      {
-        title: "Write the postmortem",
-        text: "On **Postmortem**, **Draft it** fills the summary, impact and timeline from the data, and with the AI analyst on also the root cause, lessons and action items. Edit it, give each action item an owner and tick it off when done, and **Download Markdown** for your wiki.",
-        shot: "incident-postmortem",
-        caption: "The postmortem drafted from the timeline, with action items.",
-      },
-    ],
-  },
   {
     id: "settings",
-    group: "Manage",
+    group: "Admin",
     title: "Settings",
     route: "settings",
     intro: "Your own preferences, and the team's: who can sign in, keys, thresholds, data, and how the server behaves.",
@@ -844,7 +841,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "sso",
-    group: "Manage",
+    group: "Admin",
     title: "Single sign-on and SCIM",
     intro:
       "Let people sign in with the account they already have at Google, Microsoft Entra ID, Okta, Auth0, Keycloak or any OpenID Connect or SAML 2.0 provider, and let the provider add and remove them. It all lives in **Settings → Sign-in → Single sign-on**, applies without a restart, and works next to the other ways in.",
@@ -891,7 +888,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "workspaces",
-    group: "Manage",
+    group: "Admin",
     title: "Workspaces",
     intro:
       "Workspaces let each team see only its own services. A workspace names services and members, and the server filters every read for its members: pages, Explore, the analyst, dashboards, alerts, exports and the Prometheus API. Admins always see everything, and with no workspaces everyone does.",
@@ -922,7 +919,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "config-as-code",
-    group: "Manage",
+    group: "Admin",
     title: "Configuration as code",
     intro:
       "Keep alerts, uptime checks and dashboards in git: manage them with Terraform, or move the whole setup between installs as one file from **Settings → Configuration**.",

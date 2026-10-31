@@ -48,7 +48,7 @@ export function Errors() {
     <>
       <TopBar
         title="Errors"
-        section="Monitor"
+        section="Apps"
         actions={
           <>
             <TimeRangePicker />

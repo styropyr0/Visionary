@@ -88,7 +88,7 @@ export function Metrics() {
     <>
       <TopBar
         title="Metrics"
-        section="Monitor"
+        section="System"
         actions={
           <>
             <div className="segmented" role="radiogroup" aria-label="Mode">

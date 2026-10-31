@@ -72,39 +72,59 @@ export const ROUTES: Route[] = ["overview", "performance", "queries", "dependenc
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
-    group: "Monitor",
+    group: "API",
     items: [
       { route: "overview", label: "API overview", icon: LayoutDashboard },
       { route: "performance", label: "Performance", icon: Gauge },
+      { route: "logs", label: "Requests", icon: ScrollText },
+      { route: "traces", label: "Traces", icon: Waypoints },
       { route: "queries", label: "Queries", icon: Database },
       { route: "dependencies", label: "Dependencies", icon: Network },
       { route: "profiles", label: "CPU profiles", icon: Flame },
+    ],
+  },
+  {
+    group: "Apps",
+    items: [
+      { route: "errors", label: "Errors", icon: Bug },
+      { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
+    ],
+  },
+  {
+    group: "System",
+    items: [
       { route: "system", label: "System", icon: Server },
       { route: "containers", label: "Containers", icon: Boxes },
       { route: "metrics", label: "Metrics", icon: ChartLine },
-      { route: "errors", label: "Errors", icon: Bug },
-      { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
+    ],
+  },
+  {
+    group: "Reliability",
+    items: [
       { route: "uptime", label: "Uptime", icon: Activity },
+      { route: "alerts", label: "Alerts", icon: Bell },
+      { route: "incidents", label: "Incidents", icon: Siren },
       { route: "ci", label: "CI", icon: Workflow },
+    ],
+  },
+  {
+    group: "Security",
+    items: [
       { route: "security", label: "Security", icon: ShieldAlert },
     ],
   },
   {
-    group: "Investigate",
+    group: "Analysis",
     items: [
       { route: "explore", label: "Explore", icon: Sparkles },
       { route: "applogs", label: "Logs", icon: Logs },
-      { route: "logs", label: "Requests", icon: ScrollText },
-      { route: "traces", label: "Traces", icon: Waypoints },
       { route: "dashboards", label: "Dashboards", icon: LayoutGrid },
       { route: "saved", label: "Saved panels", icon: Bookmark },
     ],
   },
   {
-    group: "Manage",
+    group: "Admin",
     items: [
-      { route: "alerts", label: "Alerts", icon: Bell },
-      { route: "incidents", label: "Incidents", icon: Siren },
       { route: "settings", label: "Settings", icon: Settings },
       { route: "guide", label: "How to use", icon: BookOpen },
     ],

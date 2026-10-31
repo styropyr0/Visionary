@@ -56,7 +56,7 @@ export function Alerts({ meta }: { meta?: Meta }) {
     <>
       <TopBar
         title="Alerts"
-        section="Manage"
+        section="Reliability"
         actions={
           <>
             {tab === "activity" && <TimeRangePicker />}

@@ -40,7 +40,7 @@ export function Saved() {
     <>
       <TopBar
         title="Saved panels"
-        section="API"
+        section="Analysis"
         actions={
           <>
             <TimeRangePicker />

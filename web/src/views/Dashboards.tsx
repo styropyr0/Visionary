@@ -73,7 +73,7 @@ function DashboardList({ list, loading, error, onChanged }: { list: Dashboard[];
     <>
       <TopBar
         title="Dashboards"
-        section="Investigate"
+        section="Analysis"
         actions={
           can("edit") && (
             <button type="button" className="btn primary" onClick={() => setCreating(true)}>
@@ -249,7 +249,7 @@ function DashboardView({ id, route, all, onChanged }: { id: number; route: Route
   if (loaded.error && !loaded.data) {
     return (
       <>
-        <TopBar title="Dashboards" section="Investigate" />
+        <TopBar title="Dashboards" section="Analysis" />
         <div className="content">
           <ErrorNotice title="Could not open this dashboard" error={loaded.error} />
           <p>

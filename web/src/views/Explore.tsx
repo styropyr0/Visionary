@@ -246,6 +246,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
     <>
       <TopBar
         title="Explore"
+        section="Analysis"
         actions={
           <>
             <TimeRangePicker />

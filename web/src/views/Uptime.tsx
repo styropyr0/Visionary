@@ -97,7 +97,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
     <>
       <TopBar
         title="Uptime"
-        section="Monitor"
+        section="Reliability"
         actions={
           <>
             <a className="btn ghost" href="/status" target="_blank" rel="noreferrer" title="Public status page (turned on in Settings → Status page)">
