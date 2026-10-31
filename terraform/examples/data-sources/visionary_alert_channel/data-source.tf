@@ -1,4 +1,4 @@
-# A channel made in the dashboard, used by a rule managed here.
+# A channel made in the dashboard, used by a rule managed here
 data "visionary_alert_channel" "oncall" {
   name = "On-call Slack"
 }

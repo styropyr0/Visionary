@@ -1,4 +1,4 @@
-# A server key for an SDK, handed to another module or a secret store.
+# A server key for an SDK, handed to another module or a secret store
 resource "visionary_api_key" "checkout_sdk" {
   name  = "checkout service"
   scope = "server"

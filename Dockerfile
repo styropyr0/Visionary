@@ -43,7 +43,7 @@ ENTRYPOINT ["/visionary"]
 # An uptime location runner: the host agent in location mode, running checks
 # from wherever it is deployed (deploy/location/compose.yaml):
 #   docker build --target location -t visionary-location .
-# Browser checks need Chromium: --target location-browser.
+# Browser checks need Chromium: --target location-browser
 FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.22 AS agent
 ARG TARGETOS
 ARG TARGETARCH
@@ -73,11 +73,11 @@ COPY --from=agent /out/visionary-agent /visionary-agent
 USER nonroot:nonroot
 ENTRYPOINT ["/visionary-agent"]
 
-# 3. Runtime: no shell, no package manager, non-root. The default target.
+# 3. Runtime: no shell, no package manager, non-root. The default target
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=server /out/visionary /visionary
 ENV VISIONARY_ADDR=:8090
-# 4317 is OTLP/gRPC, served once Settings → Server → Ingest turns it on.
+# 4317 is OTLP/gRPC, served once Settings → Server → Ingest turns it on
 EXPOSE 8090 4317
 USER nonroot:nonroot
 ENTRYPOINT ["/visionary"]

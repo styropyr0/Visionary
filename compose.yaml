@@ -1,4 +1,4 @@
-# Visionary and a PostgreSQL database for it, built from this repository.
+# Visionary and a PostgreSQL database for it, built from this repository
 #
 #   docker compose up -d --build
 #
@@ -12,7 +12,7 @@
 #
 #   VISIONARY_TARGET=browser docker compose up -d --build
 #
-# Two replicas behind a proxy: see deploy/replicas/compose.yaml.
+# Two replicas behind a proxy: see deploy/replicas/compose.yaml
 name: visionary
 
 services:
@@ -24,8 +24,8 @@ services:
       POSTGRES_DB: visionary
     volumes:
       - db:/var/lib/postgresql/data
-    # Published so services running outside Docker can write to it; remove the
-    # line if only containers on this network should reach the database.
+    # Published so services outside Docker can write to it
+    # Remove the line if only containers on this network should reach the database
     ports:
       - "5432:5432"
     healthcheck:

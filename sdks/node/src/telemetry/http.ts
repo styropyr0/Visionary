@@ -12,7 +12,7 @@ import { currentSpan, traceparent } from "./trace.js";
  * Outbound HTTP spans: fetch and undici through their diagnostics channels,
  * and the http/https modules (axios, got, node-fetch, SDKs) by wrapping
  * request/get. A span ends when the response headers arrive, like Go's
- * RoundTripper; status is "error" on a transport error or a 5xx. Each
+ * RoundTripper, and its status is "error" on a transport error or a 5xx. Each
  * request carries a traceparent naming its span
  */
 let installed = false;

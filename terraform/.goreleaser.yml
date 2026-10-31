@@ -1,6 +1,6 @@
 # Builds, checksums and signs the provider the way the Terraform registry
 # expects. Runs at the root of styropyr0/terraform-provider-visionary, which
-# .github/workflows/terraform.yml fills from this directory.
+# .github/workflows/terraform.yml fills from this directory
 version: 2
 project_name: terraform-provider-visionary
 before:

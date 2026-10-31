@@ -11,7 +11,7 @@ resource "visionary_uptime_check" "api" {
   on_status_page = true
 }
 
-# A browser check: steps played in a headless browser.
+# A browser check: steps played in a headless browser
 resource "visionary_uptime_check" "sign_in" {
   name       = "Sign-in flow"
   kind       = "browser"
@@ -28,7 +28,7 @@ resource "visionary_uptime_check" "sign_in" {
   ]
 }
 
-# A multi-step API check: sign in, then read with the token.
+# A multi-step API check: sign in, then read with the token
 resource "visionary_uptime_check" "orders_api" {
   name    = "Sign in and list orders"
   kind    = "api"
@@ -83,7 +83,7 @@ resource "visionary_uptime_check" "certificate" {
   ssl        = { host = "example.com", warn_days = 21, fail_days = 7, min_tls = "1.2" }
 }
 
-# A heartbeat: the job calls heartbeat_path on the server when it runs.
+# A heartbeat: the job calls heartbeat_path on the server when it runs
 resource "visionary_uptime_check" "backup" {
   name      = "Nightly backup"
   kind      = "heartbeat"
@@ -95,8 +95,8 @@ output "backup_heartbeat_path" {
   sensitive = true
 }
 
-# A Playwright test your CI runs with visionary-playwright-reporter; declared so it
-# is alerted on before its first run, and stale when no run arrives for 20 minutes.
+# A Playwright test your CI runs with visionary-playwright-reporter, declared so it
+# is alerted on before its first run, and stale when no run arrives for 20 minutes
 resource "visionary_uptime_check" "checkout_test" {
   name       = "Checkout pays by card"
   kind       = "playwright"

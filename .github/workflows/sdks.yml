@@ -10,7 +10,7 @@ name: SDK packages
 #                 io.github.styropyr0:visionary-android (sdks/android; JitPack is android.yml)
 # Swift Package Manager needs no upload: it resolves the tag through the root Package.swift.
 # The Go module (sdks/go, its own module) gets a matching sdks/go/vX.Y.Z tag, and the host
-# agent's Linux binaries and the visionary-checks CLI are attached to the GitHub Release.
+# agent's Linux binaries and the visionary-checks CLI are attached to the GitHub Release
 #
 # The version comes from the tag (v0.4.0 -> 0.4.0) and is written into each manifest at build
 # time only; nothing is committed. Each registry has its own job, so one failure does not block
@@ -615,7 +615,7 @@ jobs:
         with:
           go-version-file: go.mod
       # deploy/agent/install.sh downloads visionary-agent-linux-<arch> from the release, and
-      # .github/actions/run-checks downloads visionary-checks-<os>-<arch>.
+      # .github/actions/run-checks downloads visionary-checks-<os>-<arch>
       - name: Build
         env:
           TAG: ${{ needs.version.outputs.tag }}

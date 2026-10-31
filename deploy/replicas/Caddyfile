@@ -1,4 +1,4 @@
-# Sends each request to a ready replica; one that stops answering is skipped.
+# Sends each request to a ready replica and skips one that stops answering
 :8080 {
 	reverse_proxy visionary-1:8090 visionary-2:8090 {
 		health_uri /api/readyz

@@ -1,6 +1,6 @@
 # Two Visionary replicas on one PostgreSQL database, behind Caddy on port 8080.
-# Each background job runs on one replica at a time; stop one and the other
-# takes its jobs over.
+# Each background job runs on one replica at a time and the other takes
+# over when one stops
 #
 #   docker compose -f compose.yaml up -d
 services:

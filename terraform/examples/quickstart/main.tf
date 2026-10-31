@@ -1,6 +1,6 @@
 # A starting point: a channel, two rules, quiet hours, an uptime check and a
 # dashboard. Set VISIONARY_URL and VISIONARY_API_KEY (an editor key), then
-# terraform init && terraform apply.
+# terraform init && terraform apply
 
 terraform {
   required_providers {

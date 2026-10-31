@@ -9,7 +9,7 @@ output "frankfurt_location_key" {
   sensitive = true
 }
 
-# Down only when most of its locations fail.
+# Down only when most of its locations fail
 resource "visionary_uptime_check" "shop" {
   name          = "Shop"
   url           = "https://shop.example.com"

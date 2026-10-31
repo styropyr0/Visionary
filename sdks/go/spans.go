@@ -257,7 +257,7 @@ func StartSpan(ctx context.Context, kind, name string) (end func(err error)) {
 
 // StartSpanContext is StartSpan for a span that makes calls of its own: the
 // calls made with the returned context nest under it in the trace, and
-// outbound requests made with it name it as their parent.
+// outbound requests made with it name it as their parent
 //
 //	ctx, end := visionary.StartSpanContext(ctx, visionary.KindCustom, "build report")
 //	err := buildReport(ctx)
