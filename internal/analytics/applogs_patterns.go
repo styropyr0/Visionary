@@ -188,7 +188,8 @@ func (s *Server) patternPass(ctx context.Context) (int, error) {
 }
 
 func (s *Server) upsertPattern(ctx context.Context, a *patternAgg) error {
-	cols := `(id, service, template, sample, level, severity, first_seen, last_seen, first_version, code_file, code_line, lines, bytes)`
+	lines := s.q.ident("lines")
+	cols := `(id, service, template, sample, level, severity, first_seen, last_seen, first_version, code_file, code_line, ` + lines + `, bytes)`
 	vals := `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	var line any
 	if a.line > 0 {
@@ -200,7 +201,7 @@ func (s *Server) upsertPattern(ctx context.Context, a *patternAgg) error {
 	switch s.q.d {
 	case sdk.MySQL:
 		q = `INSERT INTO log_patterns ` + cols + ` ` + vals + ` ON DUPLICATE KEY UPDATE
-  lines = lines + VALUES(lines), bytes = bytes + VALUES(bytes),
+  ` + lines + ` = ` + lines + ` + VALUES(` + lines + `), bytes = bytes + VALUES(bytes),
   last_seen = GREATEST(last_seen, VALUES(last_seen)),
   severity = GREATEST(severity, VALUES(severity)),
   level = IF(VALUES(severity) > severity, VALUES(level), level)`
@@ -249,7 +250,7 @@ FROM app_logs WHERE ` + ls.sql() + ` AND pattern IS NOT NULL GROUP BY pattern OR
 	info := map[string]map[string]any{}
 	if len(ids) > 0 {
 		marks := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
-		pr, err := s.db.Query(ctx, `SELECT id, service, template, first_seen, first_version, code_file, code_line, lines, viewed_at FROM log_patterns WHERE id IN (`+marks+`)`, ids...)
+		pr, err := s.db.Query(ctx, `SELECT id, service, template, first_seen, first_version, code_file, code_line, `+s.q.ident("lines")+`, viewed_at FROM log_patterns WHERE id IN (`+marks+`)`, ids...)
 		if err == nil {
 			for i := range pr.Rows {
 				m := rowMap(&Result{Columns: pr.Columns, Rows: pr.Rows}, i)

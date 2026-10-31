@@ -52,7 +52,7 @@ func (q sqlDialect) logTables() string {
     first_version {key},
     code_file     TEXT,
     code_line     INTEGER,
-    lines         BIGINT NOT NULL DEFAULT 0,
+    {lines}       BIGINT NOT NULL DEFAULT 0,
     bytes         BIGINT NOT NULL DEFAULT 0,
     viewed_at     {ts}
 ){tail};
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS log_archives (
     id         {id},
     hour       {ts} NOT NULL,
     object     TEXT NOT NULL,
-    lines      BIGINT NOT NULL DEFAULT 0,
+    {lines}    BIGINT NOT NULL DEFAULT 0,
     bytes      BIGINT NOT NULL DEFAULT 0,
     created_at {ts} NOT NULL
 ){tail};
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS log_archives (
 		// MySQL can't index TEXT without a length
 		ddl = strings.Replace(ddl, "id            {key} NOT NULL PRIMARY KEY", "id            VARCHAR(16) NOT NULL PRIMARY KEY", 1)
 	}
-	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{tail}", tail, "{index}", index).Replace(ddl)
+	return strings.NewReplacer("{lines}", q.ident("lines"), "{id}", id, "{key}", key, "{ts}", ts, "{tail}", tail, "{index}", index).Replace(ddl)
 }
 
 // applogsStart also adds a trigram index on PostgreSQL when it can, so text search doesn't scan the range.

@@ -39,6 +39,14 @@ func (q sqlDialect) round(expr string, n int) string {
 	return "ROUND(" + expr + ", " + strconv.Itoa(n) + ")"
 }
 
+// ident quotes a column name that MySQL reserves, such as lines.
+func (q sqlDialect) ident(name string) string {
+	if q.d == sdk.MySQL {
+		return "`" + name + "`"
+	}
+	return name
+}
+
 func (q sqlDialect) text(expr string) string {
 	if q.d == sdk.MySQL {
 		return "CAST(" + expr + " AS CHAR)"
@@ -98,7 +106,8 @@ func (q sqlDialect) promptRules() string {
 	case sdk.MySQL:
 		return `- Dialect: MySQL 8. created_at is VARCHAR; compare it as text, or STR_TO_DATE(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') for date functions.
 - No percentile function: use the rank method below. Integer division is DIV.
-- Round with ROUND(x, 2). Count a condition with SUM(cond) or SUM(CASE WHEN cond THEN 1 ELSE 0 END). Every derived table needs an alias.`
+- Round with ROUND(x, 2). Count a condition with SUM(cond) or SUM(CASE WHEN cond THEN 1 ELSE 0 END). Every derived table needs an alias.
+- lines is a reserved word: write the log_patterns and log_archives column as `+"`lines`"+`.`
 	}
 	return `- Dialect: SQLite. created_at is TEXT; compare it as text, or use strftime/julianday for date functions. Never wrap a bound in datetime() or date(): they return '2026-10-22 05:00:00' (a space, no Z), which never matches the stored text. Write created_at >= '2026-10-22T05:00:00.000Z'.
 - No percentile function: use the rank method below.

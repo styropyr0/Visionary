@@ -22,8 +22,8 @@ func (s *Server) handleTopPatterns(w http.ResponseWriter, r *http.Request) {
 		s.logFail(w, err)
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT pattern, COUNT(*) AS lines, MAX(severity) AS sev FROM app_logs WHERE `+ls.sql()+
-		` AND pattern IS NOT NULL GROUP BY pattern ORDER BY lines DESC LIMIT 15`, ls.args...)
+	rows, err := s.db.Query(r.Context(), `SELECT pattern, COUNT(*) AS `+s.q.ident("lines")+`, MAX(severity) AS sev FROM app_logs WHERE `+ls.sql()+
+		` AND pattern IS NOT NULL GROUP BY pattern ORDER BY `+s.q.ident("lines")+` DESC LIMIT 15`, ls.args...)
 	if err != nil {
 		s.logFail(w, dbErr(err))
 		return
@@ -47,7 +47,7 @@ func (s *Server) handleLogVersions(w http.ResponseWriter, r *http.Request) {
 		s.logFail(w, err)
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT service, version, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS lines
+	rows, err := s.db.Query(r.Context(), `SELECT service, version, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS `+s.q.ident("lines")+`
 FROM app_logs WHERE `+ls.sql()+` AND version IS NOT NULL GROUP BY service, version ORDER BY first_seen DESC LIMIT 200`, ls.args...)
 	if err != nil {
 		s.logFail(w, dbErr(err))
@@ -68,7 +68,7 @@ func (s *Server) handleLogVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	group := func(cols string, extra string, limit int) (*Result, error) {
-		q := `SELECT ` + cols + `, COUNT(*) AS lines, SUM(size) AS bytes FROM app_logs WHERE ` + ls.sql() + extra +
+		q := `SELECT ` + cols + `, COUNT(*) AS ` + s.q.ident("lines") + `, SUM(size) AS bytes FROM app_logs WHERE ` + ls.sql() + extra +
 			` GROUP BY ` + cols + ` ORDER BY bytes DESC LIMIT ` + strconv.Itoa(limit)
 		rows, err := s.db.Query(ctx, q, ls.args...)
 		if err != nil {
@@ -136,7 +136,7 @@ func (s *Server) quietPatterns(ctx context.Context, ls *logSearch, total int64) 
 	if total == 0 {
 		return []map[string]any{}, nil
 	}
-	rows, err := s.db.Query(ctx, `SELECT pattern, COUNT(*) AS lines, SUM(size) AS bytes FROM app_logs WHERE `+ls.sql()+
+	rows, err := s.db.Query(ctx, `SELECT pattern, COUNT(*) AS `+s.q.ident("lines")+`, SUM(size) AS bytes FROM app_logs WHERE `+ls.sql()+
 		` AND pattern IS NOT NULL GROUP BY pattern ORDER BY bytes DESC LIMIT 20`, ls.args...)
 	if err != nil {
 		return nil, dbErr(err)
@@ -173,12 +173,12 @@ func (s *Server) handleHiddenFailures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	where := ls.sql()
-	q := `SELECT l.pattern, a.method, a.route, COUNT(*) AS lines, COUNT(DISTINCT a.request_id) AS requests, MAX(l.id) AS sample_id,
+	q := `SELECT l.pattern, a.method, a.route, COUNT(*) AS n, COUNT(DISTINCT a.request_id) AS requests, MAX(l.id) AS sample_id,
   MAX(a.request_id) AS sample_request, MAX(l.created_at) AS last, MAX(a.status) AS status
 FROM (SELECT * FROM app_logs WHERE ` + where + ` AND severity >= 5 AND request_id IS NOT NULL) AS l
 JOIN api_logs a ON a.request_id = l.request_id AND a.created_at >= ? AND a.created_at < ?
 WHERE a.status < 400
-GROUP BY l.pattern, a.method, a.route ORDER BY lines DESC LIMIT 50`
+GROUP BY l.pattern, a.method, a.route ORDER BY n DESC LIMIT 50`
 	args := append(append([]any{}, ls.args...), ls.tr.requestsFrom(), ls.tr.To.Format(tsLayout))
 	rows, err := s.db.Query(r.Context(), q, args...)
 	if err != nil {
