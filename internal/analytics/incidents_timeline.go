@@ -213,8 +213,6 @@ func splitRef(ref string) (int64, string) {
 	return id, b
 }
 
-// incidentSource is what declaring from an alert, a check, an error or a
-// log line fills in.
 type incidentSource struct {
 	Kind      string   `json:"kind"`
 	Ref       string   `json:"ref"`
@@ -351,7 +349,6 @@ func (s *Server) resolveIncidentSource(ctx context.Context, kind, ref string) (*
 	return src, nil
 }
 
-// incidentNotice is an incident's status update for the alert channels.
 func incidentNotice(in *declaredIncident, by, body string) notice {
 	title := fmt.Sprintf("[%s · %s] %s", severityLabel(in.Severity), incidentStatusLabels[in.Status], in.Title)
 	event := "incident"
@@ -473,7 +470,6 @@ func applyNotices(p *statusPage) {
 	}
 }
 
-// dropStatusCache makes the next visit to the status page build it again.
 func dropStatusCache(s *Server) {
 	s.announce("status")
 	dropStatusCacheHere(s)

@@ -509,7 +509,6 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"check": c.masked()})
 }
 
-// readCheckJSON is readJSON with room for a browser check's files.
 func readCheckJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	dec.DisallowUnknownFields()

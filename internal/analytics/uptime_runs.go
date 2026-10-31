@@ -15,19 +15,14 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Runs from CI: POST /api/uptime/runs runs the checks picked by tag or id
-// once, now, outside their schedule, and returns a batch the caller polls
-// (or long-polls) for each check's result. A batch remembers the release and
-// commit it tested, so the CI page shows it beside the pipeline of that
-// commit. With environment_url_override the checks run against another
-// origin, such as a preview deployment; those results stay in the batch and
-// never count toward the checks' uptime. Batches live in uptime_run_batches
-// and their checks in uptime_run_items; execution is in uptime_runs_exec.go.
+// Runs from CI: POST /api/uptime/runs runs the picked checks once, now, and
+// returns a batch the caller polls. With environment_url_override the checks run
+// against another origin and their results never count toward uptime.
 
 const (
 	runMaxChecks   = 50
 	runMaxWaitS    = 900
-	runPollCapS    = 170 // under the server's write timeout
+	runPollCapS    = 170
 	runBatchTTL    = 15 * time.Minute
 	runListDefault = 20
 )
@@ -93,12 +88,11 @@ func (s *Server) uptimeRunsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/runs/{id}", s.authed(s.handleRunsGet))
 }
 
-// runBatch is one run from CI (or the dashboard) as the API shows it.
 type runBatch struct {
 	ID             int64     `json:"id"`
 	CreatedAt      string    `json:"created_at"`
 	FinishedAt     string    `json:"finished_at,omitempty"`
-	Status         string    `json:"status"` // running, passed, failed
+	Status         string    `json:"status"`
 	Done           bool      `json:"done"`
 	Release        string    `json:"release,omitempty"`
 	Commit         string    `json:"commit,omitempty"`
@@ -238,7 +232,6 @@ func (s *Server) createBatch(r *http.Request, picked []UptimeCheck, tags []strin
 	sess := sessionFrom(r)
 	b := runBatch{CreatedAt: now.Format(tsLayout), Status: "running", Release: body.Release, Commit: body.Commit, EnvironmentURL: override,
 		Tags: tags, CreatedBy: fallback(sess.Name, sess.UserID), Total: int64(len(picked)), deadline: now.Add(runBatchTTL).Format(tsLayout)}
-	// The batch belongs to the caller's workspace, so only its members see it.
 	ws := "NULL"
 	if sc := scopeFrom(ctx); sc != nil {
 		if sc.home > 0 {
@@ -388,7 +381,6 @@ func (s *Server) loadBatch(ctx context.Context, id int64, withItems bool) (runBa
 	return b, nil
 }
 
-// expireBatch closes a batch whose server stopped before it finished.
 func (s *Server) expireBatch(ctx context.Context, b *runBatch) {
 	if b.Status != "running" || b.deadline == "" || uptimeNow() < b.deadline {
 		return
@@ -424,7 +416,6 @@ FROM uptime_run_items WHERE batch_id = ? ORDER BY check_name, id`, id)
 	return out, nil
 }
 
-// finishBatch counts the items and closes the batch once none is pending.
 func (s *Server) finishBatch(ctx context.Context, id int64) error {
 	rows, err := s.db.Query(ctx, `SELECT status, COUNT(*) FROM uptime_run_items WHERE batch_id = ? GROUP BY status`, id)
 	if err != nil {
@@ -455,7 +446,6 @@ func (s *Server) finishBatch(ctx context.Context, id int64) error {
 		status, uptimeNow(), passed, failed, skipped, id)
 }
 
-// waitBatch long-polls until the batch is done or timeoutS passes.
 func (s *Server) waitBatch(ctx context.Context, id int64, timeoutS int) (runBatch, error) {
 	until := time.Now().Add(time.Duration(timeoutS) * time.Second)
 	for {
@@ -471,7 +461,6 @@ func (s *Server) waitBatch(ctx context.Context, id int64, timeoutS int) (runBatc
 	}
 }
 
-// commitBatches are the batches that tested commit, for the CI page.
 func (s *Server) commitBatches(ctx context.Context, commit string) []runBatch {
 	commit = strings.ToLower(commit)
 	if !commitRe.MatchString(commit) {

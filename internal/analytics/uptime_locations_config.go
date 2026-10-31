@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// configLocation is an uptime location in a configuration file.
 type configLocation struct {
 	Name string `json:"name"`
 }
@@ -30,13 +29,11 @@ func (ci *configImport) locations(doc configDoc) error {
 				return err
 			}
 		}
-		// Checks later in the file may name it, in a dry run too.
 		ci.st.locations = append(ci.st.locations, uptimeLocation{Name: name})
 	}
 	return nil
 }
 
-// missingLocation is the first location c names that does not exist.
 func (ci *configImport) missingLocation(c UptimeCheck) string {
 	for _, name := range c.Locations {
 		if name != serverLocation && !slices.ContainsFunc(ci.st.locations, func(l uptimeLocation) bool { return l.Name == name }) {

@@ -54,7 +54,6 @@ VALUES (?, ?, ?, 'i', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	exec(req, "r2", ts(15), "GET", "/stock/1", "/stock/{id}", 503, 50.0, "stock", tid, "b000000000000001", "a000000000000002")
 	exec(span, ts(20), "r2", "stock", "db", "SELECT items", "postgresql/stock", 5.0, 20.0, "ok", tid, "b000000000000002", "b000000000000001")
 	exec(`INSERT INTO errors (created_at, service, instance, request_id, type, message, fingerprint, handled) VALUES (?, 'stock', 'i', 'r2', 'Timeout', 'db slow', 'fp1', 0)`, ts(60))
-	// A request from before tracing, which every view must tolerate.
 	exec(`INSERT INTO api_logs (request_id, created_at, method, path, status, duration_ms) VALUES ('old', ?, 'GET', '/', 200, 5)`, ts(1))
 	return s, at
 }

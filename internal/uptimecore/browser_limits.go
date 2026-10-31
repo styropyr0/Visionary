@@ -7,10 +7,9 @@ import (
 	"strings"
 )
 
-// Performance limits: a browser run that passes every step still fails when
-// its Web Vitals, its total time or one step's time go over a hard limit, and
-// counts as degraded when they go over a "warn above" value. The slow
-// threshold of the check (degraded_ms) is the warn value of the total time.
+// A browser run that passes every step still fails when its Web Vitals, total
+// time or one step's time go over a hard limit, and is degraded over a warn
+// value. degraded_ms is the warn value of the total time.
 
 // BrowserLimits are a check's optional limits; zero is no limit.
 type BrowserLimits struct {
@@ -57,7 +56,6 @@ func groupInt(n int64) string {
 
 func clsText(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
-// overLimit names the first hard limit a passing run went over.
 func (c Check) overLimit(r Result) string {
 	l := c.BrowserLimits
 	switch {
@@ -73,7 +71,6 @@ func (c Check) overLimit(r Result) string {
 	return ""
 }
 
-// warnings name every warn value a passing run went over.
 func (c Check) warnings(r Result) string {
 	l := c.BrowserLimits
 	var out []string

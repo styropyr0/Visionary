@@ -38,7 +38,6 @@ func TestScopeRewrite(t *testing.T) {
 			t.Errorf("rewrite(%s)\n got %s (%v)\nwant %s", c.in, got, err, c.want)
 		}
 	}
-	// SQL from people may only name scoped tables, shared ones and real CTEs.
 	for _, q := range []string{
 		`SELECT * FROM visionary_users`,
 		`SELECT * FROM main.api_logs`,
@@ -86,8 +85,6 @@ func TestServicePatterns(t *testing.T) {
 	}
 }
 
-// ---------- The leak test ----------
-
 // Every row of the hidden service carries this marker somewhere in its data,
 // never in an id, so a response that contains it leaked a row.
 const leak = "zzleak"
@@ -100,7 +97,7 @@ const (
 type wsFixture struct {
 	s                *Server
 	h                http.Handler
-	scoped, unscoped string // read API keys
+	scoped, unscoped string
 	at               time.Time
 }
 
@@ -120,8 +117,6 @@ func newWSFixture(t *testing.T) *wsFixture {
 		}
 	}
 	ts := f.at.Format(tsLayout)
-	// The hidden service first, so its rows have the low ids that direct
-	// links below ask for.
 	for _, svc := range []struct{ name, web, mark, trace, host, fp, num string }{
 		{leak + "-svc", leak + "-web", leak, secretTrace, leak + "-host", "f00d0001", "1"},
 		{"pay-api", "pay-web", "payok", payTrace, "pay-host", "f00d0002", "2"},
@@ -212,7 +207,6 @@ VALUES (?, ?, ?, 'failed', ?, ?, ?, '[]', ?, 1)`, svc.num, ts, ts, svc.num, m+"-
 			m+" detection", "rule_"+svc.num, `{"logic":"threshold","source":"api","threshold":5,"window":"5m","where":"path LIKE '/`+m+`%'"}`, ts, ts)
 	}
 	exec(`INSERT INTO dashboards (name, description, layout, created_by, created_at, updated_at) VALUES ('Shared board', '', '{"panels":[],"variables":[]}', '', ?, ?)`, ts, ts)
-	// Rows without a service are seen only by people who see everything.
 	exec(`INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms) VALUES ('reqnull', ?, 'GET', ?, ?, 503, 10)`, ts, "/"+leak+"-null", "/"+leak+"-null")
 
 	f.scoped = f.key(t, "scoped")
@@ -223,7 +217,6 @@ VALUES (?, ?, ?, 'failed', ?, ?, ?, '[]', ?, 1)`, svc.num, ts, ts, svc.num, m+"-
 	exec(`INSERT INTO workspaces (id, name, services, members, created_by, created_at, updated_at) VALUES (2, 'Payments', '["pay-*"]', ?, 't', ?, ?)`,
 		`[{"kind":"key","id":"`+scopedID+`","role":"viewer"}]`, ts, ts)
 	s.dropWorkspaces()
-	// Rollups over the raw rows, for the long ranges.
 	rt := &rollupRuntime{s: s, spans: map[string]rollupSpan{}}
 	rollupRuntimes.Store(s, rt)
 	t.Cleanup(func() { rollupRuntimes.Delete(s) })
@@ -262,7 +255,6 @@ func (f *wsFixture) get(key, target string, timeout time.Duration) *httptest.Res
 	r.Header.Set("Authorization", "Bearer "+key)
 	w := httptest.NewRecorder()
 	f.h.ServeHTTP(w, r)
-	// Replay chunks come gzipped; read what they hold.
 	if w.Header().Get("Content-Encoding") == "gzip" {
 		if zr, err := gzip.NewReader(bytes.NewReader(w.Body.Bytes())); err == nil {
 			plain, _ := io.ReadAll(zr)
@@ -331,7 +323,6 @@ func sourceRoutes(t *testing.T) []route {
 	return out
 }
 
-// readPOSTs are the POST routes that only read, with a body to send.
 var readPOSTs = map[string]string{
 	"/api/query":                    `{"query":"SELECT service, path, route FROM api_logs UNION ALL SELECT app, url, message FROM client_events","from":"%FROM%","to":"%TO%"}`,
 	"/api/settings/logs/rules/test": `{"rules":[],"sample":"x"}`,
@@ -352,7 +343,6 @@ var pathValues = map[string]string{
 	"{host}": leak + "-host", "{account}": "acct1", "{ip}": "10.0.0.1", "{name}": "service", "{seq}": "0", "{run}": "1",
 }
 
-// panelRoutes expand {panel} into every panel the route knows.
 func (f *wsFixture) panels(path string) []string {
 	s := f.s
 	keys := func(m any) []string {
@@ -474,20 +464,17 @@ func TestWorkspaceLeaks(t *testing.T) {
 	for _, b := range broken {
 		t.Errorf("scope broke %s", b)
 	}
-	// The hidden rows must be there for someone, or the test proves nothing.
 	if seen < 80 {
 		t.Errorf("only %d of %d responses showed the hidden service to the unscoped key", seen, len(calls))
 	}
 	t.Logf("%d calls, %d answered for the scoped key; the unscoped key saw the hidden service in %d", len(calls), ok, seen)
 
-	// The newer features' hidden rows are really there for the unscoped key.
 	for _, p := range []string{"/api/rum/replay/1", "/api/rum/replay/1/chunk/0", "/api/uptime/checks/1/runs", "/api/uptime/checks/1/runs/1", "/api/security/rules", "/api/security/findings"} {
 		w := f.get(f.unscoped, p+"?"+ranges[0], 10*time.Second)
 		if !strings.Contains(w.Body.String(), leak) {
 			t.Errorf("unscoped %s shows no hidden row (%d): %.200s", p, w.Code, w.Body)
 		}
 	}
-	// The scoped key does see its own service.
 	w := f.get(f.scoped, "/api/applogs?"+ranges[0], 10*time.Second)
 	if !strings.Contains(w.Body.String(), "payok line failed") {
 		t.Errorf("scoped key can't see its own logs: %s", w.Body)
@@ -498,13 +485,11 @@ func TestWorkspaceLeaks(t *testing.T) {
 	}
 }
 
-// Requests made inside a workspace can't change what belongs to another.
 func TestWorkspaceWrites(t *testing.T) {
 	f := newWSFixture(t)
 	s := f.s
 	ctx := context.Background()
 	editor := &session{UserID: "acct:ed", Name: "Ed", Role: "editor"}
-	// Ed is an editor in Payments only.
 	if err := s.db.Exec(ctx, `UPDATE workspaces SET members = '[{"kind":"user","id":"ed","role":"editor"}]' WHERE id = 2`); err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +513,6 @@ func TestWorkspaceWrites(t *testing.T) {
 			t.Errorf("%s 1 was deleted from outside its workspace", table)
 		}
 	}
-	// What Ed creates belongs to Payments.
 	if code := do("POST", "/api/dashboards", `{"name":"Ed's board","layout":{"panels":[],"variables":[]}}`, s.handleCreateDashboard, nil); code != http.StatusCreated {
 		t.Fatalf("create dashboard: %d", code)
 	}
@@ -536,12 +520,9 @@ func TestWorkspaceWrites(t *testing.T) {
 	if len(res.Rows) != 1 || toInt(res.Rows[0][0]) != 2 {
 		t.Errorf("new dashboard's workspace: %v", res.Rows)
 	}
-	// Detection rules cover every service, so they're changed from outside workspaces.
 	if code := do("DELETE", "/api/security/rules/1", "", s.handleDeleteDetectionRule, map[string]string{"id": "1"}); code != http.StatusForbidden {
 		t.Errorf("workspace editor deleted a detection rule: %d", code)
 	}
-	// Configuration export and import span every workspace: refused inside
-	// one, even for an admin who narrowed the pages to it.
 	admin := &session{UserID: "acct:root", Name: "Root", Role: "admin"}
 	for _, c := range []struct {
 		method, target string
@@ -559,14 +540,11 @@ func TestWorkspaceWrites(t *testing.T) {
 			t.Errorf("%s by a workspace editor: %d", c.target, code)
 		}
 	}
-	// Editors in a workspace aren't admins of the server.
 	if code := do("GET", "/api/team/keys", "", s.handleListKeys, nil); code != http.StatusForbidden {
 		t.Errorf("workspace editor listed API keys: %d", code)
 	}
 }
 
-// With no workspaces nothing changes: no request is scoped and statements
-// run as written.
 func TestNoWorkspacesNoScope(t *testing.T) {
 	f := newWSFixture(t)
 	s := f.s
@@ -587,8 +565,6 @@ func TestNoWorkspacesNoScope(t *testing.T) {
 	}
 }
 
-// Every table is either filtered in a workspace or known to hold no
-// service's data.
 func TestEveryTableClassified(t *testing.T) {
 	f := newWSFixture(t)
 	shared := map[string]bool{

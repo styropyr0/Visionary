@@ -19,9 +19,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// Acceptance tests run against a real Visionary: built from this
-// repository, started on a free port with a fresh SQLite database and
-// sign-in off, then given an admin key. They need TF_ACC=1 and the
+// Acceptance tests run against a real Visionary built from this repository,
+// on a free port with a fresh SQLite database. They need TF_ACC=1 and the
 // terraform CLI.
 
 var accFactories = map[string]func() (tfprotov6.ProviderServer, error){
@@ -34,7 +33,6 @@ func startVisionary(t *testing.T) {
 		t.Skip("set TF_ACC=1 to run acceptance tests")
 	}
 	if os.Getenv("VISIONARY_URL") != "" && os.Getenv("VISIONARY_API_KEY") != "" {
-		// An instance set up by hand.
 		return
 	}
 	dir := t.TempDir()
@@ -211,8 +209,6 @@ data "visionary_services" "all" {}
 func TestAccEverything(t *testing.T) {
 	startVisionary(t)
 	panels := `jsonencode([{ id = "p1", kind = "builtin", ref = "overview/latency", x = 0, y = 0, w = 6, h = 4, viz = { type = "timeseries", unit = "ms" } }])`
-	// The same panels written differently: Visionary's answer must not show
-	// up as a change after apply or on refresh.
 	samePanels := `<<EOT
 [
   {"h": 4, "w": 6, "y": 0, "x": 0, "ref": "overview/latency", "kind": "builtin", "id": "p1", "title": "", "viz": {"unit": "ms", "type": "timeseries"}}

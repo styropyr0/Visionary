@@ -73,8 +73,6 @@ func (s *Server) addAction(ctx context.Context, id int64, body, owner string) er
 	return s.db.Exec(ctx, `INSERT INTO incident_actions (incident_id, body, owner, done, created_at, done_at) VALUES (?, ?, ?, 0, ?, '')`, id, body, owner, nowTS())
 }
 
-// incidentEvidence is the affected services' traffic during the incident
-// against the same length of time before it, and the errors raised.
 func (s *Server) incidentEvidence(ctx context.Context, in *declaredIncident) string {
 	start, _ := time.Parse(tsLayout, in.StartedAt)
 	end := time.Now().UTC()
@@ -118,7 +116,6 @@ FROM api_logs WHERE created_at >= ? AND created_at < ?`+svc+` GROUP BY service O
 	return b.String()
 }
 
-// timelineText is the timeline as Markdown bullets in UTC.
 func timelineText(entries []incidentEntry) string {
 	var b strings.Builder
 	for _, e := range entries {
@@ -145,8 +142,6 @@ func durationText(sec *int64) string {
 	return humanDuration(time.Duration(*sec) * time.Second)
 }
 
-// dataDraft is the draft without the model: the facts, with the parts only
-// people can write left for them.
 func dataDraft(in *declaredIncident, entries []incidentEntry, evidence string) postmortem {
 	services := "no services named"
 	if len(in.Services) > 0 {
@@ -438,7 +433,6 @@ func (s *Server) handleRemoveAction(w http.ResponseWriter, r *http.Request) {
 	s.writeActions(w, r, in.ID)
 }
 
-// postmortemMarkdown is the whole postmortem as one Markdown document.
 func postmortemMarkdown(in *declaredIncident, p *postmortem, actions []incidentAction, entries []incidentEntry) string {
 	if p == nil {
 		p = &postmortem{}

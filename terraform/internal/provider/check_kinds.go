@@ -20,17 +20,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// The check kinds beyond http and browser each have a block of their own:
-// api, tcp, dns, ping, ssl and heartbeat.
-
 var varNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
-// browserOnly are the attributes only browser checks take.
 var browserOnly = []string{"files", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms", "viewport_w", "viewport_h"}
 
 var checkKinds = []string{"http", "browser", "playwright", "api", "tcp", "dns", "ping", "ssl", "heartbeat"}
 
-// kindBlocks are the blocks, by the kind that uses each.
 var kindBlocks = []string{"api", "tcp", "dns", "ping", "ssl", "heartbeat"}
 
 type apiModel struct {
@@ -100,8 +95,6 @@ type heartbeatModel struct {
 	Timezone types.String `tfsdk:"timezone"`
 	GraceS   types.Int64  `tfsdk:"grace_s"`
 }
-
-// The API's shapes.
 
 type apiAPI struct {
 	Requests []apiRequestB `json:"requests"`

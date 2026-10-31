@@ -15,7 +15,6 @@ import (
 // A parser for the PromQL subset Visionary evaluates. Written here rather
 // than linking the Prometheus module, which would pull in most of Prometheus.
 
-// promError is a query error with the byte offset it points at.
 type promError struct {
 	Pos int
 	Msg string
@@ -89,7 +88,7 @@ type aggExpr struct {
 type vectorMatching struct {
 	on       bool
 	labels   []string
-	card     string // "one-to-one", "many-to-one", "one-to-many"
+	card     string
 	include  []string
 	explicit bool
 }
@@ -122,7 +121,6 @@ func (e *binaryExpr) position() int { return e.pos }
 func (e *unaryExpr) position() int  { return e.pos }
 func (e *parenExpr) position() int  { return e.pos }
 
-// Tokens.
 type promTokKind int
 
 const (
@@ -131,7 +129,7 @@ const (
 	tNumber
 	tDuration
 	tString
-	tOp // punctuation and operators
+	tOp
 )
 
 type promToken struct {
@@ -145,7 +143,7 @@ type promToken struct {
 var promAggOps = []string{"sum", "avg", "min", "max", "count", "topk", "bottomk", "quantile", "stddev", "stdvar", "group"}
 
 var promFuncs = map[string]struct {
-	args     []string // "v" instant vector, "m" range vector, "s" scalar
+	args     []string
 	optional int
 }{
 	"rate": {[]string{"m"}, 0}, "irate": {[]string{"m"}, 0}, "increase": {[]string{"m"}, 0},
@@ -296,7 +294,6 @@ func lexNumber(input string, start int) (promToken, int, error) {
 	for j < len(input) && isDigit(input[j]) {
 		j++
 	}
-	// A duration: digits followed by a unit, possibly repeated (1h30m).
 	if j < len(input) && strings.ContainsRune("smhdwy", rune(input[j])) {
 		var total time.Duration
 		k := start
@@ -354,7 +351,6 @@ type promParser struct {
 
 const maxPromQueryLen = 10000
 
-// parsePromQL parses a query into its expression tree.
 func parsePromQL(input string) (promExpr, error) {
 	if strings.TrimSpace(input) == "" {
 		return nil, promErrorf(0, "the query is empty")
@@ -520,7 +516,6 @@ func (p *promParser) unary() (promExpr, error) {
 	return p.postfix(e)
 }
 
-// postfix reads [range] and offset after a selector or parenthesised expression.
 func (p *promParser) postfix(e promExpr) (promExpr, error) {
 	if p.isOp("[") {
 		lb := p.next()
@@ -769,7 +764,6 @@ func (p *promParser) aggregate(op string, pos int) (promExpr, error) {
 	return ae, nil
 }
 
-// Value types for checking.
 const (
 	typScalar = "scalar"
 	typVector = "instant vector"
@@ -813,7 +807,6 @@ func article(t string) string {
 	return "a " + t
 }
 
-// checkTypes checks argument and operand types, so evaluation can trust them.
 func checkTypes(e promExpr) error {
 	switch x := e.(type) {
 	case *parenExpr:

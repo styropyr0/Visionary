@@ -16,7 +16,6 @@ import (
 // series; the first point of a series only sets the baseline.
 
 const (
-	// maxSeriesPerMetric matches the SDKs' default cap on label sets.
 	maxSeriesPerMetric = 1000
 	maxMetricSeries    = 200000
 	maxMetricNames     = 10000
@@ -36,7 +35,6 @@ type histPoint struct {
 	counts   []float64
 }
 
-// metricPoint is one reading before it becomes a row.
 type metricPoint struct {
 	at                time.Time
 	service, instance string
@@ -44,9 +42,8 @@ type metricPoint struct {
 	labels            map[string]string
 	value             float64
 	hist              *histPoint
-	// cumulative marks counter and histogram totals since a start.
-	cumulative bool
-	start      time.Time
+	cumulative        bool
+	start             time.Time
 }
 
 type metricBaseline struct {
@@ -57,19 +54,16 @@ type metricBaseline struct {
 	usedAt time.Time
 }
 
-// metricIngest is the ingestion's memory: series seen per name, for the cap,
-// and the last cumulative point per series.
 type metricIngest struct {
-	mu      sync.Mutex
-	perName map[string]map[string]bool
-	total   int
-	dropped map[string]int64
-	prev    map[string]*metricBaseline
-	// promTypes are metric family types from remote_write metadata.
+	mu        sync.Mutex
+	perName   map[string]map[string]bool
+	total     int
+	dropped   map[string]int64
+	prev      map[string]*metricBaseline
 	promTypes map[string]string
 }
 
-var metricIngests sync.Map // *Server -> *metricIngest
+var metricIngests sync.Map
 
 func (s *Server) metricIngest() *metricIngest {
 	v, ok := metricIngests.Load(s)
@@ -82,7 +76,6 @@ func (s *Server) metricIngest() *metricIngest {
 	return v.(*metricIngest)
 }
 
-// droppedSeries is how many new series each name lost to the cap since start.
 func (mi *metricIngest) droppedSeries() map[string]int64 {
 	mi.mu.Lock()
 	defer mi.mu.Unlock()
@@ -93,8 +86,6 @@ func (mi *metricIngest) droppedSeries() map[string]int64 {
 	return out
 }
 
-// add turns p into a row in out, or nothing for a baseline, a dropped
-// series or a value that is not a number.
 func (mi *metricIngest) add(out *otlpRows, p metricPoint) bool {
 	p.name = strings.TrimSpace(p.name)
 	if p.name == "" || len(p.name) > 200 {
@@ -162,15 +153,12 @@ func (mi *metricIngest) add(out *otlpRows, p metricPoint) bool {
 		}
 		row[13] = encodeHist(h.bounds, h.counts)
 	} else if p.kind == "counter" && p.value <= 0 {
-		// Nothing happened in the interval; the SDKs skip these too.
 		return false
 	}
 	out.add(metricsTable, row)
 	return true
 }
 
-// trimBaselines forgets the half of the baselines used longest ago. The
-// caller holds mi.mu.
 func (mi *metricIngest) trimBaselines() {
 	times := make([]time.Time, 0, len(mi.prev))
 	for _, b := range mi.prev {
@@ -200,7 +188,6 @@ func histDelta(cur, prev *histPoint) *histPoint {
 	return out
 }
 
-// bucketBound is bucket i's upper bound, +Inf for the last.
 func bucketBound(bounds []float64, i int) float64 {
 	if i < len(bounds) {
 		return bounds[i]

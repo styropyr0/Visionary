@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// memSource serves fixed series to the evaluator, already bucketed.
 type memSource []*rawSeries
 
 func (m memSource) load(_ context.Context, vs *vectorSel, w promWindow) ([]*rawSeries, error) {
@@ -78,7 +77,6 @@ func evalAt(t *testing.T, src promSource, q string, at int64) promVal {
 	return v
 }
 
-// instantValues are the series of an instant result by their labels.
 func instantValues(v promVal) map[string]float64 {
 	out := map[string]float64{}
 	for _, s := range mergeSeries(v.vec) {
@@ -204,13 +202,11 @@ func TestPromQLRange(t *testing.T) {
 	}
 	for i := 0; i < ev.n; i++ {
 		at := (ev.at(i) - t0) / 1000
-		// Data runs from 15 s to 600 s: full windows inside, nothing after 600 + 60.
 		want, ok := 0.2, at <= 600
 		if ok != v.vec[0].ok[i] || ok && !near(v.vec[0].v[i], want) {
 			t.Errorf("at %ds: %v %v, want %v %v", at, v.vec[0].v[i], v.vec[0].ok[i], want, ok)
 		}
 	}
-	// A bare range vector is shown only at an instant.
 	expr, _ = parsePromQL(`temp[1m]`)
 	if _, err := newPromEval(context.Background(), promFixture(), expr, sec(60), sec(120), 60_000).eval(expr); err == nil {
 		t.Error("a range vector in a range query should fail")
@@ -227,7 +223,6 @@ func TestPromQLResolution(t *testing.T) {
 	if ev.res != 15 || ev.phase != 0 {
 		t.Errorf("1h at 60s: res %d phase %d", ev.res, ev.phase)
 	}
-	// 30 days at 1h: buckets coarsen to a divisor of the step.
 	ev = newPromEval(context.Background(), memSource{}, expr, sec(7), sec(30*86400+7), 3600_000)
 	if 3600%ev.res != 0 || (30*86400+600)/ev.res > maxPromBuckets || ev.phase != (t0/1000+7)%ev.res {
 		t.Errorf("30d at 1h: res %d phase %d", ev.res, ev.phase)
@@ -265,7 +260,6 @@ func TestPromQLErrors(t *testing.T) {
 			t.Errorf("%s: at %d %q, want at %d containing %q", q, pe.Pos, pe.Msg, want.pos, want.msg)
 		}
 	}
-	// Many-to-many is a runtime error.
 	expr, _ := parsePromQL(`temp + on() temp`)
 	if _, err := newPromEval(context.Background(), promFixture(), expr, sec(600), sec(600), 0).eval(expr); err == nil || !strings.Contains(err.Error(), "many-to-many") {
 		t.Errorf("many-to-many: %v", err)
@@ -289,8 +283,6 @@ func TestPromQLParse(t *testing.T) {
 	}
 }
 
-// The SQL source over a real database: custom metrics, a histogram exposed
-// as _bucket series, and the built-in request series.
 func TestPromQLOverSQL(t *testing.T) {
 	s := metricsTestServer(t)
 	ctx := context.Background()
@@ -385,14 +377,11 @@ func seriesHex(s string) string {
 	return string(out)
 }
 
-// A chart whose buckets are longer than rate's window still has a point in
-// every bucket with traffic, not a few minutes' sample of each.
 func TestPromChartWidensWindows(t *testing.T) {
 	s := metricsTestServer(t)
 	ctx := context.Background()
 	to := time.Now().UTC().Truncate(30 * time.Minute)
 	from := to.Add(-6 * time.Hour)
-	// a request every 20 minutes
 	for at := from.Add(time.Minute); at.Before(to); at = at.Add(20 * time.Minute) {
 		if err := s.db.Exec(ctx, `INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms, service) VALUES ('r', ?, 'GET', '/x', '/x', 200, 5, 'shop')`,
 			at.Format(tsLayout)); err != nil {

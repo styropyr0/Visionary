@@ -169,7 +169,6 @@ type activeSpan struct {
 	ended  atomic.Bool
 }
 
-// context is the span as the parent of the calls made inside it.
 func (s *activeSpan) context() spanContext {
 	sc := s.parent
 	sc.spanID = s.rec.spanID
@@ -187,8 +186,6 @@ func beginSpan(ctx context.Context, kind string) *activeSpan {
 		return nil
 	}
 	s := &activeSpan{agent: a, rec: spanRecord{start: time.Now(), kind: kind, rows: -1}}
-	// A call outside any trace starts one, so the service it reaches can
-	// still be followed.
 	parent := currentSpan(ctx)
 	s.parent = parent
 	if !parent.valid() {

@@ -110,7 +110,6 @@ func TestConvertRecording(t *testing.T) {
 	if len(got.Unsupported) != 5 {
 		t.Errorf("unsupported: %q", got.Unsupported)
 	}
-	// What it converts to saves as a check.
 	c := UptimeCheck{Name: got.Title, Kind: "browser", Steps: got.Steps, BrowserOptions: BrowserOptions{Device: got.Device}}
 	if err := c.normalize(nil); err != nil {
 		t.Fatal(err)

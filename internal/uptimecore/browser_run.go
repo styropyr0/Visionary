@@ -32,11 +32,10 @@ const (
 	browserMaxEntryLen = 500
 )
 
-// StepResult is how one step went.
 type StepResult struct {
 	Action     string  `json:"action"`
 	Label      string  `json:"label"`
-	Status     string  `json:"status"` // passed, failed, skipped
+	Status     string  `json:"status"`
 	DurationMs float64 `json:"duration_ms"`
 	Error      string  `json:"error,omitempty"`
 	// Detail is what the step found, such as an extracted value.
@@ -53,7 +52,7 @@ type NetFailure struct {
 // BrowserRun is the detail of one run, beside its uptime_results row.
 type BrowserRun struct {
 	Steps      []StepResult `json:"steps"`
-	FailedStep int          `json:"failed_step"` // -1 when every step passed
+	FailedStep int          `json:"failed_step"`
 	Console    []string     `json:"console"`
 	Network    []NetFailure `json:"network"`
 	Screenshot []byte       `json:"-"`
@@ -78,16 +77,14 @@ type vitals struct {
 	TTFB *float64 `json:"ttfb"`
 }
 
-// runState is what the event listeners collect while the steps play.
 type runState struct {
-	mu      sync.Mutex
-	console []string
-	network []NetFailure
-	urls    map[network.RequestID]string
-	navs    int
-	mask    func(string) string
-	touch   bool
-	// the request timeline
+	mu        sync.Mutex
+	console   []string
+	network   []NetFailure
+	urls      map[network.RequestID]string
+	navs      int
+	mask      func(string) string
+	touch     bool
 	reqs      map[network.RequestID]*NetRequest
 	order     []*NetRequest
 	wallBase  float64
@@ -126,7 +123,6 @@ func (st *runState) navCount() int {
 	return st.navs
 }
 
-// resolveSecrets fills {{secret.NAME}} in a step's value.
 func resolveSecrets(v string, secrets map[string]string) string {
 	for k, s := range secrets {
 		v = strings.ReplaceAll(v, "{{secret."+k+"}}", s)
@@ -134,7 +130,6 @@ func resolveSecrets(v string, secrets map[string]string) string {
 	return v
 }
 
-// masker replaces secret values with the mask in anything a run records.
 func masker(secrets map[string]string) func(string) string {
 	var vals []string
 	for _, v := range secrets {
@@ -315,7 +310,6 @@ func roundMs(p *float64) *float64 {
 	return &v
 }
 
-// collect listens to the tab's console and network until ctx ends.
 func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 	console := chromedp.Console(ctx)
 	sent := chromedp.Events(ctx, network.RequestWillBeSent)
@@ -436,7 +430,6 @@ func shoot(ctx context.Context, shrink float64, limit int, qualities []int64) []
 	return nil
 }
 
-// jsString quotes s for a script.
 func jsString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
@@ -512,7 +505,6 @@ type elementAt struct {
 	Y float64 `json:"y"`
 }
 
-// stepKeys maps the key names a step may use to what chromedp sends.
 var stepKeys = map[string]string{
 	"enter": kb.Enter, "tab": kb.Tab, "escape": kb.Escape, "backspace": kb.Backspace, "delete": kb.Delete, "space": " ",
 	"arrowdown": kb.ArrowDown, "arrowup": kb.ArrowUp, "arrowleft": kb.ArrowLeft, "arrowright": kb.ArrowRight,

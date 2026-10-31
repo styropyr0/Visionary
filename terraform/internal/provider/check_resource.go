@@ -416,7 +416,6 @@ func optDefault(v, def string, ref types.String) types.String {
 	return optString(v, ref)
 }
 
-// unmask puts back the values the API hides, from ref.
 func unmask(server map[string]string, ref types.Map) types.Map {
 	known := map[string]string{}
 	if !ref.IsNull() && !ref.IsUnknown() {
@@ -462,7 +461,6 @@ func (m *checkModel) fill(c apiCheck) {
 	m.WarnLCPMs, m.WarnCLS, m.WarnTTFBMs = optInt(c.WarnLCPMs, m.WarnLCPMs), optFloat(c.WarnCLS, m.WarnCLS), optInt(c.WarnTTFBMs, m.WarnTTFBMs)
 	m.Device, m.ViewportW, m.ViewportH = types.StringValue(fallbackStr(c.Device, "desktop")), optInt(c.ViewportW, m.ViewportW), optInt(c.ViewportH, m.ViewportH)
 	m.StepScreenshots = types.BoolValue(c.StepScreenshots)
-	// The API leaves file contents out; they stay as configured.
 	if len(c.Files) > 0 || m.Files != nil {
 		known := map[string]fileModel{}
 		for _, f := range m.Files {

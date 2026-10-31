@@ -20,7 +20,6 @@ func TestBrowserLimits(t *testing.T) {
 	if got := c.overLimit(r); !strings.HasPrefix(got, "the run took 4,200 ms") {
 		t.Errorf("duration: %q", got)
 	}
-	// Vitals that were not measured are not judged.
 	if got := (Check{BrowserOptions: BrowserOptions{BrowserLimits: BrowserLimits{MaxTTFBMs: 1}}}).overLimit(Result{}); got != "" {
 		t.Errorf("unmeasured: %q", got)
 	}

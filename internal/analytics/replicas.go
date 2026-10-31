@@ -13,11 +13,10 @@ import (
 	"time"
 )
 
-// Each replica writes a heartbeat to visionary_replicas with each lease
-// round, which Settings → Server lists. Edits that other replicas cache
-// (alert rules and silences, API keys, uptime checks, settings, sign-outs)
-// bump a row in visionary_changes, so the others drop their copy within one
-// round instead of waiting for it to expire.
+// Each replica writes a heartbeat to visionary_replicas each lease round,
+// listed in Settings → Server. Edits other replicas cache (alert rules,
+// silences, API keys, uptime checks, settings, sign-outs) bump a row in
+// visionary_changes, so the others drop their copy within a round.
 
 type replicaState struct {
 	id      string
@@ -28,7 +27,7 @@ type replicaState struct {
 	prunedAt time.Time
 }
 
-var replicaStates sync.Map // *Server -> *replicaState
+var replicaStates sync.Map
 
 func (s *Server) replica() *replicaState {
 	if v, ok := replicaStates.Load(s); ok {
@@ -36,8 +35,6 @@ func (s *Server) replica() *replicaState {
 	}
 	id := strings.TrimSpace(os.Getenv("VISIONARY_REPLICA_ID"))
 	if id == "" {
-		// The same host and port after a restart picks its leases up again
-		// at once instead of waiting for them to expire.
 		host, _ := os.Hostname()
 		port := s.cfg.Addr
 		if i := strings.LastIndex(port, ":"); i >= 0 {
@@ -105,7 +102,6 @@ func (s *Server) bump(kind string) {
 	}
 }
 
-// followChanges drops what this replica cached of things changed elsewhere.
 func (s *Server) followChanges(ctx context.Context) {
 	res, err := s.db.Query(ctx, `SELECT name, changed_ms FROM visionary_changes`)
 	if err != nil {
@@ -242,7 +238,6 @@ type replicaView struct {
 	Leases      []string `json:"leases"`
 }
 
-// handleReplicas lists the replicas seen in the last day and what each holds.
 func (s *Server) handleReplicas(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return

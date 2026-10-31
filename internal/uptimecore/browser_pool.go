@@ -22,11 +22,9 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Browser checks drive one headless Chrome (or Chromium, or Edge) process,
-// started on the first run and closed after a while without any. Each run
-// gets a fresh incognito context, so cookies and storage never leak between
-// runs or checks. When no browser can be found, browser checks wait instead
-// of failing.
+// Browser checks share one headless Chrome (or Chromium, Edge) process, started
+// on the first run and closed after a while idle. Each run gets a fresh incognito
+// context. With no browser found, checks wait instead of failing.
 
 const (
 	browserIdleClose   = 10 * time.Minute
@@ -37,11 +35,10 @@ const (
 
 var errNoBrowser = errors.New("no Chrome or Chromium found on this machine")
 
-// BrowserStatus is what the dashboard shows about the browser.
 type BrowserStatus struct {
 	Available bool   `json:"available"`
 	Path      string `json:"path,omitempty"`
-	Source    string `json:"source,omitempty"` // setting, env or found
+	Source    string `json:"source,omitempty"`
 	Version   string `json:"version,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Help      string `json:"help,omitempty"`
@@ -111,7 +108,6 @@ func inContainer() bool {
 	return false
 }
 
-// BrowserPool shares one browser process among a few concurrent runs.
 type BrowserPool struct {
 	sem     chan struct{}
 	setting func() string
@@ -121,7 +117,7 @@ type BrowserPool struct {
 	mu        sync.Mutex
 	path      string
 	version   string
-	cancel    context.CancelFunc // ends the browser process
+	cancel    context.CancelFunc
 	browser   context.Context
 	launchErr error
 	launchAt  time.Time
@@ -136,7 +132,6 @@ func NewBrowserPool(workers int, setting func() string, help string, logger *slo
 	return &BrowserPool{sem: make(chan struct{}, max(1, workers)), setting: setting, help: help, logger: logger}
 }
 
-// Status says whether browser checks can run and why not.
 func (p *BrowserPool) Status() BrowserStatus {
 	st := BrowserStatus{Workers: cap(p.sem)}
 	path, src, err := FindBrowser(p.setting())
@@ -294,7 +289,6 @@ func (p *BrowserPool) kill() {
 	p.closeLocked()
 }
 
-// Close ends the browser process.
 func (p *BrowserPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()

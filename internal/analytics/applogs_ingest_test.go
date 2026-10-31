@@ -453,7 +453,6 @@ func testDatabaseURL(t *testing.T, file string) string {
 
 func onSharedTestDatabase() bool { return os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" }
 
-// newTestServer is a server on an empty test database, before Init.
 func newTestServer(t *testing.T, file string, web fs.FS) *Server {
 	t.Helper()
 	s, err := New(Config{DatabaseURL: testDatabaseURL(t, file)}, slog.New(slog.NewTextHandler(io.Discard, nil)), web)
@@ -466,7 +465,6 @@ func newTestServer(t *testing.T, file string, web fs.FS) *Server {
 	return s
 }
 
-// testTables lists the tables in the server's database.
 func testTables(t *testing.T, s *Server) []string {
 	t.Helper()
 	q := `SELECT name FROM sqlite_master WHERE type = 'table'`

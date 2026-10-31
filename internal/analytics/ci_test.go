@@ -18,7 +18,6 @@ import (
 
 const ghSecret = "It's a Secret to Everybody"
 
-// Shaped like GitHub's deliveries, trimmed of fields Visionary doesn't read.
 const ghRunRequested = `{
   "action": "requested",
   "workflow_run": {
@@ -149,7 +148,6 @@ func TestGitHubWebhookSignature(t *testing.T) {
 	ghDeliver(t, h, "push", `{"ref":"refs/heads/main"}`, ghSign(`{"ref":"refs/heads/main"}`), http.StatusAccepted)
 	ghDeliver(t, h, "workflow_run", ghRunRequested, ghSign(ghRunRequested), http.StatusAccepted)
 
-	// The GitHub example secret and body from the webhook docs.
 	if !ghSignatureValid(ghSecret, []byte("Hello, World!"), "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17") {
 		t.Fatal("GitHub's documented signature does not verify")
 	}
@@ -160,7 +158,6 @@ func TestGitHubWebhookRunAndJobs(t *testing.T) {
 	s.live().Config["github_webhook_secret"] = ghSecret
 	h := ciMux(s)
 	ctx := context.Background()
-	// Out of order: the run completes before its job's in_progress arrives.
 	ghDeliver(t, h, "workflow_run", ghRunRequested, ghSign(ghRunRequested), http.StatusAccepted)
 	ghDeliver(t, h, "workflow_job", ghJobCompleted, ghSign(ghJobCompleted), http.StatusAccepted)
 	ghDeliver(t, h, "workflow_run", ghRunCompleted, ghSign(ghRunCompleted), http.StatusAccepted)
@@ -380,7 +377,6 @@ func TestJUnitUploadAndFlaky(t *testing.T) {
 		t.Fatalf("no key = %d", w.Code)
 	}
 
-	// Raw and gzip'd, with the fields in the query.
 	var gz bytes.Buffer
 	zw := gzip.NewWriter(&gz)
 	_, _ = zw.Write([]byte(junitGo))
@@ -395,13 +391,11 @@ func TestJUnitUploadAndFlaky(t *testing.T) {
 		t.Fatalf("raw gzip upload = %d %s", w.Code, w.Body)
 	}
 
-	// Same commit, the retry passes: flaky.
 	pass := strings.Replace(junitGo, `<failure message="Failed" type="">    cart_test.go:22: total = 41, want 42</failure>`, "", 1)
 	got := junitUpload(t, h, map[string]string{"service": "cart", "branch": "feature", "commit": "aaaaaaa1", "at": "2026-10-20T10:05:00Z"}, pass, true)
 	if got["failed"] != 0 || got["passed"] != 2 {
 		t.Fatalf("counts = %v", got)
 	}
-	// Flip-flops on main: TestAdd fails alone twice.
 	failAdd := strings.Replace(junitGo, `<testcase name="TestAdd" classname="github.com/example/shop/cart" time="0.000"></testcase>`,
 		`<testcase name="TestAdd" classname="github.com/example/shop/cart" time="0.000"><failure message="Failed">flake</failure></testcase>`, 1)
 	for i, rep := range []string{pass, failAdd, pass, pass, failAdd, pass} {

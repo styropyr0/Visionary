@@ -11,13 +11,9 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Declared incidents: someone says "this is an incident", gives it a
-// severity, a commander and responders, and moves it through investigating,
-// identified, monitoring and resolved while the timeline fills in. Firing
-// alerts (alert_incidents) and failing checks stay as they are; an incident
-// links to them and reads their history. The API is in incidents_api.go, the
-// timeline and status updates in incidents_timeline.go, the postmortem in
-// incidents_postmortem.go.
+// Declared incidents: a severity, a commander and responders, a status that
+// moves from investigating to resolved, and a timeline that fills in. Alerts
+// and checks stay as they are; an incident links to them.
 
 var (
 	incidentSeverities = []string{"sev1", "sev2", "sev3", "sev4"}
@@ -207,7 +203,6 @@ func sinceStart(start, at string) *int64 {
 	return &d
 }
 
-// loadIncidents reads incidents matching where, newest first, with their roles.
 func (s *Server) loadIncidents(ctx context.Context, where string, args []any, limit int) ([]declaredIncident, error) {
 	res, err := s.db.Query(ctx, `SELECT `+incidentColumns+` FROM incidents WHERE `+where+` ORDER BY declared_at DESC, id DESC LIMIT `+strconv.Itoa(limit), args...)
 	if err != nil {
@@ -251,7 +246,6 @@ WHERE incident_id IN (`+placeholders(len(chunk))+`) ORDER BY id`, chunk...)
 	return out, nil
 }
 
-// getIncident is one incident, nil when there is none.
 func (s *Server) getIncident(ctx context.Context, id int64) (*declaredIncident, error) {
 	list, err := s.loadIncidents(ctx, "id = ?", []any{id}, 1)
 	if err != nil || len(list) == 0 {
@@ -260,7 +254,6 @@ func (s *Server) getIncident(ctx context.Context, id int64) (*declaredIncident, 
 	return &list[0], nil
 }
 
-// activeIncidents counts the incidents not yet resolved, for the sidebar.
 func (s *Server) activeIncidents(ctx context.Context) int {
 	res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM incidents WHERE resolved_at = ''`)
 	if err != nil || len(res.Rows) == 0 {
@@ -269,7 +262,6 @@ func (s *Server) activeIncidents(ctx context.Context) int {
 	return int(toInt(res.Rows[0][0]))
 }
 
-// noticeSeverity maps an incident severity onto the channels' three levels.
 func noticeSeverity(sev string) string {
 	switch sev {
 	case "sev1", "sev2":

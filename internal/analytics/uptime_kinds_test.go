@@ -136,7 +136,6 @@ func TestAPICheckRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The second request fails an assertion; nothing recorded holds a secret.
 	bad := apiCheck(site.URL)
 	bad.API.Requests[1].Assert = append(bad.API.Requests[1].Assert, APIAssertion{Source: "json", Path: "$.orders", Op: "gt", Value: "10"})
 	bad.API.Requests = append(bad.API.Requests, APIRequest{Method: "GET", URL: site.URL + "/never"})
@@ -150,7 +149,6 @@ func TestAPICheckRun(t *testing.T) {
 		t.Errorf("error: %q", res.Error)
 	}
 
-	// A wrong password: the login's status fails and its body excerpt is kept.
 	wrong := apiCheck(site.URL)
 	wrong.Secrets["PASS"] = "nope-wrong"
 	wrong.API.Requests[0].Body = `{"password":"{{secret.PASS}}","echo":"{{secret.PASS}}"}`
@@ -165,7 +163,6 @@ func TestAPICheckRun(t *testing.T) {
 		t.Fatalf("secret recorded: %s", joined)
 	}
 
-	// The guard refuses loopback.
 	s.live().Config["uptime_allow_private"] = "false"
 	guarded := newUptimeRunner(s, uptimeSettings{workers: 1})
 	res = guarded.probeWithRetry(ctx, c)

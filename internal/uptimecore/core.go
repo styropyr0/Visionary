@@ -13,16 +13,13 @@ import (
 	"unicode/utf8"
 )
 
-// TimeLayout is how result times are written.
 const TimeLayout = "2006-01-02T15:04:05.000Z"
 
-// Mask replaces secret values in anything a run records.
 const Mask = "********"
 
 // SecretNameRe matches header and query names whose values are secret.
 var SecretNameRe = regexp.MustCompile(`(?i)(auth|token|secret|key|cookie|session|password|signature|credential)`)
 
-// Check is what running a check needs.
 type Check struct {
 	ID              int64             `json:"id"`
 	Name            string            `json:"name"`
@@ -47,10 +44,8 @@ type Check struct {
 	BrowserOptions
 }
 
-// MaxBrowserTimeoutMs is the longest a browser check may take.
 const MaxBrowserTimeoutMs = 120000
 
-// BrowserOptions are a browser check's settings beyond its steps.
 type BrowserOptions struct {
 	// TraceOrigins get the run's traceparent; empty means the first page's.
 	TraceOrigins []string `json:"trace_origins,omitempty"`
@@ -62,12 +57,10 @@ type BrowserOptions struct {
 	ViewportW int    `json:"viewport_w,omitempty"`
 	ViewportH int    `json:"viewport_h,omitempty"`
 	// StepScreenshots keeps a small screenshot after every step.
-	StepScreenshots bool `json:"step_screenshots,omitempty"`
-	// Files are what upload steps send.
-	Files []BrowserFile `json:"files,omitempty"`
+	StepScreenshots bool          `json:"step_screenshots,omitempty"`
+	Files           []BrowserFile `json:"files,omitempty"`
 }
 
-// Result is one run of a check.
 type Result struct {
 	CreatedAt     string   `json:"created_at"`
 	OK            bool     `json:"ok"`
@@ -89,13 +82,11 @@ type Result struct {
 	// Skip says why nothing ran or there is nothing to record yet.
 	Skip string `json:"-"`
 
-	blocked bool // refused by the address guard; retrying cannot help
+	blocked bool
 }
 
-// Blocked is whether the address guard refused the run.
 func (r Result) Blocked() bool { return r.blocked }
 
-// BrowserStep is one step of a browser check.
 type BrowserStep struct {
 	Action   string `json:"action"`
 	Selector string `json:"selector,omitempty"`
@@ -111,9 +102,8 @@ type BrowserStep struct {
 	// set_storage and the file of upload.
 	Name string `json:"name,omitempty"`
 	// Attr is what extract reads: text (default), value or an attribute.
-	Attr  string `json:"attr,omitempty"`
-	Regex string `json:"regex,omitempty"`
-	// Target is where drag drops.
+	Attr   string `json:"attr,omitempty"`
+	Regex  string `json:"regex,omitempty"`
 	Target string `json:"target,omitempty"`
 	// Scope is the cookie's URL or domain, local or session storage, or the
 	// origin a permission is granted to.
@@ -123,7 +113,6 @@ type BrowserStep struct {
 	Lon        float64 `json:"lon,omitempty"`
 }
 
-// Describe names a step for results and errors.
 func (b BrowserStep) Describe() string { return b.describe() }
 
 func (b BrowserStep) describe() string {

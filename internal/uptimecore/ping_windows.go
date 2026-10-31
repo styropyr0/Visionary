@@ -70,7 +70,6 @@ func pingHost(ctx context.Context, addr netip.Addr, n int, wait time.Duration) (
 		got, _, _ := icmpSendEcho.Call(h, uintptr(dst), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)), 0,
 			uintptr(unsafe.Pointer(&reply[0])), uintptr(len(reply)), uintptr(wait.Milliseconds()))
 		took := msSince(t0)
-		// ICMP_ECHO_REPLY: Address, Status, RoundTripTime, ...
 		if got == 0 || binary.LittleEndian.Uint32(reply[4:8]) != 0 {
 			out = append(out, nil)
 			continue

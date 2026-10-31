@@ -168,8 +168,6 @@ func (s *Server) rollupsStart(ctx context.Context) {
 			timer.Reset(max(tickEvery-time.Since(started), 5*time.Second))
 		}
 	})
-	// Replicas that don't build the rollups still read them, and need to know
-	// how far they reach.
 	go func() {
 		defer rollupRuntimes.Delete(s)
 		tick := time.NewTicker(tickEvery)

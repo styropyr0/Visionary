@@ -43,7 +43,6 @@ func (s *Server) incidentFromPath(w http.ResponseWriter, r *http.Request) (*decl
 	return in, true
 }
 
-// addIncidentEntry writes one timeline entry and marks the incident updated.
 func (s *Server) addIncidentEntry(ctx context.Context, id int64, kind, actor, body string, detail map[string]any) (int64, error) {
 	if detail == nil {
 		detail = map[string]any{}
@@ -141,7 +140,6 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, in)
 	}
-	// Open incidents first, the worst of them on top.
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if (a.ResolvedAt == "") != (b.ResolvedAt == "") {
@@ -155,9 +153,6 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"incidents": out, "can_edit": s.can(r, "edit")})
 }
 
-// handleIncidentStats is the page's numbers for incidents declared in the
-// range: counts by severity per hour, day or week, and mean times to acknowledge,
-// mitigate and resolve.
 func (s *Server) handleIncidentStats(w http.ResponseWriter, r *http.Request) {
 	tr, err := parseRange(r.URL.Query(), 3650)
 	if err != nil {
@@ -702,7 +697,6 @@ func (s *Server) handleRemoveRole(w http.ResponseWriter, r *http.Request) {
 	s.writeIncident(w, r, in.ID)
 }
 
-// validLink accepts web addresses and the dashboard's own #/ links.
 func validLink(v string) bool {
 	if v == "" || strings.HasPrefix(v, "#/") {
 		return true

@@ -1,8 +1,5 @@
 package analytics
 
-// Alert metrics over CI: how often pipelines fail and how long they take,
-// per workflow, how long jobs wait for a runner, and tests newly found flaky.
-
 func ciMetrics() []metricDef {
 	fixed := func(sql string) func(int64) string { return func(int64) string { return sql } }
 	finished := "status = 'completed' AND conclusion IN ('success', 'failure', 'timed_out')"

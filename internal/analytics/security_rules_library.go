@@ -1,8 +1,5 @@
 package analytics
 
-// The rule library: templates a team turns on with one click and edits
-// from there, each tagged with MITRE ATT&CK.
-
 type ruleTemplate struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -21,8 +18,7 @@ type ruleTemplate struct {
 	Learn       string            `json:"learn,omitempty"`
 	Then        map[string]string `json:"then,omitempty"`
 	Factor      float64           `json:"factor,omitempty"`
-	// Needs says what the template relies on, shown beside it.
-	Needs string `json:"needs,omitempty"`
+	Needs       string            `json:"needs,omitempty"`
 }
 
 func (t ruleTemplate) rule() detectionRule {
@@ -152,7 +148,6 @@ type mitreEntry struct {
 	Name string `json:"name"`
 }
 
-// mitreTactics are the Enterprise ATT&CK tactics.
 var mitreTactics = []mitreEntry{
 	{"TA0043", "Reconnaissance"}, {"TA0042", "Resource Development"}, {"TA0001", "Initial Access"}, {"TA0002", "Execution"},
 	{"TA0003", "Persistence"}, {"TA0004", "Privilege Escalation"}, {"TA0005", "Defense Evasion"}, {"TA0006", "Credential Access"},
@@ -160,8 +155,8 @@ var mitreTactics = []mitreEntry{
 	{"TA0010", "Exfiltration"}, {"TA0040", "Impact"},
 }
 
-// mitreTechniques are the techniques the templates use and others a web
-// API team meets often; a rule may name any technique id.
+// mitreTechniques lists the techniques the templates use; a rule may name
+// any technique id.
 var mitreTechniques = []mitreEntry{
 	{"T1078", "Valid Accounts"}, {"T1078.004", "Valid Accounts: Cloud Accounts"},
 	{"T1110", "Brute Force"}, {"T1110.001", "Brute Force: Password Guessing"}, {"T1110.003", "Brute Force: Password Spraying"},

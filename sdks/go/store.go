@@ -258,8 +258,8 @@ func OpenURL(raw string) (*sql.DB, Dialect, error) {
 		if strings.HasPrefix(raw, u.Scheme+":///") && !strings.Contains(dsn, ":") {
 			dsn = "/" + dsn // absolute path on Unix
 		}
-		// The writers and the Visionary server share the file: wait for its
-		// lock instead of failing at once.
+		// The Visionary server shares the file, so wait for its lock instead of
+		// failing.
 		if !strings.Contains(dsn, "_pragma=") {
 			sep := "?"
 			if strings.Contains(dsn, "?") {

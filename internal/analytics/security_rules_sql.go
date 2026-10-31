@@ -10,18 +10,15 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// What a detection rule reads. Each source names its table, the fields a
-// rule can group or count by (as SQL expressions that never return NULL, so
-// a group's value can be matched again with =), the filters its form offers,
-// and the columns a matched event shows with.
+// What a detection rule reads. Fields are SQL expressions that never return
+// NULL, so a group's value can be matched again with =.
 
 type ruleSource struct {
 	table  string
 	label  string
 	fields map[string]string
 	// count is what one row adds: host rows stand for several occurrences.
-	count string
-	// sample is the columns of one matched event, for samples and timelines.
+	count  string
 	sample string
 }
 
@@ -61,7 +58,6 @@ func (q sqlDialect) ruleSources() map[string]ruleSource {
 	}
 }
 
-// ruleFilterKeys are the filters each source's form offers.
 var ruleFilterKeys = map[string][]string{
 	"requests": {"status", "method", "route", "path", "ip", "user", "role", "service", "user_agent", "login", "auth_failed"},
 	"logs":     {"query"},
@@ -85,7 +81,6 @@ func (q sqlDialect) fieldExpr(src, field string) string {
 	return q.ruleSources()[src].fields[field]
 }
 
-// splitList is a comma list with blanks dropped.
 func splitList(v string) []string {
 	var out []string
 	for _, p := range strings.Split(v, ",") {
@@ -150,7 +145,6 @@ func statusCond(v string, args *[]any) (string, error) {
 }
 
 // filterSQL is a rule step's filter as a WHERE fragment with its bound args.
-// tr bounds the request lookups a log search may make.
 func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (string, []any, error) {
 	q := s.q
 	var conds []string
@@ -188,7 +182,6 @@ func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (strin
 			add(likeList("COALESCE(route, path)", v, &args))
 		}
 		if v := splitList(get("path")); len(v) > 0 {
-			// Attacks hide in the query string as often as in the path.
 			c := likeList("path", v, &args)
 			add("(" + c + " OR " + likeList("COALESCE(query, '')", v, &args) + ")")
 		}
@@ -226,7 +219,6 @@ func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (strin
 			args = append(args, cq.args...)
 		}
 	case "events":
-		// Signals from rules are never read by rules.
 		add("source <> 'rule'")
 		if v := splitList(get("kind")); len(v) > 0 {
 			add(inList("kind", v, &args))
@@ -294,7 +286,6 @@ func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (strin
 
 const maxFilterArgs = 60
 
-// spanArgs are a time range as the two bound created_at bounds.
 func spanArgs(from, to time.Time) []any {
 	return []any{from.UTC().Format(tsLayout), to.UTC().Format(tsLayout)}
 }

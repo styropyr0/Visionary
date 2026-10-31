@@ -11,7 +11,6 @@ import (
 
 var clockRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 
-// tagRe matches an uptime check tag as the server stores it.
 var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:-]{0,39}$`)
 
 type rfc3339Validator struct{}
@@ -49,7 +48,6 @@ func (httpURLValidator) ValidateString(_ context.Context, req validator.StringRe
 	}
 }
 
-// jsonPanelsValidator checks a dashboard's panels JSON parses as panels.
 type jsonPanelsValidator struct{}
 
 func (jsonPanelsValidator) Description(context.Context) string {

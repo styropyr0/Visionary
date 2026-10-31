@@ -115,7 +115,6 @@ func firstNonEmpty(s ...string) string {
 	return ""
 }
 
-// cpuName is the processor model where the OS tells it cheaply.
 func cpuName() string {
 	if v := os.Getenv("PROCESSOR_IDENTIFIER"); v != "" {
 		return v

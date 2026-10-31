@@ -11,11 +11,9 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// CI visibility: pipelines (workflow runs), their jobs and the tests they
-// ran. GitHub Actions posts to a webhook signed with a shared secret; other
-// CI systems post runs as JSON and JUnit XML with a server key. Ingest is in
-// ci_ingest.go and ci_junit.go, the page's API in ci_api.go, flaky tests in
-// ci_flaky.go and the alert metrics in ci_alerts.go.
+// CI visibility: pipelines, their jobs and the tests they ran. GitHub Actions
+// posts to a signed webhook; other CI systems post JSON and JUnit XML with a
+// server key.
 
 func init() {
 	for _, t := range []string{"CI_PIPELINES", "CI_JOBS", "CI_TESTS", "CI_FLAKY_TESTS"} {
@@ -152,7 +150,6 @@ Table ci_flaky_tests: each test the first time it was seen flaky (passing and fa
 - A deploy is a releases row whose version starts with (or contains) a commit SHA prefix of at least 7 characters: join a run to what it shipped that way, then compare api_logs and errors before and after the deploy.`
 }
 
-// ciRunKey names a run attempt across providers.
 func ciRunKey(provider, repo, runID string, attempt int64) string {
 	return provider + ":" + repo + ":" + runID + ":" + strconv.FormatInt(max(attempt, 1), 10)
 }

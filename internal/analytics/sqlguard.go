@@ -61,7 +61,7 @@ const (
 type token struct {
 	kind tokKind
 	text string
-	// pos and end are the token's bytes in the statement.
+	// pos and end are byte offsets in the statement.
 	pos, end int
 }
 
@@ -170,8 +170,7 @@ func checkTables(toks []token) error {
 
 // tableRefs returns the index of every identifier standing where a table
 // does: after FROM or JOIN, and after each comma of a FROM list, subqueries
-// included. Workspaces filter exactly these references, so what the guard
-// checks and what a workspace filters cannot disagree.
+// included. Workspaces filter exactly these, so the guard and the filter agree.
 func tableRefs(toks []token) ([]int, error) {
 	var refs []int
 	// parens records, per open paren, whether it is an EXTRACT-style call;

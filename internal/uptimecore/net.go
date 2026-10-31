@@ -254,7 +254,6 @@ type DNSDetail struct {
 	ResolveMs float64  `json:"resolve_ms,omitempty"`
 }
 
-// dnsNorm makes an answer or expected value comparable.
 func dnsNorm(recordType, v string) string {
 	v = strings.TrimSpace(v)
 	if recordType == "TXT" {
@@ -480,8 +479,7 @@ func probeSSL(ctx context.Context, c Check, allowPrivate func() bool) (res Resul
 	if _, err := netip.ParseAddr(sni); err == nil {
 		serverName = ""
 	}
-	// Verification is done below, so each problem can be named and some
-	// ignored.
+	// Verified below instead, so each problem can be named and some ignored.
 	conn := tls.Client(raw, &tls.Config{ServerName: serverName, InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}) //nolint:gosec
 	t0 := time.Now()
 	if err := conn.HandshakeContext(ctx); err != nil {

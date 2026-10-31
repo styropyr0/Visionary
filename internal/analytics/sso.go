@@ -17,16 +17,9 @@ import (
 	"time"
 )
 
-// Single sign-on: people sign in through an identity provider, over OpenID
-// Connect or SAML 2.0, next to (or instead of) the way in chosen under
-// Settings → Sign-in, and SCIM keeps their accounts in step. Providers are
-// kept in visionary_settings like the rest of sign-in, so a change applies
-// within 30 seconds on every server.
-//
-// Whoever signs in this way gets a row in visionary_users with no password
-// (source oidc, saml or scim), so they show in Settings and are re-checked
-// every minute like accounts: disabling, deleting or demoting someone ends or
-// changes their session.
+// Single sign-on through OpenID Connect or SAML 2.0, with SCIM for accounts.
+// Providers live in visionary_settings, so a change applies within 30 seconds
+// on every server. People who sign in get a passwordless visionary_users row.
 
 const (
 	settingSSO        = "auth.sso"
@@ -72,7 +65,6 @@ type ssoProvider struct {
 	DefaultRole    string   `json:"default_role,omitempty"`
 	CreateUsers    bool     `json:"create_users"`
 
-	// Read-only, filled in for Settings.
 	SecretSet   bool   `json:"client_secret_set,omitempty"`
 	RedirectURL string `json:"redirect_url,omitempty"`
 	EntityID    string `json:"entity_id,omitempty"`
@@ -109,7 +101,7 @@ type ssoState struct {
 	used map[string]time.Time
 }
 
-var ssoStates sync.Map // *Server -> *ssoState
+var ssoStates sync.Map
 
 func (s *Server) sso() *ssoState {
 	v, _ := ssoStates.LoadOrStore(s, &ssoState{oidc: map[string]*oidcClient{}, saml: map[string]*samlClient{},
@@ -124,7 +116,6 @@ func (s *Server) ssoSetup() *ssoSetup {
 	return &ssoSetup{key: "pending"}
 }
 
-// applySSO swaps in the providers saved in m.
 func (s *Server) applySSO(m map[string][2]string) {
 	raw, secrets := m[settingSSO][0], m[settingSSOSecrets][0]
 	key := strings.Join([]string{raw, secrets, m[settingSAMLSP][0]}, "\x00")
@@ -149,7 +140,6 @@ func (s *Server) applySSO(m map[string][2]string) {
 	st.mu.Unlock()
 }
 
-// provider is an enabled provider by id.
 func (st *ssoSetup) provider(id string) *ssoProvider {
 	if st.err != nil {
 		return nil
@@ -188,7 +178,6 @@ func (st *ssoSetup) enabled() []ssoProvider {
 	return out
 }
 
-// ssoButton is what the sign-in screen shows for a provider.
 type ssoButton struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -314,8 +303,6 @@ func checkProviderURL(raw string) error {
 	return errors.New("must start with https://")
 }
 
-// ---------- Cookies and sealed values ----------
-
 // ssoSeal encrypts v with the session key, bound to purpose.
 func (s *Server) ssoSeal(purpose string, plain []byte) string {
 	aead := *s.auth.aead.Load()
@@ -356,7 +343,6 @@ func (s *Server) clearFlowCookie(w http.ResponseWriter, r *http.Request, name st
 // ssoFlowTTL is how long someone has at the provider to sign in.
 const ssoFlowTTL = 10 * time.Minute
 
-// ssoFail sends someone back to the sign-in screen with what went wrong.
 func ssoFail(w http.ResponseWriter, r *http.Request, msg string) {
 	http.Redirect(w, r, "/?sso_error="+url.QueryEscape(sentence(msg)), http.StatusSeeOther)
 }

@@ -19,15 +19,10 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Heartbeat checks are pushed to instead of probed: a cron job, backup
-// script or worker calls the check's secret URL (/api/heartbeat/<token>)
-// when it runs. The check is down when no ping arrives within the expected
-// period plus a grace time, when a job reports a failure (/fail, or a
-// non-zero exit code), or when a job that said it started (/start) does not
-// finish within the grace time. The runner looks every minute and records a
-// result, so heartbeats get uptime, incidents and alerts like other checks.
-// The ping endpoint needs no sign-in (the token is the key), is rate
-// limited, and answers a plain 404 for any token it does not know.
+// Heartbeat checks are pushed to: a job calls the check's secret URL
+// (/api/heartbeat/<token>) when it runs. The check is down when no ping comes
+// within the period plus grace, or a job reports failure or never finishes.
+// The ping endpoint needs no sign-in, is rate limited, and 404s unknown tokens.
 
 // HeartbeatConfig is the settings of a heartbeat check: PeriodS, or Cron in
 // Timezone, says when pings are expected. Token is never stored with the
@@ -88,7 +83,6 @@ func (h *HeartbeatConfig) normalize(old *HeartbeatConfig) error {
 	return nil
 }
 
-// expectedAfter is when the next ping is due after one at t.
 func (h *HeartbeatConfig) expectedAfter(t time.Time) time.Time {
 	if h.Cron == "" {
 		return t.Add(time.Duration(h.PeriodS) * time.Second)
@@ -104,7 +98,6 @@ func (h *HeartbeatConfig) expectedAfter(t time.Time) time.Time {
 	return spec.next(t.In(loc)).UTC()
 }
 
-// heartbeatPings is what the latest pings of a check say.
 type heartbeatPings struct {
 	success, fail, start time.Time
 	failCode             *int64
@@ -153,13 +146,12 @@ func (s *Server) lastHeartbeats(ctx context.Context, id int64) (heartbeatPings, 
 	return p, nil
 }
 
-// heartbeatVerdict is a heartbeat check's state at a moment.
 type heartbeatVerdict struct {
 	ok      bool
-	waiting bool // no ping yet, and none is overdue
+	waiting bool
 	reason  string
-	next    time.Time // when the next ping is due
-	late    time.Time // next plus the grace time
+	next    time.Time
+	late    time.Time
 }
 
 func (h *HeartbeatConfig) verdict(p heartbeatPings, created, now time.Time) heartbeatVerdict {
@@ -217,8 +209,6 @@ func (s *Server) heartbeatResult(ctx context.Context, c UptimeCheck, now time.Ti
 	}
 	return res
 }
-
-// --- the ping endpoint ---
 
 var heartbeatLimits struct {
 	sync.Mutex
@@ -305,7 +295,6 @@ func (s *Server) handleHeartbeatPing(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	var duration any
 	if kind == "success" {
-		// The run's length, from its start ping, if it sent one.
 		rows, err := s.db.Query(ctx, `SELECT MAX(created_at) FROM uptime_heartbeat_pings WHERE check_id = ? AND kind = 'start' AND created_at > COALESCE(
   (SELECT MAX(created_at) FROM uptime_heartbeat_pings WHERE check_id = ? AND kind <> 'start'), '')`, id, id)
 		if err == nil && len(rows.Rows) > 0 {
@@ -348,10 +337,6 @@ func (s *Server) handleHeartbeatPing(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, "OK\n")
 }
 
-// --- dashboard ---
-
-// handleHeartbeatView is a heartbeat check's pings in the range, its last
-// ping and when the next is due. Editors get its URL too.
 func (s *Server) handleHeartbeatView(w http.ResponseWriter, r *http.Request) {
 	c, ok := s.loadCheck(w, r)
 	if !ok {

@@ -17,19 +17,11 @@ import (
 )
 
 // Custom metrics: counters, gauges and histograms the application defines.
-// Values add up in memory and the started Agent writes one metrics row per
-// series every interval (15 s by default). Recording never waits for the
-// database.
-//
-//	visionary.Counter("orders_placed", "region", "eu").Add(1)
-//	visionary.Gauge("queue_depth", "queue", "emails").Set(float64(n))
-//	visionary.Histogram("checkout_ms").Observe(float64(took.Milliseconds()))
-//
-// Labels are key/value pairs. Each distinct set is one series; past
-// MaxSeries (1000) series per metric name new ones are dropped and counted,
-// so a label holding user ids cannot fill the database.
+// Values add up in memory and are written as one row per series every interval
+// (15 s by default); recording never waits for the database. Past MaxSeries
+// (1000) series per metric name new ones are dropped and counted, so a label
+// holding user ids cannot fill the database.
 
-// Limits from the SDK contract.
 const (
 	maxMetricName    = 200
 	maxLabels        = 20
@@ -134,7 +126,7 @@ func (h *HistogramSeries) Observe(v float64) {
 		return
 	}
 	s := h.s
-	i := sort.SearchFloat64s(s.bounds, v) // first bound >= v
+	i := sort.SearchFloat64s(s.bounds, v)
 	s.mu.Lock()
 	s.counts[i]++
 	if s.count == 0 || v < s.min {
@@ -160,8 +152,8 @@ type metricSeries struct {
 
 	mu      sync.Mutex
 	touched bool
-	total   float64 // counter: since the last row
-	value   float64 // gauge
+	total   float64
+	value   float64
 	counts  []uint64
 	count   uint64
 	sum     float64
@@ -216,7 +208,6 @@ func (r *registry) get(name, kind string, kv []string) *metricSeries {
 	return s
 }
 
-// metricRecord is one row of metrics.
 type metricRecord struct {
 	at               time.Time
 	name, kind, unit string
@@ -286,7 +277,6 @@ var metricColumns = []string{
 	"created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
 }
 
-// metricParams returns the row in metricColumns order.
 func (w *writer) metricParams(r *metricRecord) []any {
 	row := []any{
 		r.at.UTC().Format(tsLayout), nullable(w.ident.service), nullable(w.ident.instance),
@@ -349,8 +339,6 @@ func (m *metricsRecorder) flush(ctx context.Context) {
 	if len(recs) == 0 {
 		return
 	}
-	// The table is created once something is recorded, so services without
-	// custom metrics never get it.
 	if !m.schemaOK {
 		sctx, cancel := context.WithTimeout(quiet(ctx), 20*time.Second)
 		err := m.db.execScript(sctx, m.db.dialect().MetricsSchema())

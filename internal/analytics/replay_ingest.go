@@ -26,7 +26,6 @@ const (
 
 var replaySessionID = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
-// replayChunk is one upload, described by its query string.
 type replayChunk struct {
 	sessionID, app, userID, url, reason string
 	seq                                 int64

@@ -82,7 +82,6 @@ func BracketHost(h string) string {
 	return h
 }
 
-// NormalizeHost accepts a host name or an IP address, without a port.
 func NormalizeHost(h string) (string, error) {
 	h = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(h), "["), "]")
 	if h == "" {
@@ -97,7 +96,6 @@ func NormalizeHost(h string) (string, error) {
 	return strings.ToLower(h), nil
 }
 
-// MaskValues replaces each value with the mask, in anything a run records.
 func MaskValues(vals []string) func(string) string {
 	var keep []string
 	for _, v := range vals {

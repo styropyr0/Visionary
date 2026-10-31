@@ -12,10 +12,9 @@ import (
 	"time"
 )
 
-// Detection rules: the team's own detectors, over requests, app logs, the
-// security events from hosts and detectors, or Visionary's audit log. A rule
-// writes what it finds as a finding with source 'rule' (a signal), so the
-// findings list, triage, suppressions, alerts and the report all apply.
+// Detection rules: the team's own detectors over requests, app logs, security
+// events or the audit log. A rule writes what it finds as a finding with source
+// 'rule' (a signal), so triage, suppressions, alerts and the report all apply.
 //
 //	security_rules.go          the rule, its checks, the store and the API
 //	security_rules_sql.go      sources, fields and filters as SQL
@@ -109,7 +108,6 @@ func (r *detectionRule) every() time.Duration {
 // dedupe is how long one group's signal keeps growing before a new one opens.
 func (r *detectionRule) dedupe() time.Duration { return max(r.window(), 10*time.Minute) }
 
-// check validates and tidies a rule.
 func (s *Server) checkDetectionRule(r *detectionRule) error {
 	r.Name = strings.TrimSpace(r.Name)
 	if r.Name == "" || len(r.Name) > 120 {
@@ -268,7 +266,6 @@ func tidyFilter(f map[string]string) map[string]string {
 	return out
 }
 
-// suppressedBy is the active suppression matching a group's values.
 func (r *detectionRule) suppressedBy(values map[string]string, now time.Time) *ruleSuppression {
 	ts := now.UTC().Format(tsLayout)
 	for i, sp := range r.Suppress {
@@ -281,8 +278,6 @@ func (r *detectionRule) suppressedBy(values map[string]string, now time.Time) *r
 	}
 	return nil
 }
-
-// Store.
 
 func (s *Server) listDetectionRules(ctx context.Context, onlyEnabled bool) ([]detectionRule, error) {
 	where := ""
@@ -372,8 +367,6 @@ func (s *Server) updateDetectionRule(ctx context.Context, r *detectionRule) erro
 	return s.db.Exec(ctx, `UPDATE security_rules SET name = ?, enabled = ?, spec = ?, updated_at = ? WHERE id = ?`,
 		r.Name, boolInt(r.Enabled), r.specJSON(), r.UpdatedAt, r.ID)
 }
-
-// API.
 
 func (s *Server) securityRulesRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/security/rules", s.authed(s.handleListDetectionRules))
@@ -469,8 +462,6 @@ func sessionName(r *http.Request) string {
 	return ""
 }
 
-// handleCreateDetectionRule saves a new rule, or one from a template when
-// the body names one.
 func (s *Server) handleCreateDetectionRule(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
@@ -561,7 +552,6 @@ func (s *Server) handleUpdateDetectionRule(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, rule)
 }
 
-// handlePatchDetectionRule turns a rule on or off.
 func (s *Server) handlePatchDetectionRule(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return
@@ -603,8 +593,6 @@ func (s *Server) handleDeleteDetectionRule(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleSuppressDetectionRule adds one field = value suppression to a rule,
-// from a signal's drawer.
 func (s *Server) handleSuppressDetectionRule(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "edit") || !s.requireAllServices(w, r) {
 		return

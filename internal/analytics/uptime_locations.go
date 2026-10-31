@@ -13,18 +13,10 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Locations are the places a check runs from. "server" is the Visionary
-// server itself; every other location is a host agent started with
-// VISIONARY_AGENT_LOCATION and that location's key, which polls for its
-// checks and posts their results (uptime_locations_api.go).
-//
-// Each location writes its own uptime_results rows, with location and
-// location_ok (that location's verdict). ok is the check's verdict across
-// its locations at that moment, by the check's rule: down when any, a
-// majority or all of the locations that report fail. So uptime, incidents,
-// alerts and the status page follow the combined state, and the per-location
-// views read location_ok. A location that stopped reporting is stale and
-// left out of the vote.
+// Locations are the places a check runs from. "server" is Visionary itself;
+// every other is a host agent that polls for checks and posts results.
+// ok is the check's verdict across locations by its rule; location_ok is one
+// location's. Stale locations are left out of the vote.
 
 const (
 	serverLocation = "server"
@@ -42,7 +34,6 @@ var (
 	locationRules  = map[string]bool{"any": true, "majority": true, "all": true}
 )
 
-// uptimeLocationColumns are the uptime_results columns locations add.
 var uptimeLocationColumns = map[string][]sdk.Column{
 	"uptime_results": {{Name: "location", Kind: "text"}, {Name: "location_ok", Kind: "int"}},
 }
@@ -81,7 +72,6 @@ CREATE TABLE IF NOT EXISTS uptime_check_locations (
 )` + tail}
 }
 
-// uptimeLocation is one runner location, as the Locations tab lists it.
 type uptimeLocation struct {
 	ID             int64  `json:"id"`
 	Name           string `json:"name"`
@@ -122,8 +112,6 @@ func scanLocation(row []any) uptimeLocation {
 		KindList: strings.FieldsFunc(toString(row[9]), func(r rune) bool { return r == ',' })}
 }
 
-// listLocations returns the server location first, then the agents' by name,
-// each with its state.
 func (s *Server) listLocations(ctx context.Context) ([]uptimeLocation, error) {
 	rows, err := s.db.Query(ctx, `SELECT `+uptimeLocationCols+` FROM uptime_locations ORDER BY name`)
 	if err != nil {
@@ -200,7 +188,6 @@ func (c UptimeCheck) runsAt(location string) bool {
 	return slices.Contains(c.Locations, location)
 }
 
-// checkLocations refuses locations that do not exist.
 func (s *Server) checkLocations(ctx context.Context, c UptimeCheck) error {
 	if len(c.Locations) == 1 && c.Locations[0] == serverLocation {
 		return nil
@@ -325,7 +312,6 @@ WHERE check_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 200`, c.ID
 	return !locationsDown(c.LocationRule, len(failing), n), failing, nil
 }
 
-// locationsDown applies a check's rule to failed of n reporting locations.
 func locationsDown(rule string, failed, n int) bool {
 	switch {
 	case failed == 0:
@@ -348,10 +334,9 @@ func ownError(msg string) string {
 	return msg
 }
 
-// locationState is how one location sees a check now.
 type locationState struct {
 	Name           string  `json:"name"`
-	State          string  `json:"state"` // up, degraded, down, stale, pending, no_browser
+	State          string  `json:"state"`
 	LastAt         string  `json:"last_at,omitempty"`
 	LastStatus     int64   `json:"last_status"`
 	LastDurationMs float64 `json:"last_duration_ms"`

@@ -128,8 +128,6 @@ func (w *writer) run() {
 	ticker := time.NewTicker(w.cfg.FlushInterval)
 	defer ticker.Stop()
 
-	// Full batches go to a few flushers; while all are busy the queue
-	// absorbs the load.
 	work := make(chan []any)
 	var flushers sync.WaitGroup
 	for range w.flushers() {
@@ -224,9 +222,8 @@ func (w *writer) write(batch []any) {
 	for _, g := range []*rowGroup{&reqs, &spans, &errs, &logs, &metrics} {
 		stmts = g.statements(stmts, d1)
 	}
-	// D1 takes 50 statements a call, so a request's spans can push a batch
-	// into several calls, each retried on its own. SQL backends write the
-	// whole batch in one transaction.
+	// D1 takes 50 statements a call, so a batch can need several calls, each
+	// retried on its own.
 	perCall := len(stmts)
 	if d1 {
 		perCall = maxStatementsPerCall
@@ -244,7 +241,6 @@ func (w *writer) write(batch []any) {
 	}
 }
 
-// rowGroup is one table's rows in a batch.
 type rowGroup struct {
 	table   string
 	columns []string

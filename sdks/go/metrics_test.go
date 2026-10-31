@@ -24,7 +24,6 @@ func TestMetricSeriesCanonical(t *testing.T) {
 	if len(id) != 16 {
 		t.Fatalf("id %q is not 16 hex digits", id)
 	}
-	// Fixed so every SDK can check its own implementation against it.
 	if text, id := MetricSeries("orders_placed", map[string]string{"region": "eu"}); text != `{"region":"eu"}` || id != "da4f5c6244c4f3e4" {
 		t.Fatalf("got %s %s", text, id)
 	}
@@ -74,12 +73,10 @@ func TestMetricsCollect(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.buckets), &b); err != nil {
 		t.Fatal(err)
 	}
-	// <= 10, <= 100, above
 	if len(b.Bounds) != 2 || b.Counts[0] != 2 || b.Counts[1] != 1 || b.Counts[2] != 1 {
 		t.Fatalf("buckets %s", r.buckets)
 	}
 
-	// Counters and histograms restart from zero; gauges keep reporting.
 	recs, _ = reg.collect(time.Now())
 	if len(recs) != 1 || recs[0].name != "queue" {
 		t.Fatalf("second interval: %+v", recs)

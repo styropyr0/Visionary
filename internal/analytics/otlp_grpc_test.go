@@ -24,8 +24,6 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-// otlpGRPCClient serves s's OTLP/gRPC on a free port and dials it with the raw
-// codec, so requests are the encoded Export bodies.
 func otlpGRPCClient(t *testing.T, s *Server) *grpc.ClientConn {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -80,7 +78,6 @@ func TestOTLPGRPCExport(t *testing.T) {
 		{TraceId: traceID, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}, Name: "GET /items", Kind: tracepb.Span_SPAN_KIND_SERVER,
 			StartTimeUnixNano: uint64(now.UnixNano()), EndTimeUnixNano: uint64(now.Add(20 * time.Millisecond).UnixNano()),
 			Attributes: []*commonpb.KeyValue{otlpStr("http.request.method", "GET"), otlpStr("http.route", "/items")}},
-		// No ids: rejected through partial_success.
 		{Name: "broken", StartTimeUnixNano: 1, EndTimeUnixNano: 2},
 	}}}}}}
 	out, err := otlpGRPCExportCall(conn, otlpSignals[0].service, "k1", traces)
@@ -103,7 +100,6 @@ func TestOTLPGRPCExport(t *testing.T) {
 		{Name: "queue.depth", Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{
 			DataPoints: []*metricspb.NumberDataPoint{{TimeUnixNano: uint64(now.UnixNano()), Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: 7}}}}}},
 	}}}}}}
-	// gzip, as exporters send with OTEL_EXPORTER_OTLP_COMPRESSION=gzip.
 	if out, err := otlpGRPCExportCall(conn, otlpSignals[1].service, "k1", metrics, grpc.UseCompressor(gzip.Name)); err != nil || len(out) != 0 {
 		t.Fatalf("metrics: %x %v", out, err)
 	}
@@ -134,7 +130,6 @@ func TestOTLPGRPCErrors(t *testing.T) {
 	if _, err := otlpGRPCRaw(conn, traces, "wrong", nil); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("wrong key: %v", err)
 	}
-	// Bearer and x-visionary-key both work; an empty export is fine.
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "x-visionary-key", "k1")
 	var out []byte
 	if err := conn.Invoke(ctx, "/"+traces+"/Export", []byte{}, &out); err != nil {
@@ -148,7 +143,6 @@ func TestOTLPGRPCErrors(t *testing.T) {
 	if _, err := otlpGRPCRaw(conn, traces, "k1", big); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("oversize: %v", err)
 	}
-	// Small on the wire, too big once decompressed.
 	if _, err := otlpGRPCRaw(conn, traces, "k1", big, grpc.UseCompressor(gzip.Name)); status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("oversize gzip: %v", err)
 	}
@@ -169,7 +163,6 @@ func TestOTLPGRPCErrors(t *testing.T) {
 		t.Fatalf("retry info: %+v", st.Details())
 	}
 
-	// A database that cannot be written asks the exporter to retry.
 	_ = s.db.Close()
 	if v, ok := otlpStates.Load(s); ok && v.(*otlpState).sql != nil {
 		_ = v.(*otlpState).sql.Close()

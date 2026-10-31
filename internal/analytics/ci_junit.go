@@ -21,8 +21,8 @@ import (
 // row per test case per upload, tied to a run, commit, branch and service.
 
 const (
-	ciMaxReport     = 32 << 20 // per report, after gunzip
-	ciMaxUpload     = 64 << 20 // all reports of one request
+	ciMaxReport     = 32 << 20
+	ciMaxUpload     = 64 << 20
 	ciMaxCases      = 20000
 	ciMaxMessage    = 2000
 	ciMaxTestName   = 500
@@ -51,7 +51,6 @@ type junitCase struct {
 	FlakyErrors   []junitIssue `xml:"flakyError"`
 }
 
-// junitNode is <testsuites> or <testsuite>, which may nest.
 type junitNode struct {
 	XMLName xml.Name
 	Name    string      `xml:"name,attr"`
@@ -60,7 +59,6 @@ type junitNode struct {
 	Cases   []junitCase `xml:"testcase"`
 }
 
-// ciTestCase is one result to store.
 type ciTestCase struct {
 	Suite, Test, File, Status string
 	DurationMs                *float64
@@ -156,7 +154,6 @@ func junitSeconds(v string) (float64, bool) {
 	return f, true
 }
 
-// junitMessage is the failure's message and the start of its output.
 func junitMessage(i junitIssue) string {
 	msg, text := strings.TrimSpace(i.Message), strings.TrimSpace(i.Text)
 	switch {
@@ -170,7 +167,6 @@ func junitMessage(i junitIssue) string {
 	return ciClip(msg+"\n"+text, ciMaxMessage)
 }
 
-// gunzipMaybe inflates gzip data (by its magic bytes) up to limit.
 func gunzipMaybe(b []byte, limit int64) ([]byte, error) {
 	if len(b) < 2 || b[0] != 0x1f || b[1] != 0x8b {
 		return b, nil
@@ -190,8 +186,6 @@ func gunzipMaybe(b []byte, limit int64) ([]byte, error) {
 	return out, nil
 }
 
-// readJUnitUpload returns the reports and the fields that came with them:
-// query parameters, plus form fields of a multipart upload.
 func readJUnitUpload(w http.ResponseWriter, r *http.Request) ([][]byte, url.Values, int, error) {
 	fields := r.URL.Query()
 	mt, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -305,8 +299,6 @@ type ciUpload struct {
 	at                                                  time.Time
 }
 
-// saveTests stores the cases, filling the commit, branch and service from
-// the run when it is known, then looks for newly flaky tests among them.
 func (s *Server) saveTests(ctx context.Context, up ciUpload, cases []ciTestCase) (map[string]int, error) {
 	runKey := ""
 	if up.runID != "" {

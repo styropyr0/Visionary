@@ -17,11 +17,10 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// SCIM 2.0 (RFC 7643, 7644): an identity provider creates, changes and
-// removes people, and puts them in groups that map to roles. It calls with
-// an API key of scope scim. People it manages live in visionary_users with
-// source scim and sign in through single sign-on; their groups live in
-// visionary_scim_groups.
+// SCIM 2.0 (RFC 7643, 7644): an identity provider creates, changes and removes
+// people and their groups with an API key of scope scim. Managed people live in
+// visionary_users with source scim and sign in through single sign-on; groups
+// live in visionary_scim_groups.
 
 const (
 	scimSource      = "scim"
@@ -129,7 +128,6 @@ func readSCIM(r *http.Request, dst any) error {
 	return nil
 }
 
-// scimBase is where SCIM resources are, for meta.location.
 func (s *Server) scimBase() string {
 	return strings.TrimRight(s.ssoSetup().cfg.PublicURL, "/") + "/scim/v2"
 }
@@ -141,7 +139,6 @@ func scimList(resources []any, total, start int) map[string]any {
 	}
 }
 
-// scimPage reads startIndex (1-based) and count.
 func scimPage(r *http.Request) (start, count int) {
 	start, count = 1, 100
 	if n, err := strconv.Atoi(r.URL.Query().Get("startIndex")); err == nil && n > 1 {
@@ -225,8 +222,6 @@ func scimTime(ts string) string {
 	}
 	return t.UTC().Format(time.RFC3339)
 }
-
-// ---------- Discovery ----------
 
 func (s *Server) handleSCIMConfig(w http.ResponseWriter, _ *http.Request) {
 	scimJSON(w, http.StatusOK, map[string]any{

@@ -10,15 +10,11 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Several servers (replicas) can run on one database behind a load balancer.
-// Work that must happen once, such as alert checks, deliveries, digests,
-// uptime probes, rollups and retention, runs under a lease in
-// visionary_leases: one replica holds each lease, renews it every 10 seconds
-// and stops that work as soon as it can't. A lease expires 30 seconds after
-// its last renewal by the database's clock, so a replica that dies hands its
-// work over within 40 seconds, and one that shuts down hands it
-// over at once. Leases spread across replicas: one holding more than its
-// share gives one up now and then for another to take.
+// Several replicas can run on one database. Work that must happen once runs
+// under a lease in visionary_leases: a holder renews it every 10 seconds and
+// it expires 30 seconds after the last renewal by the database's clock, so a
+// dead replica's work moves within 40 seconds and a clean shutdown hands it
+// over at once. Leases spread across replicas.
 
 const (
 	leaseTTL   = 30 * time.Second
@@ -39,13 +35,13 @@ type leaseState struct {
 	mu      sync.Mutex
 	jobs    []*leaseJob
 	wg      sync.WaitGroup
-	okAt    time.Time // when the last renewal that worked was sent
+	okAt    time.Time
 	live    int
 	shedAt  time.Time
 	stopped chan struct{}
 }
 
-var leaseStates sync.Map // *Server -> *leaseState
+var leaseStates sync.Map
 
 func (s *Server) leases() *leaseState {
 	v, _ := leaseStates.LoadOrStore(s, &leaseState{})
@@ -104,7 +100,6 @@ func (q sqlDialect) leasesSchema() []string {
 	}
 }
 
-// insertIgnore adds a row unless its key is taken.
 func (q sqlDialect) insertIgnore(table, cols, values string) string {
 	if q.d == sdk.MySQL {
 		return `INSERT IGNORE INTO ` + table + ` (` + cols + `) VALUES (` + values + `)`
@@ -112,7 +107,6 @@ func (q sqlDialect) insertIgnore(table, cols, values string) string {
 	return `INSERT INTO ` + table + ` (` + cols + `) VALUES (` + values + `) ON CONFLICT DO NOTHING`
 }
 
-// upsertRow adds a row or overwrites the named columns of the one with its key.
 func (q sqlDialect) upsertRow(table, key, cols, values string, update []string) string {
 	stmt := `INSERT INTO ` + table + ` (` + cols + `) VALUES (` + values + `)`
 	set := ""
@@ -177,9 +171,6 @@ func (s *Server) releaseLease(ctx context.Context, name string) error {
 
 func ms(d time.Duration) string { return strconv.FormatInt(d.Milliseconds(), 10) }
 
-// leaseRound renews what this replica holds, takes free leases up to its
-// share, gives one up when it holds too many, and starts or stops the jobs
-// to match.
 func (s *Server) leaseRound(ctx context.Context) {
 	ls := s.leases()
 	sent := time.Now()
@@ -197,7 +188,6 @@ func (s *Server) leaseRound(ctx context.Context) {
 		lost := time.Since(ls.okAt) > leaseTTL-leaseRenew
 		ls.mu.Unlock()
 		if lost {
-			// Others may take the leases before this replica can tell.
 			s.stopJobs(func(*leaseJob) bool { return true })
 		}
 		if ctx.Err() == nil && !missingTable(firstErr(err, hbErr, renewErr), "visionary_") {
@@ -224,7 +214,6 @@ func (s *Server) leaseRound(ctx context.Context) {
 		if heldBy(r) || (r.holder != "" && r.expiresMs > nowMs) {
 			continue
 		}
-		// A lease another replica just gave up is left to those below their share.
 		if held >= fair && exists && nowMs-r.expiresMs < 2*leaseRenew.Milliseconds() {
 			continue
 		}
@@ -255,7 +244,6 @@ func (s *Server) leaseRound(ctx context.Context) {
 		}
 	}
 	if live > 1 && len(mine) > fair && time.Since(ls.shedAt) > 2*leaseRenew {
-		// The most recently started job gives way, so long runs aren't cut.
 		sort.Slice(mine, func(a, b int) bool { return mine[a].since.After(mine[b].since) })
 		for _, j := range mine {
 			if j.cancel != nil && !j.stopping {
@@ -269,10 +257,8 @@ func (s *Server) leaseRound(ctx context.Context) {
 	}
 }
 
-// startJob runs j until its context ends; ls.mu is held.
 func (s *Server) startJob(ctx context.Context, j *leaseJob) {
 	ls := s.leases()
-	// Leased jobs work for everyone, never within a workspace.
 	jctx, cancel := context.WithCancel(unscoped(ctx))
 	j.cancel, j.stopping, j.since = cancel, false, time.Now()
 	s.logger.Info("leases: running", "lease", j.name)
@@ -298,7 +284,6 @@ func (s *Server) startJob(ctx context.Context, j *leaseJob) {
 	}()
 }
 
-// stopJobs asks the running jobs that match to end, without waiting.
 func (s *Server) stopJobs(match func(*leaseJob) bool) {
 	ls := s.leases()
 	ls.mu.Lock()
@@ -312,8 +297,6 @@ func (s *Server) stopJobs(match func(*leaseJob) bool) {
 	}
 }
 
-// leasesStart takes the first leases before returning, so a lone replica
-// starts its jobs at once, then keeps them renewed until ctx ends.
 func (s *Server) leasesStart(ctx context.Context) {
 	ls := s.leases()
 	ls.mu.Lock()
@@ -337,9 +320,6 @@ func (s *Server) leasesStart(ctx context.Context) {
 	}()
 }
 
-// leasesStop waits briefly for the jobs to end, then gives up this replica's
-// leases and its place in the list, so others take over without waiting for
-// the leases to expire.
 func (s *Server) leasesStop() {
 	ls := s.leases()
 	done := make(chan struct{})

@@ -47,7 +47,6 @@ func (t *tracedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	s := beginSpan(ctx, KindHTTP)
 	if s == nil {
-		// Not recorded, but the trace still goes on to the next service.
 		if !isQuiet(ctx) {
 			req = injectTrace(req, currentSpan(ctx))
 		}

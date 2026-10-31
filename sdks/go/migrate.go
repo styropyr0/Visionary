@@ -154,7 +154,6 @@ func migrateSystem(ctx context.Context, s store) error {
 	return migrate(ctx, s, "system_metrics", AddedSystemColumns)
 }
 
-// migrateRequests adds missing api_logs columns and the trace index.
 func migrateRequests(ctx context.Context, s store) error {
 	if err := migrate(ctx, s, "api_logs", AddedRequestColumns); err != nil {
 		return err
@@ -162,7 +161,6 @@ func migrateRequests(ctx context.Context, s store) error {
 	return s.execScript(ctx, s.dialect().TraceIndex("api_logs"))
 }
 
-// migrateSpans adds missing spans columns and the trace index.
 func migrateSpans(ctx context.Context, s store) error {
 	if err := migrate(ctx, s, "spans", AddedSpanColumns); err != nil {
 		return err

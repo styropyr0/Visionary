@@ -23,7 +23,6 @@ func (s *Server) ssoRoutes(mux *http.ServeMux) {
 	s.scimRoutes(mux)
 }
 
-// handleSSOStart sends someone to the identity provider.
 func (s *Server) handleSSOStart(w http.ResponseWriter, r *http.Request) {
 	st := s.ssoSetup()
 	p := st.provider(r.PathValue("id"))
@@ -68,11 +67,10 @@ func (s *Server) ssoBegin(w http.ResponseWriter, r *http.Request, st *ssoSetup, 
 }
 
 type ssoView struct {
-	Config ssoConfig `json:"config"`
-	Error  string    `json:"error,omitempty"`
-	// SPCert is the SAML certificate to give identity providers that ask.
-	SPCert  string `json:"sp_cert,omitempty"`
-	SCIMURL string `json:"scim_url,omitempty"`
+	Config  ssoConfig `json:"config"`
+	Error   string    `json:"error,omitempty"`
+	SPCert  string    `json:"sp_cert,omitempty"`
+	SCIMURL string    `json:"scim_url,omitempty"`
 	// SignInType is the way in from Settings → Sign-in, so the page can say
 	// whether single sign-on is the only one.
 	SignInType string `json:"sign_in_type"`

@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// readQueries are the requests behind the main dashboard pages.
 var readQueries = []struct{ name, path string }{
 	{"Overview: stats", "/api/overview/stats"},
 	{"Overview: traffic", "/api/overview/traffic"},

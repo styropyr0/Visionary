@@ -14,11 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// The CI page: pipelines with their success rate, durations and queue time,
-// slow and failing jobs, tests, flaky tests, one run in detail, and the
-// deploys a run's commit became.
-
-// ciFilter narrows a CI table by the page's filters that it has.
 func ciFilter(q url.Values, cols ...string) (string, []any) {
 	var b strings.Builder
 	var args []any
@@ -189,7 +184,6 @@ WHERE created_at >= ? AND created_at < ?`+f+` LIMIT 50000`, append([]any{from, t
 		duration = append(duration, []any{b, "p50", a.pct(durs, 0.5)}, []any{b, "p95", a.pct(durs, 0.95)}, []any{b, "queue p50", a.pct(queues, 0.5)})
 	}
 
-	// Success rate over time for the busiest workflows.
 	flows := make([]string, 0, len(perFlowBucket))
 	flowRuns := map[string]int{}
 	for f, m := range perFlowBucket {
@@ -375,7 +369,6 @@ func isHex(s string) bool {
 	return s != ""
 }
 
-// deploysOf are the releases whose version names commit.
 func deploysOf(all []release, commit string) []release {
 	out := []release{}
 	commit = strings.ToLower(commit)
@@ -468,7 +461,6 @@ type ciTestRow struct {
 	Flaky      bool     `json:"flaky"`
 }
 
-// deployImpact is a service's traffic in the hour before and after a deploy.
 type deployImpact struct {
 	release
 	Before map[string]any `json:"before"`
@@ -512,7 +504,6 @@ FROM ci_jobs WHERE run_key = ? ORDER BY created_at, started_at, id LIMIT 500`, r
 		}
 	}
 
-	// Tests uploaded with this run, or else with its commit and no run.
 	where, args := "run_key = ?", []any{run.runKey}
 	if run.Commit != "" {
 		cnt, err := s.db.Query(ctx, `SELECT COUNT(*) FROM ci_tests WHERE run_key = ?`, run.runKey)
@@ -608,8 +599,6 @@ func ptrAny(p *float64) any {
 	return *p
 }
 
-// trafficAround measures a service between from and to: requests, p95,
-// the 5xx rate and exceptions.
 func (s *Server) trafficAround(ctx context.Context, service string, from, to time.Time) map[string]any {
 	out := map[string]any{"requests": 0, "p95_ms": nil, "error_rate": nil, "errors": 0}
 	args := []any{from.UTC().Format(tsLayout), to.UTC().Format(tsLayout), service}

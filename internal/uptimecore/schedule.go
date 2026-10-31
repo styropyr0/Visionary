@@ -9,22 +9,18 @@ import (
 	"time"
 )
 
-// The scheduler keeps a schedule of checks, reloaded every 30s and right
-// after Wake, and feeds due checks to a fixed pool of workers. Browser
-// checks have their own, smaller pool, so a slow page never holds up HTTP
-// checks. A check never runs twice at once; when every worker is busy, due
-// checks wait for the next tick instead of piling up.
+// The scheduler reloads its checks every 30s and right after Wake, and feeds
+// due checks to a fixed pool of workers; browser checks get a smaller pool of
+// their own. A check never runs twice at once, and when every worker is busy
+// due checks wait for the next tick.
 
 const (
 	tick   = time.Second
 	reload = 30 * time.Second
 )
 
-// Scheduler runs checks on their intervals.
 type Scheduler struct {
-	// Load returns the checks to run now.
-	Load func(ctx context.Context) ([]Check, error)
-	// Execute runs one check and stores its result.
+	Load           func(ctx context.Context) ([]Check, error)
 	Execute        func(ctx context.Context, c Check)
 	Workers        int
 	BrowserWorkers int
@@ -56,7 +52,6 @@ type scheduled struct {
 	next  time.Time
 }
 
-// Run schedules checks until ctx ends, then waits for running checks.
 func (u *Scheduler) Run(ctx context.Context) {
 	jobs := make(chan Check)
 	browserJobs := make(chan Check)
@@ -107,7 +102,6 @@ func (u *Scheduler) Run(ctx context.Context) {
 				u.setRunning(e.check.ID, true)
 				e.next = now.Add(Jittered(e.check.IntervalS))
 			default:
-				// All workers busy: try again next tick.
 			}
 		}
 		select {
@@ -146,7 +140,6 @@ func (u *Scheduler) reload(ctx context.Context, schedule map[int64]*scheduled) {
 			e.check = c
 			continue
 		}
-		// New (or just started): first run soon, spread over a few seconds.
 		spread := min(time.Duration(c.IntervalS)*time.Second/2, 15*time.Second)
 		schedule[c.ID] = &scheduled{check: c, next: time.Now().Add(time.Duration(rand.Int64N(int64(spread))))}
 	}

@@ -14,11 +14,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Configuration as a file: alert rules, channels, silences, uptime checks,
-// saved panels, dashboards, saved log searches and the hidden pages, written
-// as one YAML or JSON document that another install imports. Everything is
-// matched by name, since ids differ between installs, and secrets (channel
-// URLs and keys, secret headers, browser secrets) stay behind.
+// Configuration as one YAML or JSON document that another install imports.
+// Everything is matched by name, since ids differ between installs, and
+// secrets stay behind.
 
 const configVersion = 1
 
@@ -122,7 +120,6 @@ type configPanel struct {
 	Viz         Viz    `json:"viz"`
 }
 
-// configDashboard's saved panels are referred to by their title.
 type configDashboard struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
@@ -144,14 +141,11 @@ func (s *Server) configRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/config/import", s.authed(s.handleConfigImport))
 }
 
-// configState is everything the document covers as it is stored now, with
-// lookups both ways between ids and names.
 type configState struct {
-	channels []alertChannel
-	rules    []alertRule
-	silences []alertSilence
-	checks   []UptimeCheck
-	// locations include the server's, first
+	channels  []alertChannel
+	rules     []alertRule
+	silences  []alertSilence
+	checks    []UptimeCheck
 	locations []uptimeLocation
 	panels    []Panel
 	dashes    []dashboard
@@ -273,7 +267,6 @@ func (st *configState) silenceConfig(sl alertSilence) silenceInput {
 	return out
 }
 
-// checkConfig is the check with its secrets masked.
 func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	m := c.masked()
 	follow, enabled := m.FollowRedirects, m.Enabled
@@ -290,7 +283,6 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 			out.FollowRedirects = nil
 		}
 	}
-	// Files are configuration, not secrets: they travel whole.
 	out.Files = c.Files
 	if len(out.Tags) == 0 {
 		out.Tags = nil
@@ -306,7 +298,6 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	}
 	out.StatusShowLocations = c.StatusShowLocations
 	if m.Kind == "browser" {
-		// The start URL is the first step's; the rest does not apply.
 		out.URL, out.Method, out.ExpectStatus, out.FollowRedirects = "", "", "", nil
 	}
 	if m.Kind == "playwright" {

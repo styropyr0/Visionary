@@ -132,7 +132,6 @@ func TestRunsFromCI(t *testing.T) {
 		t.Fatalf("by commit: %+v", list)
 	}
 
-	// Against an override the result stays out of the check's history.
 	var before, after int64
 	count := func() int64 {
 		rows, _ := s.db.Query(context.Background(), `SELECT COUNT(*) FROM uptime_results`)
@@ -147,8 +146,6 @@ func TestRunsFromCI(t *testing.T) {
 		t.Fatalf("override run was recorded: %d -> %d", before, after)
 	}
 
-	// A check that runs only from another location runs from the server
-	// too, but its history keeps only its own locations' results.
 	elsewhere := UptimeCheck{ID: 99, Name: "EU only", Kind: "http", URL: site.URL + "/", Method: "GET", ExpectStatus: "200-299", TimeoutMs: 5000, Locations: []string{"eu-west"}}
 	if it := s.runOne(context.Background(), runnerFor(s), elsewhere, ""); it.Status != "passed" {
 		t.Fatalf("elsewhere %s: %+v", elsewhere.URL, it)

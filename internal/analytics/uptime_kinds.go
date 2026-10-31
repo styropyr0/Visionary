@@ -15,14 +15,9 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Check kinds beyond http and browser: multi-step API checks (uptime_api.go),
-// TCP, DNS and SSL certificate checks (uptime_net.go), ping (uptime_ping.go)
-// and heartbeats, which jobs push to instead of being probed
-// (uptime_heartbeat.go). They share the schedule, results, incidents, alerts
-// and status page of HTTP checks. Their settings live in
-// uptime_check_settings, and what each run found beyond the uptime_results
-// row (each request of an API check, ping round trips, DNS answers, the
-// certificate) in uptime_run_details.
+// Check kinds beyond http and browser: API (uptime_api.go), TCP, DNS and SSL
+// (uptime_net.go), ping (uptime_ping.go) and heartbeat (uptime_heartbeat.go).
+// Settings live in uptime_check_settings, per-run findings in uptime_run_details.
 
 var settingsKinds = map[string]bool{"api": true, "tcp": true, "dns": true, "ping": true, "ssl": true, "heartbeat": true}
 
@@ -239,7 +234,6 @@ func normalizeSecrets(secrets map[string]string, prev map[string]string) (map[st
 	return out, nil
 }
 
-// kindSettings is what uptime_check_settings stores for a check.
 func (c UptimeCheck) kindSettings() any {
 	switch c.Kind {
 	case "api":
@@ -260,7 +254,6 @@ func (c UptimeCheck) kindSettings() any {
 	return nil
 }
 
-// loadKindSettings fills in the settings of checks of the kinds above.
 func (s *Server) loadKindSettings(ctx context.Context, checks []UptimeCheck) error {
 	ids := []string{}
 	for _, c := range checks {
@@ -396,7 +389,6 @@ func onlyTemplates(v string) bool {
 	return rest == "" || strings.EqualFold(rest, "basic")
 }
 
-// kindSettingsOrNil is kindSettings for any check, for comparing two.
 func (c UptimeCheck) kindSettingsOrNil() any {
 	if !settingsKinds[c.Kind] || (c.Kind == "heartbeat" && c.Heartbeat == nil) {
 		return nil
@@ -404,7 +396,6 @@ func (c UptimeCheck) kindSettingsOrNil() any {
 	return c.kindSettings()
 }
 
-// recordDetail keeps what a run found beyond its uptime_results row.
 func (s *Server) recordDetail(ctx context.Context, c UptimeCheck, r uptimeResult, location string) error {
 	if r.Detail == nil || !settingsKinds[c.Kind] {
 		return nil
@@ -417,8 +408,6 @@ func (s *Server) recordDetail(ctx context.Context, c UptimeCheck, r uptimeResult
 		r.CreatedAt, c.ID, boolInt(r.OK), string(b), location)
 }
 
-// handleUptimeDetails lists a check's run details in the range, newest
-// first.
 func (s *Server) handleUptimeDetails(w http.ResponseWriter, r *http.Request) {
 	id, ok := checkID(w, r)
 	if !ok {

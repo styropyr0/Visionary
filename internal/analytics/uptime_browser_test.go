@@ -33,7 +33,6 @@ func TestBrowserCheckNormalize(t *testing.T) {
 	if m.Secrets["PASS"] != uptimeMask || c.Secrets["PASS"] != "hunter22" {
 		t.Fatalf("masking: %v %v", m.Secrets, c.Secrets)
 	}
-	// The mask sent back keeps the stored secret.
 	again := m
 	again.Steps = append([]BrowserStep(nil), m.Steps...)
 	if err := again.normalize(&c); err != nil || again.Secrets["PASS"] != "hunter22" {
@@ -68,7 +67,6 @@ func TestBrowserCheckNormalize(t *testing.T) {
 	}
 }
 
-// testSite is a login form that leads to a dashboard.
 func testSite() *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +169,6 @@ func TestBrowserCheckRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The runs list and one run in full.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/uptime/checks/{id}/runs", s.handleBrowserRuns)
 	mux.HandleFunc("GET /api/uptime/checks/{id}/runs/{run}", s.handleBrowserRun)
@@ -194,7 +191,6 @@ func TestBrowserCheckRun(t *testing.T) {
 		t.Fatalf("run: %d %.300s", rec.Code, rec.Body)
 	}
 
-	// With the guard on, the browser may not open a loopback page.
 	s.live().Config["uptime_allow_private"] = "false"
 	guarded := newUptimeRunner(s, uptimeSettings{workers: 1, browserWorkers: 1})
 	defer guarded.browser.Close()

@@ -41,7 +41,7 @@ type statusCheck struct {
 
 type statusLocation struct {
 	Name  string `json:"name"`
-	State string `json:"state"` // operational, degraded, outage, unknown
+	State string `json:"state"`
 }
 
 type statusDay struct {

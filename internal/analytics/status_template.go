@@ -10,11 +10,9 @@ import (
 )
 
 // The status page is server-rendered HTML with inline styles (the CSP allows
-// them), drawn with the dashboard's own tokens and Inter, and a theme that
-// follows the visitor's system setting. It reloads itself every minute. Times
-// are written in UTC inside <time> elements; /status.js, a same-origin script
-// the CSP allows, rewrites them into the visitor's own time zone, and without
-// script they stay readable in UTC.
+// them), with the dashboard's own tokens and a theme that follows the system
+// setting. Times are written in UTC in <time> elements and /status.js rewrites
+// them to the visitor's time zone.
 
 // statusView is what the template sees: the cached page plus where the
 // dashboard's font lives in this build.
@@ -121,7 +119,6 @@ var statusFuncs = template.FuncMap{
 		}
 		return out
 	},
-	// avgUptime is the mean 90-day uptime of the checks that have one.
 	"avgUptime": func(checks []statusCheck) *float64 {
 		var sum float64
 		n := 0

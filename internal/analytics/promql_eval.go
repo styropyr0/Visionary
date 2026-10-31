@@ -11,13 +11,10 @@ import (
 	"time"
 )
 
-// Evaluating PromQL: every node is computed for all steps of the query at
-// once. Selectors read series bucketed in SQL at a resolution that divides
-// the step, the ranges and the offsets, so windows line up with buckets.
-//
-// Counters are stored as increases, so rate and increase sum them exactly
-// (no extrapolation); a bare counter reads as its running total from the
-// start of the data loaded for the query.
+// Every node is computed for all steps at once. Selectors read series bucketed
+// in SQL at a resolution that divides the step, ranges and offsets. Counters
+// are stored as increases, so rate and increase sum them exactly; a bare
+// counter reads as its running total.
 
 const (
 	promLookback      = 5 * time.Minute
@@ -46,7 +43,6 @@ func (l promLabels) key() string {
 	return b.String()
 }
 
-// String writes the labels as name{k="v", ...}.
 func (l promLabels) String() string {
 	keys := make([]string, 0, len(l))
 	for k := range l {
@@ -102,8 +98,7 @@ type rawSeries struct {
 	labels  promLabels
 	counter bool
 	samples []rawSample
-	// cum is the running total of a counter's increases.
-	cum []float64
+	cum     []float64
 }
 
 func (rs *rawSeries) value(i int) float64 {
@@ -189,7 +184,6 @@ func newPromEval(ctx context.Context, src promSource, expr promExpr, start, end,
 	span := (end-start+maxBack)/1000 + int64(promLookback/time.Second)
 	res := base
 	if span/res > maxPromBuckets {
-		// Coarser buckets, preferably ones that still divide the step.
 		need := (span + maxPromBuckets - 1) / maxPromBuckets
 		res = ((need + base - 1) / base) * base
 		if stepS := step / 1000; stepS > 0 && stepS%base == 0 {
@@ -397,7 +391,6 @@ func (e *promEval) instant(vs *vectorSel) (promVal, error) {
 	return promVal{vec: out}, nil
 }
 
-// window calls f with each step's samples in (t-rng, t].
 func (e *promEval) window(m *matrixSel, f func(rs *rawSeries, lo, hi int, t int64) (float64, bool), keepName bool) (promVal, error) {
 	series, err := e.read(m.vs, m.rng)
 	if err != nil {
@@ -637,7 +630,6 @@ func (e *promEval) rangeFunc(fn string, m *matrixSel) (promVal, error) {
 		return e.window(m, func(rs *rawSeries, lo, hi int, _ int64) (float64, bool) {
 			last := rs.samples[hi-1]
 			if rs.counter {
-				// A bucket's value is the increase over its own res seconds.
 				if fn == "irate" {
 					return last.V / res, true
 				}
@@ -957,7 +949,6 @@ func (e *promEval) aggregate(a *aggExpr) (promVal, error) {
 	return promVal{vec: out}, nil
 }
 
-// quantileOf interpolates between the closest ranks, as Prometheus's quantile does.
 func quantileOf(q float64, vals []float64) float64 {
 	if len(vals) == 0 || math.IsNaN(q) {
 		return math.NaN()
@@ -1009,7 +1000,6 @@ func arith(op string, a, b float64) (float64, bool) {
 	return 0, false
 }
 
-// binOp applies op to one pair: the value and whether the element is kept.
 func binOp(op string, returnBool bool, a, b float64) (float64, bool) {
 	v, keep := arith(op, a, b)
 	if !isComparison(op) {

@@ -8,11 +8,8 @@ import (
 )
 
 // Distributed traces: requests (api_logs) and calls (spans) that share a W3C
-// trace_id, across every service that wrote them. The SDKs and the OTLP
-// receiver fill trace_id, span_id and parent_span_id; this feature reads
-// them: one trace on a timeline (traces_api.go), trace search, and the
-// service map built from parent-child pairs that cross services
-// (traces_map.go).
+// trace_id across services. One trace on a timeline is in traces_api.go, the
+// service map in traces_map.go.
 
 // tracesSchema indexes trace_id. The columns themselves are added to older
 // tables in ensureSchema, before the feature schemas run.
@@ -37,7 +34,6 @@ func (s *Server) tracesPrompt() string {
 - app_logs.trace_id and app_logs.span_id link log lines to the trace and the span they were logged in.`
 }
 
-// traceIDPattern accepts W3C ids and the other forms log lines carry.
 var traceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 // inMarks is "?, ?, ..." for n values.

@@ -9,13 +9,10 @@ import (
 	"time"
 )
 
-// Ping checks send N ICMP echo requests and report loss and round trip
-// times. Raw ICMP needs privileges, so they use what needs none: datagram
-// ("ping") sockets on Linux and macOS, allowed on Linux by the
-// net.ipv4.ping_group_range sysctl (Docker allows it by default), falling
-// back to a raw socket when the process may open one; and the ICMP helper
-// API on Windows. Where neither works, ping checks wait without recording
-// results, and the dashboard says why.
+// Ping checks send ICMP echo requests without raw-socket privileges: datagram
+// sockets on Linux and macOS (Linux needs net.ipv4.ping_group_range, which Docker
+// allows), a raw socket as fallback, the ICMP helper API on Windows. Where none
+// works, checks wait without recording results and the dashboard says why.
 
 // PingConfig is the settings of a ping check. The check fails when more
 // than MaxLossPct of the packets are lost.

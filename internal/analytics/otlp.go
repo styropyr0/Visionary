@@ -22,11 +22,10 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-// OpenTelemetry ingestion over OTLP/HTTP and OTLP/gRPC (otlp_grpc.go),
-// mapped onto Visionary's tables (docs/otlp.md). The bodies of the three
-// Export services have the same wire and JSON form as TracesData, MetricsData
-// and LogsData, so the data packages are enough and the generated service
-// stubs are not linked in.
+// OTLP/HTTP and OTLP/gRPC (otlp_grpc.go) ingestion, mapped onto Visionary's
+// tables (docs/otlp.md). The Export bodies match TracesData, MetricsData and
+// LogsData on the wire, so only the data packages are linked, not the generated
+// service stubs.
 
 const (
 	// otlpMaxBody caps a request body, on the wire and decompressed.
@@ -35,8 +34,6 @@ const (
 	otlpMaxInFlight = 8
 )
 
-// otlpSignal is one Export service: how its body becomes rows. Both
-// transports go through ingest.
 type otlpSignal struct {
 	name    string
 	service string

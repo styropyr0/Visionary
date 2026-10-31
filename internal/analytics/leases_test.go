@@ -68,7 +68,6 @@ func TestLeaseAcquireRenewStealRelease(t *testing.T) {
 		t.Fatalf("renewed lease ends %d ms after it was taken", left)
 	}
 
-	// a stops renewing; once the lease has expired b takes it.
 	if err := a.db.Exec(ctx, `UPDATE visionary_leases SET expires_ms = expires_ms - 60000`); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +77,6 @@ func TestLeaseAcquireRenewStealRelease(t *testing.T) {
 	if h := holderOf(t, a, "job"); h != "b" {
 		t.Fatalf("holder %q, want b after expiry", h)
 	}
-	// a renewing late doesn't take it back.
 	if err := a.renewLeases(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -127,18 +125,14 @@ func TestLeaseJobRunsOnceAndHandsOver(t *testing.T) {
 		t.Fatalf("starts a=%d b=%d, want the job on a only", ja.starts.Load(), jb.starts.Load())
 	}
 
-	// a dies without a word: its lease expires and b takes over.
 	if err := a.db.Exec(context.Background(), `UPDATE visionary_leases SET expires_ms = 0`); err != nil {
 		t.Fatal(err)
 	}
 	b.leaseRound(bctx)
 	waitFor(t, func() bool { return jb.running.Load() == 1 })
-	// If a was only slow, it learns at its next round and stops.
 	a.leaseRound(actx)
 	waitFor(t, func() bool { return ja.running.Load() == 0 })
 
-	// b shuts down cleanly: a takes over at its next round, without waiting
-	// for the lease to expire.
 	stopB()
 	b.leasesStop()
 	if h := holderOf(t, a, "job"); h != "" {
@@ -180,7 +174,6 @@ func TestLeasesSpreadAcrossReplicas(t *testing.T) {
 		a.leases().mu.Unlock()
 		a.leaseRound(ctx)
 		time.Sleep(50 * time.Millisecond)
-		// A lease a just gave up is free for b at once; a waits its turn.
 		b.leaseRound(ctx)
 		if running(a) == 2 && running(b) == 2 {
 			break

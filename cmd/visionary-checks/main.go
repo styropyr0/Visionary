@@ -28,7 +28,6 @@ import (
 // version is set at build time: -ldflags "-X main.version=v1.2.3".
 var version = "dev"
 
-// Exit codes.
 const (
 	exitPassed  = 0
 	exitFailed  = 1
@@ -244,7 +243,6 @@ type item struct {
 	} `json:"detail"`
 }
 
-// failedStep names the browser step that failed, if any.
 func (it item) failedStep() string {
 	if f := it.Detail.FailedStep; f != nil && *f >= 0 && *f < len(it.Detail.Steps) {
 		return it.Detail.Steps[*f].Label
