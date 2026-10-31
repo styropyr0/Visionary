@@ -1985,6 +1985,8 @@ pre.code {
 
 .tabs {
   display: flex;
+  /* Scrolling would otherwise let it shrink to nothing in a flex column. */
+  flex-shrink: 0;
   gap: 4px;
   margin-bottom: 12px;
   overflow-x: auto;

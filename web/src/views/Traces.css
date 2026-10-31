@@ -60,33 +60,44 @@
   white-space: nowrap;
 }
 
-.content.smap-content {
+/* Both tabs fill the height under the tab bar; the list and the map scroll or
+   pan inside their panel instead of the page scrolling. */
+.content.tr-fill {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.smap-wrap {
+.tr-fill-body {
   flex: 1 1 auto;
   min-height: 420px;
   display: flex;
   flex-direction: column;
-  margin-top: 12px;
+  gap: 12px;
 }
 
-.smap-panel {
+.tr-fill-body > .filter-row {
+  flex: none;
+}
+
+.tr-fill-panel {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.smap-panel > .panel-body {
+.tr-fill-panel > .panel-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: auto;
+}
+
+.tr-fill-panel > .panel-body > .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .smap-canvas {

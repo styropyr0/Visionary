@@ -95,7 +95,7 @@ function TraceLists({ initialTab, initialFilters }: { initialTab: Tab | null; in
           </>
         }
       />
-      <div className={`content ${connected && tab === "map" ? "smap-content" : ""}`}>
+      <div className={`content ${connected ? "tr-fill" : ""}`}>
         {connected ? (
           <>
             <nav className="tabs" role="tablist" aria-label="Traces">
@@ -106,12 +106,12 @@ function TraceLists({ initialTab, initialFilters }: { initialTab: Tab | null; in
               ))}
             </nav>
             {tab === "search" && (
-              <div className="grid" style={{ marginTop: 12 }}>
+              <div className="tr-fill-body">
                 <TraceSearch filters={filters} onChange={setFilters} />
               </div>
             )}
             {tab === "map" && (
-              <div className="smap-wrap">
+              <div className="tr-fill-body">
                 <MapTab onOpen={openSearch} />
               </div>
             )}
@@ -144,7 +144,7 @@ function TraceSearch({ filters, onChange }: { filters: TraceFilters; onChange: (
 
   return (
     <>
-      <div className="filter-row span-12" role="search">
+      <div className="filter-row" role="search">
         <input className="input" placeholder="Services, comma separated" value={typed.service} onChange={set("service")} style={{ width: 200 }} aria-label="Services" />
         <Select
           label="Route"
@@ -183,7 +183,7 @@ function TraceSearch({ filters, onChange }: { filters: TraceFilters; onChange: (
         )}
       </div>
       <Panel
-        className="span-12"
+        className="tr-fill-panel"
         title="Traces"
         description="Traces that started in the range, newest first, at most 50. The root is the request that started the trace; duration runs from its start to the end of the last request in it."
         result={q.data}
@@ -198,7 +198,7 @@ function TraceSearch({ filters, onChange }: { filters: TraceFilters; onChange: (
               <HelpLink topic="tracing">How requests join a trace</HelpLink>
             </div>
           ) : (
-            <DataTable result={q.data} columns={columns} maxHeight={640} onRowClick={(row) => (window.location.hash = traceHref(String(row[0])))} rowKey={(row) => row[0]} />
+            <DataTable result={q.data} columns={columns} onRowClick={(row) => (window.location.hash = traceHref(String(row[0])))} rowKey={(row) => row[0]} />
           ))
         }
       />
@@ -286,7 +286,7 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
   return (
     <>
       <Panel
-        className="smap-panel"
+        className="tr-fill-panel"
         title="Service map"
         description="Each box is a service, or a database, host, cache or queue they call. An arrow is calls from one to the other in the range: thicker is more often, amber or red when some failed. Calls between services come from traces; click an arrow, a box or a row of the table to list the traces behind it."
         result={table}
