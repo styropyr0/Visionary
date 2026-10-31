@@ -213,6 +213,30 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "errors",
+    group: "API",
+    title: "Errors",
+    route: "errors",
+    intro: "Exceptions and panics grouped into issues, with the stack, the versions they appear in and the requests that raised them.",
+    shot: "errors",
+    steps: [
+      {
+        title: "Triage the list",
+        text: "Filter **Status** to **New** or **Regressed** to see what this range brought. Search by type, message or route.",
+      },
+      {
+        title: "Open an issue",
+        text: "Click an issue for its occurrences over time, the versions and instances it appears on, its stack trace, and the routes and users it reached. **View request** on a recent occurrence opens the request that failed.",
+        shot: "errors-issue",
+        caption: "One issue: when it happens, where it comes from and who it reached.",
+      },
+      {
+        title: "Ask why",
+        text: "**Ask the analyst** opens Explore with a question about this issue already written.",
+      },
+    ],
+  },
+  {
     id: "queries",
     group: "API",
     title: "Queries",
@@ -278,30 +302,6 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Narrow it down",
         text: "Pick a route in **Profiles** to merge only the profiles taken while it was busy, or click a profile in the table to see just that one. **Service** appears when several services are profiled.",
-      },
-    ],
-  },
-  {
-    id: "errors",
-    group: "Apps",
-    title: "Errors",
-    route: "errors",
-    intro: "Exceptions and panics grouped into issues, with the stack, the versions they appear in and the requests that raised them.",
-    shot: "errors",
-    steps: [
-      {
-        title: "Triage the list",
-        text: "Filter **Status** to **New** or **Regressed** to see what this range brought. Search by type, message or route.",
-      },
-      {
-        title: "Open an issue",
-        text: "Click an issue for its occurrences over time, the versions and instances it appears on, its stack trace, and the routes and users it reached. **View request** on a recent occurrence opens the request that failed.",
-        shot: "errors-issue",
-        caption: "One issue: when it happens, where it comes from and who it reached.",
-      },
-      {
-        title: "Ask why",
-        text: "**Ask the analyst** opens Explore with a question about this issue already written.",
       },
     ],
   },
@@ -799,7 +799,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "settings",
-    group: "Admin",
+    group: "General",
     title: "Settings",
     route: "settings",
     intro: "Your own preferences, and the team's: who can sign in, keys, thresholds, data, and how the server behaves.",
@@ -841,7 +841,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "sso",
-    group: "Admin",
+    group: "General",
     title: "Single sign-on and SCIM",
     intro:
       "Let people sign in with the account they already have at Google, Microsoft Entra ID, Okta, Auth0, Keycloak or any OpenID Connect or SAML 2.0 provider, and let the provider add and remove them. It all lives in **Settings → Sign-in → Single sign-on**, applies without a restart, and works next to the other ways in.",
@@ -888,7 +888,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "workspaces",
-    group: "Admin",
+    group: "General",
     title: "Workspaces",
     intro:
       "Workspaces let each team see only its own services. A workspace names services and members, and the server filters every read for its members: pages, Explore, the analyst, dashboards, alerts, exports and the Prometheus API. Admins always see everything, and with no workspaces everyone does.",
@@ -919,7 +919,7 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "config-as-code",
-    group: "Admin",
+    group: "General",
     title: "Configuration as code",
     intro:
       "Keep alerts, uptime checks and dashboards in git: manage them with Terraform, or move the whole setup between installs as one file from **Settings → Configuration**.",

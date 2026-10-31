@@ -78,6 +78,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
       { route: "performance", label: "Performance", icon: Gauge },
       { route: "logs", label: "Requests", icon: ScrollText },
       { route: "traces", label: "Traces", icon: Waypoints },
+      { route: "errors", label: "Errors", icon: Bug },
       { route: "queries", label: "Queries", icon: Database },
       { route: "dependencies", label: "Dependencies", icon: Network },
       { route: "profiles", label: "CPU profiles", icon: Flame },
@@ -86,7 +87,6 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
   {
     group: "Apps",
     items: [
-      { route: "errors", label: "Errors", icon: Bug },
       { route: "frontend", label: "Frontend", icon: MonitorSmartphone },
     ],
   },
@@ -123,7 +123,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     ],
   },
   {
-    group: "Admin",
+    group: "General",
     items: [
       { route: "settings", label: "Settings", icon: Settings },
       { route: "guide", label: "How to use", icon: BookOpen },

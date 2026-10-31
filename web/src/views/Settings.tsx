@@ -86,7 +86,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
 
   return (
     <>
-      <TopBar title="Settings" section="Admin" actions={current === "audit" ? <TimeRangePicker /> : undefined} />
+      <TopBar title="Settings" section="General" actions={current === "audit" ? <TimeRangePicker /> : undefined} />
       <div className="content">
         <div className="tabs" role="tablist" ref={tabsRef}>
           {visible.map((t) => (
