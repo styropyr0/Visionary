@@ -11,6 +11,7 @@ import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { ServiceMapGraph } from "../components/telemetry/ServiceMapGraph";
 import { TraceTimeline, traceTree } from "../components/telemetry/TraceTimeline";
+import { KIND_COLOR } from "../components/telemetry/Waterfall";
 import type { Result } from "../lib/api";
 import { logsHref } from "../lib/applogs";
 import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
@@ -20,7 +21,6 @@ import { records } from "../lib/telemetry";
 import { formatLogTime } from "../lib/time";
 import {
   NO_FILTERS,
-  serviceColors,
   serviceLabel,
   traceHref,
   traceSearchHref,
@@ -208,8 +208,6 @@ function TraceSearch({ filters, onChange }: { filters: TraceFilters; onChange: (
 
 function searchColumns(res: Result): Column[] {
   const col = (name: string) => res.columns.indexOf(name);
-  const all = res.rows.flatMap((r) => (r[col("services")] as string[] | null) ?? []);
-  const colors = serviceColors(all);
   return [
     { key: "started", label: "Started", render: (v) => <span className="mono">{formatLogTime(String(v))}</span>, width: 150 },
     {
@@ -217,7 +215,7 @@ function searchColumns(res: Result): Column[] {
       label: "Root request",
       render: (v, row) => (
         <span className="span-name">
-          <span className="wf-swatch" style={{ background: colors.get(String(row[col("service")] ?? "")) }} aria-hidden />
+          <span className="wf-swatch" style={{ background: KIND_COLOR.request }} aria-hidden />
           <span className="mono">
             {String(row[col("method")] ?? "")} {String(v ?? "")}
           </span>
@@ -232,7 +230,6 @@ function searchColumns(res: Result): Column[] {
         <span className="tr-services">
           {((v as string[] | null) ?? []).map((s) => (
             <span key={s} className="tr-service">
-              <span className="wf-swatch" style={{ background: colors.get(s) }} aria-hidden />
               {serviceLabel(s)}
             </span>
           ))}
@@ -358,7 +355,6 @@ function TracePage({ id }: { id: string }) {
   const errors = useMemo(() => records(q.data?.errors), [q.data]);
   const lines = useMemo(() => records(q.data?.logs), [q.data]);
   const services = useMemo(() => [...new Set(tree.nodes.map((n) => n.service))].sort(), [tree]);
-  const colors = useMemo(() => serviceColors(services), [services]);
   const failed = tree.nodes.filter((n) => n.failed).length;
   const spanName = useMemo(() => new Map(tree.nodes.map((n) => [n.spanId, n.name])), [tree]);
   const root = tree.nodes[0];
@@ -404,7 +400,6 @@ function TracePage({ id }: { id: string }) {
                       <a href={`#/errors?fp=${encodeURIComponent(String(e.fingerprint))}`} className="rt-error">
                         <Bug size={13} aria-hidden />
                         <span className="tr-service">
-                          <span className="wf-swatch" style={{ background: colors.get(String(e.service ?? "")) }} aria-hidden />
                           {serviceLabel(e.service)}
                         </span>
                         <span className="mono rt-error-type">{String(e.type)}</span>
@@ -437,7 +432,6 @@ function TracePage({ id }: { id: string }) {
                     <li key={String(l.id)}>
                       <span className="mono dim">+{formatMs(Math.max(0, new Date(String(l.created_at)).getTime() - tree.start))}</span>
                       <span className="tr-service">
-                        <span className="wf-swatch" style={{ background: colors.get(String(l.service ?? "")) }} aria-hidden />
                         {serviceLabel(l.service)}
                       </span>
                       <span className={`wf-loglevel lv-${String(l.level ?? "info")}`}>{String(l.level ?? "info")}</span>

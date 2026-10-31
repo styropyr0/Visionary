@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 import { formatCount, formatMs, formatPercent } from "../../lib/format";
-import { serviceColors, serviceLabel, type MapEdge, type MapNode, type ServiceMap } from "../../lib/traces";
+import { serviceLabel, type MapEdge, type MapNode, type ServiceMap } from "../../lib/traces";
 import { TIP_DELAY, TipBubble } from "../InfoTip";
 import { KIND_COLOR } from "./Waterfall";
 
@@ -128,7 +128,6 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
   const [moved, setMoved] = useState<Map<string, { x: number; y: number }>>(new Map());
   const nodes = useMemo(() => laid.nodes.map((n) => ({ ...n, ...moved.get(n.id) })), [laid, moved]);
   const at = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  const colors = useMemo(() => serviceColors(map.nodes.filter((n) => n.kind === "service").map((n) => n.name)), [map]);
   const maxCalls = Math.max(1, ...map.edges.map((e) => e.calls));
   const [hover, setHover] = useState<string | null>(null);
 
@@ -393,7 +392,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
           })}
           {nodes.map((n) => {
             const svc = n.kind === "service";
-            const color = svc ? (colors.get(n.name) ?? "var(--series-1)") : (KIND_COLOR[n.kind] ?? "var(--text-3)");
+            const color = svc ? KIND_COLOR.request : (KIND_COLOR[n.kind] ?? "var(--text-3)");
             const failed = svc && n.requests > 0 ? (100 * n.errors) / n.requests : 0;
             return (
               <g

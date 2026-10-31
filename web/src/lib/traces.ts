@@ -79,12 +79,6 @@ export function useServiceMap(): QueryState<ServiceMap> {
   return useQuery<ServiceMap>(`trace-map?${qs}#${tick}`, (signal) => api<ServiceMap>(`/api/traces/map?${qs}`, { signal }));
 }
 
-/** Categorical colour of a service, stable for a given set of names. */
-export function serviceColors(names: string[]): Map<string, string> {
-  const sorted = [...new Set(names)].sort();
-  return new Map(sorted.map((n, i) => [n, `var(--series-${(i % 8) + 1})`]));
-}
-
 export function serviceLabel(name: unknown): string {
   const s = String(name ?? "");
   return s || "unnamed service";

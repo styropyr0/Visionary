@@ -632,7 +632,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Read a trace",
-        text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in and coloured by service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
+        text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in. Colours mean the kind, the same on every page: slate for a request, blue for a database query, orange for an outbound HTTP call, green for a cache, amber for a queue, dark green for background work; each request row names its service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
         shot: "trace",
         caption: "One checkout through four services, with the log lines it wrote.",
       },

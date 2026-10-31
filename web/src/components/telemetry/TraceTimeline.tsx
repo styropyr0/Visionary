@@ -2,7 +2,8 @@ import { Fragment, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { formatCount, formatMs, toNumber } from "../../lib/format";
 import { records } from "../../lib/telemetry";
-import { serviceColors, serviceLabel, type TraceResponse } from "../../lib/traces";
+import { serviceLabel, type TraceResponse } from "../../lib/traces";
+import { KIND_COLOR, KIND_LABEL } from "./Waterfall";
 import { SqlView } from "./SqlView";
 import { QueryViewerLink } from "./QueryViewerLink";
 import "./telemetry.css";
@@ -115,12 +116,16 @@ export function traceTree(t: TraceResponse | undefined): { nodes: TraceNode[]; s
 const MAX_INDENT = 8;
 
 /**
- * Every request and call of a trace on one time axis: one colour per
- * service, nesting by parent, failures outlined.
+ * Every request and call of a trace on one time axis, nested by parent and
+ * coloured by kind with the same colours as every other page; failures are
+ * outlined.
  */
 export function TraceTimeline({ trace, onOpenRequest }: { trace: TraceResponse; onOpenRequest?: (logId: number) => void }) {
   const { nodes, start, end } = useMemo(() => traceTree(trace), [trace]);
-  const colors = useMemo(() => serviceColors(nodes.map((n) => n.service)), [nodes]);
+  const kinds = useMemo(() => {
+    const seen = new Set(nodes.map((n) => n.kind));
+    return Object.keys(KIND_COLOR).filter((k) => seen.has(k));
+  }, [nodes]);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const total = Math.max(end - start, 1);
   const toggle = (k: string) =>
@@ -134,10 +139,10 @@ export function TraceTimeline({ trace, onOpenRequest }: { trace: TraceResponse; 
   return (
     <div className="waterfall">
       <div className="wf-legend">
-        {[...colors].map(([svc, color]) => (
-          <span key={svc} className="wf-legend-item">
-            <span className="wf-swatch" style={{ background: color }} />
-            {serviceLabel(svc)}
+        {kinds.map((k) => (
+          <span key={k} className="wf-legend-item">
+            <span className="wf-swatch" style={{ background: KIND_COLOR[k] }} />
+            {KIND_LABEL[k] ?? k}
           </span>
         ))}
         <span className="dim" style={{ marginLeft: "auto" }}>
@@ -161,7 +166,7 @@ export function TraceTimeline({ trace, onOpenRequest }: { trace: TraceResponse; 
           const left = (100 * offset) / total;
           const width = Math.max((100 * n.duration) / total, 0.25);
           const isOpen = open.has(n.key);
-          const color = colors.get(n.service) ?? "var(--series-1)";
+          const color = KIND_COLOR[n.kind] ?? KIND_COLOR.custom;
           return (
             <Fragment key={n.key}>
               <button type="button" className={`wf-grid wf-row tr-row ${n.kind === "request" ? "tr-request" : ""} ${isOpen ? "open" : ""}`} role="listitem" onClick={() => toggle(n.key)} aria-expanded={isOpen}>

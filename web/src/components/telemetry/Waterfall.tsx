@@ -21,7 +21,9 @@ export interface SpanRow {
 }
 
 /** Categorical slots in a fixed order, so a kind keeps its color everywhere. */
+/** One fixed colour per kind, the same on every page. */
 export const KIND_COLOR: Record<string, string> = {
+  request: "var(--kind-request)",
   db: "var(--series-1)",
   http: "var(--series-2)",
   cache: "var(--series-3)",
@@ -31,7 +33,7 @@ export const KIND_COLOR: Record<string, string> = {
   background: "var(--series-6)",
 };
 
-const KIND_LABEL: Record<string, string> = { db: "Database", http: "HTTP", cache: "Cache", queue: "Queue", custom: "Custom", graphql: "GraphQL", background: "Background" };
+export const KIND_LABEL: Record<string, string> = { request: "Request", db: "Database", http: "HTTP", cache: "Cache", queue: "Queue", custom: "Custom", graphql: "GraphQL", background: "Background" };
 
 export function toSpans(res: Result | undefined): SpanRow[] {
   return records(res).map((r) => ({
