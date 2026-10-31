@@ -131,9 +131,21 @@ func promDuration(v string) (time.Duration, error) {
 
 // runPromQL parses and evaluates query from start to end every step.
 func (s *Server) runPromQL(ctx context.Context, query string, start, end time.Time, step time.Duration) (promExpr, promVal, *promEval, error) {
+	return s.runPromQLWindows(ctx, query, start, end, step, 0)
+}
+
+// runPromQLWindows widens every range selector shorter than minRange to it.
+func (s *Server) runPromQLWindows(ctx context.Context, query string, start, end time.Time, step, minRange time.Duration) (promExpr, promVal, *promEval, error) {
 	expr, err := parsePromQL(query)
 	if err != nil {
 		return nil, promVal{}, nil, err
+	}
+	if minRange > 0 {
+		walkProm(expr, func(x promExpr) {
+			if m, ok := x.(*matrixSel); ok && m.rng < minRange {
+				m.rng = minRange
+			}
+		})
 	}
 	ctx, cancel := context.WithTimeout(ctx, promTimeout)
 	defer cancel()
@@ -556,7 +568,11 @@ func (s *Server) promResult(ctx context.Context, query string, tr timeRange) (*R
 	start := time.Unix(tr.From.Unix()/tr.Bucket*tr.Bucket, 0)
 	end := time.Unix((tr.To.Unix()+tr.Bucket-1)/tr.Bucket*tr.Bucket, 0)
 	started := time.Now()
-	_, v, ev, err := s.runPromQL(ctx, query, start, end, time.Duration(tr.Bucket)*time.Second)
+	// A chart's step is often longer than rate(x[5m])'s window, which would
+	// sample a few minutes of each bucket and leave lone points; each bucket
+	// reads its whole span instead, as Grafana's $__rate_interval does.
+	step := time.Duration(tr.Bucket) * time.Second
+	_, v, ev, err := s.runPromQLWindows(ctx, query, start, end, step, step)
 	if err != nil {
 		return nil, err
 	}
