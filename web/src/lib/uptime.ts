@@ -307,6 +307,19 @@ export interface NetRequest {
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });
 
+/** Steps converted from a Chrome DevTools Recorder export, and the recorded steps that have no equivalent. */
+export interface RecorderImport {
+  title: string;
+  steps: BrowserStep[];
+  device?: Device;
+  viewport_w?: number;
+  viewport_h?: number;
+  unsupported: string[];
+}
+
+export const importRecording = (json: string) =>
+  api<RecorderImport>("/api/uptime/browser/recorder", { method: "POST", body: json, headers: { "Content-Type": "application/json" } });
+
 export const getBrowserRuns = (id: number, from: Date, to: Date, signal?: AbortSignal) =>
   api<{ runs: BrowserRunSummary[]; steps: StepStat[] }>(`/api/uptime/checks/${id}/runs?${rangeQuery(from, to)}`, { signal });
 

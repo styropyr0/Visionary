@@ -488,10 +488,11 @@ func findJS(s BrowserStep) string {
 		finder = `(() => {
   const want = ` + jsString(strings.TrimSpace(s.Text)) + `.toLowerCase();
   const seen = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
-  const text = (e) => ((e.innerText || e.value || e.getAttribute("aria-label") || "") + "").trim().replace(/\s+/g, " ").toLowerCase();
+  const text = (e) => ((e.innerText || e.value || e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.getAttribute("title") || e.getAttribute("alt") || "") + "").trim().replace(/\s+/g, " ").toLowerCase();
   const pick = (sel) => { const all = [...document.querySelectorAll(sel)].filter(seen); return all.find((e) => text(e) === want) || all.find((e) => text(e).includes(want)); };
   // Controls first, so a button wins over a heading with the same words.
   return pick("button, a, [role=button], [role=link], [role=tab], [role=menuitem], input[type=submit], input[type=button], summary, label") ||
+    pick("input, textarea, select, [role=textbox], [role=combobox], img") ||
     pick("option, li, span, div, p, td, h1, h2, h3, h4") || null;
 })()`
 	}

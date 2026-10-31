@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Globe, Network, Plus, Trash2, X } from "lucide-react";
+import { Clapperboard, Globe, Network, Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
+import { RecorderDialog } from "./Uptime.recorder";
 import { DeviceSettings, LimitSettings, TraceSettings } from "./Uptime.settings";
 import { BrowserNotice, FilesEditor, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
@@ -59,6 +60,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [recorder, setRecorder] = useState(false);
   const set = <K extends keyof CheckInput>(k: K, v: CheckInput[K]) => setForm((f) => ({ ...f, [k]: v }));
   // How the check is alerted on; a new check gets the rule for every check
   // unless the form says otherwise.
@@ -162,6 +164,14 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <span>Name</span>
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
         </label>
+        {browser && (
+          <div>
+            <button type="button" className="btn ghost sm" onClick={() => setRecorder(true)} title="Turn a recording exported from Chrome DevTools' Recorder into steps">
+              <Clapperboard size={14} />
+              Import from Chrome Recorder
+            </button>
+          </div>
+        )}
         {browser && <StepsEditor steps={steps} onChange={setSteps} files={form.files ?? []} />}
         {browser && <DeviceSettings form={form} set={set} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
@@ -300,6 +310,21 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </button>
         </div>
       </form>
+      {recorder && (
+        <RecorderDialog
+          onClose={() => setRecorder(false)}
+          onImport={(r) => {
+            setSteps(r.steps);
+            setForm((f) => ({
+              ...f,
+              name: f.name.trim() ? f.name : r.title.slice(0, 120),
+              ...(r.device ? { device: r.device, viewport_w: r.viewport_w, viewport_h: r.viewport_h } : {}),
+            }));
+            setRecorder(false);
+            toast("ok", `Imported ${r.steps.length} steps`);
+          }}
+        />
+      )}
       {confirm && check && (
         <Modal
           title="Delete check"
