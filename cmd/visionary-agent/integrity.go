@@ -91,7 +91,7 @@ func (c *fileCollector) collect() []agentapi.Event {
 // times are unchanged. A symlink is compared by its target. False when the
 // file is not there (or is not a file).
 func (c *fileCollector) stat(p string, was fileState, had bool) (fileState, bool) {
-	fi, err := os.Lstat(p)
+	fi, err := os.Lstat(hostPath(p))
 	if err != nil || !(fi.Mode().IsRegular() || fi.Mode()&os.ModeSymlink != 0) {
 		return fileState{}, false
 	}
@@ -103,12 +103,12 @@ func (c *fileCollector) stat(p string, was fileState, had bool) (fileState, bool
 	}
 	switch {
 	case fi.Mode()&os.ModeSymlink != 0:
-		target, _ := os.Readlink(p)
+		target, _ := os.Readlink(hostPath(p))
 		st.hash = "link:" + target
 	case fi.Size() > fileHashMax:
 		st.hash = "size:" + strconv.FormatInt(st.size, 10) + "@" + strconv.FormatInt(st.mtime, 10)
 	default:
-		f, err := os.Open(p)
+		f, err := os.Open(hostPath(p))
 		if err != nil {
 			// Unreadable without root (/etc/shadow): compare size and mtime.
 			c.a.once("files-unreadable", "a watched file is unreadable; comparing its size and time only", "path", p, "err", err)
@@ -132,12 +132,12 @@ func fileWatchList() []string {
 	add := func(dir string, depth int) {
 		var walk func(string, int)
 		walk = func(dir string, depth int) {
-			entries, err := os.ReadDir(dir)
+			entries, err := os.ReadDir(hostPath(dir))
 			if err != nil {
 				return
 			}
 			for _, e := range entries {
-				p := filepath.Join(dir, e.Name())
+				p := dir + "/" + e.Name()
 				if e.IsDir() {
 					if depth > 0 {
 						walk(p, depth-1)
@@ -156,8 +156,10 @@ func fileWatchList() []string {
 		add(d, 1)
 	}
 	for _, pat := range []string{"/etc/systemd/system/*.service", "/etc/systemd/system/*.timer"} {
-		m, _ := filepath.Glob(pat)
-		out = append(out, m...)
+		m, _ := filepath.Glob(hostPath(pat))
+		for _, p := range m {
+			out = append(out, fromHost(p))
+		}
 	}
 	if len(out) > fileWatchMax {
 		out = out[:fileWatchMax]

@@ -13,15 +13,16 @@ import (
 )
 
 // FS is where /proc and /sys are. HOST_PROC and HOST_SYS move them, as for
-// gopsutil, so the agent can watch the host from a container
+// gopsutil, so the agent can watch the host from a container. Root is the
+// host's filesystem from HOST_ROOT, used to find the host's nvidia-smi
 type FS struct {
-	Proc, Sys string
-	linux     bool
+	Proc, Sys, Root string
+	linux           bool
 }
 
 // DefaultFS is the running system's /proc and /sys, read only on Linux
 func DefaultFS() FS {
-	return FS{Proc: envOr("HOST_PROC", "/proc"), Sys: envOr("HOST_SYS", "/sys"), linux: runtime.GOOS == "linux"}
+	return FS{Proc: envOr("HOST_PROC", "/proc"), Sys: envOr("HOST_SYS", "/sys"), Root: envOr("HOST_ROOT", "/"), linux: runtime.GOOS == "linux"}
 }
 
 // FixtureFS reads a Linux tree copied under root on any OS, for tests

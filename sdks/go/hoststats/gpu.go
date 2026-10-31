@@ -118,23 +118,33 @@ var nvidiaPaths = []string{
 	`C:\Windows\System32\nvidia-smi.exe`, `C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe`,
 }
 
-// findNvidiaSMI is nvidia-smi's path, or "" without one
-func findNvidiaSMI() string {
+// findNvidiaSMI is how to run nvidia-smi, or "" without one. Failing a local
+// one, a host mounted at root runs its own through chroot
+func findNvidiaSMI(root string) (string, []string) {
 	if p, err := exec.LookPath("nvidia-smi"); err == nil {
-		return p
+		return p, nil
 	}
 	for _, p := range nvidiaPaths {
 		if filepath.IsAbs(p) && fileExists(p) {
-			return p
+			return p, nil
 		}
 	}
-	return ""
+	if root == "" || filepath.Clean(root) == string(filepath.Separator) {
+		return "", nil
+	}
+	for _, p := range nvidiaPaths {
+		if strings.HasPrefix(p, "/") && fileExists(filepath.Join(root, p)) {
+			return "chroot", []string{root, p}
+		}
+	}
+	return "", nil
 }
 
 // gpuReader runs nvidia-smi once per sample and reads AMD cards from sysfs
 type gpuReader struct {
 	fs       FS
 	smi      string
+	smiArgs  []string
 	smiFound time.Time
 	failures int
 	skipTill time.Time
@@ -168,14 +178,19 @@ func runCommand(ctx context.Context, name string, args ...string) ([]byte, error
 	return exec.CommandContext(ctx, name, args...).Output()
 }
 
+func (g *gpuReader) args(a ...string) []string {
+	return append(append([]string(nil), g.smiArgs...), a...)
+}
+
 // read takes one reading of every GPU
 func (g *gpuReader) read(now time.Time) []GPU {
 	var out []GPU
 	if g.smi == "" && now.Sub(g.smiFound) > time.Hour && (runtime.GOOS == "linux" || runtime.GOOS == "windows") {
-		g.smi, g.smiFound = findNvidiaSMI(), now
+		g.smi, g.smiArgs = findNvidiaSMI(g.fs.Root)
+		g.smiFound = now
 	}
 	if g.smi != "" && now.After(g.skipTill) {
-		b, err := g.run(context.Background(), g.smi, "--query-gpu="+NvidiaQuery, "--format=csv,noheader,nounits")
+		b, err := g.run(context.Background(), g.smi, g.args("--query-gpu="+NvidiaQuery, "--format=csv,noheader,nounits")...)
 		if err != nil {
 			g.failures++
 			g.skipTill = now.Add(min(time.Duration(g.failures)*time.Minute, 10*time.Minute))
@@ -197,7 +212,7 @@ func (g *gpuReader) processes(ctx context.Context) []GPUProcess {
 	if g.smi == "" || time.Now().Before(g.skipTill) {
 		return nil
 	}
-	b, err := g.run(ctx, g.smi, "--query-compute-apps=gpu_uuid,pid,process_name,used_memory", "--format=csv,noheader,nounits")
+	b, err := g.run(ctx, g.smi, g.args("--query-compute-apps=gpu_uuid,pid,process_name,used_memory", "--format=csv,noheader,nounits")...)
 	if err != nil {
 		return nil
 	}

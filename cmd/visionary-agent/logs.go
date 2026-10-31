@@ -262,7 +262,8 @@ func (s *logShipper) journald(ctx context.Context) {
 		} else {
 			args = append(args, "--since", "now")
 		}
-		cmd := exec.CommandContext(ctx, "journalctl", args...)
+		name, argv := hostArgv("journalctl", args)
+		cmd := exec.CommandContext(ctx, name, argv...)
 		out, err := cmd.StdoutPipe()
 		if err == nil {
 			err = cmd.Start()
@@ -344,8 +345,10 @@ func (s *logShipper) tailFiles(ctx context.Context, globs []string) {
 			scan = time.Now()
 			paths = paths[:0]
 			for _, g := range globs {
-				m, _ := filepath.Glob(g)
-				paths = append(paths, m...)
+				m, _ := filepath.Glob(hostPath(g))
+				for _, p := range m {
+					paths = append(paths, fromHost(p))
+				}
 			}
 		}
 		for _, p := range paths {
@@ -362,7 +365,7 @@ func (s *logShipper) tailFiles(ctx context.Context, globs []string) {
 // A file seen for the first time starts at its end; a rotated or truncated
 // one starts again from the beginning.
 func (s *logShipper) readFile(path string) {
-	fi, err := os.Stat(path)
+	fi, err := os.Stat(hostPath(path))
 	if err != nil || fi.IsDir() {
 		return
 	}
@@ -380,7 +383,7 @@ func (s *logShipper) readFile(path string) {
 	if fi.Size() == mark.Offset {
 		return
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(hostPath(path))
 	if err != nil {
 		return
 	}

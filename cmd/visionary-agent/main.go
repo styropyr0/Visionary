@@ -14,7 +14,9 @@
 //
 //	VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=... visionary-agent
 //
-// It runs on the host itself (deploy/agent/install.sh), not in a container.
+// It runs on the host itself (deploy/agent/install.sh), or in a container that
+// sees the host through HOST_ROOT, HOST_PROC, HOST_SYS and HOST_ETC (see
+// Dockerfile.agent).
 package main
 
 import (
@@ -149,7 +151,7 @@ func loadConfig(args []string) (config, error) {
 		c.report = c.interval
 	}
 	if c.host == "" {
-		c.host, _ = os.Hostname()
+		c.host = machineName()
 	}
 	c.host = hostName(c.host)
 	return c, nil
@@ -170,7 +172,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if !cfg.gpu {
 		opts = append(opts, visionary.WithoutGPU())
 	}
-	sampler := visionary.NewHostSampler(diskPath, cfg.interval, opts...)
+	sampler := visionary.NewHostSampler(hostPath(diskPath), cfg.interval, opts...)
 	a := newAgent(cfg, logger)
 	a.sampler = sampler
 	snd := newSender(cfg, logger)
@@ -229,9 +231,60 @@ func sample(h *visionary.HostSampler) agentapi.Sample {
 	return agentapi.Sample{At: at, Values: values, GPUs: gpus(h.GPUs())}
 }
 
-// procPath is a path under /proc.
+// hostRoot is where the host's filesystem is: "/" on the host itself, e.g.
+// "/host" in a container started with -v /:/host:ro
+var hostRoot = rootFrom(os.Getenv("HOST_ROOT"))
+
+func rootFrom(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "/"
+	}
+	if c := filepath.Clean(v); c != string(filepath.Separator) {
+		return c
+	}
+	return "/"
+}
+
+// hostPath is p, a path on the host, as this process sees it
+func hostPath(p string) string {
+	if hostRoot == "/" {
+		return p
+	}
+	return filepath.Join(hostRoot, p)
+}
+
+// fromHost turns a path under hostRoot back into the host's own path
+func fromHost(p string) string {
+	if hostRoot == "/" {
+		return p
+	}
+	rel, err := filepath.Rel(hostRoot, p)
+	if rel == "." {
+		return "/"
+	}
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return p
+	}
+	return "/" + filepath.ToSlash(rel)
+}
+
+// procPath is a path under the host's /proc
 func procPath(parts ...string) string {
-	return filepath.Join(append([]string{"/proc"}, parts...)...)
+	return filepath.Join(append([]string{envStr("HOST_PROC", "/proc")}, parts...)...)
+}
+
+// machineName is the host's /etc/hostname in a container, else the kernel's name
+func machineName() string {
+	if hostRoot != "/" {
+		if b, err := os.ReadFile(hostPath("/etc/hostname")); err == nil {
+			if n := strings.TrimSpace(string(b)); n != "" {
+				return n
+			}
+		}
+	}
+	n, _ := os.Hostname()
+	return n
 }
 
 func fallbackStr(v, def string) string {

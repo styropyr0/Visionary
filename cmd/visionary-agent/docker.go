@@ -76,12 +76,7 @@ func (d *dockerCollector) socket() string {
 	if d.sock != "" {
 		return d.sock
 	}
-	candidates := dockerSockets
-	if d.setting != "" {
-		candidates = []string{d.setting}
-	} else if h := os.Getenv("DOCKER_HOST"); strings.HasPrefix(h, "unix://") {
-		candidates = append([]string{strings.TrimPrefix(h, "unix://")}, candidates...)
-	}
+	candidates := socketCandidates(d.setting)
 	for _, p := range candidates {
 		// A configured path is trusted to be a socket; found ones must be.
 		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && (d.setting != "" || fi.Mode()&os.ModeSocket != 0) {
@@ -101,6 +96,25 @@ func (d *dockerCollector) socket() string {
 		d.a.once("docker-missing", "container engine socket not found", "socket", d.setting)
 	}
 	return ""
+}
+
+// socketCandidates are the paths to try in order. In a container the host's
+// sockets under hostRoot come after one mounted at the usual path, and
+// /run first since /var/run is often an absolute link to it
+func socketCandidates(setting string) []string {
+	if setting != "" {
+		return []string{setting}
+	}
+	out := append([]string(nil), dockerSockets...)
+	if h := os.Getenv("DOCKER_HOST"); strings.HasPrefix(h, "unix://") {
+		out = append([]string{strings.TrimPrefix(h, "unix://")}, out...)
+	}
+	if hostRoot != "/" {
+		for _, p := range []string{"/run/docker.sock", "/var/run/docker.sock", "/run/podman/podman.sock"} {
+			out = append(out, hostPath(p))
+		}
+	}
+	return out
 }
 
 func (d *dockerCollector) get(ctx context.Context, path string, out any) error {

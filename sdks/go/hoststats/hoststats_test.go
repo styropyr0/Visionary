@@ -291,3 +291,28 @@ func TestOffLinuxReadsNothing(t *testing.T) {
 		t.Errorf("read off Linux: %v", v)
 	}
 }
+
+func TestFindNvidiaSMIUnderHostRoot(t *testing.T) {
+	if p, _ := findNvidiaSMI(""); p != "" {
+		t.Skip("this machine has its own nvidia-smi")
+	}
+	root := t.TempDir()
+	if p, _ := findNvidiaSMI(root); p != "" {
+		t.Fatalf("found %q under an empty root", p)
+	}
+	smi := filepath.Join(root, "usr", "bin", "nvidia-smi")
+	if err := os.MkdirAll(filepath.Dir(smi), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(smi, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name, args := findNvidiaSMI(root)
+	if name != "chroot" || len(args) != 2 || args[0] != root || args[1] != "/usr/bin/nvidia-smi" {
+		t.Fatalf("got %q %q", name, args)
+	}
+	g := &gpuReader{smi: name, smiArgs: args}
+	if got := g.args("-L"); len(got) != 3 || got[2] != "-L" {
+		t.Fatalf("args %q", got)
+	}
+}

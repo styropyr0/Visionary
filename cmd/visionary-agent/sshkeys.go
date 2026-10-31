@@ -40,7 +40,7 @@ func (c *sshKeyCollector) collect() []agentapi.Event {
 	owners := map[string]string{}
 	names := passwdNames()
 	for _, path := range authorizedKeyFiles() {
-		f, err := os.Open(path)
+		f, err := os.Open(hostPath(path))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -121,12 +121,12 @@ func homeOwner(path string) string {
 // and of accounts with a UID of 1000 or more.
 func authorizedKeyFiles() []string {
 	homes := map[string]bool{"/root": true}
-	if dirs, err := filepath.Glob("/home/*"); err == nil {
+	if dirs, err := filepath.Glob(hostPath("/home/*")); err == nil {
 		for _, d := range dirs {
-			homes[d] = true
+			homes[fromHost(d)] = true
 		}
 	}
-	if b, err := os.ReadFile("/etc/passwd"); err == nil {
+	if b, err := os.ReadFile(hostPath("/etc/passwd")); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			f := strings.Split(line, ":")
 			if len(f) < 6 || !strings.HasPrefix(f[5], "/") || f[5] == "/" {

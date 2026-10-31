@@ -277,10 +277,10 @@ func (a *agent) processes(now time.Time) []agentapi.Process {
 	return out
 }
 
-// passwdNames maps uids to user names from /etc/passwd.
+// passwdNames maps uids to user names from the host's /etc/passwd
 func passwdNames() map[uint32]string {
 	out := map[uint32]string{}
-	b, err := os.ReadFile("/etc/passwd")
+	b, err := os.ReadFile(hostPath("/etc/passwd"))
 	if err != nil {
 		return out
 	}
@@ -329,10 +329,10 @@ func (a *agent) mounts() []agentapi.Mount {
 			if !want[mp] {
 				continue
 			}
-		} else if pseudoFS[p.Fstype] || underAny(mp, pseudoMounts) || devices[p.Device] {
+		} else if pseudoFS[p.Fstype] || underAny(mp, pseudoMounts) || (hostRoot != "/" && underAny(mp, []string{hostRoot})) || devices[p.Device] {
 			continue
 		}
-		u, err := disk.Usage(mp)
+		u, err := disk.Usage(hostPath(mp))
 		if err != nil || u.Total == 0 {
 			continue
 		}
@@ -414,8 +414,7 @@ func (a *agent) units(ctx context.Context) []agentapi.Unit {
 func hostCommand(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "SYSTEMD_COLORS=0"}
+	cmd := hostExec(ctx, name, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -427,6 +426,22 @@ func hostCommand(ctx context.Context, timeout time.Duration, name string, args .
 		return out, err
 	}
 	return append(out, stderr.Bytes()...), nil
+}
+
+// hostExec builds a command for a program of the host: run directly on the
+// host, through chroot into hostRoot in a container
+func hostExec(ctx context.Context, name string, args ...string) *exec.Cmd {
+	name, args = hostArgv(name, args)
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "SYSTEMD_COLORS=0"}
+	return cmd
+}
+
+func hostArgv(name string, args []string) (string, []string) {
+	if hostRoot == "/" {
+		return name, args
+	}
+	return "chroot", append([]string{hostRoot, name}, args...)
 }
 
 // commandError is a non-zero exit, with what the command printed.
