@@ -12,7 +12,7 @@
 [![Image on GHCR](https://img.shields.io/badge/image-ghcr.io%2Fstyropyr0%2Fvisionary-2496ED?logo=docker&logoColor=white)](https://github.com/styropyr0/Visionary/pkgs/container/visionary)
 [![Last commit](https://img.shields.io/github/last-commit/styropyr0/Visionary)](https://github.com/styropyr0/Visionary/commits/main)
 [![Stars](https://img.shields.io/github/stars/styropyr0/Visionary?style=flat)](https://github.com/styropyr0/Visionary/stargazers)
-[![License: VNCL v1.0](https://img.shields.io/badge/license-VNCL%20v1.0-orange)](LICENSE)
+[![License: VSAL v2.0](https://img.shields.io/badge/license-VSAL%20v2.0-blue)](LICENSE)
 
 Self-hosted monitoring for your APIs, servers and frontends: requests, traces,
 logs, errors, metrics, uptime, alerts and an AI analyst that answers *why*.
@@ -623,6 +623,15 @@ containers behind Caddy).
 On D1, which bills by rows read, panels show their rows read under Inspect.
 Rollups keep long ranges cheap; a short range reads raw rows, so keep
 auto-refresh for short ranges.
+
+## Licence
+
+Visionary is source-available under the [Visionary Source-Available License
+(VSAL) v2.0](LICENSE). You can use, run and modify it for free for any purpose,
+including in a company and in production, to monitor your own applications,
+even ones that make money, and you can ship the SDKs inside your apps. You
+can't sell it, charge for access to it, or offer it to others as a hosted or
+managed service; that needs a separate agreement with the author.
 
 ## Troubleshooting
 

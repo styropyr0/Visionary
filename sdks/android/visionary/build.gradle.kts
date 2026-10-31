@@ -89,7 +89,7 @@ extensions.configure<MavenPublishBaseExtension> {
         url.set("https://github.com/styropyr0/Visionary/tree/main/sdks/android")
         licenses {
             license {
-                name.set("Visionary Non-Commercial License (VNCL) v1.0")
+                name.set("Visionary Source-Available License (VSAL) v2.0")
                 url.set("https://github.com/styropyr0/Visionary/blob/main/LICENSE")
                 distribution.set("repo")
             }
