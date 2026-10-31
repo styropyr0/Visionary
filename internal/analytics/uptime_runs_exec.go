@@ -55,10 +55,9 @@ func (s *Server) executeBatch(b runBatch, items []runItem, checks []UptimeCheck,
 	}
 }
 
-// runOne runs one check, always from the server location. Against its own
-// URL, on a check that runs from the server, the result is recorded like a
-// scheduled one; otherwise it is kept in the batch only, so a check that
-// runs elsewhere never gets results from a location it doesn't use.
+// runOne runs one check from the server location. Against its own URL, on a
+// check that runs from the server, the result is recorded like a scheduled one;
+// otherwise it stays in the batch only.
 func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, override string) runItem {
 	if c.Kind == "playwright" {
 		return runItem{Status: "skipped", Error: "Playwright checks report from your test runs; they can't be started here"}
@@ -124,7 +123,6 @@ func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, o
 }
 
 var (
-	// probeKinds run as one probe, with uptimecore.
 	probeKinds = map[string]bool{"http": true, "api": true, "tcp": true, "dns": true, "ping": true, "ssl": true}
 	// hostKinds point at a host rather than a URL.
 	hostKinds = map[string]bool{"tcp": true, "dns": true, "ping": true, "ssl": true, "heartbeat": true}
@@ -173,8 +171,6 @@ func (s *Server) saveItem(ctx context.Context, id int64, it runItem) {
 		s.logger.Warn("uptime run result not saved", "item", id, "err", err)
 	}
 }
-
-// --- base URL override ---
 
 // parseOverride checks an override origin against every picked check: it
 // must be on the same site as the check's own URL, or match the hosts an
@@ -255,8 +251,6 @@ func withOrigin(c UptimeCheck, origin string) (UptimeCheck, error) {
 	if err := json.Unmarshal([]byte(out), &next); err != nil {
 		return c, err
 	}
-	// Cookie domains and wildcard trace origins carry no scheme, so the
-	// rewrite above misses them.
 	o, _ := url.Parse(origin)
 	for i, st := range next.Steps {
 		if st.Action == "set_cookie" && st.Scope != "" && !strings.Contains(st.Scope, "://") && siteOf(strings.TrimPrefix(st.Scope, ".")) == site {
@@ -271,10 +265,8 @@ func withOrigin(c UptimeCheck, origin string) (UptimeCheck, error) {
 	return next, nil
 }
 
-// originRe finds origins inside JSON strings, with the character after them.
 var originRe = regexp.MustCompile(`(https?://[A-Za-z0-9.\-\[\]:]+)([/?#"\\])`)
 
-// overrideURL is u with its origin replaced, for showing where a run went.
 func overrideURL(u, origin string) string {
 	if origin == "" {
 		return u

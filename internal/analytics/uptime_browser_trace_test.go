@@ -46,7 +46,6 @@ func browserRunner(t *testing.T) (*Server, *uptimeRunner) {
 	return s, u
 }
 
-// playCheck normalizes c and plays it once; it must pass unless fail is set.
 func playCheck(t *testing.T, u *uptimeRunner, c UptimeCheck, fail bool) (uptimeResult, browserRun) {
 	t.Helper()
 	if c.Name == "" {

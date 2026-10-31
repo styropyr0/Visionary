@@ -25,8 +25,6 @@ func (b *dsBase) Configure(_ context.Context, req datasource.ConfigureRequest, r
 	b.c = c
 }
 
-// --- visionary_services ---
-
 type servicesDataSource struct{ dsBase }
 
 func newServicesDataSource() datasource.DataSource { return &servicesDataSource{} }
@@ -61,8 +59,6 @@ func (d *servicesDataSource) Read(ctx context.Context, _ datasource.ReadRequest,
 	m := servicesModel{ID: types.StringValue("services"), Services: optStringList(append([]string{}, out.Services...), types.ListUnknown(types.StringType))}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
-
-// --- visionary_alert_channel ---
 
 type alertChannelDataSource struct{ dsBase }
 

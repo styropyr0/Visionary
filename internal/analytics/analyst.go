@@ -71,8 +71,7 @@ type AnalystPanel struct {
 	Query       string  `json:"query"`
 	Viz         Viz     `json:"viz"`
 	Result      *Result `json:"result"`
-	// PromQL marks Query as a PromQL expression rather than SQL.
-	PromQL bool `json:"promql,omitempty"`
+	PromQL      bool    `json:"promql,omitempty"`
 }
 
 // sse writes server-sent events and flushes each one.

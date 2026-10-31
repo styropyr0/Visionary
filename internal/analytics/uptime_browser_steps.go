@@ -20,7 +20,6 @@ var (
 	browserPerms  = map[string]bool{"geolocation": true, "notifications": true, "clipboard": true}
 )
 
-// validateMore checks the fields of the newer step types.
 func (b *BrowserStep) validateMore(files map[string]bool) error {
 	if len(b.Name) > 200 || len(b.Attr) > 100 || len(b.Regex) > 500 || len(b.Target) > 500 || len(b.Scope) > 2048 {
 		return errors.New("a field is too long")
@@ -60,7 +59,6 @@ func (b *BrowserStep) validateMore(files map[string]bool) error {
 			return fmt.Errorf("no file named %q is stored with the check", b.Name)
 		}
 	case "frame":
-		// No selector goes back to the page itself.
 	case "set_cookie":
 		if !cookieNameRe.MatchString(b.Name) {
 			return errors.New("the cookie needs a name of letters, digits and -_.")
@@ -99,7 +97,6 @@ func (b *BrowserStep) validateMore(files map[string]bool) error {
 	return nil
 }
 
-// prevFiles are the stored files of the check being updated.
 func prevFiles(prev *UptimeCheck) []BrowserFile {
 	if prev == nil {
 		return nil
@@ -107,7 +104,6 @@ func prevFiles(prev *UptimeCheck) []BrowserFile {
 	return prev.Files
 }
 
-// refs are the variables a step uses.
 func (b BrowserStep) refs() []string {
 	var out []string
 	for _, f := range []string{b.Selector, b.Text, b.Value, b.Target, b.Scope, b.Name} {

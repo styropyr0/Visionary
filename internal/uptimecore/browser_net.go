@@ -8,19 +8,15 @@ import (
 	"github.com/chromedp/cdproto/network"
 )
 
-// Each run keeps its requests for a waterfall and a HAR download: what was
-// asked, how it answered, when and for how long. URLs lose credentials and
-// secret-looking query values, and secrets are masked, as elsewhere.
-// Optional step screenshots are small and capped per run.
+// Each run keeps its requests for a waterfall and HAR download. URLs lose
+// credentials and secret-looking query values; step screenshots are capped per run.
 
-// Caps on what one run keeps.
 const (
 	MaxRequests     = 300
 	MaxStepShot     = 60 << 10
 	StepShotsPerRun = 1 << 20
 )
 
-// NetRequest is one request of a run.
 type NetRequest struct {
 	URL        string  `json:"url"`
 	Method     string  `json:"method"`
@@ -33,10 +29,9 @@ type NetRequest struct {
 	Failed     bool    `json:"failed,omitempty"`
 	Error      string  `json:"error,omitempty"`
 
-	start, end float64 // monotonic seconds
+	start, end float64
 }
 
-// request is the entry of id, made on whichever event comes first.
 func (st *runState) request(id network.RequestID) *NetRequest {
 	if r, ok := st.reqs[id]; ok {
 		return r
@@ -57,7 +52,6 @@ func (st *runState) netSent(ev *network.EventRequestWillBeSent) {
 		st.wallBase = ev.WallTime.Float64() - ev.Timestamp.Float64()
 	}
 	if prev, ok := st.reqs[ev.RequestID]; ok && ev.RedirectResponse != nil {
-		// A redirect ends the previous hop; the next one is a new entry.
 		prev.Status, prev.MIME, prev.end = ev.RedirectResponse.Status, ev.RedirectResponse.MimeType, ev.Timestamp.Float64()
 		delete(st.reqs, ev.RequestID)
 	}

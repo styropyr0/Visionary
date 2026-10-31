@@ -21,7 +21,6 @@ import (
 
 const oidcCookie = "visionary_oidc"
 
-// ssoHTTP calls identity providers: discovery, keys, tokens, metadata.
 var ssoHTTP = &http.Client{Timeout: 15 * time.Second}
 
 type oidcClient struct {
@@ -30,7 +29,6 @@ type oidcClient struct {
 	oauth    oauth2.Config
 }
 
-// oidcFlow is what the cookie carries between the start and the callback.
 type oidcFlow struct {
 	Provider string `json:"p"`
 	State    string `json:"s"`
@@ -80,8 +78,6 @@ func newOIDCClient(ctx context.Context, p *ssoProvider, secret, publicURL string
 	q.urls(publicURL)
 	return &oidcClient{
 		provider: prov,
-		// Keys are fetched from the provider's jwks_uri and refreshed when
-		// a token is signed with one not seen yet.
 		verifier: prov.Verifier(&oidc.Config{ClientID: p.ClientID}),
 		oauth: oauth2.Config{
 			ClientID: p.ClientID, ClientSecret: secret, Endpoint: prov.Endpoint(),
@@ -103,7 +99,6 @@ func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request, st *ssoSetup,
 	http.Redirect(w, r, c.oauth.AuthCodeURL(f.State, oauth2.S256ChallengeOption(f.Verifier), oidc.Nonce(f.Nonce)), http.StatusFound)
 }
 
-// handleOIDCCallback is where the provider sends people back with a code.
 func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	var f oidcFlow
 	ck, err := r.Cookie(oidcCookie)
@@ -190,7 +185,6 @@ func (s *Server) oidcIdentity(ctx context.Context, st *ssoSetup, p *ssoProvider,
 		return nil, fmt.Errorf("the ID token's claims can't be read: %v", err)
 	}
 	if _, ok := claims["email"]; !ok && c.provider.UserInfoEndpoint() != "" {
-		// Some providers put the email only in userinfo.
 		if ui, err := c.provider.UserInfo(cctx, oauth2.StaticTokenSource(tok)); err == nil && ui.Subject == idt.Subject {
 			extra := map[string]any{}
 			if ui.Claims(&extra) == nil {

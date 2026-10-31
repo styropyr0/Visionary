@@ -23,7 +23,6 @@ func metricsTestServer(t *testing.T) *Server {
 }
 
 func TestSnappyDecode(t *testing.T) {
-	// "abc" as a literal, then a 6-byte copy from 3 back.
 	got, err := snappyDecode([]byte{9, 0x08, 'a', 'b', 'c', 0x09, 3}, 100)
 	if err != nil || string(got) != "abcabcabc" {
 		t.Fatalf("got %q, %v", got, err)
@@ -48,8 +47,6 @@ func TestBucketQuantile(t *testing.T) {
 	}
 }
 
-// Prometheus remote_write: a counter, a gauge and a classic histogram, sent
-// twice so the cumulative ones have a baseline.
 func TestRemoteWrite(t *testing.T) {
 	s := metricsTestServer(t)
 	base := time.Now().Add(-time.Minute).Truncate(time.Second)
@@ -116,7 +113,6 @@ func TestRemoteWrite(t *testing.T) {
 	check(metricQuery{Name: "room_temp", Agg: "max"}, 22.5)
 	check(metricQuery{Name: "latency_seconds", Agg: "count"}, 20)
 	check(metricQuery{Name: "latency_seconds", Agg: "avg"}, 6.0/20)
-	// 10 of the 20 new observations are <= 0.1, 13 more by 1: p50 is the 0.1 bound.
 	check(metricQuery{Name: "latency_seconds", Agg: "p50"}, 0.1)
 
 	r := httptest.NewRequest("POST", "/api/v1/write", nil)
@@ -127,7 +123,6 @@ func TestRemoteWrite(t *testing.T) {
 	}
 }
 
-// snappyLiteral encodes b as one snappy literal, which every decoder reads.
 func snappyLiteral(b []byte) []byte {
 	out := protowire.AppendVarint(nil, uint64(len(b)))
 	n := len(b) - 1
@@ -157,7 +152,6 @@ func TestOTLPCustomMetrics(t *testing.T) {
 					DataPoints: []*metricspb.NumberDataPoint{{Attributes: attrs, TimeUnixNano: ns, Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: depth}}}}}},
 				{Name: "job.duration", Unit: "ms", Data: &metricspb.Metric_Histogram{Histogram: &metricspb.Histogram{AggregationTemporality: metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA,
 					DataPoints: []*metricspb.HistogramDataPoint{{TimeUnixNano: ns, Count: count, Sum: &sum, ExplicitBounds: []float64{10, 100}, BucketCounts: hist}}}}},
-				// A system metric keeps going to system_metrics.
 				{Name: "system.cpu.load_average.1m", Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{
 					DataPoints: []*metricspb.NumberDataPoint{{TimeUnixNano: ns, Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: 1.5}}}}}},
 			}}},
@@ -190,7 +184,6 @@ func TestOTLPCustomMetrics(t *testing.T) {
 		t.Fatal("p95 of a gauge should be refused")
 	}
 
-	// The alert reads the same numbers.
 	rule := alertRule{ID: 1, Kind: "threshold", Spec: ruleSpec{Metric: "custom_metric", Op: ">", Threshold: 5, Window: "1h",
 		MetricQuery: &metricQuery{Name: "jobs.done", Labels: map[string]string{"queue": "mail"}}}}
 	obs, err := s.observe(ctx, rule, time.Now())

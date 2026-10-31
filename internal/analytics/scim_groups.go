@@ -51,7 +51,6 @@ func (s *Server) scimManagesRoles() bool {
 	return c.RoleMap != "" || c.DefaultRole != ""
 }
 
-// scimRole is the role the named groups give.
 func (s *Server) scimRole(groupNames []string) role {
 	c := s.ssoSetup().cfg.SCIM
 	m, err := newRoleMapping(c.RoleMap, nil)
@@ -61,7 +60,6 @@ func (s *Server) scimRole(groupNames []string) role {
 	return max(m.resolve(groupNames), parseRole(c.DefaultRole))
 }
 
-// scimApplyRoles sets the role of each person from their groups.
 func (s *Server) scimApplyRoles(r *http.Request, groups []scimGroup, userIDs []string) {
 	if !s.scimManagesRoles() {
 		return
@@ -91,7 +89,6 @@ func (s *Server) scimApplyRoles(r *http.Request, groups []scimGroup, userIDs []s
 	}
 }
 
-// scimForget takes a deleted person out of every group.
 func (s *Server) scimForget(ctx context.Context, userID string) error {
 	groups, err := s.scimGroups(ctx)
 	if err != nil {
@@ -140,7 +137,6 @@ func (s *Server) scimGroupView(g *scimGroup, names map[string]string) map[string
 	return v
 }
 
-// scimNames maps user ids to usernames, for members' display.
 func (s *Server) scimNames(ctx context.Context) (map[string]string, error) {
 	list, err := s.scimUsers(ctx, "", "")
 	if err != nil {
@@ -316,7 +312,6 @@ func (s *Server) handleSCIMReplaceGroup(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// memberFilter matches the path members[value eq "id"].
 var memberFilter = regexp.MustCompile(`(?i)^members\[\s*value\s+eq\s+"([^"]*)"\s*\]$`)
 
 func (s *Server) handleSCIMPatchGroup(w http.ResponseWriter, r *http.Request) {

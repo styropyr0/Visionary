@@ -46,7 +46,6 @@ ORDER BY created_at DESC LIMIT 1 OFFSET `+strconv.Itoa(p.keep), checkID)
 	return nil
 }
 
-// traceHasRows reports whether a backend recorded anything under the trace.
 func (s *Server) traceHasRows(ctx context.Context, traceID string) bool {
 	if traceID == "" {
 		return false

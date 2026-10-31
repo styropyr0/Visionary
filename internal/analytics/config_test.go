@@ -71,7 +71,6 @@ func TestConfigExportImport(t *testing.T) {
 		t.Fatalf("unexpected export:\n%s", doc)
 	}
 
-	// created after the export: on a shared test database it wipes the source
 	dst := logsTestServer(t, nil)
 	b := configMux(dst, "admin")
 	counts, changes := importDoc(t, b, doc, true)
@@ -87,7 +86,6 @@ func TestConfigExportImport(t *testing.T) {
 			skipped[c.Name] = true
 		}
 	}
-	// the webhook needs its URL and the API check its header, both left out
 	if !skipped["hook"] || !skipped["API"] || len(skipped) != 2 {
 		t.Fatalf("skipped %v", skipped)
 	}

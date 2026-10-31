@@ -10,15 +10,13 @@ import (
 	"time"
 )
 
-// Importing a configuration document. A dry run reports what would be
-// created, updated or left unchanged without writing anything; applying
-// makes those changes. Nothing is deleted: something missing from the file
-// is left alone.
+// Importing a configuration document. A dry run reports what would change
+// without writing; applying makes the changes. Nothing is ever deleted.
 
 type configChange struct {
 	Type    string   `json:"type"`
 	Name    string   `json:"name"`
-	Action  string   `json:"action"` // create, update, unchanged or skip
+	Action  string   `json:"action"`
 	Fields  []string `json:"fields,omitempty"`
 	Warning string   `json:"warning,omitempty"`
 }
@@ -86,7 +84,6 @@ func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
 			ci.panelID[p.Title] = p.ID
 		}
 	}
-	// Each part may refer to the ones before it.
 	steps := []func(configDoc) error{ci.channels, ci.locations, ci.checks, ci.rules, ci.silences, ci.panels, ci.dashboards, ci.logViews, ci.pages}
 	for _, step := range steps {
 		if err := step(doc); err != nil {
@@ -122,7 +119,6 @@ func (ci *configImport) skip(typ, name, why string) {
 	ci.changes = append(ci.changes, configChange{Type: typ, Name: name, Action: "skip", Warning: why})
 }
 
-// warn adds a warning to the last change noted.
 func (ci *configImport) warn(msg string) {
 	if n := len(ci.changes); n > 0 {
 		c := &ci.changes[n-1]
@@ -374,8 +370,6 @@ func (ci *configImport) checks(doc configDoc) error {
 	return nil
 }
 
-// ruleFrom builds the rule a file entry describes, with what it refers to
-// resolved, and the form it is compared in.
 func (ci *configImport) ruleFrom(in configRule, inFile map[string]bool) (alertRule, configRule, []string, error) {
 	name := strings.TrimSpace(in.Name)
 	chans, chanNames, missing := resolve(in.Channels, ci.chanID, "no channel")
@@ -479,7 +473,6 @@ func (ci *configImport) rules(doc configDoc) error {
 			ci.laterDeps[rule.ID] = form.DependsOn
 		}
 	}
-	// Dependencies on rules that came later in the file.
 	for id, deps := range ci.laterDeps {
 		rule, err := ci.s.getRule(ctx, id)
 		if err != nil || rule == nil {

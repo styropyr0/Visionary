@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// client calls Visionary's HTTP API with an API key.
 type client struct {
 	base string
 	key  string
@@ -29,7 +28,6 @@ func newClient(base, key, version string) *client {
 	}
 }
 
-// apiError is an answer other than 2xx, with the server's message.
 type apiError struct {
 	Status  int
 	Message string

@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// base is what every resource shares: the API client and import by id.
 type base struct {
 	c *client
 }
@@ -54,10 +53,9 @@ func parseID(v types.String) (int64, error) {
 	return strconv.ParseInt(v.ValueString(), 10, 64)
 }
 
-// The helpers below turn what the server answers into state. Optional
-// attributes that were left out stay null when the server holds the empty
-// value, so a plan stays clean; ref is the plan after a change, or the prior
-// state on a refresh.
+// The helpers below turn the server's answers into state. Optional attributes
+// stay null when the server holds the empty value, so a plan stays clean; ref
+// is the plan after a change, or the prior state on a refresh.
 
 func optString(v string, ref types.String) types.String {
 	if v == "" && ref.IsNull() {
@@ -152,7 +150,6 @@ func mapOf(ctx context.Context, m types.Map, diags *diag.Diagnostics) map[string
 	return out
 }
 
-// apiDiag reports a failed call.
 func apiDiag(diags *diag.Diagnostics, what string, err error) {
 	diags.AddError("Visionary: "+what, err.Error())
 }

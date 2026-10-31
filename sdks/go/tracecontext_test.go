@@ -55,7 +55,6 @@ func traceAgent() *Agent {
 	return a
 }
 
-// written returns the rows queued so far.
 func written(a *Agent) (entries []*entry, spans []*spanRecord) {
 	for {
 		select {
@@ -169,7 +168,6 @@ func TestTransportPropagates(t *testing.T) {
 		t.Fatal("the caller's request was changed")
 	}
 
-	// A traceparent the caller set is kept.
 	own := "00-" + strings.Repeat("a", 32) + "-" + strings.Repeat("b", 16) + "-00"
 	r2, _ := http.NewRequest("GET", down.URL, nil)
 	r2.Header.Set("traceparent", own)
@@ -195,7 +193,6 @@ func TestBackgroundKeepsTrace(t *testing.T) {
 		<-done
 	}))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
-	// The background span ends just after fn returns.
 	deadline := time.Now().Add(2 * time.Second)
 	var e *entry
 	var late []*spanRecord

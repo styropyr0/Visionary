@@ -20,17 +20,9 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Playwright checks are uptime checks of kind "playwright" whose runs are
-// reported, never started here: the visionary-playwright-reporter package
-// posts each test of a Playwright run in the customer's CI or on their own
-// host. Running customer code on this server would let any editor execute
-// code on it, so there is no scheduler for them. A check is keyed by its
-// Playwright project and title path (file › describe › test) and is made on
-// its first report unless it was declared first. Each run writes an
-// uptime_results row (uptime %, incidents, alerts and the status page work as
-// for other checks) and its steps and small attachments to
-// uptime_playwright_results. A check whose interval passes without a run is
-// stale: the watcher records a failed result, as a heartbeat would.
+// Playwright checks are reported, never run here: visionary-playwright-reporter
+// posts each test from the customer's CI or host. A check is keyed by project
+// and title path, and is stale when its interval passes without a run.
 
 const (
 	pwMaxBody       = 3 << 20
@@ -51,7 +43,6 @@ func init() {
 	scopedTables["UPTIME_PLAYWRIGHT_RESULTS"] = scopeRule{by: byCheck}
 }
 
-// PlaywrightTest names the test a playwright check follows.
 type PlaywrightTest struct {
 	Project string `json:"project"`
 	Title   string `json:"title"`
@@ -115,7 +106,6 @@ func (s *Server) uptimePlaywrightRoutes(mux *http.ServeMux) {
 func (c *UptimeCheck) normalizePlaywright() error {
 	c.Method, c.ExpectStatus, c.BodyContains, c.Headers, c.FollowRedirects = "GET", "200-299", "", map[string]string{}, true
 	c.Steps, c.Secrets, c.FinalScreenshot, c.TimeoutMs, c.BrowserOptions = nil, nil, false, 0, BrowserOptions{}
-	// Runs come from wherever the tests run, so there is no location to pick.
 	c.Locations, c.LocationRule, c.StatusShowLocations = []string{serverLocation}, "majority", false
 	if c.Playwright == nil {
 		return errors.New("a Playwright check needs its project and test title")
@@ -146,8 +136,6 @@ func (c *UptimeCheck) normalizePlaywright() error {
 	}
 	return nil
 }
-
-// --- the extras every check carries: tags, and a playwright check's test ---
 
 func (s *Server) loadCheckExtras(ctx context.Context, checks []UptimeCheck) error {
 	if err := s.loadCheckTags(ctx, checks); err != nil {
@@ -206,8 +194,6 @@ func (s *Server) deleteCheckExtras(ctx context.Context, id int64) {
 	}
 }
 
-// --- reports from the reporter ---
-
 type pwRun struct {
 	Project           string         `json:"project"`
 	Title             string         `json:"title"`
@@ -250,7 +236,7 @@ type pwOutcome struct {
 	Project string `json:"project"`
 	Title   string `json:"title"`
 	CheckID int64  `json:"check_id,omitempty"`
-	Status  string `json:"status"` // recorded, created, skipped, paused, error
+	Status  string `json:"status"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -445,11 +431,8 @@ func (s *Server) recordPlaywrightDetail(ctx context.Context, c UptimeCheck, res 
 	return s.db.Exec(ctx, "INSERT INTO uptime_playwright_results ("+strings.Join(cols, ", ")+") VALUES (?"+strings.Repeat(", ?", len(cols)-1)+")", vals...)
 }
 
-// --- stale checks ---
-
-// watchPlaywright records a failure for each playwright check whose expected
-// interval passed without a run, once per interval, so incidents and alerts
-// open as they would for a check that stopped answering.
+// watchPlaywright records a failure, once per interval, for each playwright
+// check that went a full interval without a run.
 func (s *Server) watchPlaywright(ctx context.Context) {
 	tick := time.NewTicker(pwStaleTick)
 	defer tick.Stop()
@@ -525,8 +508,6 @@ func formatEvery(d time.Duration) string {
 	}
 	return d.String()
 }
-
-// --- the check page ---
 
 func (s *Server) handlePlaywrightRuns(w http.ResponseWriter, r *http.Request) {
 	id, ok := checkID(w, r)
@@ -653,7 +634,6 @@ FROM uptime_playwright_results WHERE id = ? AND check_id = ?`, rid, id)
 	})
 }
 
-// handlePlaywrightTrace downloads a run's trace, to open in trace.playwright.dev.
 func (s *Server) handlePlaywrightTrace(w http.ResponseWriter, r *http.Request) {
 	id, rid, ok := pwRunID(w, r)
 	if !ok {

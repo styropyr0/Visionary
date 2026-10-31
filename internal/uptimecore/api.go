@@ -15,19 +15,14 @@ import (
 	"time"
 )
 
-// API checks play an ordered list of HTTP requests. A request can extract
-// values from its response into variables, used by later requests as
-// {{var.NAME}}, and assert on its status, JSON body, headers, body text and
-// response time. Secrets ({{secret.NAME}}) are kept like browser secrets and
-// masked in everything a run records. Every request goes through the same
-// address guard as HTTP checks.
+// API checks play an ordered list of HTTP requests. Responses feed variables
+// ({{var.NAME}}) and assertions; secrets ({{secret.NAME}}) are masked in
+// everything a run records.
 
-// APIConfig is the settings of an API check.
 type APIConfig struct {
 	Requests []APIRequest `json:"requests"`
 }
 
-// APIRequest is one request of an API check.
 type APIRequest struct {
 	Name      string            `json:"name,omitempty"`
 	Method    string            `json:"method"`
@@ -265,7 +260,6 @@ func (a *APIAssertion) normalize() error {
 	return nil
 }
 
-// describe is how a failed assertion reads in results.
 func (a APIAssertion) describe() string {
 	op := map[string]string{"in": "in", "equals": "=", "not_equals": "≠", "contains": "contains", "not_contains": "does not contain",
 		"exists": "exists", "not_exists": "does not exist", "lt": "<", "lte": "≤", "gt": ">", "gte": "≥", "matches": "matches"}[a.Op]
@@ -287,8 +281,6 @@ func (a APIAssertion) describe() string {
 	}
 	return out
 }
-
-// --- JSON paths ---
 
 type pathStep struct {
 	key   string
@@ -391,9 +383,6 @@ func jsonText(v any) string {
 	return string(b)
 }
 
-// --- running ---
-
-// apiResponse is what assertions and extractions read.
 type apiResponse struct {
 	status int
 	header http.Header
@@ -415,7 +404,6 @@ func (r *apiResponse) json() (any, error) {
 	return r.doc, r.docErr
 }
 
-// check returns "" when the assertion holds, else what was found.
 func (a APIAssertion) check(r *apiResponse) (bool, string) {
 	var got string
 	present := true
@@ -547,7 +535,7 @@ type APIRequestResult struct {
 	Name       string  `json:"name"`
 	Method     string  `json:"method"`
 	URL        string  `json:"url"`
-	State      string  `json:"state"` // passed, failed, skipped
+	State      string  `json:"state"`
 	Status     int     `json:"status,omitempty"`
 	DurationMs float64 `json:"duration_ms,omitempty"`
 	Size       int     `json:"size,omitempty"`
@@ -568,7 +556,6 @@ func (rq APIRequest) label(i int) string {
 	return fmt.Sprintf("request %d", i+1)
 }
 
-// fill puts variables and secrets into a template.
 func fill(s string, vars, secrets map[string]string) (string, error) {
 	var missing error
 	out := TemplateRefRe.ReplaceAllStringFunc(s, func(m string) string {
@@ -608,7 +595,6 @@ func probeAPI(ctx context.Context, c Check, allowPrivate func() bool) (res Resul
 		}
 		rr.State = "passed"
 	}
-	// Secrets, and variables whose names look secret, never reach a record.
 	vals := make([]string, 0, len(c.Secrets)+len(vars))
 	for _, v := range c.Secrets {
 		vals = append(vals, v)

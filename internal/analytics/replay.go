@@ -9,18 +9,18 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Session replay: the browser SDK records the page (a DOM snapshot, then its
-// mutations, mouse, scroll and inputs, masked on the device) and posts it in
-// gzipped chunks to POST /api/ingest/replay. replay_chunks keeps each chunk
-// as base64 text, which every backend stores the same way; replay_sessions
-// indexes them by session. Off until Settings → Server → Ingest turns it on.
+// Session replay: the browser SDK posts page recordings (a DOM snapshot, then
+// mutations and input, masked on the device) as gzipped chunks to POST
+// /api/ingest/replay. replay_chunks stores each as base64 text and
+// replay_sessions indexes them by session. Off until Settings → Server → Ingest
+// turns it on.
 
 type replayState struct {
 	// bytes is the stored total, counted by the sweep and added to on ingest.
 	bytes atomic.Int64
 }
 
-var replayStates sync.Map // *Server -> *replayState
+var replayStates sync.Map
 
 func (s *Server) replay() *replayState {
 	v, _ := replayStates.LoadOrStore(s, &replayState{})

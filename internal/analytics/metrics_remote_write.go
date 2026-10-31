@@ -16,12 +16,10 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Prometheus remote_write (version 1): snappy-compressed WriteRequest
-// protobufs, read with protowire so the Prometheus module is not linked in.
-// Series ending in _total, or typed counter by the metadata Prometheus sends,
-// are counters; _bucket series with an le label (with _sum and _count) are
-// histograms; the rest are gauges. The job label becomes the service and
-// instance the instance.
+// Prometheus remote_write (v1): snappy-compressed protobufs, read with
+// protowire so the Prometheus module is not linked in. _total series are
+// counters, _bucket series with an le label are histograms, the rest gauges.
+// The job label becomes the service.
 
 const remoteWriteMaxDecoded = 32 << 20
 
@@ -97,7 +95,6 @@ type promSeries struct {
 
 var errRemoteWrite = errors.New("bad remote_write request")
 
-// parseWriteRequest reads the series and the metadata (family -> type).
 func parseWriteRequest(b []byte) ([]promSeries, map[string]string, error) {
 	var out []promSeries
 	meta := map[string]string{}
@@ -165,7 +162,6 @@ func parseWriteRequest(b []byte) ([]promSeries, map[string]string, error) {
 	return out, meta, err
 }
 
-// promTypeNames are prometheus.MetricMetadata.MetricType values.
 var promTypeNames = map[uint64]string{1: "counter", 2: "gauge", 3: "histogram", 4: "gaugehistogram", 5: "summary", 6: "info", 7: "stateset"}
 
 // protoFields calls f for each field of a message: bytes fields get v,
@@ -263,7 +259,6 @@ func (mi *metricIngest) promPoints(series []promSeries) []metricPoint {
 		}
 		return h
 	}
-	// Buckets first, so _sum and _count know which families are histograms.
 	for _, ts := range series {
 		name := ts.labels["__name__"]
 		family, isBucket := strings.CutSuffix(name, "_bucket")
@@ -340,7 +335,6 @@ func (mi *metricIngest) promPoints(series []promSeries) []metricPoint {
 	return out
 }
 
-// promCounter: typed counter by metadata, or named like one.
 func (mi *metricIngest) promCounter(name string) bool {
 	if t := mi.promType(name); t != "" {
 		return t == "counter"

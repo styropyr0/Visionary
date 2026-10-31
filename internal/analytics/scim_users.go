@@ -67,7 +67,6 @@ func (s *Server) scimUserView(a *account, groups []scimGroup) map[string]any {
 	return v
 }
 
-// scimUserState is what SCIM can change about a person.
 type scimUserState struct {
 	userName, externalID, email string
 	displayName, formatted      string
@@ -151,7 +150,6 @@ func (u *scimUserState) set(path string, v json.RawMessage) error {
 	return nil
 }
 
-// apply runs a PATCH's operations on the state.
 func (u *scimUserState) apply(ops []patchOp) error {
 	for _, op := range ops {
 		path := strings.ToLower(strings.TrimSpace(op.Path))
@@ -183,7 +181,6 @@ func (u *scimUserState) apply(ops []patchOp) error {
 	return nil
 }
 
-// fromBody reads a whole user, as POST and PUT send it.
 func scimStateFromBody(r *http.Request) (*scimUserState, error) {
 	var obj map[string]json.RawMessage
 	if err := readSCIM(r, &obj); err != nil {
@@ -198,7 +195,6 @@ func scimStateFromBody(r *http.Request) (*scimUserState, error) {
 	return u, nil
 }
 
-// check normalizes the userName and fills the name from it if needed.
 func (u *scimUserState) check() error {
 	name, err := normalizeUsername(u.userName)
 	if err != nil {

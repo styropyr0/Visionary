@@ -82,7 +82,6 @@ func promFail(w http.ResponseWriter, status int, typ, msg string) {
 	writeJSON(w, status, map[string]any{"status": "error", "errorType": typ, "error": msg})
 }
 
-// promFailErr answers with the Prometheus error type that fits err.
 func (s *Server) promFailErr(w http.ResponseWriter, err error) {
 	var pe *promError
 	var qe *queryError
@@ -129,7 +128,6 @@ func promDuration(v string) (time.Duration, error) {
 	return 0, errors.New("cannot parse " + strconv.Quote(v) + " as a duration")
 }
 
-// runPromQL parses and evaluates query from start to end every step.
 func (s *Server) runPromQL(ctx context.Context, query string, start, end time.Time, step time.Duration) (promExpr, promVal, *promEval, error) {
 	return s.runPromQLWindows(ctx, query, start, end, step, 0)
 }
@@ -249,7 +247,6 @@ func (s *Server) handlePromQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// rangeParams reads start, end and step, bounded like every other range.
 func (s *Server) rangeParams(r *http.Request) (time.Time, time.Time, time.Duration, error) {
 	q := r.URL.Query()
 	start, err := promTime(q.Get("start"), time.Time{})
@@ -338,7 +335,6 @@ func (s *Server) metaRange(r *http.Request) (time.Time, time.Time, error) {
 	return start, end, nil
 }
 
-// matchParam parses the match[] selectors.
 func matchParam(r *http.Request) ([][]labelMatcher, error) {
 	var out [][]labelMatcher
 	for _, m := range r.URL.Query()["match[]"] {
@@ -521,7 +517,6 @@ func (s *Server) handlePromMetadata(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePromBuildInfo(w http.ResponseWriter, _ *http.Request) {
 	_, commit := buildInfo()
-	// A Prometheus version, so clients enable the API features it implies.
 	promOK(w, map[string]string{"version": "2.53.0", "revision": commit, "branch": "visionary", "buildUser": "visionary", "buildDate": "", "goVersion": runtime.Version()})
 }
 
@@ -563,14 +558,12 @@ const maxChartSeries = 50
 // promResult evaluates query over tr, one point per bucket, as t, series,
 // value rows; the largest 50 series are kept.
 func (s *Server) promResult(ctx context.Context, query string, tr timeRange) (*Result, error) {
-	// Steps on bucket boundaries, like every other chart; the last one is at
-	// or after the end so the newest data shows.
 	start := time.Unix(tr.From.Unix()/tr.Bucket*tr.Bucket, 0)
 	end := time.Unix((tr.To.Unix()+tr.Bucket-1)/tr.Bucket*tr.Bucket, 0)
 	started := time.Now()
 	// A chart's step is often longer than rate(x[5m])'s window, which would
-	// sample a few minutes of each bucket and leave lone points; each bucket
-	// reads its whole span instead, as Grafana's $__rate_interval does.
+	// leave lone points; each bucket reads its whole span instead, as Grafana's
+	// $__rate_interval does.
 	step := time.Duration(tr.Bucket) * time.Second
 	_, v, ev, err := s.runPromQLWindows(ctx, query, start, end, step, step)
 	if err != nil {

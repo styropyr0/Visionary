@@ -125,7 +125,6 @@ func TestRuleThreshold(t *testing.T) {
 		t.Fatal("no webhook")
 	}
 
-	// The same burst going on grows the open signal instead of opening one.
 	more := make([]req, 5)
 	for i := range more {
 		more[i] = req{at: now.Add(time.Minute), method: "POST", path: "/api/login", route: "/api/login", status: 401, ip: "203.0.113.9"}
@@ -137,7 +136,6 @@ func TestRuleThreshold(t *testing.T) {
 		t.Fatalf("after more: %+v", got)
 	}
 
-	// A suppressed group writes nothing.
 	r.Suppress = []ruleSuppression{{Field: "ip", Value: "198.51.100.1"}}
 	r.Threshold = 2
 	if err := s.checkDetectionRule(&r); err != nil {
@@ -192,8 +190,6 @@ func TestRuleNewValue(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// With nothing to learn from yet, a rule stays unlearned rather than
-	// flagging everything that comes first.
 	early := addRule(t, s, fromTemplate(t, "app_user_new_ip_admin_route"))
 	s.runRules(ctx, now.Add(-time.Hour))
 	if res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM security_known WHERE kind = ?`, ruleKnownKind(early.ID)); err != nil || toInt(res.Rows[0][0]) != 0 {
@@ -215,14 +211,12 @@ func TestRuleNewValue(t *testing.T) {
 		t.Fatalf("signals = %+v", got)
 	}
 
-	// Seen once, a value is not new again.
 	addReqs(t, s, req{at: now.Add(time.Minute), path: "/api/admin/users", route: "/api/admin/users", status: 200, ip: "10.9.9.9", handle: "bob"})
 	s.runRules(ctx, now.Add(2*time.Minute))
 	if got := signalsOf(t, s, r.Kind); len(got) != 1 {
 		t.Fatalf("repeat value signalled: %+v", got)
 	}
 
-	// The preview finds the same new value over the last day.
 	hits, _, err := s.previewRule(ctx, &r, now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatal(err)
@@ -241,15 +235,12 @@ func TestRuleSequence(t *testing.T) {
 		rows = append(rows, req{at: now.Add(-4*time.Minute + time.Duration(i)*time.Second), method: "POST", path: "/api/login", route: "/api/login", status: 401, ip: "203.0.113.7"})
 	}
 	rows = append(rows, req{at: now.Add(-2 * time.Minute), method: "POST", path: "/api/login", route: "/api/login", status: 200, ip: "203.0.113.7"})
-	// Success first, failures after: not a guessed password.
 	rows = append(rows, req{at: now.Add(-4 * time.Minute), method: "POST", path: "/api/login", route: "/api/login", status: 200, ip: "203.0.113.8"})
 	for i := 0; i < 6; i++ {
 		rows = append(rows, req{at: now.Add(-3 * time.Minute), method: "POST", path: "/api/login", route: "/api/login", status: 401, ip: "203.0.113.8"})
 	}
 	addReqs(t, s, rows...)
 	r := addRule(t, s, fromTemplate(t, "failed_then_success"))
-	// The first run counts only its last interval as new; start the cursor
-	// earlier, as a rule that has been running would have.
 	rs := s.ruleRuns()
 	rs.runs[r.ID] = &ruleRun{cursor: now.Add(-10 * time.Minute), active: map[string]bool{}, baseline: map[string][]float64{}}
 	s.runRules(ctx, now)
@@ -258,7 +249,6 @@ func TestRuleSequence(t *testing.T) {
 		t.Fatalf("signals = %+v", got)
 	}
 
-	// Host events: SSH failures, then a login from the same address.
 	for i := 0; i < 10; i++ {
 		if err := s.db.Exec(ctx, `INSERT INTO security_events (created_at, source, kind, severity, host, ip, count) VALUES (?, 'host', 'ssh_failed', 'warning', 'web-1', '198.51.100.4', 2)`,
 			now.Add(-5*time.Minute).Format(tsLayout)); err != nil {
@@ -318,7 +308,6 @@ func TestRuleAnomalyAndPreview(t *testing.T) {
 		t.Fatalf("threshold preview = %+v", hits)
 	}
 
-	// The job's in-memory baseline: quiet runs, then a burst.
 	run := &ruleRun{baseline: map[string][]float64{}}
 	for i := 0; i < ruleWarmup; i++ {
 		run.record(map[string]float64{"": 4}, nil)

@@ -12,24 +12,11 @@ import (
 	"time"
 )
 
-// Rules run in the background every 30 seconds; each one is due every
-// every() (a fifth of its window, 1 to 10 minutes). Every query is bounded
-// by time through the created_at index and by a LIMIT, and only groups past
-// the rule's bar come back, so a run reads little even on D1:
-//
-//   - threshold: one grouped query over the window.
-//   - new_value: one grouped query over what arrived since the last run; the
-//     values each group had are kept in security_known (kind rule:<id>),
-//     learned once from the rule's learning period when it first runs.
-//   - sequence: the groups that did the first step often enough, then the
-//     second step for just those groups, then both steps' times for the few
-//     that did both.
-//   - anomaly: one grouped query; each group's usual count is the median of
-//     its recent runs, kept in memory like the built-in rate detectors.
-//
-// A group's signal is one finding per rule and group per dedupe() period;
-// while it goes on, later runs add what is new to its count, as the built-in
-// detectors do.
+// Rules run every 30 seconds, each when due (every()). Queries are bounded by
+// created_at and a LIMIT and return only groups past the bar, so a run reads
+// little even on D1. new_value rules keep what each group had in security_known
+// (kind rule:<id>). A group's signal is one finding per rule and group per
+// dedupe() period.
 
 const (
 	rulesTick        = 30 * time.Second
@@ -55,7 +42,7 @@ type ruleRunState struct {
 	runs map[int64]*ruleRun
 }
 
-var ruleRunStates sync.Map // *Server -> *ruleRunState
+var ruleRunStates sync.Map
 
 func (s *Server) ruleRuns() *ruleRunState {
 	v, _ := ruleRunStates.LoadOrStore(s, &ruleRunState{runs: map[int64]*ruleRun{}})
@@ -141,12 +128,11 @@ func (s *Server) runRules(parent context.Context, now time.Time) {
 	}
 }
 
-// ruleSignal is one group that matched.
 type ruleSignal struct {
 	group   map[string]string
 	key     string
-	value   string // the new value, for new_value
-	ip      string // the address behind a new country
+	value   string
+	ip      string
 	n, nNew int64
 	first   string
 	last    string
@@ -154,7 +140,6 @@ type ruleSignal struct {
 	summary string
 }
 
-// groupKey names a group as field=value pairs in the rule's order.
 func groupKey(fields []string, values map[string]string) string {
 	parts := make([]string, 0, len(fields))
 	for _, f := range fields {
@@ -171,7 +156,6 @@ func (s *Server) groupExprs(r *detectionRule) []string {
 	return out
 }
 
-// groupCond matches rows of one group, bound.
 func (s *Server) groupCond(src string, values map[string]string, args *[]any) string {
 	keys := make([]string, 0, len(values))
 	for k := range values {
@@ -240,7 +224,6 @@ FROM ` + src.table + ` WHERE created_at >= ? AND created_at < ? AND ` + where
 	return sql + "\nLIMIT " + strconv.Itoa(limit), args, nil
 }
 
-// evalCounts runs threshold and anomaly rules.
 func (s *Server) evalCounts(ctx context.Context, r *detectionRule, run *ruleRun, cursor, to time.Time) ([]ruleSignal, error) {
 	w := r.window()
 	having := r.Threshold
@@ -300,8 +283,6 @@ func (s *Server) ruleUnit(r *detectionRule) string {
 	return map[string]string{"requests": "requests", "logs": "log lines", "events": "events", "audit": "audit entries"}[r.Source]
 }
 
-// baselineOf is the median of a group's recent counts, and whether there are
-// enough of them to judge.
 func (run *ruleRun) baselineOf(key string) (float64, bool) {
 	h := run.baseline[key]
 	if len(h) < ruleWarmup {
@@ -338,7 +319,6 @@ func (run *ruleRun) record(samples map[string]float64, flagged map[string]bool) 
 	}
 }
 
-// valuePair is one group with one value of the watched field.
 type valuePair struct {
 	group       map[string]string
 	key, value  string
@@ -405,7 +385,6 @@ LIMIT `+strconv.Itoa(limit), args...)
 	return list, nil
 }
 
-// evalNewValues flags values a group has not had before.
 func (s *Server) evalNewValues(ctx context.Context, r *detectionRule, run *ruleRun, cursor, to time.Time) ([]ruleSignal, error) {
 	if r.Field == "country" && !s.geoEnabled() {
 		return nil, badInput("watching countries needs a location database (Settings → Server → Threat intelligence)")
@@ -421,10 +400,9 @@ func (s *Server) evalNewValues(ctx context.Context, r *detectionRule, run *ruleR
 			return nil, err
 		}
 		if len(res.Rows) == 0 {
-			// First run: learn what each group had over the learning period.
-			// With no history at all, this run's values are learned too
-			// rather than all flagged, and with nothing yet, the next run
-			// tries again.
+			// First run learns each group's values over the learning period;
+			// with no history at all, this run's values are learned too instead
+			// of all flagged. With none yet, the next run tries again.
 			past, err := s.newValueRows(ctx, r, cursor.Add(-r.learn()), cursor, ruleLearnLimit)
 			if err != nil {
 				return nil, err
@@ -513,7 +491,6 @@ func (s *Server) knownValues(ctx context.Context, kind string, pairs []valuePair
 	return out, nil
 }
 
-// stepTime is one row of a sequence step.
 type stepTime struct {
 	at time.Time
 	n  int64
@@ -590,8 +567,6 @@ func (s *Server) evalSequence(ctx context.Context, r *detectionRule, cursor, to 
 	return out, nil
 }
 
-// stepTimes is each group's matching rows of one step over [from, to), oldest
-// first.
 func (s *Server) stepTimes(ctx context.Context, r *detectionRule, filter map[string]string, groups []map[string]string, from, to time.Time, limit int) (map[string][]stepTime, error) {
 	out := map[string][]stepTime{}
 	if len(groups) == 0 {
@@ -673,7 +648,6 @@ ORDER BY created_at DESC LIMIT `+strconv.Itoa(limit), args...)
 	return out, nil
 }
 
-// compactRows turns a result into small objects for a signal's detail.
 func compactRows(res *Result, n int) []map[string]any {
 	if res == nil {
 		return nil
@@ -702,7 +676,6 @@ func compactRows(res *Result, n int) []map[string]any {
 	return out
 }
 
-// signalFinding is what a signal writes into security_events.
 func (r *detectionRule) signalFinding(sig ruleSignal) finding {
 	f := finding{source: "rule", kind: r.Kind, severity: r.Severity, n: sig.n, nNew: sig.nNew,
 		ip: sig.group["ip"], actor: fallback(sig.group["user"], sig.group["account"]), host: sig.group["host"], service: sig.group["service"]}
@@ -751,8 +724,6 @@ func detailJSON(d map[string]any) string {
 	return string(b)
 }
 
-// writeSignals inserts new signals, grows the ones still open, and sends
-// the new ones to the rule's channels.
 func (s *Server) writeSignals(ctx context.Context, r *detectionRule, run *ruleRun, sigs []ruleSignal, cursor, to, now time.Time) error {
 	active := map[string]bool{}
 	if len(sigs) == 0 {
@@ -786,7 +757,6 @@ func (s *Server) writeSignals(ctx context.Context, r *detectionRule, run *ruleRu
 		found = append(found, r.signalFinding(sig))
 		kept = append(kept, sig)
 	}
-	// Global suppressions, place and blocklists, as for the built-in detectors.
 	before := len(found)
 	found, err = s.prepareFindings(ctx, found)
 	if err != nil {
@@ -859,7 +829,6 @@ VALUES (?, 'rule', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return nil
 }
 
-// signalNotice is one message for a run's new signals.
 func (s *Server) signalNotice(r *detectionRule, fresh []finding, ids []int64) notice {
 	title := "[SECURITY] " + r.Name
 	if len(fresh) == 1 {

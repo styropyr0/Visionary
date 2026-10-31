@@ -17,22 +17,18 @@ const (
 	LocationResultsPath = "/api/agent/v1/location/results"
 )
 
-// LocationPoll says who is asking and what this machine can run.
 type LocationPoll struct {
 	Location string `json:"location"`
 	// Instance is random per process, so two runners started with the same
 	// key do not both run checks.
-	Instance string `json:"instance"`
-	Version  string `json:"version"`
-	Host     string `json:"host"`
-	// Browser is whether a Chrome or Chromium was found, so browser checks
-	// can run here.
+	Instance       string   `json:"instance"`
+	Version        string   `json:"version"`
+	Host           string   `json:"host"`
 	Browser        bool     `json:"browser"`
 	BrowserVersion string   `json:"browser_version,omitempty"`
-	Kinds          []string `json:"kinds"` // check kinds this runner can run
+	Kinds          []string `json:"kinds"`
 }
 
-// LocationChecks is the answer to a poll.
 type LocationChecks struct {
 	Active bool `json:"active"`
 	// Checks are every enabled check assigned to the location, secrets
@@ -45,7 +41,6 @@ type LocationChecks struct {
 	Message      string `json:"message,omitempty"`
 }
 
-// LocationResults is a batch of runs.
 type LocationResults struct {
 	Location string           `json:"location"`
 	Instance string           `json:"instance"`

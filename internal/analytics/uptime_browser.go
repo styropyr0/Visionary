@@ -19,14 +19,10 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Browser checks are uptime checks of kind "browser": instead of one request
-// they play a list of steps in a headless browser (uptime_browser_run.go).
-// They share the schedule, results, incidents, alerts and status page of HTTP
-// checks. Their steps and secrets live in uptime_browser_checks, and each
-// run's step results, console and network errors and screenshots in
-// uptime_browser_results, next to its uptime_results row.
+// Browser checks are uptime checks of kind "browser" that play a list of steps
+// in a headless browser (uptime_browser_run.go). Steps and secrets live in
+// uptime_browser_checks, run results in uptime_browser_results.
 
-// BrowserStep is one step of a browser check.
 type BrowserStep struct {
 	Action   string `json:"action"`
 	Selector string `json:"selector,omitempty"`
@@ -275,7 +271,6 @@ func (b *BrowserStep) validate() error {
 	return nil
 }
 
-// loadBrowserConfigs fills in the steps and secrets of browser checks.
 func (s *Server) loadBrowserConfigs(ctx context.Context, checks []UptimeCheck) error {
 	ids := []string{}
 	for _, c := range checks {
@@ -378,9 +373,6 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	return u.s.db.Exec(ctx, "INSERT INTO uptime_browser_results ("+strings.Join(cols, ", ")+") VALUES (?"+strings.Repeat(", ?", len(cols)-1)+")", vals...)
 }
 
-// --- handlers ---
-
-// handleBrowserRunNow plays a browser check now and records the run.
 func (s *Server) handleBrowserRunNow(w http.ResponseWriter, r *http.Request, run *uptimeRunner, c UptimeCheck) {
 	if !run.browser.Available() {
 		st := run.browser.Status()
@@ -410,8 +402,6 @@ func (s *Server) handleUptimeBrowser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runnerFor(s).browser.Status())
 }
 
-// handleBrowserRuns lists a browser check's runs in the range, with how each
-// step did across them.
 func (s *Server) handleBrowserRuns(w http.ResponseWriter, r *http.Request) {
 	id, ok := checkID(w, r)
 	if !ok {
@@ -488,7 +478,6 @@ ORDER BY b.created_at DESC LIMIT 500`, id, tr.From.UTC().Format(tsLayout), tr.To
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "steps": stats})
 }
 
-// handleBrowserRun is one run in full, screenshots included.
 func (s *Server) handleBrowserRun(w http.ResponseWriter, r *http.Request) {
 	id, ok := checkID(w, r)
 	if !ok {

@@ -81,7 +81,6 @@ func main() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", "err", err)
 	}
-	// Hands this replica's leases to the others before exiting.
 	srv.Wait(shutdownCtx)
 	if restart {
 		logger.Info("restarting")

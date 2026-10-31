@@ -9,9 +9,8 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// The runner runs the server's own checks with internal/uptimecore, which
-// the host agent's location runner shares: the schedule, HTTP probes and
-// browser runs. What is left here is loading checks and storing results.
+// The runner runs the server's own checks with internal/uptimecore, shared with
+// the host agent's location runner. Here: loading checks and storing results.
 
 // uptimeRunners holds each server's runner, so handlers can reach it without
 // a field on Server.
@@ -68,7 +67,6 @@ func (u *uptimeRunner) run(ctx context.Context) {
 	u.sched.Run(ctx)
 }
 
-// load gives the scheduler the enabled checks.
 func (u *uptimeRunner) load(ctx context.Context) ([]uptimecore.Check, error) {
 	checks, err := u.s.listUptimeChecks(ctx)
 	if err != nil {
@@ -77,7 +75,6 @@ func (u *uptimeRunner) load(ctx context.Context) ([]uptimecore.Check, error) {
 	byID := make(map[int64]UptimeCheck, len(checks))
 	out := make([]uptimecore.Check, 0, len(checks))
 	for _, c := range checks {
-		// Playwright checks are pushed by the reporter; nothing runs them here.
 		if !c.Enabled || c.Kind == "playwright" || !c.runsAt(serverLocation) {
 			continue
 		}
@@ -99,7 +96,6 @@ func (u *uptimeRunner) executeCore(ctx context.Context, cc uptimecore.Check) {
 	}
 }
 
-// execute runs one scheduled check.
 func (u *uptimeRunner) execute(ctx context.Context, c UptimeCheck) {
 	if c.Kind == "browser" {
 		u.executeBrowser(ctx, c)

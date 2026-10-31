@@ -18,13 +18,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Workspaces scope people to sets of services. A workspace is a name, the
-// services it covers (exact names or globs) and its members, each with a
-// role there. With no workspaces everyone sees everything, as before. Global
-// admins always see everything; anyone else who belongs to a workspace sees
-// only its services, and can switch between their workspaces. Alerts,
-// uptime checks, dashboards and saved views can belong to one. The
-// filtering itself is in workspaces_scope.go.
+// Workspaces scope people to sets of services. With none defined everyone sees
+// everything; global admins always do. The filtering is in workspaces_scope.go.
 
 const (
 	workspaceCookie   = "visionary_workspace"
@@ -96,11 +91,8 @@ func (s *Server) workspacesRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/workspaces/items", s.authed(s.handleAssignWorkspaceItem))
 }
 
-// ---------- Cache ----------
-
 type wsSnapshot struct {
-	list []workspace
-	// groups are each account's identity provider and SCIM groups.
+	list   []workspace
 	groups map[string][]string
 	// rules maps alert rules to their workspace, so they are evaluated
 	// over its services.
@@ -116,14 +108,13 @@ type wsState struct {
 	loads singleflight.Group
 }
 
-var wsStates sync.Map // *Server -> *wsState
+var wsStates sync.Map
 
 func (s *Server) workspaceState() *wsState {
 	v, _ := wsStates.LoadOrStore(s, &wsState{})
 	return v.(*wsState)
 }
 
-// dropWorkspaces makes the next request read workspaces again.
 func (s *Server) dropWorkspaces() {
 	st := s.workspaceState()
 	st.mu.Lock()
@@ -229,8 +220,6 @@ func (s *Server) listWorkspaces(ctx context.Context) ([]workspace, error) {
 	return out, nil
 }
 
-// ---------- Who sees what ----------
-
 type wsAccess struct {
 	ws   *workspace
 	role role
@@ -252,7 +241,6 @@ func memberships(snap *wsSnapshot, sess *session) []wsAccess {
 	key, isKey := strings.CutPrefix(id, "key:")
 	groups := snap.groups[account]
 	if account == "" && !isKey && sess.Role == "" {
-		// Delegated sign-in: the provider's roles act as groups.
 		groups = sess.Roles
 	}
 	var out []wsAccess
@@ -280,7 +268,6 @@ func memberships(snap *wsSnapshot, sess *session) []wsAccess {
 	return out
 }
 
-// available are the workspaces sess may switch to: all of them for admins.
 func (s *Server) available(snap *wsSnapshot, sess *session) []wsAccess {
 	if s.roleOf(sess) >= roleAdmin {
 		out := make([]wsAccess, len(snap.list))
@@ -346,8 +333,6 @@ func (s *Server) scopeFor(r *http.Request, sess *session) (*wsScope, error) {
 	return sc, nil
 }
 
-// ruleScope evaluates an alert rule that belongs to a workspace over that
-// workspace's services only.
 func (s *Server) ruleScope(ctx context.Context, ruleID int64) context.Context {
 	snap, err := s.workspaceSnap(ctx)
 	if err != nil {
@@ -365,7 +350,6 @@ func (s *Server) ruleScope(ctx context.Context, ruleID int64) context.Context {
 	return ctx
 }
 
-// serveAs runs h as sess, within the request's workspace scope.
 func (s *Server) serveAs(w http.ResponseWriter, r *http.Request, sess *session, h http.HandlerFunc) {
 	ctx := context.WithValue(r.Context(), sessionKey{}, sess)
 	sc, err := s.scopeFor(r, sess)
@@ -420,8 +404,6 @@ func (s *Server) workspaceView(r *http.Request) map[string]any {
 	return out
 }
 
-// ---------- API ----------
-
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.workspaceSnap(r.Context())
 	if err != nil {
@@ -453,7 +435,6 @@ type workspaceBody struct {
 	Members  []wsMember `json:"members"`
 }
 
-// clean checks a workspace as sent and puts it in a stable form.
 func (b *workspaceBody) clean() error {
 	b.Name = strings.TrimSpace(b.Name)
 	if b.Name == "" || len(b.Name) > maxWorkspaceName {
@@ -530,7 +511,6 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, workspace{ID: id, Name: body.Name, Services: body.Services, Members: body.Members, CreatedBy: sess.Name, CreatedAt: now, UpdatedAt: now})
 }
 
-// findWorkspace reads one workspace afresh, for changes.
 func (s *Server) findWorkspace(ctx context.Context, id int64) (*workspace, error) {
 	list, err := s.listWorkspaces(unscoped(ctx))
 	if err != nil {
@@ -598,7 +578,6 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// memberChanges lists who was added, removed or given another role.
 func memberChanges(before, after []wsMember) []string {
 	key := func(m wsMember) string { return m.Kind + " " + m.ID }
 	old := map[string]string{}
@@ -642,7 +621,6 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	// What belonged to it becomes unassigned rather than lost.
 	for table := range ownedTables {
 		if err := s.db.Exec(ctx, `UPDATE `+strings.ToLower(table)+` SET workspace_id = NULL WHERE workspace_id = ?`, id); err != nil {
 			s.fail(w, dbErr(err))
@@ -658,7 +636,6 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// serviceSources are where service names are found for the picker.
 var serviceSources = []string{"api_logs", "app_logs", "spans", "errors", "system_metrics", "metrics", "releases"}
 
 // handleWorkspaceServices lists the services seen in the last 30 days, so
@@ -715,7 +692,6 @@ func (s *Server) handleWorkspaceUnassigned(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// workspaceItems are what can belong to a workspace, by the name the API uses.
 var workspaceItems = map[string]string{"alert": "alert_rules", "check": "uptime_checks", "dashboard": "dashboards", "view": "log_views"}
 
 func (s *Server) handleWorkspaceItems(w http.ResponseWriter, r *http.Request) {

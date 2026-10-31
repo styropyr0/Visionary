@@ -35,7 +35,6 @@ func TestWriterMultiRowInserts(t *testing.T) {
 		}
 		rows += s.rows
 	}
-	// 21 log columns fit 1428 rows a statement: one for the logs, one for the span.
 	if len(st.written) != 2 || rows != 1201 || w.written.Load() != 1201 {
 		t.Fatalf("%d statements, %d rows, %d counted", len(st.written), rows, w.written.Load())
 	}

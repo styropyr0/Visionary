@@ -213,7 +213,6 @@ func (s *Server) deletePanel(ctx context.Context, id int64) error {
 // filter, cached for ten minutes.
 func (s *Server) knownRoutes(ctx context.Context) []string {
 	if scopeFrom(ctx) != nil {
-		// The cache holds every service's routes.
 		return s.loadRoutes(ctx)
 	}
 	s.routesMu.Lock()
@@ -265,7 +264,6 @@ var sourceTables = map[string]string{
 // asked again next time.
 func (s *Server) sources(ctx context.Context) map[string]bool {
 	if scopeFrom(ctx) != nil {
-		// What the cache knows is about every service.
 		out := make(map[string]bool, len(sourceTables))
 		for key, table := range sourceTables {
 			res, err := s.db.Query(ctx, `SELECT 1 FROM `+table+` LIMIT 1`)

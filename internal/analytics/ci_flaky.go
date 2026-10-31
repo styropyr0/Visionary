@@ -43,7 +43,6 @@ type flakyTest struct {
 
 func ciFailed(status string) bool { return status == "failed" || status == "error" }
 
-// findFlaky scores each test in rows, which are ordered by test and time.
 func findFlaky(rows []ciResult, defaults map[string]bool) []*flakyTest {
 	var out []*flakyTest
 	for start := 0; start < len(rows); {
@@ -145,8 +144,6 @@ func (s *Server) ciDefaultBranches(ctx context.Context) map[string]bool {
 	return out
 }
 
-// ciResults loads the results of the tests among hashes that failed at
-// least once since from, oldest first per test.
 func (s *Server) ciResults(ctx context.Context, from, to string, hashes []string, extra string, extraArgs []any) ([]ciResult, error) {
 	var failing []any
 	if hashes == nil {

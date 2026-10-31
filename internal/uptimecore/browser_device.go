@@ -8,9 +8,8 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// A browser check runs at the screen size of a device preset, or a custom
-// size. The phone preset is a mobile browser: its user agent, touch and a
-// device pixel ratio of 3.
+// A browser check runs at a device preset's screen size, or a custom size. The
+// phone preset is a mobile browser: its user agent, touch and pixel ratio 3.
 
 type deviceSpec struct {
 	Label  string
@@ -46,7 +45,6 @@ func (o *BrowserOptions) NormalizeDevice() error {
 	return nil
 }
 
-// device is what the check runs as.
 func (o BrowserOptions) device() deviceSpec {
 	if o.Device == "custom" {
 		return deviceSpec{Label: "Custom", W: o.ViewportW, H: o.ViewportH, Scale: 1}
@@ -57,8 +55,6 @@ func (o BrowserOptions) device() deviceSpec {
 	return browserDevices["desktop"]
 }
 
-// emulate sets the tab's screen, and for a mobile device its user agent and
-// touch.
 func (d deviceSpec) emulate(ctx context.Context) error {
 	opts := []chromedp.EmulateViewportOption{chromedp.EmulateScale(d.Scale)}
 	if d.Mobile {

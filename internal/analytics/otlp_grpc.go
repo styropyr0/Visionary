@@ -19,11 +19,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// OTLP/gRPC on a port of its own (Settings → Server → Ingest), for exporters
-// set to OTEL_EXPORTER_OTLP_PROTOCOL=grpc. Each Export call goes through the
-// same key check, limits and ingest as OTLP/HTTP. The codec hands the raw
-// request bytes to that ingest, so the generated collector types (and the
-// gateway they import) are not needed.
+// OTLP/gRPC on its own port (Settings → Server → Ingest), for
+// OTEL_EXPORTER_OTLP_PROTOCOL=grpc. A raw codec hands request bytes to the same
+// ingest as OTLP/HTTP, so no generated types are needed.
 
 // otlpRawCodec passes messages through as bytes: requests are decoded by the
 // signal, responses are already encoded.
@@ -116,8 +114,7 @@ func otlpRetryStatus(code codes.Code, msg string, after time.Duration) error {
 	return st.Err()
 }
 
-// otlpGRPCAddr reads the listen address; a bare port listens on every
-// interface.
+// otlpGRPCAddr reads the listen address; a bare port listens on every interface.
 func (s *Server) otlpGRPCAddr() string {
 	addr := strings.TrimSpace(s.conf("otlp_grpc_addr"))
 	if !strings.Contains(addr, ":") {
@@ -126,7 +123,6 @@ func (s *Server) otlpGRPCAddr() string {
 	return addr
 }
 
-// otlpGRPCStart serves OTLP/gRPC until ctx ends, when Settings turn it on.
 func (s *Server) otlpGRPCStart(ctx context.Context) {
 	if !s.confBool("otlp_grpc") {
 		return

@@ -24,10 +24,9 @@ import (
 	"github.com/crewjam/saml"
 )
 
-// SAML 2.0: Visionary is the service provider. Sign-in starts here (the
-// HTTP-Redirect binding) and the identity provider posts a signed response
-// to the ACS. The request ID is derived from a sealed RelayState, so any
-// server sharing the database can check InResponseTo without keeping state.
+// SAML 2.0 with Visionary as the service provider. The request ID is derived
+// from a sealed RelayState, so any server sharing the database can check
+// InResponseTo without keeping state.
 
 const (
 	samlCookie   = "visionary_saml"
@@ -148,8 +147,6 @@ func parseIDPMetadata(raw []byte) (*saml.EntityDescriptor, error) {
 	return nil, errors.New("isn't SAML metadata for an identity provider (no IDPSSODescriptor)")
 }
 
-// ---------- The service provider's key ----------
-
 // newSPKeyPair makes an RSA key and a self-signed certificate for ten years.
 func newSPKeyPair() (string, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -210,7 +207,6 @@ func parseSPKeyPair(bundle string) (crypto.Signer, *x509.Certificate, error) {
 	return key, cert, nil
 }
 
-// spCertPEM is the public half, for Settings to show.
 func spCertPEM(bundle string) string {
 	_, cert, err := parseSPKeyPair(bundle)
 	if err != nil {
@@ -235,8 +231,6 @@ func (s *Server) ensureSPKeyPair(ctx context.Context) error {
 	return dbErr(s.db.Exec(ctx, s.q.insertSettingIfAbsent(), settingSAMLSP, bundle, nowTS()))
 }
 
-// ---------- Sign-in ----------
-
 // samlRelayState seals when the sign-in expires and whether it is a test.
 func (s *Server) samlRelayState(test bool) string {
 	plain := make([]byte, 17)
@@ -248,7 +242,6 @@ func (s *Server) samlRelayState(test bool) string {
 	return s.ssoSeal(samlRelay, plain)
 }
 
-// samlRequestID ties the AuthnRequest to its RelayState.
 func samlRequestID(relay string) string {
 	sum := sha256.Sum256([]byte("request:" + relay))
 	return "id-" + hex.EncodeToString(sum[:20])
@@ -282,8 +275,6 @@ func (s *Server) samlStart(w http.ResponseWriter, r *http.Request, st *ssoSetup,
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
-// handleSAMLMetadata serves the service provider's metadata, to upload to
-// the identity provider.
 func (s *Server) handleSAMLMetadata(w http.ResponseWriter, r *http.Request) {
 	st := s.ssoSetup()
 	p := st.anyProvider(r.PathValue("id"))
@@ -311,7 +302,6 @@ func (s *Server) handleSAMLMetadata(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(out)
 }
 
-// handleSAMLACS takes the identity provider's response.
 func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, samlMaxBytes)
 	if err := r.ParseForm(); err != nil {

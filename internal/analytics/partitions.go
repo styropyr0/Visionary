@@ -16,15 +16,10 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Time partitioning on PostgreSQL, opt in (Settings → Data). The tables that
-// grow with traffic are range-partitioned by day on created_at. The text
-// format sorts as time, so day bounds such as '2026-10-30' work as is.
-// Retention then drops whole days instead of deleting rows in chunks, and
-// queries over a range read only its days.
-//
-// Turning it on converts tables that are still empty at once. A table with
-// rows is converted only when an admin asks: a copy into a partitioned twin
-// in chunks while writes go on, then a short swap under a lock.
+// Opt-in daily range partitioning on PostgreSQL (Settings → Data), by
+// created_at. Retention drops whole days and range queries read only their
+// days. Empty tables convert when it is turned on; a table with rows converts
+// only when an admin asks, by copying into a twin and swapping under a lock.
 
 var partitionTables = []string{"api_logs", "spans", "app_logs", "metrics", "client_events"}
 
@@ -48,7 +43,6 @@ func (l *liveSettings) partitioningOn() bool {
 	return v == "daily"
 }
 
-// conversion is the progress of one table's conversion.
 type conversion struct {
 	Table   string    `json:"table"`
 	Step    string    `json:"step"`
@@ -64,7 +58,7 @@ type partitionJobs struct {
 	runs map[string]*conversion
 }
 
-var partitionRuns sync.Map // *Server -> *partitionJobs
+var partitionRuns sync.Map
 
 func (s *Server) partitionJobs() *partitionJobs {
 	v, _ := partitionRuns.LoadOrStore(s, &partitionJobs{runs: map[string]*conversion{}})
@@ -108,8 +102,6 @@ func (s *Server) partitionsStart(ctx context.Context) {
 	})
 }
 
-// maintainPartitions keeps days ahead on partitioned tables and, with
-// partitioning on, converts tables that have no rows yet.
 func (s *Server) maintainPartitions(ctx context.Context) {
 	on := s.live().partitioningOn()
 	today := time.Now().UTC().Truncate(24 * time.Hour)
@@ -149,7 +141,6 @@ func partitionName(table string, day time.Time) string {
 	return table + "_p" + day.Format("20060102")
 }
 
-// partitionDay reads the day of a partition this file named, or false.
 func partitionDay(table, name string) (time.Time, bool) {
 	rest, ok := strings.CutPrefix(name, table+"_p")
 	if !ok || len(rest) != 8 {
@@ -205,7 +196,6 @@ func (s *Server) createPartition(ctx context.Context, parent, table string, day 
 		return nil
 	}
 	in := fmt.Sprintf("created_at >= '%s' AND created_at < '%s'", day.Format("2006-01-02"), day.AddDate(0, 0, 1).Format("2006-01-02"))
-	// Statements sent together run as one transaction.
 	return s.db.Exec(ctx, `CREATE TABLE `+name+` (LIKE `+parent+` INCLUDING DEFAULTS);
 INSERT INTO `+name+` SELECT * FROM `+table+`_pdefault WHERE `+in+`;
 DELETE FROM `+table+`_pdefault WHERE `+in+`;
@@ -275,7 +265,6 @@ func (s *Server) convertTable(ctx context.Context, t string) error {
 		}
 	})
 	if err != nil {
-		// Leave the plain table as it was.
 		_ = s.db.Exec(context.WithoutCancel(ctx), `DROP TABLE IF EXISTS `+t+`_part`)
 	} else {
 		s.logger.Info("table partitioned by day", "table", t)
@@ -309,7 +298,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 	total := toInt(bounds.Rows[0][1])
 	progress(func(c *conversion) { c.Total, c.Step = total, "Creating partitions" })
 
-	// A twin left by a crash is rebuilt from scratch.
 	if err := s.db.Exec(ctx, `DROP TABLE IF EXISTS `+twin); err != nil {
 		return err
 	}
@@ -331,7 +319,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 			}
 			newest, xmax, seen := toInt(res.Rows[0][0]), toInt(res.Rows[0][1]), time.Now()
 			progress(func(c *conversion) { c.Total = newest })
-			// What is left goes under the lock.
 			if newest-last <= copyChunk {
 				return nil
 			}
@@ -365,8 +352,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 		return err
 	}
 
-	// Indexes are built once the bulk of the rows is in: faster than
-	// keeping them up to date row by row.
 	progress(func(c *conversion) { c.Step = "Building indexes" })
 	if err := s.db.Exec(ctx, `ALTER TABLE `+twin+` ADD CONSTRAINT `+twin+`_pkey PRIMARY KEY (id, created_at)`); err != nil {
 		return err
@@ -392,7 +377,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 	}
 
 	progress(func(c *conversion) { c.Step = "Swapping tables" })
-	// Statements sent together run as one transaction.
 	swap := []string{
 		`LOCK TABLE ` + t + ` IN ACCESS EXCLUSIVE MODE`,
 		fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s WHERE id > %d`, twin, t, last),
@@ -410,7 +394,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 		return err
 	}
 	progress(func(c *conversion) { c.Copied = c.Total })
-	// Fresh statistics, for the planner and the row counts in Settings.
 	_ = s.db.Exec(ctx, `ANALYZE `+t)
 	s.seenMu.Lock()
 	s.seen = nil
@@ -418,7 +401,6 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 	return nil
 }
 
-// indexTable is the table in an index definition from pg_indexes.
 var indexTable = regexp.MustCompile(` ON (?:ONLY )?[A-Za-z0-9_."]+ USING `)
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
@@ -432,8 +414,6 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// ---------- Settings → Data ----------
-
 func (s *Server) partitionRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/settings/partitions", s.authed(s.handlePartitions))
 	mux.Handle("PUT /api/settings/partitions", s.authed(s.handlePutPartitions))
@@ -445,7 +425,7 @@ type partitionTable struct {
 	Exists      bool        `json:"exists"`
 	Partitioned bool        `json:"partitioned"`
 	Partitions  int         `json:"partitions"`
-	Rows        int64       `json:"rows"` // the planner's estimate
+	Rows        int64       `json:"rows"`
 	Bytes       int64       `json:"bytes"`
 	Conversion  *conversion `json:"conversion,omitempty"`
 }
@@ -546,7 +526,6 @@ func (s *Server) handleConvertTable(w http.ResponseWriter, r *http.Request) {
 			s.logger.Warn("partition a table", "table", t, "err", err)
 		}
 	}()
-	// Let the job register before the page reads its progress.
 	time.Sleep(50 * time.Millisecond)
 	s.handlePartitions(w, r)
 }

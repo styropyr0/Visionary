@@ -30,7 +30,6 @@ var ssoAddedColumns = map[string][]sdk.Column{
 	},
 }
 
-// ssoIdentity is who the identity provider says signed in.
 type ssoIdentity struct {
 	Subject       string
 	Email         string
@@ -38,7 +37,6 @@ type ssoIdentity struct {
 	Name          string
 	// Groups is nil when the provider sent no groups claim at all.
 	Groups []string
-	// Claims is everything the provider sent, shown by a test sign-in.
 	Claims map[string]any
 }
 
@@ -50,12 +48,10 @@ func randomToken() string {
 
 func isSSOSession(sess *session) bool { return strings.HasPrefix(sess.UserID, ssoPrefix) }
 
-// ssoDecision is what signing someone in would do.
 type ssoDecision struct {
 	username string
 	role     role
 	existing *account
-	// roleFrom says how the role was chosen, for a test sign-in.
 	roleFrom string
 }
 
@@ -90,7 +86,6 @@ func (s *Server) ssoDecide(ctx context.Context, p *ssoProvider, id *ssoIdentity)
 	}
 	d := &ssoDecision{username: username, existing: existing}
 	mapping, _ := newRoleMapping(p.RoleMap, nil)
-	// SCIM's groups decide for the people it manages, when it maps roles.
 	switch {
 	case existing != nil && existing.Source == scimSource && s.scimManagesRoles():
 		d.role, d.roleFrom = parseRole(existing.Role), "SCIM"
@@ -113,7 +108,6 @@ func (s *Server) ssoDecide(ctx context.Context, p *ssoProvider, id *ssoIdentity)
 	return d, nil
 }
 
-// ssoComplete signs the person in, or for a test shows what would happen.
 func (s *Server) ssoComplete(w http.ResponseWriter, r *http.Request, p *ssoProvider, id *ssoIdentity, test bool) {
 	d, err := s.ssoDecide(r.Context(), p, id)
 	if test {
@@ -160,8 +154,6 @@ func (s *Server) ssoComplete(w http.ResponseWriter, r *http.Request, p *ssoProvi
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// ssoUpsert creates the account (just in time) or brings its name, email and
-// role up to date.
 func (s *Server) ssoUpsert(r *http.Request, p *ssoProvider, id *ssoIdentity, d *ssoDecision) (*account, error) {
 	ctx := r.Context()
 	now := nowTS()
@@ -187,7 +179,7 @@ VALUES (?, ?, ?, ?, '', ?, 0, ?, ?, ?, ?, ?)`, a.ID, a.Username, a.Name, a.Role,
 	return a, nil
 }
 
-// touch makes this server re-read a person's account on their next request.
+// touchUser makes this server re-read a person's account on their next request.
 func (s *Server) touchUser(id string) {
 	st := s.sso()
 	st.mu.Lock()
@@ -237,9 +229,6 @@ func (s *Server) confirmSSO(ctx context.Context, sess *session) (*session, bool,
 	return &next, true, nil
 }
 
-// ---------- Errors and test sign-ins ----------
-
-// ssoError ends a sign-in that failed before anyone was identified.
 func (s *Server) ssoError(w http.ResponseWriter, r *http.Request, test bool, msg string) {
 	if test {
 		s.ssoTestPage(w, nil, nil, nil, errors.New(msg))

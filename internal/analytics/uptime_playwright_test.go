@@ -17,7 +17,6 @@ func TestPlaywrightReports(t *testing.T) {
 	admin := configMux(s, "admin")
 	var key struct{ Secret string }
 	_ = json.Unmarshal(incidentDo(t, admin, "POST", "/api/team/keys", `{"name":"pipeline","scope":"ci"}`, http.StatusCreated), &key)
-	// Declared before its first run, so the report fills it in.
 	var declared struct{ Check UptimeCheck }
 	_ = json.Unmarshal(incidentDo(t, admin, "POST", "/api/uptime/checks",
 		`{"name":"Checkout","kind":"playwright","interval_s":600,"playwright":{"project":"chromium","title":"checkout.spec.ts › pays by card"}}`, http.StatusCreated), &declared)
@@ -125,7 +124,6 @@ func TestPlaywrightStale(t *testing.T) {
 	if len(rows.Rows) != 2 || toInt(rows.Rows[1][0]) != 0 || !strings.HasPrefix(toString(rows.Rows[1][1]), pwStalePrefix+"10m") {
 		t.Fatalf("results %v", rows.Rows)
 	}
-	// One interval later it is stale again.
 	if err := s.markStale(ctx, now.Add(12*time.Minute)); err != nil {
 		t.Fatal(err)
 	}

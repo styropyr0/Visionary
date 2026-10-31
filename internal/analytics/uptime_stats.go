@@ -21,8 +21,8 @@ type checkState struct {
 	LastError      string     `json:"last_error,omitempty"`
 	CertExpiresAt  string     `json:"cert_expires_at,omitempty"`
 	IncidentSince  string     `json:"incident_since,omitempty"`
-	NoBrowser      bool       `json:"no_browser,omitempty"`  // a browser check waiting for a browser on the server
-	Unavailable    string     `json:"unavailable,omitempty"` // why a ping check cannot run on this server
+	NoBrowser      bool       `json:"no_browser,omitempty"`
+	Unavailable    string     `json:"unavailable,omitempty"`
 	Uptime24h      *float64   `json:"uptime_24h"`
 	Days           []dayBar   `json:"days"`
 	Spark          []*float64 `json:"spark"` // hourly average response time, last 24h
@@ -306,8 +306,6 @@ GROUP BY 1 ORDER BY 1`,
   COALESCE(location, 'server') AS location, COALESCE(location_ok, ok) AS location_ok
 FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}{{location}}
 ORDER BY created_at DESC LIMIT 500`,
-	// Per location: totals over the range, and series of response time and
-	// failures, from each location's own verdict.
 	"locations": `SELECT COALESCE(location, 'server') AS location, COUNT(*) AS checks, ` + countIf("COALESCE(location_ok, ok) = 0") + ` AS failed,
   AVG(CASE WHEN COALESCE(location_ok, ok) = 1 THEN duration_ms END) AS avg_ms
 FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}
@@ -335,8 +333,6 @@ func (s *Server) handleUptimePanel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Results can be narrowed to one location; names are checked, so they
-	// quote safely.
 	where := ""
 	if l := r.URL.Query().Get("location"); l != "" {
 		if !locationNameRe.MatchString(l) {

@@ -9,17 +9,12 @@ import (
 	"time"
 )
 
-// The custom_metric alert reads one custom metric, narrowed by labels and
-// service, aggregated over the rule's window: one reading, or one per value
-// of a label when the rule groups by it.
-
 func customMetricDefs() []metricDef {
 	return []metricDef{{ID: "custom_metric", Label: "Custom metric", Group: "metrics", Unit: "none",
 		Description: "A counter, gauge or histogram your services record, aggregated over the window: sum, average, max, min, rate per second, or p50/p95/p99 of a histogram. Fires per label value when grouped.",
 		Scopes:      []string{"service"}, Op: ">", Threshold: 0, UpIsBad: true}}
 }
 
-// checkMetricRule cleans a custom_metric rule's query.
 func checkMetricRule(sp *ruleSpec) error {
 	mq := sp.MetricQuery
 	if mq == nil || strings.TrimSpace(mq.Name) == "" {
@@ -70,7 +65,6 @@ func (s *Server) observeCustomMetric(ctx context.Context, r alertRule, now time.
 	return out, nil
 }
 
-// metricQueryLabel names what a rule measures, e.g. "p95 of checkout_ms {region=eu}".
 func metricQueryLabel(mq metricQuery, agg string) string {
 	s := agg + " of " + mq.Name
 	if len(mq.Labels) > 0 {

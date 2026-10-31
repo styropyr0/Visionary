@@ -68,7 +68,6 @@ func TestKindsAtLocation(t *testing.T) {
 	if !res.OK || res.Detail == nil {
 		t.Fatalf("run at the location: %+v", res)
 	}
-	// Over the wire, as the agent sends it.
 	raw, _ := json.Marshal(res)
 	var sent uptimecore.Result
 	_ = json.Unmarshal(raw, &sent)

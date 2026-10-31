@@ -14,17 +14,16 @@ import (
 )
 
 // Each browser run is a trace: the browser sends a W3C traceparent with the
-// run's trace id, so a backend instrumented with a Visionary SDK records its
-// side under that id and the run links to it. The header only goes to the
-// check's trace origins (by default the first page's), since an unexpected
-// header on a cross-origin request can fail its CORS preflight.
+// run's trace id, so a backend with a Visionary SDK records its side under it.
+// Only the check's trace origins (default the first page's) get the header,
+// since it can fail the CORS preflight of a cross-origin request.
 
 const browserMaxTraceOrigins = 10
 
 func newTraceIDs() (trace, span string) {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
-	b[0] |= 1 // never all zeros
+	b[0] |= 1
 	b[16] |= 1
 	return hex.EncodeToString(b[:16]), hex.EncodeToString(b[16:])
 }
@@ -48,7 +47,6 @@ func NormalizeOrigin(raw string) (string, error) {
 	return u.Scheme + "://" + h, nil
 }
 
-// originOf is the origin of an absolute URL, "" when it has none.
 func originOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -57,7 +55,6 @@ func originOf(raw string) string {
 	return u.Scheme + "://" + strings.ToLower(u.Host)
 }
 
-// NormalizeTrace checks and tidies the trace origins.
 func (o *BrowserOptions) NormalizeTrace() error {
 	if len(o.TraceOrigins) > browserMaxTraceOrigins {
 		return fmt.Errorf("at most %d trace origins", browserMaxTraceOrigins)
@@ -84,7 +81,6 @@ func (o *BrowserOptions) NormalizeTrace() error {
 	return nil
 }
 
-// tracePatterns are the Fetch patterns of the origins that get the header.
 func (c Check) tracePatterns() []*fetch.RequestPattern {
 	if c.NoTrace {
 		return nil
@@ -128,7 +124,6 @@ func propagateTrace(ctx, tab context.Context, wg *sync.WaitGroup, traceparent st
 			inflight.Add(1)
 			go func() {
 				defer inflight.Done()
-				// It fails when the page cancelled the request meanwhile.
 				_, _ = chromedp.Call(tab, fetch.ContinueRequest, params)
 			}()
 		}

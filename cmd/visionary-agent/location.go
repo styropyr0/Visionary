@@ -18,11 +18,9 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Location mode (VISIONARY_AGENT_LOCATION): instead of reporting the host,
-// the agent runs the uptime checks the server assigns to that location, with
-// the same code the server runs its own with (internal/uptimecore), and
-// posts the results in batches. HTTP checks always run; browser checks only
-// when a Chrome or Chromium is found here, which the poll tells the server.
+// Location mode (VISIONARY_AGENT_LOCATION): the agent runs the uptime checks
+// the server assigns to that location with internal/uptimecore and posts the
+// results in batches. Browser checks need a Chrome or Chromium on this machine.
 
 const (
 	locationBatchEvery = 5 * time.Second
@@ -103,13 +101,11 @@ func (l *locationRunner) execute(ctx context.Context, c uptimecore.Check) {
 	case "http", "api", "tcp", "dns", "ping", "ssl":
 		out.Result = uptimecore.ProbeWithRetry(ctx, c, l.allowPrivate)
 		if out.Result.Skip != "" {
-			// Ping is not possible here after all: nothing ran.
 			return
 		}
 	case "browser":
 		res, run, err := l.browser.Run(ctx, c, l.allowPrivate())
 		if err != nil {
-			// No browser after all: nothing ran, so nothing is reported.
 			return
 		}
 		out.Result, out.Screenshot, out.FinalScreenshot, out.StepShots = res, run.Screenshot, run.Final, run.StepShots
@@ -135,7 +131,6 @@ func (l *locationRunner) execute(ctx context.Context, c uptimecore.Check) {
 	}
 }
 
-// poll asks for the location's checks until ctx ends.
 func (l *locationRunner) poll(ctx context.Context) {
 	wait := time.Duration(0)
 	var lastMsg string
@@ -199,7 +194,6 @@ func sameChecks(a, b []uptimecore.Check) bool {
 	return bytes.Equal(ja, jb)
 }
 
-// send posts queued results every few seconds, or sooner when a batch fills.
 func (l *locationRunner) send(ctx context.Context) {
 	t := time.NewTicker(locationBatchEvery)
 	defer t.Stop()
@@ -243,7 +237,6 @@ func (l *locationRunner) flush(ctx context.Context) {
 	}
 }
 
-// post sends body as JSON and decodes a success into out.
 func (l *locationRunner) post(ctx context.Context, path string, body, out any) (int, string, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {

@@ -13,7 +13,6 @@ import (
 	"testing"
 )
 
-// fakeServer answers a run that finishes on the second poll.
 func fakeServer(t *testing.T, final string) (*httptest.Server, *runRequest) {
 	var got runRequest
 	var polls atomic.Int32

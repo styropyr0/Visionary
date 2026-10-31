@@ -60,8 +60,6 @@ type config struct {
 	logs     []string
 	stateDir string
 
-	// Location mode: run this uptime location's checks instead of
-	// reporting the host.
 	location string
 	// allowPrivate is "true" or "false", or empty to follow the server's
 	// setting for its own checks.

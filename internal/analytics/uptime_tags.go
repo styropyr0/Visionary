@@ -10,9 +10,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Checks carry tags (smoke, checkout, deploy) that group them: the list
-// filters by them and a run from CI picks checks by them. They live in
-// uptime_check_tags, one row per tag, beside the check.
+// Tags (smoke, checkout, deploy) group checks for filtering and for CI runs.
+// They live in uptime_check_tags, one row per tag.
 
 const uptimeMaxTags = 20
 
@@ -59,7 +58,6 @@ func normalizeTags(in []string) ([]string, error) {
 	return out, nil
 }
 
-// loadCheckTags fills in each check's tags.
 func (s *Server) loadCheckTags(ctx context.Context, checks []UptimeCheck) error {
 	for i := range checks {
 		checks[i].Tags = []string{}
@@ -115,7 +113,6 @@ func (s *Server) deleteCheckTags(ctx context.Context, id int64) {
 	}
 }
 
-// checksTagged are the checks with any of tags, or with any id in ids.
 func checksTagged(checks []UptimeCheck, tags []string, ids []int64) []UptimeCheck {
 	var out []UptimeCheck
 	for _, c := range checks {

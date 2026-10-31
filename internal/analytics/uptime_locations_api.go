@@ -16,9 +16,9 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// The Locations tab's API, and the two endpoints location runners call
-// (agentapi): poll for checks, post results. A location's key is an API key
-// of scope "location", made with the location and tied to it by key_id.
+// The Locations tab's API and the two endpoints location runners call: poll for
+// checks, post results. A location's key is an API key of scope "location",
+// tied to it by key_id.
 
 const defaultLocationRuleName = "Uptime location offline"
 
@@ -63,7 +63,6 @@ func (s *Server) handleLocationList(w http.ResponseWriter, r *http.Request) {
 		"stale_after_s": int(locationStaleAfter.Seconds())})
 }
 
-// newLocationKey makes a location key and returns its id and secret.
 func (s *Server) newLocationKey(r *http.Request, name string) (int64, string, error) {
 	secret, err := newKeySecret()
 	if err != nil {
@@ -293,9 +292,8 @@ func (s *Server) observeLocations(ctx context.Context, r alertRule, now time.Tim
 	return out, nil
 }
 
-// incidentLocations names the locations that failed during each incident:
-// those the vote counted as failing (error "down in a, b: ..."), or the
-// location of a check that runs from one place.
+// incidentLocations names the locations that failed during each incident: those
+// the vote counted as failing, or the location of a check that runs from one place.
 func (s *Server) incidentLocations(ctx context.Context, id int64, tr timeRange, list []incident) error {
 	if len(list) == 0 {
 		return nil
@@ -341,9 +339,6 @@ WHERE check_id = ? AND ok = 0 AND created_at >= ? AND created_at < ? ORDER BY cr
 	return nil
 }
 
-// --- location runners ---
-
-// locationFor finds the location whose key the request carries.
 func (s *Server) locationFor(w http.ResponseWriter, r *http.Request, name string) (uptimeLocation, bool) {
 	k, ok := s.lookupKey(r.Context(), otlpKey(r), "location")
 	if !ok {
@@ -487,8 +482,6 @@ func (s *Server) handleLocationResults(w http.ResponseWriter, r *http.Request) {
 		if c.Kind == "browser" && in.Browser != nil {
 			run := *in.Browser
 			run.Screenshot, run.Final, run.StepShots = in.Screenshot, in.FinalScreenshot, nil
-			// A runner's step screenshots and requests get the caps of the
-			// server's own runs.
 			total := 0
 			for _, b := range in.StepShots {
 				if len(b) > uptimecore.MaxStepShot || total+len(b) > uptimecore.StepShotsPerRun {

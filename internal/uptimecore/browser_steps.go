@@ -21,11 +21,9 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// The steps beyond clicking and checking: extract a value into a variable
-// later steps use as {{var.NAME}}, hover, drag, upload a file stored with
-// the check, work inside an iframe, set a cookie or web storage, and grant a
-// permission. Steps inside a frame run in an isolated world of that frame,
-// which sees its DOM but not the page's own scripts.
+// Extract, hover, drag, upload, iframe, cookie, storage and permission steps.
+// Steps in a frame run in an isolated world of that frame, which sees its DOM
+// but not the page's own scripts.
 
 // BrowserFile is a small file an upload step sends. The API shows its size
 // without its data; sending it back without data keeps the stored file.
@@ -33,7 +31,7 @@ type BrowserFile struct {
 	Name string `json:"name"`
 	Type string `json:"type,omitempty"`
 	Size int    `json:"size"`
-	Data string `json:"data,omitempty"` // base64
+	Data string `json:"data,omitempty"`
 }
 
 const (
@@ -94,7 +92,6 @@ func (o *BrowserOptions) NormalizeFiles(prev []BrowserFile) error {
 	return nil
 }
 
-// resolve fills secrets and variables into the fields of a step.
 func (st *runState) resolve(s BrowserStep, secrets map[string]string) BrowserStep {
 	vars := func(v string) string {
 		return varRefRe.ReplaceAllStringFunc(v, func(m string) string { return st.vars[varRefRe.FindStringSubmatch(m)[1]] })
@@ -118,7 +115,7 @@ func evalJS[T any](ctx context.Context, st *runState, expr string, opts ...chrom
 	id := ids[len(ids)-1]
 	v, err := chromedp.Run(ctx, chromedp.Evaluate[T](expr, append(opts, inContext(id))...))
 	if err != nil && isTransientEval(err) {
-		st.frameCtx = nil // the frame navigated; find it again next time
+		st.frameCtx = nil
 	}
 	return v, err
 }
@@ -194,7 +191,6 @@ func (st *runState) frameOffset(ctx context.Context) (elementAt, error) {
 	return off, nil
 }
 
-// locate waits for the element a step means and returns its center in the
 // viewport.
 func (st *runState) locate(ctx context.Context, s BrowserStep) (elementAt, error) {
 	p, err := waitJS[*elementAt](ctx, st, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
@@ -208,7 +204,6 @@ func (st *runState) locate(ctx context.Context, s BrowserStep) (elementAt, error
 	return elementAt{X: p.X + off.X, Y: p.Y + off.Y}, nil
 }
 
-// pageURL is the address of the page itself.
 func pageURL(ctx context.Context) (*url.URL, error) {
 	href, err := evalJS[string](ctx, nil, `location.href`)
 	if err != nil {

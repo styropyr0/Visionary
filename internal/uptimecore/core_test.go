@@ -19,7 +19,6 @@ func TestBrowserMasker(t *testing.T) {
 	}
 }
 
-// The guard proxy refuses loopback, as the HTTP checks' dialer does.
 func TestGuardProxyRefusesPrivate(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "hi") }))
 	defer site.Close()
@@ -58,7 +57,6 @@ func TestProbe(t *testing.T) {
 	if res := Probe(context.Background(), c, allow); res.OK || res.Status != 503 || !strings.Contains(res.Error, "unexpected status 503") {
 		t.Fatalf("failing probe: %+v", res)
 	}
-	// Loopback is refused unless allowed, and not retried.
 	c.Headers = nil
 	res := ProbeWithRetry(context.Background(), c, func() bool { return false })
 	if res.OK || !res.Blocked() || res.Retried {

@@ -355,7 +355,6 @@ func New(cfg Config) (*Agent, error) {
 		a.logs = newLogger(a, w, ParseLevel(cfg.Logs.Level))
 	}
 	if cfg.Metrics.Enabled {
-		// One row per series per interval; room for many series at once.
 		mc := cfg.Requests
 		mc.QueueSize = 20000
 		w := newWriter(mc, false, a.ident, db, cfg.Logger)
@@ -502,7 +501,6 @@ func envList(k string) []string {
 // WriterStats is a snapshot of the background writers for request rows,
 // logs and metrics, summed.
 type WriterStats struct {
-	// Queued rows are waiting for the database.
 	Queued int
 	// Written and Dropped count rows since Start; dropped ones met a full
 	// queue or a write that failed three times.

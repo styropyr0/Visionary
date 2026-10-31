@@ -23,7 +23,6 @@ const (
 	maxPromCatalog = 20000
 )
 
-// promBuiltin is a series family computed from one of Visionary's tables.
 type promBuiltin struct {
 	name, kind, help, unit string
 	table                  string
@@ -69,12 +68,11 @@ func (s *Server) promBuiltins() []promBuiltin {
 	return out
 }
 
-// promTarget is one exposed metric name and where it comes from.
 type promTarget struct {
 	name    string
 	base    string
 	kind    string
-	part    string // "", "bucket", "sum" or "count" of a histogram
+	part    string
 	builtin *promBuiltin
 }
 
@@ -95,7 +93,6 @@ func nameMatches(ms []labelMatcher, name string) bool {
 	return true
 }
 
-// promTargets resolves the names a selector can read in [from, to).
 func (s *Server) promTargets(ctx context.Context, ms []labelMatcher, from, to time.Time) ([]promTarget, error) {
 	fixed := ""
 	for _, m := range ms {
@@ -227,7 +224,6 @@ type customSeries struct {
 	bounds                []float64
 }
 
-// customCatalog lists the series of custom metric names in [from, to).
 func (s *Server) customCatalog(ctx context.Context, names []string, from, to time.Time) (map[string][]customSeries, error) {
 	where := "created_at >= ? AND created_at < ?"
 	args := []any{from.UTC().Format(tsLayout), to.UTC().Format(tsLayout)}
@@ -318,7 +314,6 @@ func (src *sqlPromSource) loadCustom(ctx context.Context, t promTarget, ms []lab
 	}
 	where := "name = ? AND kind = ? AND created_at >= ? AND created_at < ?"
 	args := append([]any{t.base, t.kind}, windowArgs(w)...)
-	// past maxInlineSeries the rows are matched to byKey below instead
 	if len(byKey) < len(all) && len(ids) <= maxInlineSeries {
 		where += " AND series IN (" + strings.Join(ids, ", ") + ")"
 	}
@@ -569,8 +564,6 @@ func builtinWhere(b *promBuiltin, ms []labelMatcher) (string, []any) {
 	return where, args
 }
 
-// promCatalog lists the label sets of the series the selectors match in
-// [from, to), or of every series without selectors.
 func (s *Server) promCatalog(ctx context.Context, sels [][]labelMatcher, from, to time.Time) ([]promLabels, bool, error) {
 	if len(sels) == 0 {
 		sels = [][]labelMatcher{nil}

@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// incidentMux serves the incident handlers as a user with the given role.
 func incidentMux(s *Server, role string) http.Handler {
 	as := func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {

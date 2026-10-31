@@ -10,10 +10,9 @@ import (
 	"time"
 )
 
-// Every 10 minutes: count what replays take, delete the oldest sessions over
-// the storage cap, drop chunks whose session is gone, and copy sessions idle
-// for an hour to the log archive's bucket when one is set. Retention itself
-// runs with the other kinds (Settings → Data).
+// Every 10 minutes: count replay storage, delete the oldest sessions over the
+// cap, drop orphaned chunks, and copy sessions idle for an hour to the log
+// archive's bucket when one is set.
 
 const (
 	replayEvery       = 10 * time.Minute
@@ -72,8 +71,6 @@ func (s *Server) replayBytes(ctx context.Context) (int64, error) {
 	return toInt(res.Rows[0][0]), nil
 }
 
-// trimReplays deletes the least recently active sessions until over bytes
-// are freed, and returns what is left.
 func (s *Server) trimReplays(ctx context.Context, over int64) (int64, error) {
 	res, err := s.db.Query(ctx, `SELECT session_id, bytes FROM replay_sessions ORDER BY created_at LIMIT 1000`)
 	if err != nil {
@@ -125,7 +122,8 @@ func (s *Server) archiveReplays(ctx context.Context, c archiveConf, now time.Tim
 		var buf bytes.Buffer
 		zw := gzip.NewWriter(&buf)
 		enc := json.NewEncoder(zw)
-		// a page at a time: chunks are up to half a megabyte and D1 caps a response
+		// Chunks are up to half a megabyte and D1 caps a response, so read a
+		// page at a time.
 		for after := int64(-1); ; {
 			chunks, err := s.db.Query(ctx, `SELECT seq, created_at, ended_at, events, payload FROM replay_chunks WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT `+strconv.Itoa(replayArchivePage), id, after)
 			if err != nil {

@@ -20,7 +20,6 @@ import (
 	visionary "github.com/styropyr0/visionary/sdks/go"
 )
 
-// benchTables are the tables the write phase fills, in report order.
 var benchTables = []string{"api_logs", "spans", "errors", "app_logs", "metrics"}
 
 type writeResult struct {
@@ -101,7 +100,6 @@ func runWrite(ctx context.Context, o options) (*writeResult, error) {
 	agentCtx, stopAgent := context.WithCancel(ctx)
 	defer stopAgent()
 	agent.Start(agentCtx)
-	// Let the log settings poll see the lifted cap.
 	time.Sleep(500 * time.Millisecond)
 
 	handler := agent.Middleware(benchMux(o))

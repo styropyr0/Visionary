@@ -166,7 +166,6 @@ func TestLocationRunnersVote(t *testing.T) {
 		t.Fatalf("incidents: %v %+v", err, incidents)
 	}
 
-	// loc-b stops polling: it is stale and out of the vote.
 	old := time.Now().UTC().Add(-10 * time.Minute).Format(tsLayout)
 	if err := s.db.Exec(ctx, `UPDATE uptime_locations SET last_seen_at = ? WHERE name = 'loc-b'`, old); err != nil {
 		t.Fatal(err)

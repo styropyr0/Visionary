@@ -11,10 +11,7 @@ import (
 )
 
 // Testing a rule before it is saved: what it would have flagged over the
-// last 24 hours. Threshold and anomaly rules count in window-sized buckets,
-// new-value rules compare each value's first time with the learning period
-// before (up to 7 days, to keep the read small), and sequences run as the
-// job would over the whole day.
+// last 24 hours. New-value rules compare against up to 7 days before that.
 
 const rulePreviewSpan = 24 * time.Hour
 
@@ -135,9 +132,8 @@ func (s *Server) previewRule(ctx context.Context, r *detectionRule, to time.Time
 	return nil, "", nil
 }
 
-// previewBuckets counts each group per window over the day. Threshold rules
-// keep buckets at or over the bar; anomaly rules keep buckets at Factor times
-// the median of the group's buckets before them.
+// previewBuckets counts each group per window over the day and keeps the
+// buckets a threshold or anomaly rule would flag.
 func (s *Server) previewBuckets(ctx context.Context, r *detectionRule, from, to time.Time) ([]previewHit, error) {
 	src := s.q.ruleSources()[r.Source]
 	where, fargs, err := s.filterSQL(r.Source, r.Filter, timeRange{From: from, To: to})
@@ -204,7 +200,6 @@ GROUP BY ` + strings.Join(append([]string{bucket}, groups...), ", ")
 			}
 			continue
 		}
-		// Fill the buckets with nothing in them, so quiet stretches count.
 		byT := map[int64]int64{}
 		for _, c := range series[key] {
 			byT[c.t] = c.m

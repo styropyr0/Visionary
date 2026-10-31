@@ -38,7 +38,6 @@ const (
 
 var seriesID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
-// metricInfo describes what a query read.
 type metricInfo struct {
 	Kind      string `json:"kind"`
 	Unit      string `json:"unit"`
@@ -86,7 +85,6 @@ type catalogSeries struct {
 	rows   int64
 }
 
-// metricCatalog lists the series of a name in a range.
 func (s *Server) metricCatalog(ctx context.Context, name, service string, from, to time.Time) (map[string]*catalogSeries, error) {
 	where, args := metricWhere(name, service, from, to)
 	res, err := s.db.Query(ctx, `SELECT series, MAX(labels), MAX(kind), MAX(unit), COUNT(*) FROM metrics WHERE `+where+
@@ -113,7 +111,6 @@ func metricWhere(name, service string, from, to time.Time) (string, []any) {
 	return where, args
 }
 
-// cell accumulates one bucket of one group.
 type metricCell struct {
 	total, n      float64
 	sum, count    float64
@@ -133,8 +130,6 @@ func (c *metricCell) take(v float64) {
 	}
 }
 
-// runMetricQuery reads the query over [from, to) in buckets of bucket
-// seconds, or as one reading when bucket is 0.
 func (s *Server) runMetricQuery(ctx context.Context, mq metricQuery, from, to time.Time, bucket int64) ([]point, metricInfo, error) {
 	var info metricInfo
 	catalog, err := s.metricCatalog(ctx, mq.Name, mq.Service, from, to)
@@ -407,8 +402,6 @@ func bucketQuantile(buckets map[float64]float64, q float64) (float64, bool) {
 	return bounds[len(bounds)-1], !math.IsInf(bounds[len(bounds)-1], 1)
 }
 
-// metricQueryOf reads a query from the URL: name, agg, group, service and
-// labels as a JSON object of strings.
 func metricQueryOf(r *http.Request) (metricQuery, error) {
 	q := r.URL.Query()
 	mq := metricQuery{Name: strings.TrimSpace(q.Get("name")), Agg: q.Get("agg"), Group: strings.TrimSpace(q.Get("group")), Service: strings.TrimSpace(q.Get("service"))}
@@ -483,7 +476,6 @@ FROM metrics WHERE `+where+` GROUP BY name, kind ORDER BY name LIMIT 2000`, args
 		s.fail(w, dbErr(err))
 		return
 	}
-	// A gauge's value is the average of its series' latest readings.
 	latest := map[string]float64{}
 	lres, err := s.db.Query(ctx, `SELECT name, AVG(value) FROM (
   SELECT name, value, ROW_NUMBER() OVER (PARTITION BY series, instance ORDER BY created_at DESC, id DESC) AS rn

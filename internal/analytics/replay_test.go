@@ -91,7 +91,6 @@ func TestReplayIngestAndRead(t *testing.T) {
 		}
 	}
 
-	// Over the cap, the least recently active session goes first.
 	q2 := "sid=sess-r2&seq=0&start=" + ms + "&end=" + strconv.FormatInt(now+1000, 10) + "&enc=json"
 	if w := replayPost(s, q2, events, false); w.Code != 204 {
 		t.Fatalf("second session: %d", w.Code)
@@ -116,7 +115,6 @@ func TestReplayFrameHeaders(t *testing.T) {
 	}
 }
 
-// An idle session's chunks are archived a page at a time, all of them in order.
 func TestReplayArchivePaged(t *testing.T) {
 	s := logsTestServer(t, nil)
 	ctx := context.Background()

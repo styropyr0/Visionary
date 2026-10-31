@@ -9,17 +9,15 @@ import (
 	"strings"
 )
 
-// W3C trace context (https://www.w3.org/TR/trace-context/). A request
-// continues the trace in its traceparent header or starts one; the request
-// and every call it makes get their own span id; outbound requests through
-// Transport carry the trace on, so the service they reach joins it.
+// W3C trace context. A request continues the trace in its traceparent header
+// or starts one; it and every call it makes get their own span id, and
+// outbound requests through Transport carry the trace on.
 
 const (
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
 )
 
-// spanContext is the span that calls made with a context belong to.
 type spanContext struct {
 	traceID, spanID string
 	// flags is the traceparent trace-flags byte in hex ("01" sampled).
@@ -30,7 +28,6 @@ type spanContext struct {
 
 func (sc spanContext) valid() bool { return sc.traceID != "" && sc.spanID != "" }
 
-// traceparent is the header value naming sc as the parent.
 func (sc spanContext) traceparent() string {
 	flags := sc.flags
 	if flags == "" {
@@ -41,7 +38,6 @@ func (sc spanContext) traceparent() string {
 
 type spanCtxKey struct{}
 
-// withSpan makes sc the parent of the calls made with the returned context.
 func withSpan(ctx context.Context, sc spanContext) context.Context {
 	return context.WithValue(ctx, spanCtxKey{}, sc)
 }

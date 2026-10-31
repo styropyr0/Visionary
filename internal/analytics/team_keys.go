@@ -18,12 +18,9 @@ import (
 
 // API keys. A key is "vis_" plus 32 random bytes; only its SHA-256 is stored,
 // with the first characters kept visible so people can tell keys apart.
-// Scopes: "read" uses the HTTP API with viewer rights, "editor" and "admin"
-// use it with those roles' rights (for tools such as the Terraform provider),
-// "server" sends from SDKs and OTLP, "client" sends from browsers and mobile
-// apps (public), "scim" lets an identity provider manage people (scim.go),
-// and "ci" only runs uptime checks and reports test runs, so a pipeline holds
-// a key that can change nothing else (uptime_runs.go).
+// Scopes: read, editor and admin use the HTTP API with that role's rights;
+// server and client send from SDKs and OTLP (client is public); scim manages
+// people for an identity provider; ci only runs checks and reports tests.
 
 const (
 	keyPrefix     = "vis_"
@@ -39,7 +36,6 @@ var keyScopes = []string{"read", "editor", "admin", "server", "client", "scim", 
 // keyRoles are the scopes that use the HTTP API, with the role each acts as.
 var keyRoles = map[string]role{"read": roleViewer, "editor": roleEditor, "admin": roleAdmin, "ci": roleViewer}
 
-// ciKeyPaths are the only endpoints a CI key may call.
 var ciKeyPaths = []string{"/api/uptime/runs", "/api/uptime/playwright"}
 
 func ciKeyAllowed(r *http.Request) bool {
@@ -51,7 +47,6 @@ func ciKeyAllowed(r *http.Request) bool {
 	return false
 }
 
-// isCIKey reports a request made with a CI key.
 func isCIKey(r *http.Request) bool {
 	sess := sessionFrom(r)
 	return sess != nil && strings.HasPrefix(sess.UserID, "key:") && slices.Contains(sess.Roles, "ci")
@@ -88,7 +83,6 @@ func newKeySecret() (string, error) {
 	return keyPrefix + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// lookupKey finds an active, unexpired key of one of scopes.
 func (s *Server) lookupKey(ctx context.Context, raw string, scopes ...string) (cachedKey, bool) {
 	if !strings.HasPrefix(raw, keyPrefix) || len(raw) > 128 {
 		return cachedKey{}, false

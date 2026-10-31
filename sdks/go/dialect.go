@@ -28,7 +28,7 @@ func (d Dialect) TelemetrySchema() string { return d.schema("telemetry.sql") }
 // LogsSchema returns the CREATE statements for app_logs in d.
 func (d Dialect) LogsSchema() string { return d.schema("logs.sql") }
 
-// MetricsSchema returns the CREATE statements for metrics (custom metrics) in d.
+// MetricsSchema returns the CREATE statements for the metrics table in d.
 func (d Dialect) MetricsSchema() string { return d.schema("metrics.sql") }
 
 // SystemSchema returns the CREATE statements for system_metrics in d.

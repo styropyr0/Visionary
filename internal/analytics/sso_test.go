@@ -44,7 +44,6 @@ func newSSOServer(t *testing.T) *Server {
 	return s
 }
 
-// call runs one request through the full handler.
 func call(t *testing.T, h http.Handler, method, target string, body any, cookies []*http.Cookie, header ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	var rd io.Reader
@@ -80,8 +79,6 @@ func cookieNamed(w *httptest.ResponseRecorder, name string) *http.Cookie {
 	}
 	return nil
 }
-
-// ---------- A fake OpenID provider ----------
 
 type fakeOIDC struct {
 	srv  *httptest.Server
@@ -129,8 +126,6 @@ func newFakeOIDC(t *testing.T) *fakeOIDC {
 	return f
 }
 
-// authorize stands in for the person signing in at the provider: it reads
-// the redirect Visionary sent and returns the callback URL with a code.
 func (f *fakeOIDC) authorize(t *testing.T, location string) (string, url.Values) {
 	t.Helper()
 	u, err := url.Parse(location)
@@ -183,7 +178,6 @@ func mustRSA(t *testing.T) *rsa.PrivateKey {
 	return k
 }
 
-// setupOIDC saves the provider and makes single sign-on the only way in.
 func setupOIDC(t *testing.T, s *Server, f *fakeOIDC) http.Handler {
 	t.Helper()
 	h := s.Handler()
@@ -206,7 +200,6 @@ func setupOIDC(t *testing.T, s *Server, f *fakeOIDC) http.Handler {
 	return h
 }
 
-// oidcSignIn runs the whole flow and returns the final response.
 func oidcSignIn(t *testing.T, h http.Handler, f *fakeOIDC) *httptest.ResponseRecorder {
 	t.Helper()
 	w := call(t, h, "GET", "/api/sso/acme/start", nil, nil)
@@ -265,7 +258,6 @@ func TestOIDCSignIn(t *testing.T) {
 		t.Fatalf("account: %+v", a)
 	}
 
-	// Disabling the account in Settings signs the person out at once.
 	if w := call(t, h, "PUT", "/api/team/accounts/"+a.ID, map[string]any{"disabled": true}, []*http.Cookie{sess}); w.Code != 200 {
 		t.Fatalf("disable: %d %s", w.Code, w.Body)
 	}
@@ -300,7 +292,6 @@ func TestOIDCRefusals(t *testing.T) {
 		}
 	}
 
-	// A callback without the browser's flow cookie, or with another state.
 	f.claims, f.signWith, f.nonce = good, nil, ""
 	w := call(t, h, "GET", "/api/sso/acme/start", nil, nil)
 	cb, _ := f.authorize(t, w.Header().Get("Location"))
@@ -315,7 +306,6 @@ func TestOIDCRefusals(t *testing.T) {
 	}
 }
 
-// A test sign-in shows what would happen and signs nobody in.
 func TestOIDCTestSignIn(t *testing.T) {
 	s := newSSOServer(t)
 	f := newFakeOIDC(t)
@@ -341,8 +331,6 @@ func TestOIDCTestSignIn(t *testing.T) {
 	}
 }
 
-// ---------- SAML ----------
-
 type fakeIdP struct {
 	idp  *saml.IdentityProvider
 	meta string
@@ -366,8 +354,6 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	return &fakeIdP{idp: idp, meta: string(raw)}
 }
 
-// respond signs a response to the AuthnRequest Visionary sent, as the IdP
-// would after the person signs in, and returns the form it would post.
 func (f *fakeIdP) respond(t *testing.T, h http.Handler, location string, who *saml.Session) url.Values {
 	t.Helper()
 	u, _ := url.Parse(location)
@@ -434,7 +420,6 @@ func TestSAMLSignIn(t *testing.T) {
 		t.Fatalf("session: %s", w.Body)
 	}
 
-	// The same response again, a tampered one, and one for another request.
 	if msg := ssoErrorOf(postACS(t, h, form, []*http.Cookie{bind})); !strings.Contains(msg, "already") {
 		t.Errorf("replayed: %q", msg)
 	}

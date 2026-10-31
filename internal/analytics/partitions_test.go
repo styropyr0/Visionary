@@ -68,12 +68,10 @@ func TestConvertTable(t *testing.T) {
 	if n := count(`SELECT COUNT(*) FROM api_logs_pdefault`); n != 1 {
 		t.Fatal("rows in the default partition:", n)
 	}
-	// New rows keep their ids from the same sequence.
 	id, err := s.db.InsertID(ctx, `INSERT INTO api_logs (request_id, created_at, method, path, status, duration_ms) VALUES ('rz', ?, 'GET', '/', 200, 1)`, now.Format(tsLayout))
 	if err != nil || id != 7 {
 		t.Fatal(id, err)
 	}
-	// A day created later takes its rows out of the default partition.
 	if err := s.createPartition(ctx, "api_logs", "api_logs", future.Truncate(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +82,6 @@ func TestConvertTable(t *testing.T) {
 	if n := count(`SELECT COUNT(*) FROM api_logs`); n != 5 {
 		t.Fatal("rows after dropping old days:", n)
 	}
-	// Columns added later reach every partition.
 	if err := s.db.Exec(ctx, `ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS bench_extra TEXT`); err != nil {
 		t.Fatal(err)
 	}

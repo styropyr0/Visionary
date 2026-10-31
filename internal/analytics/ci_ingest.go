@@ -37,7 +37,6 @@ type ciJob struct {
 	Steps                                     []ciStep
 }
 
-// ciRun is one run attempt, whatever sent it.
 type ciRun struct {
 	Provider, Repo, Workflow, RunID string
 	Number, Attempt                 int64
@@ -116,7 +115,6 @@ func ciSpan(from, to time.Time) any {
 	return to.Sub(from).Milliseconds()
 }
 
-// saveRun stores a run (unless only its jobs came) and its jobs.
 func (s *Server) saveRun(ctx context.Context, run *ciRun) error {
 	if !run.jobOnly {
 		if err := s.saveCIPipeline(ctx, run); err != nil {
@@ -176,7 +174,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			if err == nil {
 				return nil
 			}
-			// Another delivery of the same run may have inserted it first.
 			continue
 		}
 		row := res.Rows[0]
@@ -365,7 +362,6 @@ func strOf(p *string) string {
 	return *p
 }
 
-// ghSignatureValid checks X-Hub-Signature-256 against the body.
 func ghSignatureValid(secret string, body []byte, header string) bool {
 	sig, ok := strings.CutPrefix(strings.TrimSpace(header), "sha256=")
 	if !ok || secret == "" {
@@ -389,8 +385,6 @@ func ghService(r *http.Request, repo ghRepo) string {
 	return repo.Name
 }
 
-// parseGitHubEvent turns a webhook delivery into a run; nil for events that
-// carry none.
 func parseGitHubEvent(event string, body []byte, service func(ghRepo) string) (*ciRun, error) {
 	switch event {
 	case "workflow_run":
@@ -496,8 +490,6 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"stored": event})
 }
 
-// Runs from any CI, as JSON: one run, a list, or {"runs": [...]}.
-
 type ciRunInput struct {
 	Provider      string `json:"provider"`
 	Repo          string `json:"repo"`
@@ -532,7 +524,6 @@ type ciRunInput struct {
 	} `json:"jobs"`
 }
 
-// idString reads an id sent as a number or a string.
 func idString(v any) string {
 	switch t := v.(type) {
 	case string:

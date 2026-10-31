@@ -250,7 +250,6 @@ func (a *auth) markSignedOut(s *session) {
 	a.signedOut[tokenKey(s.Token)] = s.expiresAt()
 }
 
-// addSignedOut takes in a logout another replica answered.
 func (a *auth) addSignedOut(key string, until time.Time) {
 	if time.Now().After(until) {
 		return

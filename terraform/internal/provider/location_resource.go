@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// locationNameRe is the form of an uptime location name.
 var locationNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,47}$`)
 
 type uptimeLocationResource struct{ base }

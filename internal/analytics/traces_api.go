@@ -17,8 +17,6 @@ const (
 	maxTraceResults  = 50
 )
 
-// handleTrace answers one trace: its requests and calls in every service,
-// the log lines that carry its id and the errors its requests raised.
 func (s *Server) handleTrace(w http.ResponseWriter, r *http.Request) {
 	tid := r.PathValue("trace_id")
 	if !traceIDPattern.MatchString(tid) {
@@ -63,7 +61,6 @@ FROM app_logs WHERE trace_id = ?`, []any{tid}
 		return
 	}
 
-	// Errors carry the request, not the trace.
 	var rids []string
 	for _, m := range rowMaps(reqs) {
 		if id := toString(m["request_id"]); id != "" {
@@ -86,9 +83,6 @@ LIMIT 100`, tr, anys(ids)...)
 	writeJSON(w, http.StatusOK, map[string]any{"trace_id": tid, "requests": reqs, "spans": spans, "logs": lines, "errors": errs})
 }
 
-// handleTraceSearch lists the traces that started in the range, newest
-// first, narrowed by the services they touched, a route, a call name or
-// target, a minimum duration and whether anything in them failed.
 func (s *Server) handleTraceSearch(w http.ResponseWriter, r *http.Request) {
 	tr, ok := s.rangeOf(w, r)
 	if !ok {
@@ -181,8 +175,6 @@ GROUP BY trace_id, service`, timeRange{}, anys(ids)...)
 	writeJSON(w, http.StatusOK, traceSummaries(out, ids, reqs, calls))
 }
 
-// traceSummary is one row of the search: the root request, the services
-// touched and how much happened.
 type traceSummary struct {
 	root                    map[string]any
 	services                []string

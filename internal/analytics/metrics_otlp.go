@@ -13,7 +13,6 @@ import (
 // histograms (exponential ones as explicit buckets) are histograms.
 // Summaries are skipped.
 
-// otlpCustomMetric adds m's datapoints to out; it returns how many it rejected.
 func (s *Server) otlpCustomMetric(out *otlpRows, res *otlpResource, m *metricspb.Metric) int64 {
 	mi := s.metricIngest()
 	base := metricPoint{service: res.service, instance: res.instance, name: m.GetName(), unit: m.GetUnit()}
@@ -60,7 +59,6 @@ func (s *Server) otlpCustomMetric(out *otlpRows, res *otlpResource, m *metricspb
 			case cumulative:
 				p.kind = "gauge"
 			default:
-				// A delta up-down counter has no level to show; skip it.
 				continue
 			}
 			mi.add(out, p)
@@ -111,8 +109,6 @@ func (s *Server) otlpCustomMetric(out *otlpRows, res *otlpResource, m *metricspb
 	return rejected
 }
 
-// exponentialBuckets turns base-2 exponential buckets into explicit upper
-// bounds: negative buckets, the zero bucket, then positive ones.
 func exponentialBuckets(dp *metricspb.ExponentialHistogramDataPoint) *histPoint {
 	hp := &histPoint{count: float64(dp.GetCount()), sum: dp.GetSum(), min: math.NaN(), max: math.NaN()}
 	base := math.Pow(2, math.Pow(2, -float64(dp.GetScale())))
@@ -120,7 +116,6 @@ func exponentialBuckets(dp *metricspb.ExponentialHistogramDataPoint) *histPoint 
 	var bounds, counts []float64
 	add := func(b, c float64) {
 		if math.IsInf(b, 0) || math.IsNaN(b) || len(bounds) > 0 && b <= bounds[len(bounds)-1] {
-			// Out of range or not increasing: fold into the bucket before.
 			if len(counts) > 0 {
 				counts[len(counts)-1] += c
 				return

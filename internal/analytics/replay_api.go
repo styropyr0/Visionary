@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-// handleReplay lists a session's chunks, for the player to fetch one by one.
 func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !replaySessionID.MatchString(id) {
@@ -86,7 +85,6 @@ func (s *Server) handleReplayFrame(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("<!DOCTYPE html><html><head></head><body></body></html>"))
 }
 
-// replaySessions says which of these sessions have a replay.
 func (s *Server) replaySessions(ctx context.Context, ids []any) map[string]bool {
 	out := map[string]bool{}
 	if len(ids) == 0 {

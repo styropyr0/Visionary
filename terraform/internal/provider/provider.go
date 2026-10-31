@@ -21,7 +21,6 @@ type visionaryProvider struct {
 	version string
 }
 
-// New returns the provider factory for providerserver.
 func New(version string) func() provider.Provider {
 	return func() provider.Provider { return &visionaryProvider{version: version} }
 }

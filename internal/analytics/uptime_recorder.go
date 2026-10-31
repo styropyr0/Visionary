@@ -11,10 +11,8 @@ import (
 	"strings"
 )
 
-// A recording exported from Chrome DevTools' Recorder (JSON) becomes the
-// steps of a browser check. Each step keeps the best selector Chrome
-// offers that a check can use (see pickSelector); XPath alone is not
-// enough. Steps with no equivalent are listed, not dropped silently.
+// A Chrome DevTools Recorder export (JSON) becomes the steps of a browser
+// check. Steps with no equivalent are listed, not dropped silently.
 
 type recorderDoc struct {
 	Title string         `json:"title"`
@@ -42,7 +40,6 @@ type recorderStep struct {
 	} `json:"assertedEvents"`
 }
 
-// recorderImport is what the form fills in.
 type recorderImport struct {
 	Title       string        `json:"title"`
 	Steps       []BrowserStep `json:"steps"`
@@ -68,7 +65,6 @@ var stableCSS = regexp.MustCompile(`^[a-z]*(#[A-Za-z][\w-]*|\[(data-test(id)?|da
 func pickSelector(raw json.RawMessage, needCSS bool) (css, text string) {
 	var groups [][]string
 	if err := json.Unmarshal(raw, &groups); err != nil {
-		// Older exports list plain strings.
 		var flat []string
 		if json.Unmarshal(raw, &flat) != nil {
 			return "", ""
@@ -121,7 +117,6 @@ func pickSelector(raw json.RawMessage, needCSS bool) (css, text string) {
 	return plain, ""
 }
 
-// isSelect guesses whether a change step was on a <select>.
 func isSelect(raw json.RawMessage) bool {
 	s := string(raw)
 	return strings.Contains(s, `[role=\"combobox\"]`) || selectTagRe.MatchString(s)
@@ -135,7 +130,6 @@ func urlPath(raw string) string {
 	return u.Path
 }
 
-// convertRecording turns a Recorder export into steps.
 func convertRecording(data []byte) (recorderImport, error) {
 	var doc recorderDoc
 	if err := json.Unmarshal(data, &doc); err != nil {
@@ -213,7 +207,6 @@ func convertRecording(data []byte) (recorderImport, error) {
 			}
 			step = &BrowserStep{Action: "press", Value: s.Key}
 		case "keyUp":
-			// The matching keyDown pressed it.
 			continue
 		case "waitForElement":
 			css, text := pickSelector(s.Selectors, false)
@@ -271,7 +264,6 @@ func convertRecording(data []byte) (recorderImport, error) {
 	return out, nil
 }
 
-// handleRecorderImport converts a Recorder export for the check form.
 func (s *Server) handleRecorderImport(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 2<<20))
 	if err != nil {

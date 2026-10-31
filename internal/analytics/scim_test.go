@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// scimKey stores a key of scope scim and returns it.
 func scimKey(t *testing.T, s *Server, scope string) string {
 	t.Helper()
 	secret, _ := newKeySecret()
@@ -36,7 +35,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 	if w := call(t, h, "GET", "/api/settings/sso", nil, nil); w.Code != 401 {
 		t.Fatalf("settings should need sign-in now: %d", w.Code)
 	}
-	// SCIM's group mapping goes in with the providers; write it directly.
 	st := s.ssoSetup()
 	cfg := st.cfg
 	cfg.SCIM = scimConfig{RoleMap: "Ops=editor,Admins=admin", DefaultRole: "viewer"}
@@ -74,7 +72,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 		t.Fatalf("unsupported filter: %d", w.Code)
 	}
 
-	// Groups set the role.
 	w, group := scimCall(t, h, key, "POST", "/scim/v2/Groups", map[string]any{"displayName": "Ops", "members": []map[string]string{{"value": id}}})
 	if w.Code != 201 {
 		t.Fatalf("group: %d %s", w.Code, w.Body)
@@ -83,7 +80,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 		t.Fatalf("role from group: %q", a.Role)
 	}
 
-	// Dana signs in through the provider, which sends no groups: SCIM's role stands.
 	f.claims = map[string]any{"email": "dana@acme.com", "email_verified": true, "groups": []string{"sales"}}
 	w = oidcSignIn(t, h, f)
 	sess := cookieNamed(w, sessionCookie)
@@ -94,7 +90,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 		t.Fatalf("session: %s", w.Body)
 	}
 
-	// Leaving the group drops to the default role; Entra-style PATCH deactivates.
 	gid := group["id"].(string)
 	w, _ = scimCall(t, h, key, "PATCH", "/scim/v2/Groups/"+gid, map[string]any{
 		"schemas": []string{scimPatchSchema}, "Operations": []map[string]any{{"op": "remove", "path": `members[value eq "` + id + `"]`}},
@@ -115,7 +110,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 		t.Fatalf("deactivated sign-in: %q", msg)
 	}
 
-	// Path form, then delete.
 	w, user = scimCall(t, h, key, "PATCH", "/scim/v2/Users/"+id, map[string]any{
 		"Operations": []map[string]any{{"op": "replace", "path": "active", "value": true}, {"op": "replace", "path": "displayName", "value": "Dana N."}},
 	})
@@ -133,7 +127,6 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 		t.Fatalf("deleted user still in group: %v", g)
 	}
 
-	// Password accounts are out of SCIM's reach.
 	if err := s.db.Exec(context.Background(), `INSERT INTO visionary_users (id, username, name, role, password_hash, password_at, disabled, created_by, created_at)
 VALUES ('local1', 'admin', 'Admin', 'admin', 'x', ?, 0, 't', ?)`, nowTS(), nowTS()); err != nil {
 		t.Fatal(err)
@@ -148,7 +141,6 @@ VALUES ('local1', 'admin', 'Admin', 'admin', 'x', ?, 0, 't', ?)`, nowTS(), nowTS
 		}
 	}
 
-	// No writer runs in tests, so the entries wait in the queue.
 	seen := map[string]bool{}
 	for len(s.team().audits) > 0 {
 		seen[(<-s.team().audits).action] = true

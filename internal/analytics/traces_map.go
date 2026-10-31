@@ -18,7 +18,6 @@ type mapNode struct {
 	P95      *float64 `json:"p95"`
 }
 
-// mapEdge is calls from one node to another in the range.
 type mapEdge struct {
 	Source    string   `json:"source"`
 	Target    string   `json:"target"`

@@ -12,17 +12,13 @@ import (
 	"github.com/styropyr0/visionary/internal/db"
 )
 
-// A request scoped to workspaces carries a *wsScope in its context, and
-// scopedDB rewrites every statement run with that context: each table that
-// holds data of services is read through a subquery that keeps only the
-// allowed services' rows. Every read goes through s.db, so no handler has to
-// remember to filter. Rows without a service are left out, so only people
-// who see every service see them.
+// A request scoped to workspaces carries a *wsScope; scopedDB rewrites every
+// statement run with it so tables of service data are read through the allowed
+// services' rows only. Rows without a service are left out.
 
 type scopeKey struct{}
 
 type wsScope struct {
-	// patterns are the service names and globs ("payments-*") the request may read.
 	patterns []string
 	// ids are the workspaces in effect, which decide the alerts, uptime
 	// checks, dashboards and saved views shown.
@@ -54,7 +50,6 @@ func (sc *wsScope) key() string {
 	return strings.Join(sc.patterns, "\n") + "\x00" + fmt.Sprint(sc.ids)
 }
 
-// unscoped drops a scope, for reads that decide the scope itself.
 func unscoped(ctx context.Context) context.Context {
 	return context.WithValue(ctx, scopeKey{}, (*wsScope)(nil))
 }
@@ -62,18 +57,18 @@ func unscoped(ctx context.Context) context.Context {
 type scopeBy int
 
 const (
-	byService   scopeBy = iota // the table's own service column
-	byInstance                 // rollup_system: instances that reported an allowed service
-	byHost                     // host tables: hosts whose inventory names an allowed service
-	byIncident                 // incident details: incidents that affect an allowed service
-	byRule                     // alert history: rules of the workspaces
-	byCheck                    // uptime results: checks of the workspaces
-	byTarget                   // EXPLAIN plans: databases an allowed service queries
-	byReplay                   // replay chunks: sessions of an allowed app
-	ownedOnly                  // alert rules and uptime checks: the workspaces' own
-	ownedShared                // dashboards and saved views: the workspaces' own and unassigned ones
-	affected                   // incidents: their affected services
-	hidden                     // nothing; the rows can't be tied to a service
+	byService scopeBy = iota
+	byInstance
+	byHost
+	byIncident
+	byRule
+	byCheck
+	byTarget
+	byReplay
+	ownedOnly
+	ownedShared
+	affected
+	hidden
 )
 
 type scopeRule struct {
@@ -107,18 +102,13 @@ var scopedTables = map[string]scopeRule{
 	"DASHBOARDS": {by: ownedShared}, "LOG_VIEWS": {by: ownedShared},
 	"EXPLAIN_REQUESTS": {by: byTarget},
 	"LOG_ARCHIVES":     {by: hidden}, "SECURITY_KNOWN": {by: hidden},
-	// Detection rules span every service; their signals are security_events.
 	"SECURITY_RULES": {by: hidden},
 }
 
-// ownedTables get the workspace of whoever creates a row in them.
 var ownedTables = map[string]bool{"ALERT_RULES": true, "UPTIME_CHECKS": true, "DASHBOARDS": true, "LOG_VIEWS": true}
 
-// sharedInScope are the unfiltered tables people in a workspace may still
-// name in their own SQL.
 var sharedInScope = map[string]bool{"ANALYTICS_PANELS": true}
 
-// pred is the filter for table (upper case), and whether the table has one.
 func (sc *wsScope) pred(table string) (string, bool) {
 	sc.once.Do(sc.buildPreds)
 	p, ok := sc.preds[table]
@@ -177,7 +167,6 @@ func (sc *wsScope) binary(col string) string {
 	return col
 }
 
-// like matches col against a glob whose only wildcard is *.
 func (sc *wsScope) like(col, glob string) string {
 	if sc.d == sdk.SQLite {
 		return col + " GLOB '" + glob + "'"
@@ -261,7 +250,7 @@ func (sc *wsScope) rewrite(sql string, untrusted bool) (string, error) {
 		}
 		switch {
 		case next == "(":
-			continue // a table function
+			continue
 		case next == ".":
 			if i+2 < len(toks) {
 				if _, ok := scopedTables[toks[i+2].text]; ok || untrusted {
@@ -291,7 +280,6 @@ func (sc *wsScope) rewrite(sql string, untrusted bool) (string, error) {
 	return b.String(), nil
 }
 
-// aliasStops are words that can follow a table reference without being its alias.
 var aliasStops = map[string]bool{
 	"WHERE": true, "GROUP": true, "ORDER": true, "LIMIT": true, "OFFSET": true, "HAVING": true, "WINDOW": true,
 	"UNION": true, "EXCEPT": true, "INTERSECT": true, "JOIN": true, "INNER": true, "LEFT": true, "RIGHT": true,
@@ -346,7 +334,6 @@ func cteNames(toks []token) map[string]bool {
 	return out
 }
 
-// closeParen is the index of the parenthesis closing the one at open.
 func closeParen(toks []token, open int) int {
 	depth := 0
 	for k := open; k < len(toks); k++ {
@@ -406,7 +393,6 @@ loop:
 	return sql[:toks[where].end] + " (" + cond + ") AND " + p + " " + sql[cut:], nil
 }
 
-// ownedInsert is the owned table an INSERT writes to, or "".
 func ownedInsert(sql string) string {
 	toks, err := scanTokens(sql, true)
 	if err != nil || len(toks) < 3 || toks[0].text != "INSERT" || toks[1].text != "INTO" || !ownedTables[toks[2].text] {
@@ -415,7 +401,6 @@ func ownedInsert(sql string) string {
 	return strings.ToLower(toks[2].text)
 }
 
-// scopedDB applies the request's workspace scope to every statement.
 type scopedDB struct{ db.DB }
 
 func scopeFailed(err error) error {

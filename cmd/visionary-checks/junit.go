@@ -44,7 +44,6 @@ type junitMessage struct {
 	Text    string `xml:",chardata"`
 }
 
-// junitXML is the run as one JUnit suite with a test case per check.
 func junitXML(b batch) []byte {
 	name := fmt.Sprintf("Visionary uptime run #%d", b.ID)
 	if len(b.Tags) > 0 {

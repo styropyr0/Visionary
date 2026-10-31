@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	// RetryDelay is the pause before a failed run is tried again.
 	RetryDelay = 2 * time.Second
 	maxBody    = 1 << 20
 	userAgent  = "Visionary-Uptime/1.0"
@@ -103,7 +102,7 @@ func client(c Check, allowPrivate func() bool) *http.Client {
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
-			Proxy:                  nil, // a proxy would hide the real destination from the guard
+			Proxy:                  nil,
 			DialContext:            dialer.DialContext,
 			TLSHandshakeTimeout:    timeout,
 			DisableKeepAlives:      true,
@@ -128,7 +127,6 @@ func client(c Check, allowPrivate func() bool) *http.Client {
 	}
 }
 
-// Probe makes one HTTP request for c.
 func Probe(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	defer func() {
@@ -214,7 +212,6 @@ func ProbeError(err error, timeoutMs int) string {
 	}
 	msg := err.Error()
 	if errors.Is(err, ErrBlockedAddress) {
-		// Keep the guard's explanation, not the dialer's wrapping.
 		if i := strings.Index(msg, ErrBlockedAddress.Error()); i > 0 {
 			msg = msg[i:]
 		}
@@ -225,7 +222,6 @@ func ProbeError(err error, timeoutMs int) string {
 	return msg
 }
 
-// StatusRange is an inclusive range of accepted HTTP statuses.
 type StatusRange struct{ lo, hi int }
 
 var expectStatusPart = regexp.MustCompile(`^([1-5])xx$|^(\d{3})(?:-(\d{3}))?$`)
@@ -258,7 +254,6 @@ func ParseExpectStatus(spec string) ([]StatusRange, error) {
 	return out, nil
 }
 
-// StatusAccepted is whether code falls in one of rs.
 func StatusAccepted(rs []StatusRange, code int) bool {
 	for _, r := range rs {
 		if code >= r.lo && code <= r.hi {

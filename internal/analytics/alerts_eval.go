@@ -152,7 +152,6 @@ func (e *alertEngine) run(ctx context.Context, r alertRule) {
 
 func (e *alertEngine) enabledRules(ctx context.Context) ([]alertRule, error) {
 	if scopeFrom(ctx) != nil {
-		// The cache holds every workspace's rules.
 		return e.s.listRules(ctx, true)
 	}
 	e.mu.Lock()

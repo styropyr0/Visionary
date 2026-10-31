@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// The Prometheus HTTP API with the request shapes Grafana sends: form POSTs,
-// Unix or RFC 3339 times, a step in seconds, a read key as Basic password.
 func TestPromHTTPAPI(t *testing.T) {
 	s := metricsTestServer(t)
 	ctx := context.Background()
@@ -116,12 +114,10 @@ func TestPromHTTPAPI(t *testing.T) {
 	if code != http.StatusUnauthorized {
 		t.Fatalf("bad key: %d", code)
 	}
-	// remote_write still answers on its own path.
 	code, _ = call("POST", "/api/v1/write", nil, nil)
 	if code != http.StatusUnauthorized {
 		t.Fatalf("remote_write: %d", code)
 	}
-	// The Metrics page's endpoint, with the position of a mistake.
 	code, out = call("GET", "/api/metrics/promql", url.Values{"query": {`rate(orders_placed)`}}, bearer)
 	if code != 400 || out["position"] != float64(5) {
 		t.Fatalf("chart error: %d %v", code, out)
