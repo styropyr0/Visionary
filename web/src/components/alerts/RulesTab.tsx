@@ -23,6 +23,7 @@ import { SeverityTag, Sparkline, StateBadge, timeAgo } from "./bits";
 import { RuleDrawer } from "./RuleDrawer";
 import { usePopover } from "../Toolbar";
 import { FloatingMenu } from "../Floating";
+import { useConfirm } from "../Confirm";
 
 interface Props {
   meta: AlertsMeta;
@@ -38,6 +39,7 @@ type Editing = { rule: RuleView } | { initial?: RuleInput } | null;
 
 export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
   const toast = useToast();
+  const ask = useConfirm();
   const [editing, setEditing] = useState<Editing>(null);
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
@@ -102,7 +104,7 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
 
   const bulk = async (action: BulkAction, minutes = 0) => {
     const ids = picked.map((r) => r.id);
-    if (action === "delete" && !window.confirm(`Delete ${ids.length} rule${ids.length === 1 ? "" : "s"}? Their history stays in Activity.`)) return;
+    if (action === "delete" && !(await ask({ title: `Delete ${ids.length} rule${ids.length === 1 ? "" : "s"}?`, message: "Their history stays in Activity.", confirm: "Delete", danger: true }))) return;
     try {
       const r = await alertsApi.bulk(ids, action, minutes);
       toast("ok", `${r.changed} rule${r.changed === 1 ? "" : "s"} ${action === "delete" ? "deleted" : action === "mute" ? "muted" : `${action}d`}`);
@@ -372,7 +374,7 @@ function RuleRow({ rule, meta, selected, onSelect, onEdit, onChange }: { rule: R
       <td>
         <StateBadge state={st} />
       </td>
-      <td>
+      <td className="al-rule-cell">
         <div className="al-rule-name">
           {rule.name}
           {muted && (
