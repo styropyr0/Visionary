@@ -8,9 +8,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 )
 
-// Each run keeps its requests for a waterfall and HAR download. URLs lose
-// credentials and secret-looking query values; step screenshots are capped per run.
-
 const (
 	MaxRequests     = 300
 	MaxStepShot     = 60 << 10
@@ -88,8 +85,7 @@ func (st *runState) netFailed(ev *network.EventLoadingFailed, reason string) {
 	r.end, r.Failed, r.Error = ev.Timestamp.Float64(), true, clip(st.mask(reason), browserMaxEntryLen)
 }
 
-// requests are the run's requests, timed from start; one still open when the
-// run ended lasts until then.
+// A request still open when the run ended lasts until then
 func (st *runState) requests(start, end time.Time) []NetRequest {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -112,8 +108,6 @@ func (st *runState) requests(start, end time.Time) []NetRequest {
 	return out
 }
 
-// stepShot is a small screenshot after a step, or nil once the run's shots
-// reach their cap.
 func (st *runState) stepShot(ctx context.Context, scale float64) []byte {
 	if st.shotBytes >= StepShotsPerRun {
 		return nil

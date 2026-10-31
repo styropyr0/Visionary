@@ -1,4 +1,4 @@
-# One error-rate rule per service that reports to Visionary.
+# One error-rate rule per service that reports to Visionary
 data "visionary_services" "all" {}
 
 resource "visionary_alert_rule" "errors" {

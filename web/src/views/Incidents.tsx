@@ -65,7 +65,7 @@ function IncidentList({ declare }: { declare: { kind: string; ref: string } | nu
     <>
       <TopBar
         title="Incidents"
-        section="Manage"
+        section="Reliability"
         actions={
           <>
             <TimeRangePicker />

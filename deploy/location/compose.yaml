@@ -1,5 +1,5 @@
 # An uptime location: runs the checks Visionary assigns to one location from
-# this machine (a VPS in another region, a box inside a private network).
+# this machine (a VPS in another region, a box inside a private network)
 #
 # In Visionary, open Uptime → Locations, add a location and copy its key, then:
 #
@@ -22,6 +22,6 @@ services:
       VISIONARY_KEY: ${VISIONARY_KEY:?set the location key}
       VISIONARY_AGENT_LOCATION: ${VISIONARY_AGENT_LOCATION:?set the location name}
       # true or false: may checks reach private addresses on this network.
-      # Empty follows the server's setting for its own checks.
+      # Empty follows the server's setting for its own checks
       VISIONARY_AGENT_ALLOW_PRIVATE: ${VISIONARY_AGENT_ALLOW_PRIVATE:-}
     restart: unless-stopped

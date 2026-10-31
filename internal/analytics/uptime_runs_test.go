@@ -32,7 +32,7 @@ func TestWithOrigin(t *testing.T) {
 	}
 }
 
-// The newer steps and trace origins follow the override too.
+// The newer steps and trace origins follow the override too
 func TestWithOriginBrowserOptions(t *testing.T) {
 	c := UptimeCheck{Kind: "browser", URL: "https://app.example.com/", Steps: []BrowserStep{
 		{Action: "goto", Value: "https://app.example.com/"},

@@ -1,12 +1,4 @@
-// Command visionary-bench measures how much a database behind Visionary
-// takes. The write phase drives the Go SDK in process at a target request
-// rate (each request with spans, log lines, custom metrics and some errors)
-// and reports rows written per second, drops, the SDK's queue and database
-// growth. The read phase times the main dashboard queries through a running
-// server's HTTP API. Results print as a Markdown table.
-//
-//	visionary-bench -db postgres://... -rate 2000 -duration 60s
-//	visionary-bench -server http://localhost:8090 -read-only
+// Command visionary-bench measures how much load a database behind Visionary can take
 package main
 
 import (

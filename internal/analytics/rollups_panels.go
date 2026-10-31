@@ -20,7 +20,7 @@ const (
 )
 
 // Ranges at least this long read rollups (when they cover the range).
-// Shorter ones do too once they hold busyRows requests.
+// Shorter ones do too once they hold busyRows requests
 const (
 	requestsRollupMin = 48 * time.Hour
 	systemRollupMin   = 24 * time.Hour

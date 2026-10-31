@@ -75,9 +75,8 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.partitionRoutes(mux)
 }
 
-// Start launches the features' background work. It returns after the first
-// lease round; the work stops when ctx ends. Work that must run on one
-// replica only registers with leased and starts when this replica holds it.
+// Start returns after the first lease round and the work stops when ctx ends.
+// Work for one replica only registers with leased
 func (s *Server) Start(ctx context.Context) {
 	if s.schemaPending.Load() {
 		go s.retrySchema(ctx)

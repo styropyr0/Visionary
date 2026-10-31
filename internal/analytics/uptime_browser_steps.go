@@ -10,9 +10,6 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Validation of the steps beyond clicking and checking; they run in
-// internal/uptimecore (browser_steps.go).
-
 var (
 	varRefRe      = regexp.MustCompile(`\{\{var\.([A-Za-z0-9_]+)\}\}`)
 	cookieNameRe  = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,200}$")

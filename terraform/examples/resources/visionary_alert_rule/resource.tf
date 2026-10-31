@@ -1,4 +1,4 @@
-# p95 latency of the checkout route over 800 ms for 2 minutes.
+# p95 latency of the checkout route over 800 ms for 2 minutes
 resource "visionary_alert_rule" "slow_checkout" {
   name      = "Slow checkout"
   severity  = "critical"
@@ -15,14 +15,14 @@ resource "visionary_alert_rule" "slow_checkout" {
     route = "/checkout"
   }
 
-  # Nobody acknowledged it in 15 minutes: page.
+  # Nobody acknowledged it in 15 minutes: page
   escalation = [{
     after    = "15m"
     channels = [visionary_alert_channel.pager.id]
   }]
 }
 
-# Traffic far from its usual level, in either direction.
+# Traffic far from its usual level, in either direction
 resource "visionary_alert_rule" "traffic" {
   name        = "Unusual traffic"
   kind        = "anomaly"
@@ -32,7 +32,7 @@ resource "visionary_alert_rule" "traffic" {
   channels    = [visionary_alert_channel.ops.id]
 }
 
-# The SLO burning its error budget too fast.
+# The SLO burning its error budget too fast
 resource "visionary_alert_rule" "slo" {
   name     = "Checkout SLO"
   kind     = "slo"
@@ -40,7 +40,7 @@ resource "visionary_alert_rule" "slo" {
   channels = [visionary_alert_channel.ops.id]
 }
 
-# A PromQL expression.
+# A PromQL expression
 resource "visionary_alert_rule" "queue" {
   name      = "Queue backing up"
   metric    = "promql"

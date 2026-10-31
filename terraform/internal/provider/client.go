@@ -42,8 +42,6 @@ func isNotFound(err error) bool {
 	return errors.As(err, &ae) && ae.Status == http.StatusNotFound
 }
 
-// do sends in as JSON (when not nil) and decodes the answer into out (when
-// not nil).
 func (c *client) do(ctx context.Context, method, path string, in, out any) error {
 	var body io.Reader
 	if in != nil {

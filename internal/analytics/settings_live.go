@@ -17,7 +17,7 @@ import (
 // The settings the server itself runs on (thresholds, retention, the status
 // page), kept in visionary_settings and edited in Settings. Readers get them
 // from s.live(), refreshed every 30 seconds and right after a change, here
-// and, through visionary_changes, on the other replicas.
+// and, through visionary_changes, on the other replicas
 
 // apdexRule is the Apdex threshold T: a default, and overrides for routes
 // that are slow by design (exports, uploads).
@@ -103,7 +103,7 @@ type liveSettings struct {
 	Retention   map[string]int `json:"retention"` // days by kind; 0 keeps forever
 	StatusPage  bool           `json:"status_page"`
 	StatusTitle string         `json:"status_title"`
-	// Partitioning is "daily" or "off" once saved (Settings → Data).
+	// Partitioning is "daily" or "off" once saved (Settings → Data)
 	Partitioning string `json:"partitioning"`
 	// Config holds the stored config.* values by key (Settings → Server);
 	// never sent as is, since some are secrets.
@@ -211,8 +211,8 @@ func (s *Server) liveStart(ctx context.Context) {
 }
 
 // retentionLoop deletes rows past each kind's retention, 90 s after start
-// and then every 6 hours, 5000 at a time; partitioned tables first drop the
-// whole days past it. Rollups keep their own pace in the rollup job.
+// and then every 6 hours, 5000 at a time, and partitioned tables first drop the
+// whole days past it. Rollups keep their own pace in the rollup job
 func (s *Server) retentionLoop(ctx context.Context) {
 	timer := time.NewTimer(90 * time.Second)
 	defer timer.Stop()

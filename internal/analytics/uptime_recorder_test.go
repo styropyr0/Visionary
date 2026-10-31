@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// recording is a Recorder export as Chrome 131 saves it, trimmed to one
-// sign-in and checkout.
 const recording = `{
   "title": "Sign in and check out",
   "steps": [

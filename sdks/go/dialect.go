@@ -28,7 +28,7 @@ func (d Dialect) TelemetrySchema() string { return d.schema("telemetry.sql") }
 // LogsSchema returns the CREATE statements for app_logs in d.
 func (d Dialect) LogsSchema() string { return d.schema("logs.sql") }
 
-// MetricsSchema returns the CREATE statements for the metrics table in d.
+// MetricsSchema returns the CREATE statements for the metrics table in d
 func (d Dialect) MetricsSchema() string { return d.schema("metrics.sql") }
 
 // SystemSchema returns the CREATE statements for system_metrics in d.
@@ -117,8 +117,6 @@ func insertSQL(table string, columns []string, stringParams bool) string {
 	return "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ") VALUES (" + strings.Join(marks, ", ") + ")"
 }
 
-// insertRowsSQL builds one INSERT carrying n rows of columns, for SQL
-// backends.
 func insertRowsSQL(table string, columns []string, n int) string {
 	row := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(columns)), ", ") + ")"
 	var b strings.Builder

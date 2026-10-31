@@ -17,8 +17,7 @@ import (
 
 const runParallel = 4
 
-// executeBatch runs each check of a batch once, a few at a time, and records
-// how each did. It outlives the request that started it.
+// It outlives the request that started it
 func (s *Server) executeBatch(b runBatch, items []runItem, checks []UptimeCheck, override string) {
 	ctx, cancel := context.WithTimeout(context.Background(), runBatchTTL)
 	defer cancel()
@@ -55,9 +54,8 @@ func (s *Server) executeBatch(b runBatch, items []runItem, checks []UptimeCheck,
 	}
 }
 
-// runOne runs one check from the server location. Against its own URL, on a
-// check that runs from the server, the result is recorded like a scheduled one;
-// otherwise it stays in the batch only.
+// Against its own URL, on a check that runs from the server, the result is
+// recorded like a scheduled one. Otherwise it stays in the batch only
 func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, override string) runItem {
 	if c.Kind == "playwright" {
 		return runItem{Status: "skipped", Error: "Playwright checks report from your test runs; they can't be started here"}
@@ -66,7 +64,7 @@ func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, o
 		return runItem{Status: "skipped", Error: "Heartbeat checks wait for pings from your job; they can't be started here"}
 	}
 	// TCP, DNS, ping and certificate checks have a host, not a URL, so they
-	// run against their own target whatever the override.
+	// run against their own target whatever the override
 	if hostKinds[c.Kind] {
 		override = ""
 	}
@@ -124,12 +122,9 @@ func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, o
 
 var (
 	probeKinds = map[string]bool{"http": true, "api": true, "tcp": true, "dns": true, "ping": true, "ssl": true}
-	// hostKinds point at a host rather than a URL.
-	hostKinds = map[string]bool{"tcp": true, "dns": true, "ping": true, "ssl": true, "heartbeat": true}
+	hostKinds  = map[string]bool{"tcp": true, "dns": true, "ping": true, "ssl": true, "heartbeat": true}
 )
 
-// runRecorded runs a check of a kind this file doesn't know through the
-// scheduler's own path, then reads back the result it recorded.
 func (s *Server) runRecorded(ctx context.Context, run *uptimeRunner, c UptimeCheck) runItem {
 	start := uptimeNow()
 	run.execute(ctx, c)
@@ -172,10 +167,8 @@ func (s *Server) saveItem(ctx context.Context, id int64, it runItem) {
 	}
 }
 
-// parseOverride checks an override origin against every picked check: it
-// must be on the same site as the check's own URL, or match the hosts an
-// admin allows in uptime_override_hosts. Otherwise a CI key could send a
-// check's secret headers to any server.
+// The override must be on the same site as each check's own URL or in uptime_override_hosts,
+// otherwise a CI key could send a check's secret headers to any server
 func (s *Server) parseOverride(raw string, checks []UptimeCheck) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -206,8 +199,8 @@ func (s *Server) parseOverride(raw string, checks []UptimeCheck) (string, error)
 	return origin, nil
 }
 
-// siteOf is a host's registrable domain (example.co.uk for a.b.example.co.uk),
-// or the host itself for IPs and single labels.
+// A host's registrable domain (example.co.uk for a.b.example.co.uk),
+// or the host itself for IPs and single labels
 func siteOf(host string) string {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	if site, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
@@ -226,9 +219,8 @@ func hostAllowed(host string, patterns []string) bool {
 	return false
 }
 
-// withOrigin points a check at another origin: its URL and every URL in it
-// (browser steps, request steps) on the same site as its URL, keeping paths
-// and queries. Other sites a check visits, such as a sign-in provider, stay.
+// Only URLs on the same site as the check's URL move. Other sites it visits,
+// such as a sign-in provider, stay
 func withOrigin(c UptimeCheck, origin string) (UptimeCheck, error) {
 	base, err := url.Parse(c.URL)
 	if err != nil {

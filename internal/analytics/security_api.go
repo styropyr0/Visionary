@@ -325,7 +325,7 @@ func (s *Server) auditRoleMapping(ctx context.Context) {
 			if len(res.Rows) == 1 {
 				detail["previous"] = json.RawMessage(toString(res.Rows[0][0]))
 			}
-			// Replicas starting together would each record it.
+			// Replicas starting together would each record it
 			sum := sha256.Sum256(cur)
 			if !s.firstUse(ctx, "role-mapping:"+hex.EncodeToString(sum[:8]), 10*time.Minute) {
 				return

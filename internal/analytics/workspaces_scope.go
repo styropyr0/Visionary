@@ -12,20 +12,16 @@ import (
 	"github.com/styropyr0/visionary/internal/db"
 )
 
-// A request scoped to workspaces carries a *wsScope; scopedDB rewrites every
-// statement run with it so tables of service data are read through the allowed
-// services' rows only. Rows without a service are left out.
+// scopedDB rewrites every statement of a scoped request so service data is read
+// through the allowed services' rows only. Rows without a service are left out
 
 type scopeKey struct{}
 
 type wsScope struct {
 	patterns []string
-	// ids are the workspaces in effect, which decide the alerts, uptime
-	// checks, dashboards and saved views shown.
-	ids []int64
-	// home is where alerts, checks, dashboards and views created now belong.
-	home int64
-	// role is what the workspaces let the person do; roleNone keeps their own.
+	ids      []int64
+	home     int64
+	// roleNone keeps the person's own role
 	role role
 	d    sdk.Dialect
 
@@ -42,7 +38,6 @@ func withScope(ctx context.Context, sc *wsScope) context.Context {
 	return context.WithValue(ctx, scopeKey{}, sc)
 }
 
-// key tells scopes apart in caches; it is empty without one.
 func (sc *wsScope) key() string {
 	if sc == nil {
 		return ""
@@ -76,9 +71,7 @@ type scopeRule struct {
 	col string
 }
 
-// scopedTables are the tables read through a filter in a scoped request, by
-// upper-case name. Any other table is shared metadata (settings, channels,
-// silences, saved panels) or admin-only.
+// Any table not listed is shared metadata or admin-only
 var scopedTables = map[string]scopeRule{
 	"API_LOGS": {byService, "service"}, "SPANS": {byService, "service"}, "ERRORS": {byService, "service"},
 	"RELEASES": {byService, "service"}, "SYSTEM_METRICS": {byService, "service"}, "APP_LOGS": {byService, "service"},
@@ -160,7 +153,6 @@ func (sc *wsScope) buildPreds() {
 	}
 }
 
-// binary makes a MySQL comparison case-sensitive, as it is elsewhere.
 func (sc *wsScope) binary(col string) string {
 	if sc.d == sdk.MySQL {
 		return col + " COLLATE utf8mb4_bin"
@@ -176,8 +168,7 @@ func (sc *wsScope) like(col, glob string) string {
 	return sc.binary(col) + " LIKE '" + pat + "' ESCAPE '!'"
 }
 
-// serviceMatch keeps rows whose col is an allowed service. Patterns are
-// checked against servicePattern when saved, so they quote safely.
+// Patterns are checked against servicePattern when saved, so they quote safely
 func (sc *wsScope) serviceMatch(col string) string {
 	var exact, parts []string
 	for _, p := range sc.patterns {
@@ -199,9 +190,8 @@ func (sc *wsScope) serviceMatch(col string) string {
 	return "(" + strings.Join(parts, " OR ") + ")"
 }
 
-// affectedMatch keeps incidents naming an allowed service. services is a
-// JSON list of names, which can't hold quotes, so a quote marks where each
-// name starts and ends.
+// services is a JSON list of names, which can't hold quotes,
+// so a quote marks where each name starts and ends
 func (sc *wsScope) affectedMatch() string {
 	var parts []string
 	for _, p := range sc.patterns {
@@ -225,9 +215,7 @@ func (sc *wsScope) affectedMatch() string {
 	return "(" + strings.Join(parts, " OR ") + ")"
 }
 
-// rewrite reads every scoped table of a SELECT through its filter. untrusted
-// is SQL from a person or the model, which may name only scoped tables, the
-// shared ones and its own CTEs.
+// untrusted SQL may name only scoped tables, the shared ones and its own CTEs
 func (sc *wsScope) rewrite(sql string, untrusted bool) (string, error) {
 	toks, err := scanTokens(sql, !untrusted)
 	if err != nil {
@@ -296,8 +284,6 @@ func hasAlias(toks []token, i int) bool {
 	return t.kind == tokName || t.kind == tokWord && !aliasStops[t.text]
 }
 
-// cteNames are the names a WITH clause defines: WITH [RECURSIVE] name
-// [(cols)] AS [[NOT] MATERIALIZED] (...), repeated after commas.
 func cteNames(toks []token) map[string]bool {
 	out := map[string]bool{}
 	for i := range toks {
@@ -350,8 +336,6 @@ func closeParen(toks []token, open int) int {
 	return len(toks)
 }
 
-// restrictWrite limits an UPDATE or DELETE of a scoped table to the rows the
-// scope can see, so nobody changes what they can't read.
 func (sc *wsScope) restrictWrite(sql string) (string, error) {
 	toks, err := scanTokens(sql, true)
 	if err != nil {

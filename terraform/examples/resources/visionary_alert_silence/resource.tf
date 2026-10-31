@@ -1,4 +1,4 @@
-# Quiet hours: no info or warning notifications on weeknights.
+# Quiet hours: no info or warning notifications on weeknights
 resource "visionary_alert_silence" "nights" {
   name       = "Quiet nights"
   severities = ["info", "warning"]
@@ -11,7 +11,7 @@ resource "visionary_alert_silence" "nights" {
   }
 }
 
-# A maintenance window for one rule.
+# A maintenance window for one rule
 resource "visionary_alert_silence" "upgrade" {
   name     = "Database upgrade"
   rule_ids = [visionary_alert_rule.slow_checkout.id]

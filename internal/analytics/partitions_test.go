@@ -30,7 +30,7 @@ func TestPartitionNames(t *testing.T) {
 	}
 }
 
-// TestConvertTable runs on PostgreSQL only (VISIONARY_TEST_DATABASE_URL).
+// TestConvertTable runs on PostgreSQL only (VISIONARY_TEST_DATABASE_URL)
 func TestConvertTable(t *testing.T) {
 	if !strings.HasPrefix(os.Getenv("VISIONARY_TEST_DATABASE_URL"), "postgres") {
 		t.Skip("needs VISIONARY_TEST_DATABASE_URL on PostgreSQL")

@@ -86,7 +86,7 @@ func TestServicePatterns(t *testing.T) {
 }
 
 // Every row of the hidden service carries this marker somewhere in its data,
-// never in an id, so a response that contains it leaked a row.
+// never in an id, so a response that contains it leaked a row
 const leak = "zzleak"
 
 const (
@@ -291,8 +291,6 @@ type route struct {
 
 var routeLine = regexp.MustCompile(`mux\.Handle(?:Func)?\(\s*(p\+)?"(?:([A-Z]+) )?(/[^"]*)"(.*)`)
 
-// sourceRoutes reads every route the package registers from its source, so a
-// new route can't escape the test without being listed.
 func sourceRoutes(t *testing.T) []route {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
@@ -334,13 +332,10 @@ var readPOSTs = map[string]string{
 	"/api/analyst":                  `{"question":"errors"}`,
 }
 
-// leakExcluded are the authed GET routes not called, and why.
 var leakExcluded = map[string]string{
 	"/api/sso/{id}/test": "redirects to an identity provider; reads no data",
 }
 
-// pathValues fill route parameters with the hidden service's objects, so
-// every direct link is tried too. None holds the marker.
 var pathValues = map[string]string{
 	"{id}": "1", "{fingerprint}": "f00d0001", "{request_id}": "req1", "{trace_id}": secretTrace,
 	"{host}": leak + "-host", "{account}": "acct1", "{ip}": "10.0.0.1", "{name}": "service", "{seq}": "0", "{run}": "1",
@@ -384,9 +379,6 @@ func (f *wsFixture) panels(path string) []string {
 
 var param = regexp.MustCompile(`\{[a-z_]+\}`)
 
-// TestWorkspaceLeaks calls every data route as a read key scoped to the
-// Payments workspace and as one that sees everything, and requires that no
-// response for the scoped key holds a row of the hidden service.
 func TestWorkspaceLeaks(t *testing.T) {
 	f := newWSFixture(t)
 	from := f.at.Add(-time.Hour).Format(time.RFC3339)

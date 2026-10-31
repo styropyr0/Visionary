@@ -27,11 +27,10 @@ var blockedPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("2002::/16"),    // 6to4 likewise
 }
 
-// ErrBlockedAddress is wrapped by every refusal of the guard.
 var ErrBlockedAddress = errors.New("blocked address")
 
 // GuardHint follows a refusal and says how to lift the guard where the
-// check runs.
+// check runs
 var GuardHint = " (an admin can allow it in Settings → Server → Other)"
 
 func BlockedAddr(a netip.Addr) bool {
@@ -67,7 +66,7 @@ func DialGuard(_, address string, _ syscall.RawConn) error {
 
 // PrecheckURL refuses obvious targets before any request: a literal private
 // IP or localhost. Names that resolve to private addresses are caught by
-// DialGuard.
+// DialGuard
 func PrecheckURL(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("unsupported scheme %q", u.Scheme)

@@ -9,6 +9,7 @@ import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { Card, Switch } from "./Settings.profiling";
 import { Row, type Account } from "./Settings.config";
+import { useConfirm } from "../components/Confirm";
 
 // ---------- Single sign-on and SCIM ----------
 
@@ -433,6 +434,7 @@ const ROLE_PICKS = DEFAULT_ROLES.slice(1);
 
 function SsoPeopleCard() {
   const toast = useToast();
+  const ask = useConfirm();
   const [run, setRun] = useState(0);
   const q = useQuery(`sso-people#${run}`, () => api<{ accounts: Account[] }>("/api/team/accounts"));
   const people = (q.data?.accounts ?? []).filter((a) => a.source);
@@ -502,8 +504,8 @@ function SsoPeopleCard() {
                       className="icon-btn"
                       title="Delete"
                       aria-label={`Delete ${a.username}`}
-                      onClick={() => {
-                        if (window.confirm(`Delete ${a.username}? If accounts are made at first sign-in, they get a new one next time; switch them off at the identity provider to keep them out.`)) {
+                      onClick={async () => {
+                        if (await ask({ title: `Delete ${a.username}?`, message: "If accounts are made at first sign-in, they get a new one next time. Switch them off at the identity provider to keep them out.", confirm: "Delete account", danger: true })) {
                           void act(() => api(`/api/team/accounts/${a.id}`, { method: "DELETE" }), `${a.username} was deleted.`);
                         }
                       }}

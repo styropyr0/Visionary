@@ -12,8 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-// A parser for the PromQL subset Visionary evaluates. Written here rather
-// than linking the Prometheus module, which would pull in most of Prometheus.
+// Written here rather than linking the Prometheus module, which would pull in most of Prometheus
 
 type promError struct {
 	Pos int
@@ -276,7 +275,6 @@ var durationUnits = map[string]time.Duration{
 	"d": 24 * time.Hour, "w": 7 * 24 * time.Hour, "y": 365 * 24 * time.Hour,
 }
 
-// lexNumber reads a number, or a duration like 5m or 1h30m.
 func lexNumber(input string, start int) (promToken, int, error) {
 	j := start
 	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }

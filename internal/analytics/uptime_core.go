@@ -2,16 +2,13 @@ package analytics
 
 import "github.com/styropyr0/visionary/internal/uptimecore"
 
-// Running a check lives in internal/uptimecore, shared with the host agent's
-// location runner; these are its types under the names this package uses.
 type (
 	uptimeResult  = uptimecore.Result
 	browserRun    = uptimecore.BrowserRun
 	stepResult    = uptimecore.StepResult
 	netFailure    = uptimecore.NetFailure
 	browserStatus = uptimecore.BrowserStatus
-	// BrowserOptions are a browser check's settings beyond its steps, stored
-	// as one JSON column in uptime_browser_checks.
+	// Stored as one JSON column in uptime_browser_checks
 	BrowserOptions = uptimecore.BrowserOptions
 	BrowserLimits  = uptimecore.BrowserLimits
 	BrowserFile    = uptimecore.BrowserFile

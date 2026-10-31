@@ -28,8 +28,7 @@ type annotations struct {
 	requestID string
 	method    string
 	path      string
-	// span is the request's server span; parentSpanID the caller's span
-	// from traceparent, if any.
+	// parentSpanID is the caller's span from traceparent, if any
 	span         spanContext
 	parentSpanID string
 

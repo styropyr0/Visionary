@@ -26,8 +26,6 @@ func ciFilter(q url.Values, cols ...string) (string, []any) {
 	return b.String(), args
 }
 
-// ciPct is the nearest-rank percentile of sorted values, as the SQL panels
-// compute it.
 func ciPct(sorted []float64, p float64) any {
 	if len(sorted) == 0 {
 		return nil
@@ -36,7 +34,6 @@ func ciPct(sorted []float64, p float64) any {
 	return sorted[min(max(i, 0), len(sorted)-1)]
 }
 
-// ciBucket aims at about 30 points: CI runs are far fewer than requests.
 func ciBucket(tr timeRange) int64 {
 	want := int64(tr.To.Sub(tr.From).Seconds()) / 30
 	for _, step := range bucketSteps {
@@ -84,8 +81,7 @@ func (a *ciAgg) add(status, conclusion, at string, id int64, queue, duration any
 	}
 }
 
-// rate is the success rate of finished runs that passed or failed; cancelled
-// and skipped runs say nothing about the code.
+// Cancelled and skipped runs say nothing about the code, so they're left out
 func (a *ciAgg) rate() any {
 	if a.success+a.failure == 0 {
 		return nil
@@ -295,7 +291,6 @@ WHERE created_at >= ? AND created_at < ?`+f+` LIMIT 50000`, append([]any{from, t
 	})
 }
 
-// ciQuiet treats a CI table that does not exist yet as empty.
 func ciQuiet(err error, table string) error {
 	if err != nil && missingTable(err, table) {
 		return nil
@@ -343,8 +338,6 @@ func scanCIRun(row []any) ciRunRow {
 	}
 }
 
-// versionCommits are the commit SHA prefixes a version names: "a1b2c3d",
-// "1.4.0+a1b2c3d", git describe's "v1.4.0-3-ga1b2c3d".
 func versionCommits(version string) []string {
 	var out []string
 	for _, tok := range strings.FieldsFunc(strings.ToLower(version), func(r rune) bool {
@@ -682,7 +675,7 @@ FROM ci_tests WHERE created_at >= ? AND created_at < ?`+f, base...)
 	if totals == nil {
 		totals = map[string]any{"tests": 0, "results": 0, "failures": 0, "skipped": 0, "failing_tests": 0}
 	}
-	// Getting slower: at least five passing runs in each half, 25% and 20 ms slower.
+	// Getting slower: at least five passing runs in each half, 25% and 20 ms slower
 	var slower [][]any
 	for _, m := range rowMaps(trend) {
 		b, a := toFloat(m["before_ms"]), toFloat(m["after_ms"])
@@ -792,8 +785,6 @@ func (s *Server) handleCIFlaky(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tests": head(flaky, 200), "new": fresh})
 }
 
-// handleCIBuilds finds the run that built each version, by the commit its
-// version names, for the deploy markers and the version comparison.
 func (s *Server) handleCIBuilds(w http.ResponseWriter, r *http.Request) {
 	versions := r.URL.Query()["version"]
 	out := map[string]any{}

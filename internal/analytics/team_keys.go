@@ -18,9 +18,9 @@ import (
 
 // API keys. A key is "vis_" plus 32 random bytes; only its SHA-256 is stored,
 // with the first characters kept visible so people can tell keys apart.
-// Scopes: read, editor and admin use the HTTP API with that role's rights;
-// server and client send from SDKs and OTLP (client is public); scim manages
-// people for an identity provider; ci only runs checks and reports tests.
+// Scopes: read, editor and admin use the HTTP API with that role's rights,
+// server and client send from SDKs and OTLP (client is public), scim manages
+// people for an identity provider and ci only runs checks and reports tests
 
 const (
 	keyPrefix     = "vis_"
@@ -33,7 +33,6 @@ const (
 
 var keyScopes = []string{"read", "editor", "admin", "server", "client", "scim", "ci"}
 
-// keyRoles are the scopes that use the HTTP API, with the role each acts as.
 var keyRoles = map[string]role{"read": roleViewer, "editor": roleEditor, "admin": roleAdmin, "ci": roleViewer}
 
 var ciKeyPaths = []string{"/api/uptime/runs", "/api/uptime/playwright"}
@@ -220,9 +219,8 @@ func bearerKey(r *http.Request) (string, bool) {
 // readPosts are the POST endpoints that only read: read keys may call them.
 var readPosts = []string{"/api/query", "/api/analyst", "/api/applogs/ask", "/api/applogs/explain", "/api/settings/logs/rules/test"}
 
-// keyAuthed serves a request made with an API key in the key's role. Read
-// keys never write, whatever the handler would allow; editor and admin keys
-// are held to the handlers' own role checks.
+// Read keys never write, whatever the handler would allow. Editor and admin keys
+// are held to the handlers' own role checks
 func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h http.HandlerFunc) {
 	k, ok := s.lookupKey(r.Context(), raw, "read", "editor", "admin", "ci")
 	if !ok {

@@ -6,10 +6,10 @@ name: Terraform provider
 # terraform/ (with its history) to styropyr0/terraform-provider-visionary, tags it v0.1.0
 # there, and goreleaser builds, signs (GPG) and attaches the binaries to that repository's
 # release, where the registry picks them up. The same tag makes the module resolvable here as
-# github.com/styropyr0/visionary/terraform@v0.1.0.
+# github.com/styropyr0/visionary/terraform@v0.1.0
 #
 # A release can be re-run: it skips (with a notice) a version that is already released.
-# One-time setup: docs/releasing.md, "Terraform provider".
+# One-time setup: docs/releasing.md, "Terraform provider"
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
           terraform_wrapper: false
       - run: go vet ./...
       - run: go test ./...
-      # Starts a Visionary built from this checkout on a temporary SQLite database.
+      # Starts a Visionary built from this checkout on a temporary SQLite database
       - name: Acceptance tests
         env:
           TF_ACC: "1"

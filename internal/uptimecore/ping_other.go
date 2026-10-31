@@ -107,7 +107,7 @@ func pingHost(ctx context.Context, addr netip.Addr, n int, wait time.Duration) (
 			if err != nil || parsed.Type != reply {
 				continue
 			}
-			// Datagram sockets rewrite the id, so only the sequence is matched there.
+			// Datagram sockets rewrite the id, so only the sequence is matched there
 			if e, ok := parsed.Body.(*icmp.Echo); ok && e.Seq == seq && (sock.udp || e.ID == id) {
 				rtt = msPtr(msSince(t0))
 			}

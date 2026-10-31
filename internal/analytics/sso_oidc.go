@@ -15,10 +15,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// OpenID Connect: the authorization code flow with PKCE, a state bound to
-// the browser by a cookie, and a nonce in the ID token, which is checked
-// against the provider's published keys (JWKS).
-
 const oidcCookie = "visionary_oidc"
 
 var ssoHTTP = &http.Client{Timeout: 15 * time.Second}
@@ -42,7 +38,6 @@ func ssoContext(ctx context.Context) context.Context {
 	return context.WithValue(oidc.ClientContext(ctx, ssoHTTP), oauth2.HTTPClient, ssoHTTP)
 }
 
-// oidcFor reads the provider's discovery document once per setup.
 func (s *Server) oidcFor(ctx context.Context, st *ssoSetup, p *ssoProvider) (*oidcClient, error) {
 	state := s.sso()
 	state.mu.Lock()
@@ -149,8 +144,6 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	s.ssoComplete(w, r, p, ident, f.Test)
 }
 
-// oidcIdentity exchanges the code and verifies the ID token: signature,
-// issuer, audience, expiry and nonce.
 func (s *Server) oidcIdentity(ctx context.Context, st *ssoSetup, p *ssoProvider, f *oidcFlow, code string) (*ssoIdentity, error) {
 	if code == "" {
 		return nil, errors.New("the provider sent no authorization code")
@@ -212,8 +205,7 @@ func (s *Server) oidcIdentity(ctx context.Context, st *ssoSetup, p *ssoProvider,
 	return id, nil
 }
 
-// claimValue finds a claim by its exact name first (namespaced claims such as
-// https://example.com/roles contain dots), then as a dotted path.
+// Namespaced claims such as https://example.com/roles contain dots, so the exact name is tried first
 func claimValue(claims map[string]any, name string) (any, bool) {
 	if v, ok := claims[name]; ok {
 		return v, true
@@ -237,8 +229,8 @@ func claimString(claims map[string]any, name string) string {
 	return strings.TrimSpace(s)
 }
 
-// claimList reads a list claim. It is nil when the claim is missing, so a
-// provider that leaves it out doesn't look like someone in no group.
+// nil when the claim is missing, so a provider that leaves it out
+// doesn't look like someone in no group
 func claimList(claims map[string]any, name string) []string {
 	v, ok := claimValue(claims, name)
 	if !ok {

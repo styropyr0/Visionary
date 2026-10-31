@@ -15,10 +15,6 @@
 //	VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=... visionary-agent
 //
 // It runs on the host itself (deploy/agent/install.sh), not in a container.
-//
-// With VISIONARY_AGENT_LOCATION it is an uptime location instead: it runs
-// the checks the server assigns to that location (location.go), and may run
-// in a container (docker build --target location).
 package main
 
 import (
@@ -60,9 +56,7 @@ type config struct {
 	logs     []string
 	stateDir string
 
-	location string
-	// allowPrivate is "true" or "false", or empty to follow the server's
-	// setting for its own checks.
+	location       string
 	allowPrivate   string
 	browserWorkers int
 

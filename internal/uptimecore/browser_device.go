@@ -8,9 +8,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// A browser check runs at a device preset's screen size, or a custom size. The
-// phone preset is a mobile browser: its user agent, touch and pixel ratio 3.
-
 type deviceSpec struct {
 	Label  string
 	W, H   int
@@ -27,7 +24,6 @@ var browserDevices = map[string]deviceSpec{
 	"phone":   {"Phone", 390, 844, 3, true},
 }
 
-// NormalizeDevice checks the device, desktop when none is given.
 func (o *BrowserOptions) NormalizeDevice() error {
 	if o.Device == "" {
 		o.Device = "desktop"

@@ -97,7 +97,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
     <>
       <TopBar
         title="Uptime"
-        section="Monitor"
+        section="Reliability"
         actions={
           <>
             <a className="btn ghost" href="/status" target="_blank" rel="noreferrer" title="Public status page (turned on in Settings → Status page)">
@@ -174,7 +174,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
                 <table className="data up-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 110 }}>State</th>
+                      <th style={{ width: "1%" }}>State</th>
                       <th>Check</th>
                       <th style={{ width: "26%" }}>Last 90 days</th>
                       <th className="num" style={{ width: 96 }}>

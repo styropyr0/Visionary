@@ -12,10 +12,8 @@ import (
 // The status page is server-rendered HTML with inline styles (the CSP allows
 // them), with the dashboard's own tokens and a theme that follows the system
 // setting. Times are written in UTC in <time> elements and /status.js rewrites
-// them to the visitor's time zone.
+// them to the visitor's time zone
 
-// statusView is what the template sees: the cached page plus where the
-// dashboard's font lives in this build.
 type statusView struct {
 	*statusPage
 	Font string
@@ -26,8 +24,7 @@ var statusFont struct {
 	path string
 }
 
-// statusFontPath finds the dashboard's Latin Inter file in the embedded build;
-// its name carries a content hash that changes between builds.
+// The file name carries a content hash that changes between builds
 func (s *Server) statusFontPath() string {
 	statusFont.once.Do(func() {
 		if s.static == nil {

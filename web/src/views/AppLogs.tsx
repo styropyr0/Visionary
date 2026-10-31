@@ -147,7 +147,7 @@ export function AppLogs() {
     <>
       <TopBar
         title="Logs"
-        section="Investigate"
+        section="Analysis"
         actions={
           <>
             <TimeRangePicker />

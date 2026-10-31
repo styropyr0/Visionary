@@ -1,6 +1,6 @@
 # Two Visionary replicas on one PostgreSQL or MySQL database, behind a Service.
 # Each background job (alert checks, deliveries, uptime probes, rollups, ...)
-# runs on one replica at a time; Settings → Server → Replicas shows which.
+# runs on one replica at a time and Settings → Server → Replicas shows which
 #
 #   kubectl create secret generic visionary-db \
 #     --from-literal=url='postgres://user:pass@db:5432/visionary?sslmode=require'
@@ -34,7 +34,7 @@ spec:
           ports:
             - name: http
               containerPort: 8090
-          # Ready once the tables exist and the database answers.
+          # Ready once the tables exist and the database answers
           readinessProbe:
             httpGet:
               path: /api/readyz

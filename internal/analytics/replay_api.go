@@ -40,8 +40,6 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"session": info, "chunks": list})
 }
 
-// handleReplayChunk sends a chunk's events as stored, gzipped; the browser
-// unzips them on the way in.
 func (s *Server) handleReplayChunk(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
@@ -71,11 +69,10 @@ func (s *Server) handleReplayChunk(w http.ResponseWriter, r *http.Request) {
 }
 
 // replayFrameCSP lets a replay load the recorded site's styles, images and
-// fonts but never run a script, submit a form or leave the dashboard.
+// fonts but never run a script, submit a form or leave the dashboard
 const replayFrameCSP = "default-src 'none'; script-src 'none'; style-src * data: 'unsafe-inline'; img-src * data: blob:; font-src * data:; media-src *; form-action 'none'; frame-ancestors 'self'"
 
-// handleReplayFrame is the empty page the player draws into. It has its own
-// policy: about:blank would inherit the dashboard's, which blocks other sites.
+// It has its own policy since about:blank would inherit the dashboard's, which blocks other sites
 func (s *Server) handleReplayFrame(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Content-Security-Policy", replayFrameCSP)

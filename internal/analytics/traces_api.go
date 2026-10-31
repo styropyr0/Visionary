@@ -198,7 +198,7 @@ func traceSummaries(out *Result, ids []string, reqs, calls *Result) *Result {
 		}
 	}
 	// Rows come oldest first, so the first request without a parent (else
-	// the first of all) is the root.
+	// the first of all) is the root
 	for _, m := range rowMaps(reqs) {
 		t := get(toString(m["trace_id"]))
 		t.requests++

@@ -30,6 +30,7 @@ import { PromQLEditor } from "../PromQLEditor";
 import { titleCase } from "../../lib/format";
 import { KIND_LABEL } from "./ChannelsTab";
 import { KINDS, kindLabel } from "../../lib/security";
+import { useConfirm } from "../Confirm";
 
 /** Kinds of container_events. */
 const CONTAINER_KINDS: Record<string, string> = { restarted: "Restarted", oom_killed: "Out-of-memory kill", exited: "Exited", unhealthy: "Health check failing", healthy: "Healthy again" };
@@ -88,6 +89,7 @@ interface Props {
 
 export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSaved, onDuplicate }: Props) {
   const toast = useToast();
+  const ask = useConfirm();
   const [form, setForm] = useState<RuleInput>(() => (rule ? ruleInputOf(rule) : (initial ?? blank(meta))));
   const [labelsText, setLabelsText] = useState(() => labelPairs(form.spec.labels).join(", "));
   const [saving, setSaving] = useState(false);
@@ -184,7 +186,7 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
   };
 
   const remove = async () => {
-    if (!rule || !window.confirm(`Delete the rule "${rule.name}"? Its history stays in Activity.`)) return;
+    if (!rule || !(await ask({ title: "Delete this rule?", message: `"${rule.name}" is deleted. Its history stays in Activity.`, confirm: "Delete rule", danger: true }))) return;
     try {
       await alertsApi.deleteRule(rule.id);
       toast("ok", "Rule deleted");

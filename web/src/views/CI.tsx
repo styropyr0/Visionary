@@ -72,7 +72,7 @@ function CIList({ tab }: { tab: Tab }) {
     <>
       <TopBar
         title="CI"
-        section="Monitor"
+        section="Reliability"
         actions={
           <>
             {pick("service", "Service", "All services")}

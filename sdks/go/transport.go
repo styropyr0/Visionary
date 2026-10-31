@@ -11,7 +11,7 @@ import (
 // headers arrive, and an error on a transport failure or a 5xx. A nil base
 // means http.DefaultTransport. Query strings are never stored. Each request
 // carries a W3C traceparent naming its span, so a service that reads it
-// (any Visionary or OpenTelemetry SDK) continues the trace.
+// (any Visionary or OpenTelemetry SDK) continues the trace
 //
 //	client := &http.Client{Timeout: 10 * time.Second, Transport: visionary.Transport(nil)}
 //

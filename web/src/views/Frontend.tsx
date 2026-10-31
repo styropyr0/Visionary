@@ -110,7 +110,7 @@ export function Frontend() {
     <>
       <TopBar
         title="Frontend"
-        section="Monitor"
+        section="Apps"
         actions={
           <>
             <Select label="App" icon={<MonitorSmartphone size={14} />} value={app} onChange={(v) => setApp(v as RumApp)} options={APPS} />

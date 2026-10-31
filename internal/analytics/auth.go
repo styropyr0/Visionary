@@ -68,7 +68,7 @@ type auth struct {
 	limiters map[string]*loginLimiter
 	// signedOut holds sessions ended by logout until they would have expired,
 	// so a copied cookie stops working at once on this instance, and on the
-	// other replicas within a lease round (shareSignOut).
+	// other replicas within a lease round (shareSignOut)
 	signedOut map[string]time.Time
 	// retryAt holds, per token, when to ask an unreachable API again; until
 	// then the session is served from its cookie without waiting on it.

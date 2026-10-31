@@ -135,8 +135,6 @@ func (m *silenceModel) input(ctx context.Context, diags *diag.Diagnostics) apiSi
 	return in
 }
 
-// sameTime keeps the time as written when the server stored the same
-// instant in UTC.
 func sameTime(server string, ref types.String) types.String {
 	a, err1 := time.Parse(time.RFC3339, server)
 	b, err2 := time.Parse(time.RFC3339, ref.ValueString())

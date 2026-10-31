@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// A server on a database whose api_logs and spans predate the trace
-// columns, with one trace: shop calls stock over HTTP, stock queries its
-// database, and shop also calls Stripe.
 func traceTestServer(t *testing.T) (*Server, time.Time) {
 	t.Helper()
 	s := newTestServer(t, "traces.db", nil)

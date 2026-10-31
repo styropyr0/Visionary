@@ -331,7 +331,7 @@ func TestRuleSuppressionExpiry(t *testing.T) {
 	}
 }
 
-// A filter binds few enough values for D1's 100 parameters per statement.
+// A filter binds few enough values for D1's 100 parameters per statement
 func TestRuleFilterArgsCapped(t *testing.T) {
 	s := securityTestServer(t, nil)
 	ips := make([]string, maxFilterArgs+1)

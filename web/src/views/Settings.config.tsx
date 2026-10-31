@@ -10,6 +10,7 @@ import { DurationSelect, spanSeconds } from "../components/DurationSelect";
 import { useToast } from "../components/Toast";
 import { Card, Switch } from "./Settings.profiling";
 import { SsoSettings } from "./Settings.sso";
+import { useConfirm } from "../components/Confirm";
 
 // ---------- Server ----------
 
@@ -845,6 +846,7 @@ const ROLES = [
 /** Settings → Sign-in → Accounts: one username and password per person. */
 function AccountsCard() {
   const toast = useToast();
+  const ask = useConfirm();
   const [run, setRun] = useState(0);
   const q = useQuery(`accounts#${run}`, () => api<{ accounts: Account[] }>("/api/team/accounts"));
   const [adding, setAdding] = useState(false);
@@ -920,8 +922,8 @@ function AccountsCard() {
                         className="icon-btn"
                         title="Turn off two-step sign-in"
                         aria-label={`Turn off two-step sign-in for ${a.username}`}
-                        onClick={() => {
-                          if (window.confirm(`Turn off two-step sign-in for ${a.username}? Do this only if they lost their phone and recovery codes; they can set it up again.`)) {
+                        onClick={async () => {
+                          if (await ask({ title: `Turn off two-step sign-in for ${a.username}?`, message: "Do this only if they lost their phone and recovery codes. They can set it up again.", confirm: "Turn off", danger: true })) {
                             void act(() => api(`/api/team/accounts/${a.id}/two-step/reset`, { method: "POST", json: {} }), `Two-step sign-in is off for ${a.username}.`);
                           }
                         }}
@@ -937,8 +939,8 @@ function AccountsCard() {
                       className="icon-btn"
                       title="Delete"
                       aria-label={`Delete ${a.username}`}
-                      onClick={() => {
-                        if (window.confirm(`Delete the account ${a.username}? They can't sign in afterwards.`)) {
+                      onClick={async () => {
+                        if (await ask({ title: `Delete ${a.username}?`, message: "They can't sign in afterwards.", confirm: "Delete account", danger: true })) {
                           void act(() => api(`/api/team/accounts/${a.id}`, { method: "DELETE" }), `${a.username} was deleted.`);
                         }
                       }}

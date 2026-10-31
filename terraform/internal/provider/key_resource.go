@@ -123,7 +123,7 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update is never called with a change: every setting replaces the key.
+// Update is never called with a change: every setting replaces the key
 func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan keyModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)

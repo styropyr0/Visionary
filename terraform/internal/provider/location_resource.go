@@ -116,7 +116,7 @@ func (r *uptimeLocationResource) Read(ctx context.Context, req resource.ReadRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update is never called with a change: a new name makes a new location.
+// Update is never called with a change: a new name makes a new location
 func (r *uptimeLocationResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan locationModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)

@@ -17,11 +17,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// SCIM 2.0 (RFC 7643, 7644): an identity provider creates, changes and removes
-// people and their groups with an API key of scope scim. Managed people live in
-// visionary_users with source scim and sign in through single sign-on; groups
-// live in visionary_scim_groups.
-
 const (
 	scimSource      = "scim"
 	scimContentType = "application/scim+json"
@@ -70,8 +65,7 @@ func (s *Server) scimRoutes(mux *http.ServeMux) {
 	})
 }
 
-// scimAuthed accepts a key of scope scim. The key stands in as the user in
-// the audit log.
+// The key stands in as the user in the audit log
 func (s *Server) scimAuthed(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := bearerKey(r)
@@ -102,8 +96,6 @@ func scimJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// scimError answers in SCIM's error shape. scimType is one of RFC 7644's
-// (invalidValue, uniqueness, invalidFilter, ...) or empty.
 func scimError(w http.ResponseWriter, status int, scimType, detail string) {
 	body := map[string]any{"schemas": []string{scimErrorSchema}, "status": strconv.Itoa(status), "detail": sentence(detail)}
 	if scimType != "" {
@@ -152,8 +144,6 @@ func scimPage(r *http.Request) (start, count int) {
 
 var scimFilterPattern = regexp.MustCompile(`^\s*([A-Za-z.]+)\s+(?i:eq)\s+"((?:[^"\\]|\\.)*)"\s*$`)
 
-// scimFilter reads the one filter identity providers send: attribute eq
-// "value". It returns the attribute in lowercase.
 func scimFilter(r *http.Request, allowed ...string) (attr, value string, err error) {
 	f := r.URL.Query().Get("filter")
 	if strings.TrimSpace(f) == "" {
@@ -171,8 +161,7 @@ func scimFilter(r *http.Request, allowed ...string) (attr, value string, err err
 	return attr, value, nil
 }
 
-// patchOp is one operation of a PATCH. Op is matched without case: Entra
-// sends "Replace".
+// Op is matched without case since Entra sends "Replace"
 type patchOp struct {
 	Op    string          `json:"op"`
 	Path  string          `json:"path"`
@@ -200,7 +189,6 @@ func readPatch(r *http.Request) ([]patchOp, error) {
 	return body.Operations, nil
 }
 
-// scimBool reads true/false, also as the strings "True" and "False".
 func scimBool(raw json.RawMessage) (bool, error) {
 	var b bool
 	if json.Unmarshal(raw, &b) == nil {

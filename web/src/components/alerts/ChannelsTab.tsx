@@ -3,6 +3,7 @@ import { BellRing, Hash, KeyRound, Mail, MessageCircle, MessageSquare, Pencil, P
 import { Modal } from "../Modal";
 import { useToast } from "../Toast";
 import { alertsApi, type AlertsMeta, type Channel, type ChannelInput, type ChannelKind } from "../../lib/alerts";
+import { useConfirm } from "../Confirm";
 
 export const KIND_LABEL: Record<ChannelKind, string> = {
   slack: "Slack",
@@ -47,6 +48,7 @@ export const NO_DIGEST_KINDS: ChannelKind[] = ["pagerduty", "opsgenie", "sms"];
 
 export function ChannelsTab({ meta, channels, onChange }: { meta: AlertsMeta; channels: Channel[]; onChange: () => void }) {
   const toast = useToast();
+  const ask = useConfirm();
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
 
@@ -62,7 +64,7 @@ export function ChannelsTab({ meta, channels, onChange }: { meta: AlertsMeta; ch
     }
   };
   const remove = async (c: Channel) => {
-    if (!window.confirm(`Delete the channel "${c.name}"? Rules that use it stop sending there, and it is removed from their settings.`)) return;
+    if (!(await ask({ title: "Delete this channel?", message: `Rules that use "${c.name}" stop sending there, and it is removed from their settings.`, confirm: "Delete channel", danger: true }))) return;
     try {
       await alertsApi.deleteChannel(c.id);
       onChange();

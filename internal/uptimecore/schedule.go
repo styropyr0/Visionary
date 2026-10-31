@@ -9,10 +9,8 @@ import (
 	"time"
 )
 
-// The scheduler reloads its checks every 30s and right after Wake, and feeds
-// due checks to a fixed pool of workers; browser checks get a smaller pool of
-// their own. A check never runs twice at once, and when every worker is busy
-// due checks wait for the next tick.
+// A check never runs twice at once, and when every worker is busy
+// due checks wait for the next tick
 
 const (
 	tick   = time.Second
@@ -24,8 +22,7 @@ type Scheduler struct {
 	Execute        func(ctx context.Context, c Check)
 	Workers        int
 	BrowserWorkers int
-	// BrowserReady says whether a browser check could start now; without a
-	// browser the check waits, rather than failing.
+	// Without a browser the check waits rather than failing
 	BrowserReady func() bool
 	Logger       *slog.Logger
 
@@ -34,12 +31,11 @@ type Scheduler struct {
 	running map[int64]bool
 }
 
-// NewScheduler makes a scheduler; fill its fields before Run.
+// Fill its fields before Run
 func NewScheduler() *Scheduler {
 	return &Scheduler{wake: make(chan struct{}, 1), running: map[int64]bool{}}
 }
 
-// Wake makes the scheduler reload checks now instead of within 30s.
 func (u *Scheduler) Wake() {
 	select {
 	case u.wake <- struct{}{}:
@@ -115,7 +111,7 @@ func (u *Scheduler) Run(ctx context.Context) {
 }
 
 // Jittered is the interval ±5% (at most ±3s), so checks with the same
-// interval drift apart instead of firing together forever.
+// interval drift apart instead of firing together forever
 func Jittered(intervalS int) time.Duration {
 	d := time.Duration(intervalS) * time.Second
 	j := min(d/20, 3*time.Second)
@@ -166,7 +162,7 @@ func (u *Scheduler) setRunning(id int64, v bool) {
 	}
 }
 
-// execute runs one scheduled check; nothing a check does may stop the loop.
+// Nothing a check does may stop the loop
 func (u *Scheduler) execute(ctx context.Context, c Check) {
 	defer u.setRunning(c.ID, false)
 	defer func() {

@@ -203,7 +203,7 @@ function ContainerList() {
     <>
       <TopBar
         title="Containers"
-        section="Monitor"
+        section="System"
         actions={
           <>
             {hosts.length > 1 && (

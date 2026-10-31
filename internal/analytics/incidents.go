@@ -11,10 +11,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Declared incidents: a severity, a commander and responders, a status that
-// moves from investigating to resolved, and a timeline that fills in. Alerts
-// and checks stay as they are; an incident links to them.
-
 var (
 	incidentSeverities = []string{"sev1", "sev2", "sev3", "sev4"}
 	incidentStatuses   = []string{"investigating", "identified", "monitoring", "resolved"}
@@ -136,8 +132,7 @@ Table incident_timeline: what happened during each incident, in order.
 - When asked why something broke during an incident, read its timeline and compare api_logs, errors and releases over started_at .. resolved_at for its services.`
 }
 
-// declaredIncident is one row of incidents with its roles; the TT* fields
-// are seconds from started_at, nil until reached.
+// The TT* fields are seconds from started_at, nil until reached
 type declaredIncident struct {
 	ID           int64          `json:"id"`
 	Title        string         `json:"title"`

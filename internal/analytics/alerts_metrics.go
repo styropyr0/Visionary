@@ -526,7 +526,7 @@ WHERE created_at >= ? ORDER BY created_at DESC LIMIT 5000`, now.Add(-w).UTC().Fo
 			Breach: compare(r.Spec.Op, v, r.Spec.Threshold)}
 		detail := ""
 		if c.fails > 0 {
-			// Checks other than HTTP ones (and heartbeats, which have no URL) record no status.
+			// Checks other than HTTP ones (and heartbeats, which have no URL) record no status
 			var parts []string
 			if c.status != "" && c.status != "0" {
 				parts = append(parts, "status "+c.status)

@@ -18,8 +18,7 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Workspaces scope people to sets of services. With none defined everyone sees
-// everything; global admins always do. The filtering is in workspaces_scope.go.
+// With no workspaces defined everyone sees everything, and global admins always do
 
 const (
 	workspaceCookie   = "visionary_workspace"
@@ -30,8 +29,7 @@ const (
 	maxMembers        = 500
 )
 
-// servicePattern is a service name, optionally with * at either end. Names
-// can't hold quotes, commas or backslashes, so they go into SQL as they are.
+// Names can't hold quotes, commas or backslashes, so they go into SQL as they are
 var servicePattern = regexp.MustCompile(`^\*$|^\*?[A-Za-z0-9._:/@+ -]{1,128}\*?$`)
 
 type workspace struct {
@@ -44,9 +42,6 @@ type workspace struct {
 	UpdatedAt string     `json:"updated_at"`
 }
 
-// wsMember is a person ("user", by account id or delegated user id), an
-// identity provider or SCIM group ("group", by name) or an API key ("key",
-// by id).
 type wsMember struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
@@ -92,12 +87,9 @@ func (s *Server) workspacesRoutes(mux *http.ServeMux) {
 }
 
 type wsSnapshot struct {
-	list   []workspace
-	groups map[string][]string
-	// rules maps alert rules to their workspace, so they are evaluated
-	// over its services.
-	rules map[int64]int64
-	// unassigned is "none" when people outside every workspace see nothing.
+	list       []workspace
+	groups     map[string][]string
+	rules      map[int64]int64
 	unassigned string
 	at         time.Time
 }
@@ -122,9 +114,8 @@ func (s *Server) dropWorkspaces() {
 	st.mu.Unlock()
 }
 
-// workspaceSnap returns the workspaces, read at most every workspaceCacheFor.
-// If reading fails the last copy stays in use; with none, the error is
-// returned so requests fail rather than show everything.
+// If reading fails the last copy stays in use. With none, the error is
+// returned so requests fail rather than show everything
 func (s *Server) workspaceSnap(ctx context.Context) (*wsSnapshot, error) {
 	st := s.workspaceState()
 	st.mu.Lock()
@@ -225,8 +216,6 @@ type wsAccess struct {
 	role role
 }
 
-// memberships are the workspaces sess belongs to, with the best role any of
-// its memberships gives there.
 func memberships(snap *wsSnapshot, sess *session) []wsAccess {
 	if sess == nil {
 		return nil
@@ -288,7 +277,6 @@ func selectedWorkspace(r *http.Request) int64 {
 	return 0
 }
 
-// scopeFor is the scope of a request, or nil when it sees every service.
 func (s *Server) scopeFor(r *http.Request, sess *session) (*wsScope, error) {
 	snap, err := s.workspaceSnap(r.Context())
 	if err != nil {
@@ -364,8 +352,7 @@ func (s *Server) serveAs(w http.ResponseWriter, r *http.Request, sess *session, 
 	h(w, r.WithContext(ctx))
 }
 
-// requestRole is the role in effect: inside workspaces, the role they give,
-// though never admin of the whole server.
+// Inside workspaces it's the role they give, though never admin of the whole server
 func (s *Server) requestRole(r *http.Request) role {
 	rl := s.roleOf(sessionFrom(r))
 	if sc := scopeFrom(r.Context()); sc != nil && sc.role != roleNone {
@@ -374,8 +361,6 @@ func (s *Server) requestRole(r *http.Request) role {
 	return rl
 }
 
-// requireAllServices answers 403 inside a workspace, for things that span
-// every service, such as detection rules.
 func (s *Server) requireAllServices(w http.ResponseWriter, r *http.Request) bool {
 	if scopeFrom(r.Context()) == nil {
 		return true
@@ -384,8 +369,6 @@ func (s *Server) requireAllServices(w http.ResponseWriter, r *http.Request) bool
 	return false
 }
 
-// workspaceView is the session's part about workspaces: where it can switch
-// and which one is active (0: all of them).
 func (s *Server) workspaceView(r *http.Request) map[string]any {
 	out := map[string]any{"workspaces": []any{}, "workspace": 0, "scoped": scopeFrom(r.Context()) != nil}
 	snap, err := s.workspaceSnap(r.Context())
@@ -524,8 +507,6 @@ func (s *Server) findWorkspace(ctx context.Context, id int64) (*workspace, error
 	return nil, nil
 }
 
-// handleUpdateWorkspace lets admins change anything and a workspace's own
-// admins change its members.
 func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -638,8 +619,6 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 
 var serviceSources = []string{"api_logs", "app_logs", "spans", "errors", "system_metrics", "metrics", "releases"}
 
-// handleWorkspaceServices lists the services seen in the last 30 days, so
-// admins can see what a pattern matches as they type it.
 func (s *Server) handleWorkspaceServices(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
@@ -758,8 +737,6 @@ func (s *Server) handleAssignWorkspaceItem(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// rememberGroups keeps the groups an identity provider sent at sign-in, which
-// can make the person a member of workspaces.
 func (s *Server) rememberGroups(ctx context.Context, accountID string, groups []string) {
 	b, _ := json.Marshal(groups)
 	if err := s.db.Exec(unscoped(ctx), `UPDATE visionary_users SET sso_groups = ? WHERE id = ?`, string(b), accountID); err != nil {

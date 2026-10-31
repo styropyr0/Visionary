@@ -27,7 +27,7 @@
 // recorded with visionary.CaptureError(ctx, err). Custom metrics go to the
 // metrics table: visionary.Counter("orders", "region", "eu").Add(1), and
 // Gauge and Histogram likewise. Everything is configurable through
-// VISIONARY_* environment variables; see FromEnv.
+// VISIONARY_* environment variables (see FromEnv)
 package visionary
 
 import (
@@ -114,13 +114,11 @@ type Config struct {
 }
 
 // MetricsConfig writes custom metrics (Counter, Gauge, Histogram) to the
-// metrics table. Nothing is written until the application records one.
+// metrics table. Nothing is written until the application records one
 type MetricsConfig struct {
-	Enabled bool
-	// Interval is how often each series is written (default 15s).
+	Enabled  bool
 	Interval time.Duration
-	// MaxSeries caps label sets per metric name (default 1000); new ones past
-	// it are dropped and counted.
+	// MaxSeries caps label sets per metric name (default 1000)
 	MaxSeries int
 }
 
@@ -173,8 +171,8 @@ type RequestsConfig struct {
 	// Go 1.22+ ServeMux pattern when available, otherwise the path.
 	Route func(r *http.Request) string
 	// LookupUser fills in Handle and Role for a user ID, on the background
-	// writer. Keep it cheap (a cache); it is called once per user per batch,
-	// and on PostgreSQL and MySQL from up to four batches at once.
+	// writer. Keep it cheap (a cache), it's called once per user per batch,
+	// and on PostgreSQL and MySQL from up to four batches at once
 	LookupUser func(ctx context.Context, id string) (User, bool)
 }
 
@@ -228,7 +226,7 @@ type SystemConfig struct {
 //	VISIONARY_PROFILE=false              (never profile; default: follow the dashboard)
 //	VISIONARY_LOGS=true|false            (default true; see LogHandler and CaptureStdLog)
 //	VISIONARY_LOG_LEVEL                  (default info, until Settings → Logs is read)
-//	VISIONARY_METRICS=true|false         (default true; see Counter, Gauge and Histogram)
+//	VISIONARY_METRICS=true|false         (default true, see Counter, Gauge and Histogram)
 //	VISIONARY_METRICS_INTERVAL           (default 15s)
 //	VISIONARY_METRICS_MAX_SERIES         (default 1000 per metric name)
 func FromEnv() Config {
@@ -504,16 +502,15 @@ func envList(k string) []string {
 }
 
 // WriterStats is a snapshot of the background writers for request rows,
-// logs and metrics, summed.
+// logs and metrics, summed
 type WriterStats struct {
 	Queued int
-	// Written and Dropped count rows since Start; dropped ones met a full
-	// queue or a write that failed three times.
+	// Dropped rows met a full queue or a write that failed three times
 	Written, Dropped int64
 }
 
 // WriterStats reports how far behind the database the writers are, for load
-// tests and health checks.
+// tests and health checks
 func (a *Agent) WriterStats() WriterStats {
 	var st WriterStats
 	if a == nil {

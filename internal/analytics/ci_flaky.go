@@ -10,7 +10,7 @@ import (
 
 // A test is flaky when it passed and failed on the same commit, or when on
 // the default branch it failed once between two passes at least twice. Its
-// score is the share of the commits it ran on where it flaked.
+// score is the share of the commits it ran on where it flaked
 
 const ciFlakyLookback = 30 * 24 * time.Hour
 
@@ -129,8 +129,6 @@ func scoreFlaky(rows []ciResult, defaults map[string]bool) *flakyTest {
 	return ft
 }
 
-// ciDefaultBranches are the branches runs named as their repository's
-// default, plus main and master.
 func (s *Server) ciDefaultBranches(ctx context.Context) map[string]bool {
 	out := map[string]bool{"main": true, "master": true}
 	res, err := s.db.Query(ctx, `SELECT DISTINCT default_branch FROM ci_pipelines WHERE default_branch IS NOT NULL LIMIT 50`)
@@ -191,8 +189,6 @@ ORDER BY test_hash, created_at, id LIMIT 50000`, append([]any{from, to}, chunk..
 	return out, nil
 }
 
-// noteFlaky records the tests of an upload that just turned flaky, once
-// each, for the new-flaky-tests alert and the Flaky tab's "new" mark.
 func (s *Server) noteFlaky(ctx context.Context, tests map[string]string, up ciUpload) error {
 	if len(tests) == 0 {
 		return nil

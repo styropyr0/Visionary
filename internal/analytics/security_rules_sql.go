@@ -10,21 +10,19 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// What a detection rule reads. Fields are SQL expressions that never return
-// NULL, so a group's value can be matched again with =.
+// Fields never return NULL, so a group's value can be matched again with =
 
 type ruleSource struct {
 	table  string
 	label  string
 	fields map[string]string
-	// count is what one row adds: host rows stand for several occurrences.
+	// count is what one row adds: host rows stand for several occurrences
 	count  string
 	sample string
 }
 
 var ruleSourceNames = []string{"requests", "logs", "events", "audit"}
 
-// attrField is a field of a log line's attrs, as attrs.order_id.
 var attrField = regexp.MustCompile(`^attrs\.[A-Za-z0-9_\-]{1,64}$`)
 
 func (q sqlDialect) ruleSources() map[string]ruleSource {
@@ -65,8 +63,6 @@ var ruleFilterKeys = map[string][]string{
 	"audit":    {"action", "user", "role", "ip", "target"},
 }
 
-// fieldExpr is the SQL for a group or count field, or "" when the source has
-// no such field.
 func (q sqlDialect) fieldExpr(src, field string) string {
 	if src == "logs" && attrField.MatchString(field) {
 		key := strings.TrimPrefix(field, "attrs.")
@@ -91,8 +87,6 @@ func splitList(v string) []string {
 	return out
 }
 
-// likeList matches expr against globs (* any run); a value without * or /
-// matches anywhere. Values are bound.
 func likeList(expr string, values []string, args *[]any) string {
 	parts := make([]string, 0, len(values))
 	for _, v := range values {
@@ -117,7 +111,6 @@ func inList(expr string, values []string, args *[]any) string {
 
 var statusItem = regexp.MustCompile(`^(>=|<=|>|<|=)?\s*([1-5])(\d\d|xx)$`)
 
-// statusCond reads 401,403 or 4xx or >=500 or <400.
 func statusCond(v string, args *[]any) (string, error) {
 	var parts []string
 	for _, it := range splitList(strings.ToLower(v)) {
@@ -144,7 +137,6 @@ func statusCond(v string, args *[]any) (string, error) {
 	return "(" + strings.Join(parts, " OR ") + ")", nil
 }
 
-// filterSQL is a rule step's filter as a WHERE fragment with its bound args.
 func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (string, []any, error) {
 	q := s.q
 	var conds []string
@@ -277,7 +269,7 @@ func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (strin
 	if len(conds) == 0 {
 		return "1=1", nil, nil
 	}
-	// the evaluator adds a few of its own; D1 binds at most 100 per statement
+	// the evaluator adds a few of its own and D1 binds at most 100 per statement
 	if len(args) > maxFilterArgs {
 		return "", nil, badInput(fmt.Sprintf("the filters list too many values (%d, at most %d)", len(args), maxFilterArgs))
 	}
