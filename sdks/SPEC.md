@@ -288,6 +288,25 @@ Counts are integers, measurements floats, `created_at`, `instance`, `service`,
 | `container_mem_used_mb` | cgroup memory in use minus its inactive page cache, as `docker stats` counts it | | |
 | `container_mem_limit_mb` | the cgroup's memory limit; NULL when unlimited | | |
 | `container_oom_kills` | OOM kills in the cgroup since the previous sample (integer) | | |
+| `psi_cpu_some_avg10`, `psi_cpu_some_avg60` | CPU pressure: `some avg10` / `avg60` (percent of time at least one runnable task waited for a CPU), as the kernel writes it; **Linux only** | see Host statistics below | same |
+| `psi_mem_some_avg10`, `psi_mem_some_avg60`, `psi_mem_full_avg10` | memory pressure: `some avg10`, `some avg60`, `full avg10` (all tasks stalled) | | |
+| `psi_io_some_avg10`, `psi_io_some_avg60`, `psi_io_full_avg10` | I/O pressure, same fields | | |
+| `minor_faults_ps`, `major_faults_ps` | page faults per second since the previous sample: minor = (`pgfault` − `pgmajfault`) delta, major = `pgmajfault` delta, from `/proc/vmstat` (1 decimal) | | |
+| `swap_in_ps`, `swap_out_ps` | pages swapped in / out per second: `pswpin` / `pswpout` deltas | | |
+| `pages_scanned_ps`, `pages_stolen_ps` | reclaim pages scanned / reclaimed per second: the sum of the `pgscan_kswapd*`, `pgscan_direct*` (not `pgscan_direct_throttle`) and `pgscan_khugepaged*` counters, and the same `pgsteal_*` ones; never `pgscan_anon`/`pgscan_file`, which split the same pages | | |
+| `host_oom_kills` | `oom_kill` delta of `/proc/vmstat` (integer; NULL on kernels before 4.13) | | |
+| `mem_dirty_mb`, `mem_writeback_mb`, `mem_slab_mb`, `mem_shmem_mb`, `mem_committed_mb`, `mem_commit_limit_mb` | `/proc/meminfo` `Dirty`, `Writeback`, `Slab`, `Shmem`, `Committed_AS`, `CommitLimit` (kB / 1024, 1 decimal); NULL unless `Dirty`, `Committed_AS` and `CommitLimit` are all there | | |
+| `container_minor_faults_ps`, `container_major_faults_ps` | the cgroup's page faults per second, from `memory.stat` (`pgfault` − `pgmajfault`, `pgmajfault`; v1 `total_pgfault`, `total_pgmajfault`); with the other `container_*` columns | | |
+| `container_mem_high_events`, `container_mem_max_events` | `high` / `max` deltas of the cgroup's `memory.events` (v2 only, else NULL; integers) | | |
+| `cpu_temp_c` | the hottest CPU sensor now, °C (1 decimal): hwmon chips named `coretemp`, `k10temp`, `zenpower`, `cpu_thermal`, `cpu-thermal`, `soc_thermal` and thermal zones whose type starts with `x86_pkg_temp`, `cpu` or one of those names; NULL without one (`acpitz` alone does not count) | | |
+| `cpu_mhz`, `cpu_max_mhz` | average `scaling_cur_freq` over `/sys/devices/system/cpu/cpu*/cpufreq` (kHz / 1000), else the average `cpu MHz` of `/proc/cpuinfo`; the highest `cpuinfo_max_freq` (NULL without cpufreq). Whole numbers | | |
+| `cpu_throttle_events` | delta of the sum of `/sys/devices/system/cpu/cpu*/thermal_throttle/core_throttle_count` (integer; NULL when the CPU set changed or the files are missing) | | |
+| `files_open`, `files_max` | `/proc/sys/fs/file-nr`: allocated − unused, and the maximum; `files_max` is NULL when 2^62 or more (no limit) | | |
+| `sockets_used`, `tcp_time_wait`, `tcp_orphans` | `/proc/net/sockstat` `sockets: used`, `TCP: tw`, `TCP: orphan` now | | |
+| `tcp_close_wait` | rows in state `08` of `/proc/net/tcp` plus `/proc/net/tcp6`; NULL when `sockets_used` is above 20000, so busy hosts do not walk the table | | |
+| `conntrack_count`, `conntrack_max` | `/proc/sys/net/netfilter/nf_conntrack_count` / `nf_conntrack_max`; NULL when the module is not loaded | | |
+| `udp_in_errors`, `udp_buf_errors` | deltas of `Udp: InErrors` and of `RcvbufErrors + SndbufErrors` in `/proc/net/snmp`, plus the `Udp6*` counters of `/proc/net/snmp6` (integers) | | |
+| `gpu_count`, `gpu_util_percent`, `gpu_mem_percent`, `gpu_temp_c` | GPUs found; the highest utilization; the highest memory used / total × 100; the hottest temperature (1 decimal). NULL without a GPU. See GPUs below | | |
 
 Container (the `container_*` columns, **Linux only**, else NULL): read the
 process's own cgroup, so a service in a container reports its container's
@@ -320,6 +339,40 @@ the reference.
   `memory.stat`; OOM kills `oom_kill` from `memory.oom_control` (newer kernels
   only, else NULL).
 - A counter that went down (the cgroup was reset) gives NULL for that sample.
+
+Host statistics (the columns from `psi_cpu_some_avg10` on, **Linux only**
+except the GPU ones, else NULL; `sdks/go/hoststats` is the reference): cheap
+reads of small files only, once per sample. Rates and deltas follow the rules
+above: a baseline at start, NULL for a sample whose counter went down. Read
+`/proc` and `/sys` under `HOST_PROC` and `HOST_SYS` when set.
+
+- Pressure comes from `/proc/pressure/{cpu,memory,io}`. In a container (the
+  test under Container below) read the cgroup v2 directory's `cpu.pressure`,
+  `memory.pressure` and `io.pressure` instead, so the container reports its
+  own stalls; with cgroup v1 in a container leave them NULL, since
+  `/proc/pressure` is the whole machine's. Each file has a `some` line and,
+  except on older kernels for CPU, a `full` line: `some avg10=1.23 avg60=0.80
+  avg300=0.10 total=123`. Store the numbers as given.
+- Every other host column describes the machine (`/proc/vmstat`,
+  `/proc/meminfo` and the rest are not namespaced), also in a container.
+- Sensors and CPU frequency files can be found once at start; the CPU set
+  rarely changes.
+
+GPUs (Linux and Windows): NVIDIA through `nvidia-smi` (on `PATH`, else
+`/usr/bin`, `/usr/local/bin`, `/usr/local/nvidia/bin`, `/usr/lib/wsl/lib`,
+`C:\Windows\System32` or `C:\Program Files\NVIDIA Corporation\NVSMI`; look
+again at most hourly when missing), run once per sample with a 5 s timeout:
+`nvidia-smi --query-gpu=index,uuid,name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.max.sm --format=csv,noheader,nounits`.
+`[N/A]` and `[Not Supported]` are missing values. When it fails, skip it for
+one more minute per consecutive failure, up to ten. AMD (Linux): each
+`/sys/class/drm/card<N>/device` whose `vendor` is `0x1002` and that has
+`gpu_busy_percent`; memory from `mem_info_vram_used` / `mem_info_vram_total`
+(bytes), temperature the highest `hwmon/hwmon*/temp*_input` (m°C). An SDK
+may leave GPUs out (Go: `VISIONARY_SYSTEM_GPU=false`).
+
+On D1 a row has more values than the 100 a statement may bind. Insert the
+first 100 columns, then, in the same `batch`, `UPDATE system_metrics SET
+<column> = NULLIF(?, ''), ... WHERE id = last_insert_rowid()` with the rest.
 
 Partition rule: skip disk devices matching
 `^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,

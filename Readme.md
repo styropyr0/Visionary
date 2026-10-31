@@ -261,7 +261,7 @@ never let two environments share one name.
 | Queries | Every SQL statement with rate, latency and the routes that run it; GraphQL operations; [query plans](#query-plans) on demand. |
 | Dependencies | Every third-party API you call (Stripe, S3, OpenAI…) with rate, failures and latency. |
 | CPU profiles | Flame graphs from every server SDK, off until turned on in Settings → Profiling. |
-| System | Host CPU, memory, disk, network, process, runtime and pool metrics; container limits, throttling and OOM kills. |
+| System | Host CPU, memory, disk, network, process, runtime and pool metrics; on Linux pressure stalls, page faults and swapping, kernel limits (file handles, conntrack, sockets), CPU temperature and clock; NVIDIA and AMD GPUs; container limits, throttling and OOM kills. |
 | Containers | Docker and Podman containers on agent machines, plus services on container platforms. |
 | Metrics | Your counters, gauges and histograms, OTLP metrics and Prometheus remote_write; PromQL; a Prometheus API for Grafana at `/api/prom`. |
 | Errors | Exceptions and panics grouped into issues, with stacks, versions and the request. |
@@ -383,8 +383,11 @@ curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/age
 
 It reports to three pages:
 
-- **System:** CPU, memory, swap, disks, network and load every 15 s; machine
-  details, mounts, top processes and failed systemd services every minute.
+- **System:** CPU, memory, swap, disks, network and load every 15 s, with
+  pressure stalls, virtual memory, kernel limits, temperatures and clock
+  speeds on Linux, and each NVIDIA or AMD GPU; machine details, mounts, top
+  processes, failed systemd services, sensors and the processes using GPU
+  memory every minute.
 - **Containers:** every Docker or Podman container, with CPU and memory
   against limits, restarts, OOM kills and failing health checks.
 - **Security:** SSH logins and sudo, open ports, pending updates, reboots,
@@ -705,6 +708,7 @@ default, and most behaviour is set in the dashboard instead.
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets allowed per metric name. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | `false` to stop host and process metrics. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | How often the host is sampled. |
+| `VISIONARY_SYSTEM_GPU` | `true` | Go SDK: `false` stops the GPU columns, which run nvidia-smi once per sample when it is installed. |
 | `VISIONARY_EXPLAIN` | `true` | `false` to refuse query plan requests (needs an explainer in code anyway). |
 | `VISIONARY_PROFILE` | follow Settings → Profiling | `false` so this service never profiles. |
 | `VISIONARY_LOG_RETENTION_DAYS`, `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Only when no Visionary server reads this database; the SDK then deletes its own old rows. |
@@ -729,6 +733,7 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_AGENT_UNITS` | | systemd services to watch, comma-separated. |
 | `VISIONARY_DISK_PATHS` | all mounts | Report only some mounts. |
 | `VISIONARY_AGENT_DOCKER` | auto | A container socket path, or `off`. |
+| `VISIONARY_AGENT_GPU` | `true` | `off` stops GPU readings (nvidia-smi and amdgpu). |
 | `VISIONARY_AGENT_AUTH_LOG` | auto | A log file, `journald` or `off`. |
 | `VISIONARY_AGENT_SECURITY` | `true` | `false` turns off all security findings. |
 | `VISIONARY_AGENT_SSH_KEYS`, `VISIONARY_AGENT_FILE_INTEGRITY`, `VISIONARY_AGENT_PROCESS_CHECKS`, `VISIONARY_AGENT_CONTAINER_RISKS` | `true` | Turn off one kind of security check. |

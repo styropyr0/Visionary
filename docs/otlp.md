@@ -200,6 +200,13 @@ instance's previous row.
 | `goroutines` | `go.goroutine.count`, else `jvm.thread.count`, else the process threads |
 | `heap_alloc_mb`, `heap_inuse_mb` | `jvm.memory.used` / `jvm.memory.committed` (heap) |
 | `gc_count` | increase of the runtime's GC count |
+| `minor_faults_ps`, `major_faults_ps` | rate of `system.paging.faults` with `system.paging.type` (or `type`) `minor` / `major` |
+| `swap_in_ps`, `swap_out_ps` | rate of `system.paging.operations` with type `major` and `system.paging.direction` (or `direction`) `in` or `page_in` / `out` or `page_out`; minor operations are page cache traffic, not swap, and are left out |
+| `gpu_count`, `gpu_util_percent`, `gpu_mem_percent` | the hardware conventions by `hw.id`: GPUs seen, the highest `hw.gpu.utilization` (task `general` or none) × 100, and the highest `hw.gpu.memory.utilization` × 100, else `hw.gpu.memory.usage` / `hw.gpu.memory.limit` × 100 |
+
+Pressure (`psi_*`), the other virtual memory columns, kernel limits,
+temperatures, clock speeds and `gpu_temp_c` have no unambiguous OpenTelemetry
+metric, so OTLP leaves them NULL; the SDKs and the host agent fill them.
 
 The older `process.runtime.<runtime>.*` names (`cpu_time`, `memory`,
 `thread_count`, `gc_count`, `cpu.utilization`, Go's `goroutines` and
