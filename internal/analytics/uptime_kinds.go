@@ -101,7 +101,7 @@ func (s *Server) uptimeKindsRoutes(mux *http.ServeMux) {
 // stored check on update, whose masked secrets and heartbeat token survive.
 func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 	c.ExpectStatus, c.BodyContains, c.Headers, c.Steps, c.FinalScreenshot = "200-299", "", map[string]string{}, nil, false
-	c.Method = "GET"
+	c.Method, c.BrowserOptions = "GET", BrowserOptions{}
 	if c.Kind != "api" {
 		c.Secrets, c.FollowRedirects = nil, true
 	}

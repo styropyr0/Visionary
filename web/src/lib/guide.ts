@@ -377,7 +377,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Script a browser check",
-        text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
+        text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, or **Import from Chrome Recorder** with a recording exported as JSON from Chrome DevTools, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. More steps read a value into `{{var.NAME}}`, hover, drag, upload a file (added under **Files**), switch into an iframe, set a cookie or storage, and grant a permission. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. **Device** picks the screen: desktop, laptop, tablet, phone or a custom size. Under **Performance limits**, a run fails above a limit on LCP, CLS, TTFB or total time and is degraded above a warning; each step can have its own time limit. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
         shot: "uptime-browser",
         caption: "A browser check: each step's result, timings and Web Vitals.",
       },
@@ -403,7 +403,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Open a check",
-        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A check with several locations adds **By location**, each location's uptime and response time in its own color, a location filter on the results, and which locations each incident failed in. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests. An API check lists its runs; click one for each request. Ping checks chart round trips and loss, DNS checks show their answers, certificate checks the certificate, and heartbeats their URL and pings.",
+        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A check with several locations adds **By location**, each location's uptime and response time in its own color, a location filter on the results, and which locations each incident failed in. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps (with a screenshot after each when **Screenshot every step** is on), the screenshot of a failure, console errors, its requests as a waterfall with **Download HAR**, and **Open trace** for what your backend did during it. An API check lists its runs; click one for each request. Ping checks chart round trips and loss, DNS checks show their answers, certificate checks the certificate, and heartbeats their URL and pings.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
       },

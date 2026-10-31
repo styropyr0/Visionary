@@ -4,7 +4,7 @@ import { formatMs } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import type { CheckInput, CheckKind, UptimeCheck } from "../lib/uptime";
-import { formatInterval } from "../lib/uptime";
+import { deviceLabel, formatInterval } from "../lib/uptime";
 import { getPingStatus, type DnsConfig, type DnsType, type HeartbeatConfig, type PingConfig, type SslConfig, type TcpConfig } from "../lib/uptimeKinds";
 
 export const KIND_INFO: Record<CheckKind, { label: string; icon: LucideIcon; text: string }> = {
@@ -74,7 +74,7 @@ export function kindDefaults(k: CheckKind): Partial<CheckInput> {
 export function describeTarget(c: UptimeCheck): string {
   switch (c.kind) {
     case "browser":
-      return `Browser · ${c.steps?.length ?? 0} steps · ${c.url}`;
+      return `Browser · ${deviceLabel(c)} · ${c.steps?.length ?? 0} steps · ${c.url}`;
     case "api": {
       const n = c.api?.requests.length ?? 0;
       return `API · ${n} ${n === 1 ? "request" : "requests"} · ${c.url}`;
@@ -99,7 +99,7 @@ export function describeTarget(c: UptimeCheck): string {
 export function describeExpect(c: UptimeCheck): string {
   switch (c.kind) {
     case "browser":
-      return ` · ${c.steps?.length ?? 0} steps`;
+      return ` · ${deviceLabel(c)} · ${c.steps?.length ?? 0} steps`;
     case "http":
       return ` · expects ${c.expect_status}${c.body_contains ? ` and “${c.body_contains}”` : ""}`;
     case "api":

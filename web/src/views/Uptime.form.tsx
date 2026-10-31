@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Clapperboard, Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
-import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
+import { RecorderDialog } from "./Uptime.recorder";
+import { DeviceSettings, LimitSettings, TraceSettings } from "./Uptime.settings";
+import { BrowserNotice, FilesEditor, SecretsEditor, StepsEditor } from "./Uptime.steps";
 import { ApiRequestsEditor } from "./Uptime.api";
 import { DnsFields, HeartbeatFields, KindPicker, kindDefaults, PingFields, PingNotice, SETTINGS_KINDS, SslFields, TcpFields } from "./Uptime.kinds";
 import { TagsField } from "./Uptime.tags";
@@ -91,6 +93,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [recorder, setRecorder] = useState(false);
   const set = <K extends keyof CheckInput>(k: K, v: CheckInput[K]) => setForm((f) => ({ ...f, [k]: v }));
   // How the check is alerted on; a new check gets the rule for every check
   // unless the form says otherwise.
@@ -110,9 +113,27 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     }
     const body = browser
       ? { ...form, headers: {}, steps, secrets: sec }
-      : settingsKind
-        ? { ...form, headers: {}, steps: undefined, final_screenshot: undefined, secrets: form.kind === "api" ? sec : undefined }
-        : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined };
+      : {
+          ...form,
+          headers: settingsKind ? {} : h,
+          steps: undefined,
+          secrets: form.kind === "api" ? sec : undefined,
+          final_screenshot: undefined,
+          trace_origins: undefined,
+          no_trace: undefined,
+          max_lcp_ms: undefined,
+          max_cls: undefined,
+          max_ttfb_ms: undefined,
+          max_duration_ms: undefined,
+          warn_lcp_ms: undefined,
+          warn_cls: undefined,
+          warn_ttfb_ms: undefined,
+          device: undefined,
+          viewport_w: undefined,
+          viewport_h: undefined,
+          step_screenshots: undefined,
+          files: undefined,
+        };
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
@@ -163,8 +184,19 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={NAME_HINT[form.kind]} maxLength={120} required autoFocus />
         </label>
         <TagsField value={form.tags ?? []} onChange={(t) => set("tags", t)} />
-        {browser && <StepsEditor steps={steps} onChange={setSteps} />}
+        {browser && (
+          <div>
+            <button type="button" className="btn ghost sm" onClick={() => setRecorder(true)} title="Turn a recording exported from Chrome DevTools' Recorder into steps">
+              <Clapperboard size={14} />
+              Import from Chrome Recorder
+            </button>
+          </div>
+        )}
+        {browser && <StepsEditor steps={steps} onChange={setSteps} files={form.files ?? []} />}
+        {browser && <DeviceSettings form={form} set={set} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
+        {browser && (form.files?.length || steps.some((s) => s.action === "upload")) ? <FilesEditor files={form.files ?? []} onChange={(f) => set("files", f)} /> : null}
+        {browser && <TraceSettings form={form} set={set} steps={steps} />}
         {form.kind === "api" && form.api && <ApiRequestsEditor requests={form.api.requests} onChange={(requests) => set("api", { requests })} />}
         {form.kind === "api" && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
         {form.kind === "tcp" && form.tcp && <TcpFields value={form.tcp} onChange={(v) => set("tcp", v)} />}
@@ -212,6 +244,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
             <span>{form.kind === "ping" ? "Wait per reply (seconds)" : "Timeout (seconds)"}</span>
             <input className="input" type="number" min={form.kind === "ping" ? 0.1 : 1} step={form.kind === "ping" ? 0.1 : 1} max={maxTimeoutS} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
           </label>
+          {!browser && (
           <label className="field" style={{ flex: 1 }}>
             <span>Degraded above (ms)</span>
             <input
@@ -224,7 +257,9 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
               onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)}
             />
           </label>
+          )}
         </div>
+        {browser && <LimitSettings form={form} set={set} />}
 
         {http && (
           <div className="field">
@@ -263,10 +298,16 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
 
         <fieldset className="up-checks">
           {browser ? (
-            <label>
-              <input type="checkbox" checked={!!form.final_screenshot} onChange={(e) => set("final_screenshot", e.target.checked)} />
-              Keep a screenshot of the last page when it passes too
-            </label>
+            <>
+              <label>
+                <input type="checkbox" checked={!!form.final_screenshot} onChange={(e) => set("final_screenshot", e.target.checked)} />
+                Keep a screenshot of the last page when it passes too
+              </label>
+              <label title="Small screenshots, at most 1 MB a run; the latest 24 runs keep theirs">
+                <input type="checkbox" checked={!!form.step_screenshots} onChange={(e) => set("step_screenshots", e.target.checked)} />
+                Screenshot every step
+              </label>
+            </>
           ) : (
             (http || form.kind === "api") && (
               <label>
@@ -321,6 +362,21 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </button>
         </div>
       </form>
+      {recorder && (
+        <RecorderDialog
+          onClose={() => setRecorder(false)}
+          onImport={(r) => {
+            setSteps(r.steps);
+            setForm((f) => ({
+              ...f,
+              name: f.name.trim() ? f.name : r.title.slice(0, 120),
+              ...(r.device ? { device: r.device, viewport_w: r.viewport_w, viewport_h: r.viewport_h } : {}),
+            }));
+            setRecorder(false);
+            toast("ok", `Imported ${r.steps.length} steps`);
+          }}
+        />
+      )}
       {confirm && check && (
         <Modal
           title="Delete check"

@@ -97,7 +97,8 @@ type configCheck struct {
 	Heartbeat       *HeartbeatConfig  `json:"heartbeat,omitempty"`
 	Tags            []string          `json:"tags,omitempty"`
 	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
-	Alert           *configCheckAlert `json:"alert,omitempty"`
+	BrowserOptions
+	Alert *configCheckAlert `json:"alert,omitempty"`
 	// Locations default to the server alone, and the rule to majority.
 	Locations           []string `json:"locations,omitempty"`
 	LocationRule        string   `json:"location_rule,omitempty"`
@@ -280,7 +281,7 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
 		FinalScreenshot: m.FinalScreenshot, API: m.API, TCP: m.TCP, DNS: m.DNS, Ping: m.Ping, SSL: m.SSL, Heartbeat: m.Heartbeat,
-		Tags: m.Tags, Playwright: m.Playwright}
+		Tags: m.Tags, Playwright: m.Playwright, BrowserOptions: m.BrowserOptions}
 	if settingsKinds[m.Kind] {
 		// The address comes from the kind's settings; a heartbeat's URL
 		// (its token) stays behind and a new one is made on import.
@@ -289,6 +290,8 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 			out.FollowRedirects = nil
 		}
 	}
+	// Files are configuration, not secrets: they travel whole.
+	out.Files = c.Files
 	if len(out.Tags) == 0 {
 		out.Tags = nil
 	}

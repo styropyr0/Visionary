@@ -147,15 +147,21 @@ variable "probe_password" {
 - `api` (Attributes) Multi-step API check (kind api): requests run in order and share variables. (see [below for nested schema](#nestedatt--api))
 - `body_contains` (String) Text the body must contain.
 - `degraded_ms` (Number) Slower than this counts as degraded.
+- `device` (String) Screen a browser check runs at: desktop (1280×800, default), laptop (1440×900), tablet (768×1024), phone (390×844, mobile user agent, touch, pixel ratio 3) or custom (viewport_w × viewport_h).
 - `dns` (Attributes) DNS check (kind dns): the name resolves, optionally to given values. (see [below for nested schema](#nestedatt--dns))
 - `enabled` (Boolean) Default true.
 - `expect_status` (String) Accepted statuses: 200, 200-299, 2xx, comma separated (default 200-299).
+- `files` (Attributes List) Small files upload steps send, 256 KB each and 512 KB in all. (see [below for nested schema](#nestedatt--files))
 - `final_screenshot` (Boolean) Keep a screenshot of every browser run, not only failed ones.
 - `follow_redirects` (Boolean) Default true.
 - `headers` (Map of String, Sensitive) Request headers.
 - `heartbeat` (Attributes) Heartbeat check (kind heartbeat): a job calls its URL; it is down when no ping arrives in time or the job reports a failure. (see [below for nested schema](#nestedatt--heartbeat))
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.
 - `kind` (String) http (default), browser, playwright, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.
+- `max_cls` (Number) A browser run whose Cumulative Layout Shift is above this fails.
+- `max_duration_ms` (Number) A browser run that takes longer than this in all fails.
+- `max_lcp_ms` (Number) A browser run whose Largest Contentful Paint is slower than this fails.
+- `max_ttfb_ms` (Number) A browser run whose time to first byte is slower than this fails.
 - `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
 - `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
@@ -166,11 +172,19 @@ variable "probe_password" {
 - `ssl` (Attributes) Certificate check (kind ssl): validity, days to expiry, hostname, chain and TLS version, without an HTTP request. (see [below for nested schema](#nestedatt--ssl))
 - `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
+- `step_screenshots` (Boolean) Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `tags` (Set of String) Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.
 - `tcp` (Attributes) TCP check (kind tcp): the port accepts a connection, and optionally answers what is sent. (see [below for nested schema](#nestedatt--tcp))
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser and api checks; for ping checks each reply's wait, default 2000).
+- `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).
+- `trace_origins` (List of String) Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.
 - `url` (String) Address probed (http checks). For other kinds it is derived: the first step's or request's URL, or tcp://, dns://, ping:// or ssl:// with the target.
+- `viewport_h` (Number) Height of a custom device, 320 to 2160.
+- `viewport_w` (Number) Width of a custom device, 320 to 3840.
+- `warn_cls` (Number) A browser run whose CLS is above this counts as degraded.
+- `warn_lcp_ms` (Number) A browser run whose LCP is slower than this counts as degraded.
+- `warn_ttfb_ms` (Number) A browser run whose TTFB is slower than this counts as degraded.
 
 ### Read-Only
 
@@ -276,15 +290,24 @@ Optional:
 
 Required:
 
-- `action` (String) goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait or script.
+- `action` (String) goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait, script, extract, hover, drag, upload, frame, set_cookie, set_storage or grant_permission.
 
 Optional:
 
+- `attr` (String) What extract reads: text (default), value or an attribute name.
 - `count` (Number) Expected count (assert_count).
 - `label` (String) Name shown in results.
+- `lat` (Number) Latitude for grant_permission geolocation.
+- `lon` (Number) Longitude for grant_permission geolocation.
+- `max_ms` (Number) Fail the step when it takes longer than this.
 - `ms` (Number) Milliseconds (wait).
+- `name` (String) The variable extract sets (used later as {{var.NAME}}), the cookie of set_cookie, the key of set_storage or the file of upload.
 - `op` (String) Comparison for assert_count: eq, gte or lte.
+- `permission` (String) grant_permission: geolocation, notifications or clipboard.
+- `regex` (String) For extract: keep the first group (or the whole match) of this regular expression.
+- `scope` (String) set_cookie: the cookie's URL or domain (default the current page); set_storage: local (default) or session; grant_permission: the origin (default the current page's).
 - `selector` (String) CSS selector.
+- `target` (String) CSS selector drag drops on.
 - `text` (String) Text to find.
 - `value` (String) URL, text to type, key, option, script; {{secret.NAME}} uses a secret.
 
@@ -301,6 +324,18 @@ Optional:
 - `expect` (String) Text the reply must contain, such as SSH-2.0.
 - `send` (String) Text sent after connecting; \r, \n and \t are read as escapes.
 
+
+<a id="nestedatt--files"></a>
+### Nested Schema for `files`
+
+Required:
+
+- `content_base64` (String) The file, base64 encoded, e.g. filebase64("avatar.png").
+- `name` (String) File name an upload step refers to.
+
+Optional:
+
+- `type` (String) MIME type.
 
 ## Import
 

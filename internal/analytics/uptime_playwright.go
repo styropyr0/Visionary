@@ -114,7 +114,7 @@ func (s *Server) uptimePlaywrightRoutes(mux *http.ServeMux) {
 // run is expected; a check without one for longer is stale.
 func (c *UptimeCheck) normalizePlaywright() error {
 	c.Method, c.ExpectStatus, c.BodyContains, c.Headers, c.FollowRedirects = "GET", "200-299", "", map[string]string{}, true
-	c.Steps, c.Secrets, c.FinalScreenshot, c.TimeoutMs = nil, nil, false, 0
+	c.Steps, c.Secrets, c.FinalScreenshot, c.TimeoutMs, c.BrowserOptions = nil, nil, false, 0, BrowserOptions{}
 	// Runs come from wherever the tests run, so there is no location to pick.
 	c.Locations, c.LocationRule, c.StatusShowLocations = []string{serverLocation}, "majority", false
 	if c.Playwright == nil {

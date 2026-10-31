@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -50,6 +51,7 @@ type UptimeCheck struct {
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	Tags            []string          `json:"tags"`
 	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
+	BrowserOptions
 	// Locations the check runs from (uptime_locations.go), the rule that
 	// combines them, and whether the status page breaks it down by them.
 	Locations           []string         `json:"locations"`
@@ -177,7 +179,7 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	}
 	switch c.Kind {
 	case "", "http":
-		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
+		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot, c.BrowserOptions = "http", nil, nil, false, BrowserOptions{}
 		c.API, c.TCP, c.DNS, c.Ping, c.SSL, c.Heartbeat = nil, nil, nil, nil, nil, nil
 	case "browser":
 		c.API, c.TCP, c.DNS, c.Ping, c.SSL, c.Heartbeat = nil, nil, nil, nil, nil, nil
@@ -291,6 +293,14 @@ func (c UptimeCheck) masked() UptimeCheck {
 		c.Secrets = sec
 	}
 	c.maskKind()
+	if c.Files != nil {
+		files := make([]BrowserFile, len(c.Files))
+		for i, f := range c.Files {
+			f.Data = ""
+			files[i] = f
+		}
+		c.Files = files
+	}
 	return c
 }
 
@@ -407,7 +417,7 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Fields left out of the body keep these defaults.
 	body := checkWithAlert{UptimeCheck: UptimeCheck{FollowRedirects: true, Enabled: true}}
-	if err := readJSON(r, &body); err != nil {
+	if err := readCheckJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -461,7 +471,7 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body checkWithAlert
-	if err := readJSON(r, &body); err != nil {
+	if err := readCheckJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -499,6 +509,16 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"check": c.masked()})
 }
 
+// readCheckJSON is readJSON with room for a browser check's files.
+func readCheckJSON(r *http.Request, dst any) error {
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return errors.New("invalid JSON body")
+	}
+	return nil
+}
+
 // checkChanges names the fields an update changed, for the audit log; values
 // are left out because headers and URLs can hold secrets.
 func checkChanges(a, b UptimeCheck) []string {
@@ -523,6 +543,9 @@ func checkChanges(a, b UptimeCheck) []string {
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
+	oa, _ := json.Marshal(a.BrowserOptions)
+	ob, _ := json.Marshal(b.BrowserOptions)
+	add("browser_options", string(oa) != string(ob))
 	add("name", a.Name != b.Name)
 	add("url", a.URL != b.URL)
 	add("method", a.Method != b.Method)

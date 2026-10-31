@@ -44,6 +44,27 @@ type Check struct {
 	DNS             *DNSConfig        `json:"dns,omitempty"`
 	Ping            *PingConfig       `json:"ping,omitempty"`
 	SSL             *SSLConfig        `json:"ssl,omitempty"`
+	BrowserOptions
+}
+
+// MaxBrowserTimeoutMs is the longest a browser check may take.
+const MaxBrowserTimeoutMs = 120000
+
+// BrowserOptions are a browser check's settings beyond its steps.
+type BrowserOptions struct {
+	// TraceOrigins get the run's traceparent; empty means the first page's.
+	TraceOrigins []string `json:"trace_origins,omitempty"`
+	NoTrace      bool     `json:"no_trace,omitempty"`
+	BrowserLimits
+	// Device is desktop (the default), laptop, tablet, phone or custom, whose
+	// size is ViewportW × ViewportH.
+	Device    string `json:"device,omitempty"`
+	ViewportW int    `json:"viewport_w,omitempty"`
+	ViewportH int    `json:"viewport_h,omitempty"`
+	// StepScreenshots keeps a small screenshot after every step.
+	StepScreenshots bool `json:"step_screenshots,omitempty"`
+	// Files are what upload steps send.
+	Files []BrowserFile `json:"files,omitempty"`
 }
 
 // Result is one run of a check.
@@ -84,6 +105,22 @@ type BrowserStep struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int    `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
+	// MaxMs fails the step when it takes longer.
+	MaxMs int `json:"max_ms,omitempty"`
+	// Name is the variable of extract, the cookie of set_cookie, the key of
+	// set_storage and the file of upload.
+	Name string `json:"name,omitempty"`
+	// Attr is what extract reads: text (default), value or an attribute.
+	Attr  string `json:"attr,omitempty"`
+	Regex string `json:"regex,omitempty"`
+	// Target is where drag drops.
+	Target string `json:"target,omitempty"`
+	// Scope is the cookie's URL or domain, local or session storage, or the
+	// origin a permission is granted to.
+	Scope      string  `json:"scope,omitempty"`
+	Permission string  `json:"permission,omitempty"`
+	Lat        float64 `json:"lat,omitempty"`
+	Lon        float64 `json:"lon,omitempty"`
 }
 
 // Describe names a step for results and errors.
@@ -126,6 +163,25 @@ func (b BrowserStep) describe() string {
 		return fmt.Sprintf("wait %d ms", b.Ms)
 	case "script":
 		return "script"
+	case "extract":
+		return "read " + b.Selector + " into " + b.Name
+	case "hover":
+		return "hover " + what
+	case "drag":
+		return "drag " + b.Selector + " to " + b.Target
+	case "upload":
+		return "upload " + b.Name + " to " + b.Selector
+	case "frame":
+		if b.Selector == "" {
+			return "back to the page"
+		}
+		return "into frame " + b.Selector
+	case "set_cookie":
+		return "set cookie " + b.Name
+	case "set_storage":
+		return "set " + b.Scope + "Storage " + b.Name
+	case "grant_permission":
+		return "grant " + b.Permission
 	}
 	return b.Action
 }

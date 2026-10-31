@@ -32,6 +32,30 @@ func TestWithOrigin(t *testing.T) {
 	}
 }
 
+// The newer steps and trace origins follow the override too.
+func TestWithOriginBrowserOptions(t *testing.T) {
+	c := UptimeCheck{Kind: "browser", URL: "https://app.example.com/", Steps: []BrowserStep{
+		{Action: "goto", Value: "https://app.example.com/"},
+		{Action: "set_cookie", Name: "a", Value: "1", Scope: ".example.com"},
+		{Action: "set_cookie", Name: "b", Value: "1", Scope: "https://app.example.com/shop"},
+		{Action: "set_cookie", Name: "c", Value: "1", Scope: ".other.org"},
+		{Action: "grant_permission", Permission: "notifications", Scope: "https://app.example.com"},
+	}, BrowserOptions: BrowserOptions{TraceOrigins: []string{"https://api.example.com", "https://*.example.com", "https://cdn.other.org"}}}
+	got, err := withOrigin(c, "https://pr-12.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopes := []string{"", "pr-12.example.com", "https://pr-12.example.com/shop", ".other.org", "https://pr-12.example.com"}
+	for i, st := range got.Steps {
+		if st.Scope != scopes[i] {
+			t.Errorf("step %d scope = %s, want %s", i, st.Scope, scopes[i])
+		}
+	}
+	if want := []string{"https://pr-12.example.com", "https://pr-12.example.com", "https://cdn.other.org"}; strings.Join(got.TraceOrigins, " ") != strings.Join(want, " ") {
+		t.Errorf("trace origins %v", got.TraceOrigins)
+	}
+}
+
 func TestParseOverride(t *testing.T) {
 	s := logsTestServer(t, nil)
 	checks := []UptimeCheck{{Name: "a", Kind: "http", URL: "https://app.example.co.uk/health"}}

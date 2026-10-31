@@ -348,7 +348,7 @@ export function UptimeDetail({ id }: { id: number }) {
             {playwright ? (
               <PlaywrightRunsPanel checkId={id} runs={pwRuns.data?.runs} loading={pwRuns.loading} error={pwRuns.error} />
             ) : browser ? (
-              <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
+              <BrowserRunsPanel checkId={id} checkName={c.name} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
             ) : kind !== "http" ? null : (
               <Panel
                 className="span-12"

@@ -409,9 +409,18 @@ See [the agent's README](cmd/visionary-agent/README.md#uptime-locations).
 
 A browser check plays scripted steps in a headless Chrome, Chromium or Edge on
 the server: go to a URL, click, type (values can be `{{secret.NAME}}`, masked in
-results), wait, and check text, the URL or an element. Each run records step
-times, LCP, CLS, TTFB, console and network errors, and a screenshot on
-failure. Runs share the schedule, alerts and status page of HTTP checks.
+results), wait, check text, the URL or an element, read a value into
+`{{var.NAME}}`, hover, drag, upload a file, work inside an iframe, set cookies
+or storage and grant permissions, at a desktop, laptop, tablet, phone or
+custom screen size. A recording exported from Chrome DevTools' Recorder can be
+imported as steps. Each run records step times, LCP, CLS, TTFB, console
+errors, every request (a waterfall, downloadable as HAR), and a screenshot on
+failure, or after every step when asked. Optional limits on LCP, CLS, TTFB,
+total time and each step's time fail a run, or mark it degraded above a lower
+warning. Each run sends a W3C `traceparent` to the first page's origin (or the
+origins the check lists), so a backend with a Visionary SDK records its side
+and the run links to that trace. Runs share the schedule, alerts and status
+page of HTTP checks.
 
 The default image has no browser, so browser checks stay paused in it. Build
 the variant with Chromium (about 400 MB larger):

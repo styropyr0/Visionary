@@ -108,7 +108,7 @@ func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, o
 		if err != nil {
 			return runItem{Status: "error", Error: "the browser did not start: " + userMessage(err)}
 		}
-		res, detail = r, map[string]any{"steps": b.Steps, "failed_step": b.FailedStep}
+		res, detail = r, map[string]any{"steps": b.Steps, "failed_step": b.FailedStep, "trace_id": b.TraceID, "warning": b.Warning}
 		if recordIt {
 			if err := run.record(cctx, c, res); err == nil {
 				_ = run.recordBrowser(cctx, c, res, b)
@@ -254,6 +254,19 @@ func withOrigin(c UptimeCheck, origin string) (UptimeCheck, error) {
 	var next UptimeCheck
 	if err := json.Unmarshal([]byte(out), &next); err != nil {
 		return c, err
+	}
+	// Cookie domains and wildcard trace origins carry no scheme, so the
+	// rewrite above misses them.
+	o, _ := url.Parse(origin)
+	for i, st := range next.Steps {
+		if st.Action == "set_cookie" && st.Scope != "" && !strings.Contains(st.Scope, "://") && siteOf(strings.TrimPrefix(st.Scope, ".")) == site {
+			next.Steps[i].Scope = o.Hostname()
+		}
+	}
+	for i, t := range next.TraceOrigins {
+		if h, ok := strings.CutPrefix(t, base.Scheme+"://*."); ok && siteOf(h) == site {
+			next.TraceOrigins[i] = origin
+		}
 	}
 	return next, nil
 }

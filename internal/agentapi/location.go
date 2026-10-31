@@ -53,11 +53,13 @@ type LocationResults struct {
 }
 
 // LocationResult is one run of one check. Browser is set for browser
-// checks, with their screenshots as JPEG bytes.
+// checks, with their screenshots as JPEG bytes; StepShots are the ones after
+// each step, nil where none was taken.
 type LocationResult struct {
 	CheckID         int64                  `json:"check_id"`
 	Result          uptimecore.Result      `json:"result"`
 	Browser         *uptimecore.BrowserRun `json:"browser,omitempty"`
 	Screenshot      []byte                 `json:"screenshot,omitempty"`
 	FinalScreenshot []byte                 `json:"final_screenshot,omitempty"`
+	StepShots       [][]byte               `json:"step_shots,omitempty"`
 }

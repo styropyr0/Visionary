@@ -45,6 +45,40 @@ export interface UptimeCheck {
   ping?: PingConfig;
   ssl?: SslConfig;
   heartbeat?: HeartbeatConfig;
+  /** Origins that get the run's traceparent; empty means the first page's. */
+  trace_origins?: string[];
+  no_trace?: boolean;
+  /** Performance limits of browser runs; 0 or absent is none. Over max_* fails, over warn_* is degraded. */
+  max_lcp_ms?: number;
+  max_cls?: number;
+  max_ttfb_ms?: number;
+  max_duration_ms?: number;
+  warn_lcp_ms?: number;
+  warn_cls?: number;
+  warn_ttfb_ms?: number;
+  /** The screen a browser check runs at; custom uses viewport_w × viewport_h. */
+  device?: Device;
+  viewport_w?: number;
+  viewport_h?: number;
+  /** Keep a small screenshot after every step. */
+  step_screenshots?: boolean;
+  files?: BrowserFile[];
+}
+
+export type Device = "desktop" | "laptop" | "tablet" | "phone" | "custom";
+
+export const DEVICES: { value: Device; label: string; size: string }[] = [
+  { value: "desktop", label: "Desktop", size: "1280 × 800" },
+  { value: "laptop", label: "Laptop", size: "1440 × 900" },
+  { value: "tablet", label: "Tablet", size: "768 × 1024" },
+  { value: "phone", label: "Phone", size: "390 × 844, mobile, touch, 3×" },
+  { value: "custom", label: "Custom", size: "" },
+];
+
+/** "Phone" or "Custom 1000 × 700", for lists. */
+export function deviceLabel(c: Pick<UptimeCheck, "device" | "viewport_w" | "viewport_h">): string {
+  if (c.device === "custom") return `${c.viewport_w} × ${c.viewport_h}`;
+  return DEVICES.find((d) => d.value === (c.device || "desktop"))?.label ?? "Desktop";
 }
 
 export type LocationRule = "any" | "majority" | "all";
@@ -134,7 +168,15 @@ export type StepAction =
   | "assert_url"
   | "assert_count"
   | "wait"
-  | "script";
+  | "script"
+  | "extract"
+  | "hover"
+  | "drag"
+  | "upload"
+  | "frame"
+  | "set_cookie"
+  | "set_storage"
+  | "grant_permission";
 
 export interface BrowserStep {
   action: StepAction;
@@ -145,6 +187,28 @@ export interface BrowserStep {
   op?: "eq" | "gte" | "lte";
   ms?: number;
   label?: string;
+  /** Fails the step when it takes longer. */
+  max_ms?: number;
+  /** The variable of extract, the cookie of set_cookie, the key of set_storage, the file of upload. */
+  name?: string;
+  /** What extract reads: text, value or an attribute. */
+  attr?: string;
+  regex?: string;
+  /** Where drag drops. */
+  target?: string;
+  /** set_cookie: URL or domain; set_storage: local or session; grant_permission: origin. */
+  scope?: string;
+  permission?: "geolocation" | "notifications" | "clipboard";
+  lat?: number;
+  lon?: number;
+}
+
+/** A file upload steps send; data (base64) comes back empty, and sending it empty keeps the stored file. */
+export interface BrowserFile {
+  name: string;
+  type?: string;
+  size: number;
+  data?: string;
 }
 
 export const MASK = "********";
@@ -264,6 +328,8 @@ export interface StepResult {
   status: "passed" | "failed" | "skipped";
   duration_ms: number;
   error?: string;
+  /** What the step found, such as an extracted value. */
+  detail?: string;
 }
 
 export interface BrowserRunSummary {
@@ -281,6 +347,9 @@ export interface BrowserRunSummary {
   screenshot: boolean;
   final_screenshot: boolean;
   steps: number;
+  degraded: boolean;
+  /** Which "warn above" values a degraded run went over. */
+  warning: string;
 }
 
 export interface StepStat {
@@ -309,9 +378,44 @@ export interface BrowserRunDetail {
   ttfb_ms: number | null;
   status: number;
   retried: boolean;
+  /** The run's trace id, and whether a backend recorded anything under it. */
+  trace_id: string;
+  trace_found: boolean;
+  degraded: boolean;
+  warning: string;
+  /** Every request of the run, timed from its start; empty for older runs. */
+  requests: NetRequest[];
+  /** data: URLs after each step, aligned with steps; "" where none was kept. */
+  step_shots: string[];
+}
+
+export interface NetRequest {
+  url: string;
+  method: string;
+  status?: number;
+  type?: string;
+  mime?: string;
+  start_ms: number;
+  duration_ms: number;
+  size?: number;
+  failed?: boolean;
+  error?: string;
 }
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });
+
+/** Steps converted from a Chrome DevTools Recorder export, and the recorded steps that have no equivalent. */
+export interface RecorderImport {
+  title: string;
+  steps: BrowserStep[];
+  device?: Device;
+  viewport_w?: number;
+  viewport_h?: number;
+  unsupported: string[];
+}
+
+export const importRecording = (json: string) =>
+  api<RecorderImport>("/api/uptime/browser/recorder", { method: "POST", body: json, headers: { "Content-Type": "application/json" } });
 
 export const getBrowserRuns = (id: number, from: Date, to: Date, signal?: AbortSignal) =>
   api<{ runs: BrowserRunSummary[]; steps: StepStat[] }>(`/api/uptime/checks/${id}/runs?${rangeQuery(from, to)}`, { signal });

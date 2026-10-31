@@ -44,6 +44,7 @@ func TestBrowserCheckNormalize(t *testing.T) {
 		func(c *UptimeCheck) { c.Steps = nil },
 		func(c *UptimeCheck) { c.Steps = c.Steps[1:] },
 		func(c *UptimeCheck) { c.Steps = append(c.Steps, BrowserStep{Action: "hover"}) },
+		func(c *UptimeCheck) { c.Steps = append(c.Steps, BrowserStep{Action: "teleport"}) },
 		func(c *UptimeCheck) {
 			c.Steps = append(c.Steps, BrowserStep{Action: "type", Selector: "#x", Value: "{{secret.NOPE}}"})
 		},
@@ -52,6 +53,9 @@ func TestBrowserCheckNormalize(t *testing.T) {
 		func(c *UptimeCheck) { c.Steps = []BrowserStep{{Action: "goto", Value: "file:///etc/passwd"}} },
 		func(c *UptimeCheck) { c.Secrets = map[string]string{"bad name": "x"} },
 		func(c *UptimeCheck) { c.TimeoutMs = 200000 },
+		func(c *UptimeCheck) { c.MaxLCPMs, c.WarnLCPMs = 2000, 2500 },
+		func(c *UptimeCheck) { c.MaxCLS = 20 },
+		func(c *UptimeCheck) { c.Steps[1].MaxMs = -1 },
 	}
 	for i, f := range bad {
 		c := ok

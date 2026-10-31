@@ -25,6 +25,9 @@ import (
 
 var varNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
+// browserOnly are the attributes only browser checks take.
+var browserOnly = []string{"files", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms", "viewport_w", "viewport_h"}
+
 var checkKinds = []string{"http", "browser", "playwright", "api", "tcp", "dns", "ping", "ssl", "heartbeat"}
 
 // kindBlocks are the blocks, by the kind that uses each.
@@ -291,6 +294,13 @@ func kindProblems(kind string, set func(string) bool) map[string]string {
 		}
 		if b != block && set(b) {
 			out[b] = `Set kind = "` + b + `" to use the ` + b + " block."
+		}
+	}
+	if kind != "browser" && kind != "playwright" {
+		for _, n := range browserOnly {
+			if set(n) {
+				out[n] = n + ` applies to browser checks; set kind = "browser" to use it.`
+			}
 		}
 	}
 	if kind != "playwright" && set("playwright") {

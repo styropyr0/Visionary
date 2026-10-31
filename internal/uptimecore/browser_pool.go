@@ -232,6 +232,9 @@ func (p *BrowserPool) ensureLocked() (context.Context, error) {
 		chromedp.Flag("mute-audio", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-default-browser-check", true),
+		// Cross-site iframes stay in the page's process, so frame steps reach them.
+		chromedp.Flag("disable-features", "Translate,BlinkGenPropertyTrees,site-per-process,IsolateOrigins"),
+		chromedp.Flag("disable-site-isolation-trials", true),
 		// Keeps WebRTC from reaching around the address guard's proxy.
 		chromedp.Flag("force-webrtc-ip-handling-policy", "disable_non_proxied_udp"),
 	)

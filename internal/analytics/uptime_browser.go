@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/styropyr0/visionary/internal/uptimecore"
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
@@ -34,18 +36,35 @@ type BrowserStep struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int    `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
+	// MaxMs fails the step when it takes longer.
+	MaxMs int `json:"max_ms,omitempty"`
+	// Name is the variable of extract, the cookie of set_cookie, the key of
+	// set_storage and the file of upload.
+	Name string `json:"name,omitempty"`
+	// Attr is what extract reads: text (default), value or an attribute.
+	Attr  string `json:"attr,omitempty"`
+	Regex string `json:"regex,omitempty"`
+	// Target is where drag drops.
+	Target string `json:"target,omitempty"`
+	// Scope is the cookie's URL or domain, local or session storage, or the
+	// origin a permission is granted to.
+	Scope      string  `json:"scope,omitempty"`
+	Permission string  `json:"permission,omitempty"`
+	Lat        float64 `json:"lat,omitempty"`
+	Lon        float64 `json:"lon,omitempty"`
 }
 
 const (
 	browserMaxSteps     = 50
 	browserMaxSecrets   = 20
-	browserMaxTimeoutMs = 120000
+	browserMaxTimeoutMs = uptimecore.MaxBrowserTimeoutMs
 )
 
 var (
 	browserActions = map[string]bool{"goto": true, "click": true, "type": true, "press": true, "select": true, "wait_selector": true,
 		"wait_text": true, "wait_navigation": true, "assert_text": true, "assert_no_text": true, "assert_url": true, "assert_count": true,
-		"wait": true, "script": true}
+		"wait": true, "script": true, "extract": true, "hover": true, "drag": true, "upload": true, "frame": true, "set_cookie": true,
+		"set_storage": true, "grant_permission": true}
 	secretNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 	secretRefRe  = regexp.MustCompile(`\{\{secret\.([A-Za-z0-9_]+)\}\}`)
 )
@@ -53,8 +72,10 @@ var (
 // uptimeAddedColumns are columns added to the uptime tables after their
 // first release.
 var uptimeAddedColumns = map[string][]sdk.Column{
-	"uptime_checks":  {{Name: "kind", Kind: "text"}},
-	"uptime_results": {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
+	"uptime_checks":          {{Name: "kind", Kind: "text"}},
+	"uptime_results":         {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
+	"uptime_browser_checks":  {{Name: "options", Kind: "bigtext"}},
+	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}, {Name: "warning", Kind: "text"}, {Name: "requests", Kind: "bigtext"}, {Name: "step_shots", Kind: "bigtext"}},
 }
 
 func (s *Server) uptimeBrowserSchema() []string {
@@ -123,13 +144,33 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 		secrets[k] = v
 	}
 	c.Secrets = secrets
+	if err := c.NormalizeFiles(prevFiles(prev)); err != nil {
+		return err
+	}
+	files := map[string]bool{}
+	for _, f := range c.Files {
+		files[f.Name] = true
+	}
+	vars := map[string]bool{}
 	for i := range c.Steps {
 		st := &c.Steps[i]
 		st.Action = strings.TrimSpace(st.Action)
 		st.Selector = strings.TrimSpace(st.Selector)
+		st.Target = strings.TrimSpace(st.Target)
 		st.Label = strings.TrimSpace(st.Label)
 		if err := st.validate(); err != nil {
 			return fmt.Errorf("step %d: %w", i+1, err)
+		}
+		if err := st.validateMore(files); err != nil {
+			return fmt.Errorf("step %d: %w", i+1, err)
+		}
+		for _, v := range st.refs() {
+			if !vars[v] {
+				return fmt.Errorf("step %d uses variable %s, which no earlier extract step sets", i+1, v)
+			}
+		}
+		if st.Action == "extract" {
+			vars[st.Name] = true
 		}
 		for _, m := range secretRefRe.FindAllStringSubmatch(st.Value, -1) {
 			if _, ok := secrets[m[1]]; !ok {
@@ -139,6 +180,12 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	}
 	if c.Steps[0].Action != "goto" {
 		return errors.New("the first step must go to a URL")
+	}
+	if err := c.NormalizeTrace(); err != nil {
+		return err
+	}
+	if err := c.NormalizeDevice(); err != nil {
+		return err
 	}
 	c.URL = c.Steps[0].Value
 	if c.IntervalS == 0 {
@@ -159,6 +206,9 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	if c.DegradedMs < 0 || c.DegradedMs > browserMaxTimeoutMs {
 		return errors.New("slow threshold must be between 0 and 120000 ms")
 	}
+	if err := c.BrowserLimits.Validate(c.DegradedMs); err != nil {
+		return err
+	}
 	if !c.OnStatusPage {
 		c.StatusShowURL = false
 	}
@@ -171,6 +221,9 @@ func (b *BrowserStep) validate() error {
 	}
 	if len(b.Selector) > 500 || len(b.Text) > 500 || len(b.Label) > 120 || len(b.Value) > 5000 {
 		return errors.New("a field is too long")
+	}
+	if b.MaxMs < 0 || b.MaxMs > browserMaxTimeoutMs {
+		return fmt.Errorf("the step's time limit must be between 0 and %d ms", browserMaxTimeoutMs)
 	}
 	need := func(field, v string) error {
 		if strings.TrimSpace(v) == "" {
@@ -233,13 +286,13 @@ func (s *Server) loadBrowserConfigs(ctx context.Context, checks []UptimeCheck) e
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := s.db.Query(ctx, `SELECT check_id, steps, secrets, final_screenshot FROM uptime_browser_checks WHERE check_id IN (`+strings.Join(ids, ", ")+`)`)
+	rows, err := s.db.Query(ctx, `SELECT check_id, steps, secrets, final_screenshot, options FROM uptime_browser_checks WHERE check_id IN (`+strings.Join(ids, ", ")+`)`)
 	if err != nil {
 		return err
 	}
 	byID := map[int64][]any{}
 	for _, row := range rows.Rows {
-		if len(row) == 4 {
+		if len(row) == 5 {
 			byID[toInt(row[0])] = row
 		}
 	}
@@ -253,6 +306,7 @@ func (s *Server) loadBrowserConfigs(ctx context.Context, checks []UptimeCheck) e
 			_ = json.Unmarshal([]byte(toString(row[1])), &c.Steps)
 			_ = json.Unmarshal([]byte(toString(row[2])), &c.Secrets)
 			c.FinalScreenshot = toInt(row[3]) == 1
+			_ = json.Unmarshal([]byte(toString(row[4])), &c.BrowserOptions)
 		}
 	}
 	return nil
@@ -273,8 +327,12 @@ func (s *Server) saveBrowserConfig(ctx context.Context, c UptimeCheck) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Exec(ctx, `INSERT INTO uptime_browser_checks (check_id, steps, secrets, final_screenshot) VALUES (?, ?, ?, ?)`,
-		c.ID, string(steps), string(secrets), boolInt(c.FinalScreenshot))
+	options, err := json.Marshal(c.BrowserOptions)
+	if err != nil {
+		return err
+	}
+	return s.db.Exec(ctx, `INSERT INTO uptime_browser_checks (check_id, steps, secrets, final_screenshot, options) VALUES (?, ?, ?, ?, ?)`,
+		c.ID, string(steps), string(secrets), boolInt(c.FinalScreenshot), string(options))
 }
 
 func (s *Server) deleteBrowserData(ctx context.Context, id int64) {
@@ -291,6 +349,26 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	network, _ := json.Marshal(b.Network)
 	cols := []string{"created_at", "check_id", "ok", "failed_step", "steps", "console", "network"}
 	vals := []any{r.CreatedAt, c.ID, boolInt(r.OK), b.FailedStep, string(steps), string(console), string(network)}
+	if b.TraceID != "" {
+		cols, vals = append(cols, "trace_id"), append(vals, b.TraceID)
+	}
+	if b.Warning != "" {
+		cols, vals = append(cols, "warning"), append(vals, b.Warning)
+	}
+	if b.Requests != nil {
+		reqs, _ := json.Marshal(b.Requests)
+		cols, vals = append(cols, "requests"), append(vals, string(reqs))
+	}
+	shots := slices.ContainsFunc(b.StepShots, func(s []byte) bool { return s != nil })
+	if shots {
+		enc, _ := json.Marshal(encodeShots(b.StepShots))
+		cols, vals = append(cols, "step_shots"), append(vals, string(enc))
+	}
+	defer func() {
+		if err := u.s.pruneRunDetail(ctx, c.ID); err != nil {
+			u.s.logger.Warn("old browser run detail not dropped", "check_id", c.ID, "err", err)
+		}
+	}()
 	if b.Screenshot != nil {
 		cols, vals = append(cols, "screenshot"), append(vals, base64.StdEncoding.EncodeToString(b.Screenshot))
 	}
@@ -345,7 +423,7 @@ func (s *Server) handleBrowserRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.id, b.created_at, b.ok, b.failed_step, b.steps, u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.retried,
-  CASE WHEN b.screenshot IS NULL THEN 0 ELSE 1 END, CASE WHEN b.final_screenshot IS NULL THEN 0 ELSE 1 END
+  CASE WHEN b.screenshot IS NULL THEN 0 ELSE 1 END, CASE WHEN b.final_screenshot IS NULL THEN 0 ELSE 1 END, u.degraded, b.warning
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.check_id = ? AND b.created_at >= ? AND b.created_at < ?
 ORDER BY b.created_at DESC LIMIT 500`, id, tr.From.UTC().Format(tsLayout), tr.To.UTC().Format(tsLayout))
@@ -393,6 +471,7 @@ ORDER BY b.created_at DESC LIMIT 500`, id, tr.From.UTC().Format(tsLayout), tr.To
 			"id": toInt(row[0]), "created_at": toString(row[1]), "ok": toInt(row[2]) == 1, "failed_step": toInt(row[3]), "failed_label": failedLabel,
 			"duration_ms": row[5], "error": toString(row[6]), "lcp_ms": row[7], "cls": row[8], "ttfb_ms": row[9], "retried": toInt(row[10]) == 1,
 			"screenshot": toInt(row[11]) == 1, "final_screenshot": toInt(row[12]) == 1, "steps": len(steps),
+			"degraded": toInt(row[13]) == 1, "warning": toString(row[14]),
 		})
 	}
 	for _, ss := range stats {
@@ -421,7 +500,7 @@ func (s *Server) handleBrowserRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.created_at, b.ok, b.failed_step, b.steps, b.console, b.network, b.screenshot, b.final_screenshot,
-  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried
+  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id, u.degraded, b.warning, b.requests, b.step_shots
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	if err != nil {
@@ -439,6 +518,15 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	_ = json.Unmarshal([]byte(toString(row[3])), &steps)
 	_ = json.Unmarshal([]byte(toString(row[4])), &console)
 	_ = json.Unmarshal([]byte(toString(row[5])), &network)
+	var requests []netRequest
+	var stepShots []string
+	_ = json.Unmarshal([]byte(toString(row[18])), &requests)
+	_ = json.Unmarshal([]byte(toString(row[19])), &stepShots)
+	for i, b := range stepShots {
+		if b != "" {
+			stepShots[i] = "data:image/jpeg;base64," + b
+		}
+	}
 	img := func(v any) string {
 		if b := toString(v); b != "" {
 			return "data:image/jpeg;base64," + b
@@ -450,5 +538,7 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 		"steps": nonNil(steps), "console": nonNil(console), "network": nonNil(network),
 		"screenshot": img(row[6]), "final_screenshot": img(row[7]),
 		"duration_ms": row[8], "error": toString(row[9]), "lcp_ms": row[10], "cls": row[11], "ttfb_ms": row[12], "status": toInt(row[13]), "retried": toInt(row[14]) == 1,
+		"trace_id": toString(row[15]), "trace_found": s.traceHasRows(r.Context(), toString(row[15])),
+		"degraded": toInt(row[16]) == 1, "warning": toString(row[17]), "requests": nonNil(requests), "step_shots": nonNil(stepShots),
 	})
 }

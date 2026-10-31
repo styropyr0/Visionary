@@ -486,7 +486,21 @@ func (s *Server) handleLocationResults(w http.ResponseWriter, r *http.Request) {
 		}
 		if c.Kind == "browser" && in.Browser != nil {
 			run := *in.Browser
-			run.Screenshot, run.Final = in.Screenshot, in.FinalScreenshot
+			run.Screenshot, run.Final, run.StepShots = in.Screenshot, in.FinalScreenshot, nil
+			// A runner's step screenshots and requests get the caps of the
+			// server's own runs.
+			total := 0
+			for _, b := range in.StepShots {
+				if len(b) > uptimecore.MaxStepShot || total+len(b) > uptimecore.StepShotsPerRun {
+					b = nil
+				}
+				total += len(b)
+				run.StepShots = append(run.StepShots, b)
+			}
+			if len(run.Requests) > uptimecore.MaxRequests {
+				run.Requests = run.Requests[:uptimecore.MaxRequests]
+			}
+			run.TraceID, run.Warning = clip(run.TraceID, 32), clip(run.Warning, 250)
 			if err := runnerFor(s).recordBrowser(ctx, c, res, run); err != nil {
 				s.logger.Warn("browser run not saved", "check_id", c.ID, "location", l.Name, "err", err)
 			}

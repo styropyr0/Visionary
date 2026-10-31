@@ -112,7 +112,7 @@ func (l *locationRunner) execute(ctx context.Context, c uptimecore.Check) {
 			// No browser after all: nothing ran, so nothing is reported.
 			return
 		}
-		out.Result, out.Screenshot, out.FinalScreenshot = res, run.Screenshot, run.Final
+		out.Result, out.Screenshot, out.FinalScreenshot, out.StepShots = res, run.Screenshot, run.Final, run.StepShots
 		out.Browser = &run
 	default:
 		return
