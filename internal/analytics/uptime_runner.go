@@ -76,7 +76,8 @@ func (u *uptimeRunner) load(ctx context.Context) ([]uptimecore.Check, error) {
 	byID := make(map[int64]UptimeCheck, len(checks))
 	out := make([]uptimecore.Check, 0, len(checks))
 	for _, c := range checks {
-		if !c.Enabled || !c.runsAt(serverLocation) {
+		// Playwright checks are pushed by the reporter; nothing runs them here.
+		if !c.Enabled || c.Kind == "playwright" || !c.runsAt(serverLocation) {
 			continue
 		}
 		byID[c.ID] = c

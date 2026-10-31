@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Clapperboard, Globe, Network, Plus, Trash2, X } from "lucide-react";
+import { Clapperboard, FlaskConical, Globe, Network, Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
@@ -9,6 +9,8 @@ import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alert
 import { RecorderDialog } from "./Uptime.recorder";
 import { DeviceSettings, LimitSettings, TraceSettings } from "./Uptime.settings";
 import { BrowserNotice, FilesEditor, SecretsEditor, StepsEditor } from "./Uptime.steps";
+import { TagsField } from "./Uptime.tags";
+import { BLANK_PLAYWRIGHT, PlaywrightFields } from "./Uptime.playwright";
 import { LocationsField } from "./Uptime.locations";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -60,7 +62,11 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [steps, setSteps] = useState<BrowserStep[]>(() => (check?.steps?.length ? check.steps : FIRST_STEPS));
   const [secrets, setSecrets] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.secrets ?? {}).map(([k, v]) => ({ k, v })));
   const browser = form.kind === "browser";
-  const setKind = (k: CheckKind) => setForm((f) => (k === "browser" ? { ...f, ...BLANK_BROWSER } : { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms }));
+  const playwright = form.kind === "playwright";
+  const setKind = (k: CheckKind) =>
+    setForm((f) =>
+      k === "browser" ? { ...f, ...BLANK_BROWSER } : k === "playwright" ? { ...f, ...BLANK_PLAYWRIGHT } : { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms },
+    );
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -151,7 +157,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <div className="field">
             <span>Kind</span>
             <div className="segmented" role="radiogroup" aria-label="Kind of check">
-              <button type="button" role="radio" aria-checked={!browser} className={!browser ? "on" : ""} onClick={() => setKind("http")}>
+              <button type="button" role="radio" aria-checked={!browser && !playwright} className={!browser && !playwright ? "on" : ""} onClick={() => setKind("http")}>
                 <Network size={13} />
                 HTTP request
               </button>
@@ -159,8 +165,18 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
                 <Globe size={13} />
                 Browser steps
               </button>
+              <button type="button" role="radio" aria-checked={playwright} className={playwright ? "on" : ""} onClick={() => setKind("playwright")}>
+                <FlaskConical size={13} />
+                Playwright test
+              </button>
             </div>
-            <small>{browser ? "Opens your pages in a headless browser and plays steps: sign in, click through, check what is shown." : "One request to a URL, checked for status, body text and response time."}</small>
+            <small>
+              {browser
+                ? "Opens your pages in a headless browser and plays steps: sign in, click through, check what is shown."
+                : playwright
+                  ? "A test from your own Playwright suite, run in your CI or on your hosts; visionary-playwright-reporter reports each run. Declare it here to alert on it before its first run."
+                  : "One request to a URL, checked for status, body text and response time."}
+            </small>
           </div>
         )}
         {browser && <BrowserNotice always />}
@@ -168,6 +184,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <span>Name</span>
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
         </label>
+        <TagsField value={form.tags ?? []} onChange={(t) => set("tags", t)} />
         {browser && (
           <div>
             <button type="button" className="btn ghost sm" onClick={() => setRecorder(true)} title="Turn a recording exported from Chrome DevTools' Recorder into steps">
@@ -181,7 +198,8 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
         {browser && (form.files?.length || steps.some((s) => s.action === "upload")) ? <FilesEditor files={form.files ?? []} onChange={(f) => set("files", f)} /> : null}
         {browser && <TraceSettings form={form} set={set} steps={steps} />}
-        {!browser && (
+        {playwright && <PlaywrightFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />}
+        {!browser && !playwright && (
           <>
             <div className="up-row">
               <div className="field" style={{ width: 120 }}>
@@ -209,27 +227,29 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </>
         )}
 
-        <LocationsField kind={form.kind} value={form.locations} rule={form.location_rule} onChange={(v) => set("locations", v)} onRule={(r) => set("location_rule", r)} />
+        {!playwright && <LocationsField kind={form.kind} value={form.locations} rule={form.location_rule} onChange={(v) => set("locations", v)} onRule={(r) => set("location_rule", r)} />}
 
-        <div className="up-row">
-          <div className="field" style={{ flex: 1 }}>
-            <span>Check every</span>
-            <Select label="Interval" value={String(form.interval_s)} align="left" onChange={(v) => set("interval_s", Number(v))} options={intervalOptions} />
-          </div>
-          <label className="field" style={{ flex: 1 }}>
-            <span>Timeout (seconds)</span>
-            <input className="input" type="number" min={1} max={browser ? 120 : 60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
-          </label>
-          {!browser && (
+        {!playwright && (
+          <div className="up-row">
+            <div className="field" style={{ flex: 1 }}>
+              <span>Check every</span>
+              <Select label="Interval" value={String(form.interval_s)} align="left" onChange={(v) => set("interval_s", Number(v))} options={intervalOptions} />
+            </div>
             <label className="field" style={{ flex: 1 }}>
-              <span>Degraded above (ms)</span>
-              <input className="input" type="number" min={0} max={60000} value={form.degraded_ms || ""} placeholder="Off" onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)} />
+              <span>Timeout (seconds)</span>
+              <input className="input" type="number" min={1} max={browser ? 120 : 60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
             </label>
-          )}
-        </div>
+            {!browser && (
+              <label className="field" style={{ flex: 1 }}>
+                <span>Degraded above (ms)</span>
+                <input className="input" type="number" min={0} max={60000} value={form.degraded_ms || ""} placeholder="Off" onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)} />
+              </label>
+            )}
+          </div>
+        )}
         {browser && <LimitSettings form={form} set={set} />}
 
-        {!browser && (
+        {!browser && !playwright && (
           <div className="field">
             <span>Request headers</span>
             {headers.map((h, i) => (
@@ -277,10 +297,12 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
               </label>
             </>
           ) : (
-            <label>
-              <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
-              Follow redirects (up to 5)
-            </label>
+            !playwright && (
+              <label>
+                <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
+                Follow redirects (up to 5)
+              </label>
+            )
           )}
           <label>
             <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />

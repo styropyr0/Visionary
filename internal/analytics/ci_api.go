@@ -597,7 +597,8 @@ FROM ci_jobs WHERE run_key = ? ORDER BY created_at, started_at, id LIMIT 500`, r
 		deploys = append(deploys, d)
 	}
 	run.Deploys = nil
-	writeJSON(w, http.StatusOK, map[string]any{"run": run, "jobs": jobs, "tests": counts, "failed": failed, "slowest": slow, "deploys": deploys})
+	writeJSON(w, http.StatusOK, map[string]any{"run": run, "jobs": jobs, "tests": counts, "failed": failed, "slowest": slow, "deploys": deploys,
+		"checks": s.commitBatches(ctx, run.Commit)})
 }
 
 func ptrAny(p *float64) any {

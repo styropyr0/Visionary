@@ -158,7 +158,7 @@ export interface Members {
   sign_ins?: SignIn[];
 }
 
-export type KeyScope = "read" | "editor" | "admin" | "server" | "client" | "scim";
+export type KeyScope = "read" | "editor" | "admin" | "server" | "client" | "scim" | "ci";
 
 export const SCOPE_INFO: Record<KeyScope, { label: string; detail: string }> = {
   read: { label: "Read", detail: "Calls the HTTP API with viewer rights (GET, queries, the analyst). Send it as Authorization: Bearer <key>." },
@@ -167,6 +167,7 @@ export const SCOPE_INFO: Record<KeyScope, { label: string; detail: string }> = {
   server: { label: "Server ingest", detail: "SDKs and OTLP exporters sending from your servers. Keep it secret." },
   client: { label: "Client ingest", detail: "Browser and mobile apps. It ships inside the app, so treat it as public: it can only send events." },
   scim: { label: "SCIM", detail: "Your identity provider adds, changes and removes people through /scim/v2 (Settings → Sign-in → Single sign-on). Keep it secret." },
+  ci: { label: "CI", detail: "Pipelines run uptime checks (POST /api/uptime/runs) and report Playwright tests, and nothing else, so a leaked key cannot change your setup. Keep it secret." },
 };
 
 export interface ApiKey {

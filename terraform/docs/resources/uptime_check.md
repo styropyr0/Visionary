@@ -3,12 +3,12 @@
 page_title: "visionary_uptime_check Resource - visionary"
 subcategory: ""
 description: |-
-  An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+  An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, or a Playwright test your own runs report (declared here so it exists before its first run). Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 ---
 
 # visionary_uptime_check (Resource)
 
-An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, or a Playwright test your own runs report (declared here so it exists before its first run). Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 
 ## Example Usage
 
@@ -20,6 +20,7 @@ resource "visionary_uptime_check" "api" {
   expect_status = "200"
   body_contains = "ok"
   degraded_ms   = 800
+  tags          = ["smoke", "api"]
   headers       = { Authorization = "Bearer ${var.health_token}" }
 
   on_status_page = true
@@ -40,6 +41,20 @@ resource "visionary_uptime_check" "sign_in" {
     { action = "wait_navigation" },
     { action = "assert_text", text = "Dashboard", label = "signed in" },
   ]
+}
+
+# A Playwright test your CI runs with visionary-playwright-reporter; declared so it
+# is alerted on before its first run, and stale when no run arrives for 20 minutes.
+resource "visionary_uptime_check" "checkout_test" {
+  name       = "Checkout pays by card"
+  kind       = "playwright"
+  interval_s = 1200
+  tags       = ["checkout"]
+
+  playwright = {
+    project = "chromium"
+    title   = "checkout.spec.ts › pays by card"
+  }
 }
 
 variable "health_token" {
@@ -71,8 +86,8 @@ variable "probe_password" {
 - `final_screenshot` (Boolean) Keep a screenshot of every browser run, not only failed ones.
 - `follow_redirects` (Boolean) Default true.
 - `headers` (Map of String, Sensitive) Request headers.
-- `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
-- `kind` (String) http (default) or browser.
+- `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.
+- `kind` (String) http (default), browser or playwright.
 - `max_cls` (Number) A browser run whose Cumulative Layout Shift is above this fails.
 - `max_duration_ms` (Number) A browser run that takes longer than this in all fails.
 - `max_lcp_ms` (Number) A browser run whose Largest Contentful Paint is slower than this fails.
@@ -81,11 +96,13 @@ variable "probe_password" {
 - `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
+- `playwright` (Attributes) The Playwright test a playwright check follows, as visionary-playwright-reporter reports it. (see [below for nested schema](#nestedatt--playwright))
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
 - `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `step_screenshots` (Boolean) Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
+- `tags` (Set of String) Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
 - `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).
 - `trace_origins` (List of String) Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.
@@ -99,6 +116,18 @@ variable "probe_password" {
 ### Read-Only
 
 - `id` (String) The id Visionary gave it.
+
+<a id="nestedatt--playwright"></a>
+### Nested Schema for `playwright`
+
+Required:
+
+- `title` (String) Title path: file › describe › test, e.g. checkout.spec.ts › pays by card.
+
+Optional:
+
+- `project` (String) Playwright project name (empty without projects).
+
 
 <a id="nestedatt--steps"></a>
 ### Nested Schema for `steps`

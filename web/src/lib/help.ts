@@ -328,7 +328,7 @@ agent, err := visionary.New(cfg)`,
     id: "checks",
     title: "Add an uptime check",
     intro:
-      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form.",
+      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form. Tags (smoke, checkout, deploy) group checks, for the list's Tag filter and for running a group from CI.",
     any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless an admin turns on Settings → Server → Other → Uptime checks may reach private addresses." },
   },
   browsercheck: {
@@ -361,6 +361,51 @@ VISIONARY_AGENT_LOCATION=frankfurt-vps visionary-agent`,
     intro:
       "A public page at /status (and /status.json) shows the checks you mark Show on the public status page, with their uptime and incidents; their URLs only when you tick that too. Declared incidents marked for it show there too, with the updates you publish.",
     any: { note: "An admin turns it on and sets its title in Settings → Status page. Then open an uptime check and tick Show on the public status page." },
+  },
+  cichecks: {
+    id: "cichecks",
+    title: "Run checks from CI",
+    intro:
+      "After a deploy, run the checks with a tag (smoke, checkout) once, now, and fail the pipeline when one fails. Their schedule is untouched. A run from CI always runs from this server, whatever locations a check uses; for a check that does not run from the server, the result stays with the run. Create a key with the CI scope in Settings → API keys: it can run checks and report tests, and nothing else. The run records the release and commit, so it shows on the CI page beside that commit's pipeline and under Runs from CI in Uptime. `url-override` runs the same checks against a preview deployment: the origin of their URLs, browser steps included, is swapped, and those results stay with the run instead of counting toward uptime. The override must be on the check's own site (pr-12.example.com for app.example.com) unless an admin lists the host in Settings → Server → Other → Hosts runs from CI may target. The action downloads the `visionary-checks` CLI from the release, prints each check's result and can write JUnit XML for test reports.",
+    any: {
+      label: "GitHub Actions",
+      code: `smoke:
+  needs: deploy
+  runs-on: ubuntu-latest
+  steps:
+    - uses: styropyr0/Visionary/.github/actions/run-checks@main
+      with:
+        server: ${origin}
+        key: \${{ secrets.VISIONARY_CI_KEY }}
+        tags: smoke
+        release: \${{ github.ref_name }}
+        # url-override: https://pr-\${{ github.event.number }}.example.com
+        junit: visionary-checks.xml
+
+# Any other CI: download visionary-checks-<os>-<arch> from the latest GitHub release, then
+# VISIONARY_URL=${origin} VISIONARY_KEY=<ci key> visionary-checks run --tag smoke --junit checks.xml`,
+    },
+  },
+  playwright: {
+    id: "playwright",
+    title: "Report Playwright tests as checks",
+    intro:
+      "Keep end-to-end tests in your repository and run them where they already run: CI, a scheduled workflow every 10 minutes, or your own host. The `visionary-playwright-reporter` package posts each test's final result here (after retries) with its duration, steps, error, browser, retries, a small screenshot and trace, and the trace id when the test sent a traceparent. Each test becomes a Playwright check, keyed by its project and title path, with uptime, incidents, alerts and the status page like any other check. This server never runs your test code. Give the check an expected interval in its form (the reporter's `expectedInterval` sets it for new ones): without a run for longer, the check is stale and counts as down, like a missed heartbeat. Use a key with the CI scope. Declare a check in the form or Terraform to alert on it before its first run.",
+    any: {
+      label: "playwright.config.ts",
+      code: `// npm i -D visionary-playwright-reporter
+export default defineConfig({
+  reporter: [
+    ["list"],
+    ["visionary-playwright-reporter", {
+      server: "${origin}",          // or VISIONARY_URL
+      // key: VISIONARY_KEY from the environment (a CI scope key)
+      expectedInterval: "15m",      // stale after 15 minutes without a run
+    }],
+  ],
+  use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
+});`,
+    },
   },
   agent: {
     id: "agent",
@@ -963,14 +1008,14 @@ export const HELP: Record<Route, PageHelp> = {
   uptime: {
     title: "Uptime",
     tip: "Checks that call your endpoints from outside on a schedule, with response times, incidents and an optional public status page.",
-    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
+    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK, and Playwright tests your own runs report. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
     read: [
       "A check fails after its retries, so a single slow answer does not open an incident.",
       "A browser check's runs show each step, Web Vitals, console and network errors, and a screenshot of the page when a step failed. It is paused while the server has no browser.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
       "A check that runs from several locations shows a dot per location in the list, and By location on its page: each location's uptime and response time. Its state combines them by its rule; Not reporting means a location is stale and left out.",
     ],
-    setup: ["checks", "browsercheck", "locations", "statuspage"],
+    setup: ["checks", "browsercheck", "locations", "cichecks", "playwright", "statuspage"],
   },
   ci: {
     title: "CI",
@@ -983,7 +1028,7 @@ export const HELP: Record<Route, PageHelp> = {
       "A run links to a deploy when a release's version is, or contains, a commit SHA prefix of 7 or more characters: `a1b2c3d`, `1.4.0+a1b2c3d`, or git describe's `v1.4.0-3-ga1b2c3d`. Compare versions on Performance links back to the run that built each version.",
       "Alerts → New rule → CI watches the pipeline failure rate and p95 duration per workflow, job queue time and new flaky tests. Settings → Data keeps CI data 90 days by default.",
     ],
-    setup: ["ci", "junit", "cirun"],
+    setup: ["ci", "junit", "cirun", "cichecks"],
   },
   security: {
     title: "Security",

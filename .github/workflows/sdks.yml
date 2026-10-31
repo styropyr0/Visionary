@@ -1,7 +1,8 @@
 name: SDK packages
 
 # Publishes every SDK to its registry when a release tag is pushed:
-#   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser)
+#   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser),
+#                visionary-playwright-reporter (sdks/playwright-reporter)
 #   PyPI         visionary-sdk (sdks/python)
 #   RubyGems     visionary-sdk (sdks/ruby)
 #   NuGet        Visionary.AspNetCore and Visionary.AspNetCore.Profiling (sdks/dotnet)
@@ -9,7 +10,7 @@ name: SDK packages
 #                 io.github.styropyr0:visionary-android (sdks/android; JitPack is android.yml)
 # Swift Package Manager needs no upload: it resolves the tag through the root Package.swift.
 # The Go module (sdks/go, its own module) gets a matching sdks/go/vX.Y.Z tag, and the host
-# agent's Linux binaries are attached to the GitHub Release.
+# agent's Linux binaries and the visionary-checks CLI are attached to the GitHub Release.
 #
 # The version comes from the tag (v0.4.0 -> 0.4.0) and is written into each manifest at build
 # time only; nothing is committed. Each registry has its own job, so one failure does not block
@@ -173,6 +174,71 @@ jobs:
         run: npm ci
       - if: steps.check.outputs.status == ''
         run: npm run build
+      - if: steps.check.outputs.status == ''
+        name: Package contents
+        run: npm pack --dry-run
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          STAGED: ${{ vars.NPM_STAGED_PUBLISH }}
+        run: |
+          tag=latest
+          [ "$PRERELEASE" = true ] && tag=next
+          if [ "$STAGED" = true ]; then
+            npm stage publish --tag "$tag"
+            echo "status=staged (approve it on npmjs.com)" >> "$GITHUB_OUTPUT"
+          else
+            npm publish --tag "$tag"
+            echo "status=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  npm-playwright-reporter:
+    name: npm (visionary-playwright-reporter)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/visionary-playwright-reporter
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/playwright-reporter
+    env:
+      PACKAGE: visionary-playwright-reporter
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - id: check
+        name: Skip if already published
+        run: |
+          npm --version
+          if npm view "$PACKAGE@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$PACKAGE@$VERSION is already on npm; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - if: steps.check.outputs.status == ''
+        run: npm ci
+      - if: steps.check.outputs.status == ''
+        run: npm test && npm run build
       - if: steps.check.outputs.status == ''
         name: Package contents
         run: npm pack --dry-run
@@ -533,7 +599,7 @@ jobs:
           echo "status=published" >> "$GITHUB_OUTPUT"
 
   agent-binaries:
-    name: Host agent binaries
+    name: Host agent and CLI binaries
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -548,7 +614,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # deploy/agent/install.sh downloads visionary-agent-linux-<arch> from the release.
+      # deploy/agent/install.sh downloads visionary-agent-linux-<arch> from the release, and
+      # .github/actions/run-checks downloads visionary-checks-<os>-<arch>.
       - name: Build
         env:
           TAG: ${{ needs.version.outputs.tag }}
@@ -558,7 +625,13 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
               -ldflags="-s -w -X main.version=$TAG" -o "out/visionary-agent-linux-$arch" ./cmd/visionary-agent
           done
-          (cd out && sha256sum visionary-agent-linux-* > SHA256SUMS)
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${target%/*} arch=${target#*/} ext=""
+            [ "$os" = windows ] && ext=.exe
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+              -ldflags="-s -w -X main.version=$TAG" -o "out/visionary-checks-$os-$arch$ext" ./cmd/visionary-checks
+          done
+          (cd out && sha256sum visionary-* > SHA256SUMS)
       - id: upload
         env:
           GH_TOKEN: ${{ github.token }}
@@ -576,7 +649,7 @@ jobs:
 
   github-release:
     name: GitHub Release
-    needs: [version, npm-node, npm-browser, pypi, rubygems, nuget, maven-central-java, maven-central-android, go-module, agent-binaries]
+    needs: [version, npm-node, npm-browser, npm-playwright-reporter, pypi, rubygems, nuget, maven-central-java, maven-central-android, go-module, agent-binaries]
     if: always() && needs.version.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -603,6 +676,7 @@ jobs:
             echo "| --- | --- | --- |"
             echo "| npm | [\`visionary-sdk@$VERSION\`](https://www.npmjs.com/package/visionary-sdk/v/$VERSION) | $(status npm-node) |"
             echo "| npm | [\`visionary-browser@$VERSION\`](https://www.npmjs.com/package/visionary-browser/v/$VERSION) | $(status npm-browser) |"
+            echo "| npm | [\`visionary-playwright-reporter@$VERSION\`](https://www.npmjs.com/package/visionary-playwright-reporter/v/$VERSION) | $(status npm-playwright-reporter) |"
             echo "| PyPI | [\`visionary-sdk $VERSION\`](https://pypi.org/project/visionary-sdk/) | $(status pypi) |"
             echo "| RubyGems | [\`visionary-sdk $VERSION\`](https://rubygems.org/gems/visionary-sdk) | $(status rubygems) |"
             echo "| NuGet | [\`Visionary.AspNetCore $VERSION\`](https://www.nuget.org/packages/Visionary.AspNetCore/$VERSION) | $(status nuget) |"
@@ -613,6 +687,7 @@ jobs:
             echo "| Swift Package Manager | \`.package(url: \"https://github.com/styropyr0/Visionary.git\", from: \"$VERSION\")\` | tag |"
             echo "| Go | \`go get github.com/styropyr0/visionary/sdks/go@$TAG\` | $(status go-module) |"
             echo "| Host agent (watches a machine; not the Visionary server) | \`visionary-agent-linux-amd64\`, \`-arm64\` on this release ([what it is](https://github.com/styropyr0/Visionary/blob/$TAG/cmd/visionary-agent/README.md)) | $(status agent-binaries) |"
+            echo "| Uptime checks CLI (runs checks from CI) | \`visionary-checks-<os>-<arch>\` on this release, used by [\`.github/actions/run-checks\`](https://github.com/styropyr0/Visionary/tree/$TAG/.github/actions/run-checks) | $(status agent-binaries) |"
             echo
             echo "Maven Central can take up to about 30 minutes to show a new version after it is published."
             echo "<!-- /sdk-packages -->"

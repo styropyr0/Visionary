@@ -31,7 +31,7 @@ output "checkout_sdk_key" {
 ### Required
 
 - `name` (String) Name.
-- `scope` (String) read (the HTTP API as a viewer), editor or admin (the HTTP API with that role), server (SDKs, OTLP, the host agent), client (browsers and apps) or scim.
+- `scope` (String) read (the HTTP API as a viewer), editor or admin (the HTTP API with that role), server (SDKs, OTLP, the host agent), client (browsers and apps), scim, or ci (runs uptime checks and reports Playwright tests only).
 
 ### Optional
 

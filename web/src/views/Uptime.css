@@ -447,6 +447,44 @@ table.data.up-table td {
   overflow-wrap: anywhere;
 }
 
+.up-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.up-run-release {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.up-run-release > span,
+.up-run-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.up-run-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+}
+.up-run-note { margin: -4px 0 10px; font-size: 12.5px; }
+.up-run-error {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--critical-text);
+  white-space: normal;
+}
+.up-run-block + .up-run-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.up-run-head { margin-bottom: 6px; font-size: 12px; }
 /* Locations */
 .up-loc-intro {
   margin: 0;

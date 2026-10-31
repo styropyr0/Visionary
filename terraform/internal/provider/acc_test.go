@@ -166,6 +166,7 @@ resource "visionary_uptime_check" "home" {
   interval_s    = %d
   expect_status = "2xx"
   headers       = { Authorization = "Bearer abc", Accept = "text/html" }
+  tags          = ["smoke", "deploy"]
 }
 
 resource "visionary_uptime_check" "login" {
@@ -177,6 +178,13 @@ resource "visionary_uptime_check" "login" {
     { action = "type", selector = "#password", value = "{{secret.PASSWORD}}" },
     { action = "assert_text", text = "Example" },
   ]
+}
+
+resource "visionary_uptime_check" "checkout_test" {
+  name       = "Checkout pays by card"
+  kind       = "playwright"
+  interval_s = 1200
+  playwright = { project = "chromium", title = "checkout.spec.ts › pays by card" }
 }
 
 resource "visionary_dashboard" "main" {
@@ -225,9 +233,11 @@ EOT`
 					resource.TestCheckResourceAttr("visionary_alert_rule.traffic", "window", "15m"),
 					resource.TestCheckResourceAttr("visionary_alert_silence.maintenance", "once.starts_at", "2030-01-10T22:00:00+01:00"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.home", "method", "GET"),
+					resource.TestCheckTypeSetElemAttr("visionary_uptime_check.home", "tags.*", "smoke"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.home", "headers.Authorization", "Bearer abc"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "url", "https://example.com/login"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "interval_s", "300"),
+					resource.TestCheckResourceAttr("visionary_uptime_check.checkout_test", "playwright.project", "chromium"),
 					resource.TestMatchResourceAttr("visionary_api_key.ci", "secret", regexp.MustCompile(`^vis_`)),
 					resource.TestCheckResourceAttrPair("data.visionary_alert_channel.ops", "id", "visionary_alert_channel.ops", "id"),
 					resource.TestCheckResourceAttr("data.visionary_alert_channel.ops", "kind", "email"),

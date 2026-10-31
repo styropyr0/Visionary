@@ -160,6 +160,7 @@ var confDefs = []confDef{
 	{Key: "logs_archive_prefix", Group: "logs_archive", Label: "Folder", Help: "Objects are written under it, as <folder>/2026/10/28/11.ndjson.gz.", Kind: confText, Default: "visionary-logs"},
 	{Key: "rollups", Group: "other", Label: "Chart summaries", Help: "Pre-aggregate requests and system metrics so long ranges load fast.", Kind: confBool, Default: "true", Restart: true},
 	{Key: "uptime_allow_private", Group: "other", Label: "Uptime checks may reach private addresses", Kind: confBool, Default: "false"},
+	{Key: "uptime_override_hosts", Group: "other", Label: "Hosts runs from CI may target", Help: "A run from CI can point checks at another origin, such as a preview deployment. The check's own site is always allowed (pr-12.example.com for app.example.com); list other hosts here, comma separated, with * as a wildcard: *.vercel.app, *.netlify.app.", Kind: confText},
 	{Key: "uptime_chrome_path", Group: "other", Label: "Browser for browser checks", Help: "Path to Chrome, Chromium or Edge on the server. Empty uses VISIONARY_CHROME, then the usual install locations and PATH.", Kind: confText},
 	{Key: "uptime_browser_workers", Group: "other", Label: "Browser checks at once", Help: "Each one is a browser tab; 1 or 2 suit a small server.", Kind: confInt, Default: "2", Min: 1, Max: 8, Restart: true},
 	{Key: "update_check", Group: "other", Label: "Check for new versions", Kind: confBool, Default: "true"},

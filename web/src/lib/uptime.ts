@@ -1,6 +1,6 @@
 import { api, rangeQuery, type Result } from "./api";
 
-export type CheckKind = "http" | "browser";
+export type CheckKind = "http" | "browser" | "playwright";
 
 export interface UptimeCheck {
   id: number;
@@ -27,6 +27,10 @@ export interface UptimeCheck {
   /** Browser checks only; values always come back as MASK. */
   secrets?: Record<string, string>;
   final_screenshot?: boolean;
+  /** Lower case, sorted. */
+  tags?: string[];
+  /** Playwright checks only: the test its reported runs come from. */
+  playwright?: { project: string; title: string };
   /** Where it runs from: "server" and uptime location names. */
   locations: string[];
   /** With several locations: down when any, a majority or all fail. */

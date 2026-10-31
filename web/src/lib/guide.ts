@@ -387,13 +387,21 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Watch the list",
-        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours, and a dot per location for checks that run from several. The row buttons run a check now, pause it or edit it.",
+        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours, and a dot per location for checks that run from several. The row buttons run a check now, pause it or edit it. Give checks **Tags** in their form (`smoke`, `checkout`) to group them; the **Tag** menu above the list shows one group.",
       },
       {
         title: "Open a check",
         text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A check with several locations adds **By location**, each location's uptime and response time in its own color, a location filter on the results, and which locations each incident failed in. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps (with a screenshot after each when **Screenshot every step** is on), the screenshot of a failure, console errors, its requests as a waterfall with **Download HAR**, and **Open trace** for what your backend did during it.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
+      },
+      {
+        title: "Run checks from CI",
+        text: "Create a key with the **CI** scope in **Settings → API keys**; it can only run checks and report tests. In your pipeline, after the deploy, use the `styropyr0/Visionary/.github/actions/run-checks` action (or the `visionary-checks` CLI) with a tag: it runs those checks once, now, prints each result, can write JUnit XML and fails the job when one fails. Pass `url-override` to run them against a preview deployment; those results stay with the run and never count toward uptime. Runs appear under **Runs from CI** below the list, and on the **CI** page beside the pipeline of the same commit. **Run a tag** starts one from here.",
+      },
+      {
+        title: "Report Playwright tests",
+        text: "Add `visionary-playwright-reporter` to your Playwright config with a CI-scope key, and run your tests as usual: in CI, a scheduled workflow, or your own host. Each test becomes a **Playwright test** check with its runs, steps, screenshot, trace and the trace id it sent. This server never runs your test code. Set **Expect a run** in the check's form: without a run for that long the check is **stale** and counts as down. Pick **Playwright test** in **New check** to declare one, so it alerts before its first run.",
       },
       {
         title: "Publish a status page",
