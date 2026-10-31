@@ -4,7 +4,7 @@ import logging
 import queue
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from . import _spans
 from ._entry import Entry, clip_login, format_ts
@@ -15,6 +15,24 @@ from ._spans import Span
 from ._storage import PURGE_CHUNK, Backend
 
 _STOP = object()
+
+# Rows per batch: D1 takes 50 statements a call; SQL backends get multi-row
+# INSERTs, and an app may raise the batch to 2000.
+D1_BATCH = 50
+SQL_BATCH = 500
+MAX_SQL_BATCH = 2000
+# Batches written at once on PostgreSQL and MySQL; SQLite and D1 take one.
+PARALLEL_FLUSHES = 4
+
+
+class WriterStats(NamedTuple):
+    """The background writers for request rows, logs and metrics, summed:
+    rows waiting for the database, and rows written or dropped (a full queue
+    or a write that failed three times) since start."""
+
+    queued: int = 0
+    written: int = 0
+    dropped: int = 0
 
 
 class Schema:
@@ -69,7 +87,12 @@ class RequestWriter:
         self._version = cfg.version or None
         self._runtime = runtime or None
         self._redact = Redactor(cfg.redact_headers, cfg.redact_fields, cfg.redact_request_fields)
-        self._batch_size = cfg.batch_size if 0 < cfg.batch_size <= 50 else 50
+        dialect = getattr(backend, "dialect", "")
+        if dialect == "d1":
+            self._batch_size = cfg.batch_size if 0 < cfg.batch_size <= D1_BATCH else D1_BATCH
+        else:
+            self._batch_size = cfg.batch_size if 0 < cfg.batch_size <= MAX_SQL_BATCH else SQL_BATCH
+        self._flushers = PARALLEL_FLUSHES if dialect in ("postgres", "mysql") else 1
         self._flush_interval = cfg.flush_interval if cfg.flush_interval > 0 else 3.0
         self._queue_size = cfg.queue_size if cfg.queue_size > 0 else 5000
         self._code_field = cfg.error_code_field or "error.code"
@@ -82,9 +105,14 @@ class RequestWriter:
     def _init_state(self) -> None:
         self._queue: "queue.Queue[Any]" = queue.Queue(maxsize=self._queue_size)
         self._dropped = 0
-        self._dropped_lock = threading.Lock()
+        self._dropped_lock = threading.Lock()  # also guards _written and _lost
+        self._written = 0
+        self._lost = 0
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._work: "queue.Queue[Any]" = queue.Queue()
+        self._free = threading.Semaphore(self._flushers)
+        self._flush_threads: List[threading.Thread] = []
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name=self._THREAD, daemon=True)
@@ -102,6 +130,11 @@ class RequestWriter:
         except queue.Full:
             with self._dropped_lock:
                 self._dropped += 1
+                self._lost += 1
+
+    def stats(self) -> WriterStats:
+        with self._dropped_lock:
+            return WriterStats(self._queue.qsize(), self._written, self._lost)
 
     def close(self, timeout: float) -> bool:
         """Stop and flush; False if the thread was still busy at the timeout."""
@@ -124,6 +157,40 @@ class RequestWriter:
     def _run(self) -> None:
         _spans.mark_internal()
         self._ensure_schemas()
+        if self._flushers > 1:
+            for i in range(self._flushers):
+                t = threading.Thread(target=self._flush_loop, name="%s-%d" % (self._THREAD, i), daemon=True)
+                t.start()
+                self._flush_threads.append(t)
+        try:
+            self._loop()
+        finally:
+            for _ in self._flush_threads:
+                self._work.put(None)
+            for t in self._flush_threads:
+                t.join()
+
+    def _flush_loop(self) -> None:
+        _spans.mark_internal()
+        while True:
+            batch = self._work.get()
+            if batch is None:
+                return
+            try:
+                self._write(batch)
+            finally:
+                self._free.release()
+
+    def _flush(self, batch: List[Any]) -> None:
+        """Write batch here, or hand it to a free flusher; while all are busy
+        the queue absorbs the load."""
+        if not self._flush_threads:
+            self._write(batch)
+            return
+        self._free.acquire()
+        self._work.put(batch)
+
+    def _loop(self) -> None:
         batch: List[Any] = []
         next_flush = time.monotonic() + self._flush_interval
         while True:
@@ -137,11 +204,11 @@ class RequestWriter:
             if item is not None and item is not _STOP:
                 batch.append(item)
                 if len(batch) >= self._batch_size:
-                    self._write(batch)
+                    self._flush(batch)
                     batch = []
             if time.monotonic() >= next_flush:
                 if batch:
-                    self._write(batch)
+                    self._flush(batch)
                     batch = []
                 self._report_drops()
                 next_flush = time.monotonic() + self._flush_interval
@@ -156,10 +223,10 @@ class RequestWriter:
                 continue
             batch.append(item)
             if len(batch) >= self._batch_size:
-                self._write(batch)
+                self._flush(batch)
                 batch = []
         if batch:
-            self._write(batch)
+            self._flush(batch)
         self._report_drops()
 
     def _report_drops(self) -> None:
@@ -181,18 +248,27 @@ class RequestWriter:
             groups = self._rows(batch)
         except Exception:
             self._logger.exception("visionary: building %s rows failed; %d entries dropped", self._WHAT, len(batch))
+            self._count(0, len(batch))
             return
+        rows = sum(len(r) for _, r in groups)
         err: Optional[Exception] = None
         for attempt in (1, 2, 3):
             self._ensure_schemas()
             try:
                 self._backend.insert_many(groups)
+                self._count(rows, 0)
                 return
             except Exception as e:
                 err = e
             if attempt < 3:
                 time.sleep(attempt)
+        self._count(0, rows)
         self._logger.error("visionary: %s batch write failed; %d entries dropped: %s", self._WHAT, len(batch), err)
+
+    def _count(self, written: int, lost: int) -> None:
+        with self._dropped_lock:
+            self._written += written
+            self._lost += lost
 
     def _write_profiles(self, profiles: List[Profile]) -> None:
         try:
