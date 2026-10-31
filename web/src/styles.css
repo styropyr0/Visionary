@@ -1983,13 +1983,18 @@ pre.code {
   display: flex;
   gap: 4px;
   margin-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  /* An inset line instead of a border, so the scroll box doesn't clip the active underline. */
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 
 .tabs button {
+  flex-shrink: 0;
+  white-space: nowrap;
   height: 34px;
   padding: 0 10px;
-  margin-bottom: -1px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;

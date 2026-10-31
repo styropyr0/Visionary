@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, CircleSlash, KeyRound, Plus, ShieldCheck } from "lucide-react";
 import { api, rangeQuery, type SessionUser } from "../lib/api";
 import { useApp } from "../lib/state";
@@ -80,11 +80,16 @@ export function Settings({ user }: { user: SessionUser | null }) {
   const visible = TABS.filter((t) => (t.key === "workspaces" ? wsAdmin : !t.admin || admin));
   const current = visible.some((t) => t.key === tab) ? tab : "preferences";
 
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabsRef.current?.querySelector(".on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current]);
+
   return (
     <>
       <TopBar title="Settings" section="Manage" actions={current === "audit" ? <TimeRangePicker /> : undefined} />
       <div className="content">
-        <div className="tabs" role="tablist">
+        <div className="tabs" role="tablist" ref={tabsRef}>
           {visible.map((t) => (
             <button type="button" key={t.key} role="tab" aria-selected={current === t.key} className={current === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
               {t.label}
