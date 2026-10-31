@@ -23,20 +23,20 @@ import (
 const configVersion = 1
 
 type configDoc struct {
-	Kind         string            `json:"kind"`
-	Version      int               `json:"version"`
-	ExportedAt   string            `json:"exported_at,omitempty"`
-	Channels     []configChannel   `json:"channels"`
-	Rules        []configRule      `json:"rules"`
-	Silences     []silenceInput    `json:"silences"`
-	UptimeChecks []configCheck     `json:"uptime_checks"`
+	Kind         string          `json:"kind"`
+	Version      int             `json:"version"`
+	ExportedAt   string          `json:"exported_at,omitempty"`
+	Channels     []configChannel `json:"channels"`
+	Rules        []configRule    `json:"rules"`
+	Silences     []silenceInput  `json:"silences"`
+	UptimeChecks []configCheck   `json:"uptime_checks"`
 	// UptimeLocations are the runner locations checks name; keys stay
 	// behind and are made in the Locations tab.
-	UptimeLocations []configLocation `json:"uptime_locations,omitempty"`
-	SavedPanels      []configPanel     `json:"saved_panels"`
-	Dashboards   []configDashboard `json:"dashboards"`
-	LogViews     []configLogView   `json:"log_views"`
-	Pages        *configPages      `json:"pages,omitempty"`
+	UptimeLocations []configLocation  `json:"uptime_locations,omitempty"`
+	SavedPanels     []configPanel     `json:"saved_panels"`
+	Dashboards      []configDashboard `json:"dashboards"`
+	LogViews        []configLogView   `json:"log_views"`
+	Pages           *configPages      `json:"pages,omitempty"`
 }
 
 // configChannel leaves the URL and secret out of exports; a file may carry
@@ -144,10 +144,10 @@ type configState struct {
 	checks   []UptimeCheck
 	// locations include the server's, first
 	locations []uptimeLocation
-	panels   []Panel
-	dashes   []dashboard
-	views    []logView
-	hidden   []string
+	panels    []Panel
+	dashes    []dashboard
+	views     []logView
+	hidden    []string
 
 	chanName, ruleName, checkName, panelTitle map[int64]string
 	alerts                                    map[int64]checkAlertView

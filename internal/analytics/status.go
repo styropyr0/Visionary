@@ -51,11 +51,11 @@ type statusDay struct {
 }
 
 type statusIncident struct {
-	Check     string  `json:"check"`
-	StartedAt string  `json:"started_at"`
-	EndedAt   *string `json:"ended_at"`
-	DurationS int64   `json:"duration_s"`
-	Ongoing   bool    `json:"ongoing"`
+	Check     string   `json:"check"`
+	StartedAt string   `json:"started_at"`
+	EndedAt   *string  `json:"ended_at"`
+	DurationS int64    `json:"duration_s"`
+	Ongoing   bool     `json:"ongoing"`
 	Locations []string `json:"locations,omitempty"`
 }
 

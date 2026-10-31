@@ -63,9 +63,9 @@ const (
 )
 
 var (
-	uptimeMethods    = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "OPTIONS": true}
-	headerNameRe     = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_|~-]{1,64}$`)
-	secretHeaderRe   = uptimecore.SecretNameRe
+	uptimeMethods  = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "OPTIONS": true}
+	headerNameRe   = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_|~-]{1,64}$`)
+	secretHeaderRe = uptimecore.SecretNameRe
 )
 
 const uptimeCheckCols = `id, name, url, method, expect_status, body_contains, headers, interval_s, timeout_ms, degraded_ms,
