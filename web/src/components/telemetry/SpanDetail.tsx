@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import type { Result, Viz } from "../../lib/api";
-import { bucketLabel, formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
+import { formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
 import { formatLogTime } from "../../lib/time";
 import { N_PLUS_ONE, records, useTelemetry } from "../../lib/telemetry";
 import { DataTable, type Column } from "../DataTable";
@@ -29,8 +29,23 @@ export interface SpanDetailResponse {
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["p95", "avg_ms"], unit: "ms" };
 const CALLS: Viz = { type: "bar", x: "t", y: ["calls"], unit: "count", axisSuffix: "calls" };
+const CALL_RATE: Viz = { type: "bar", x: "t", y: ["calls_per_minute"], axisSuffix: "calls/min" };
 const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count", axisSuffix: "calls" };
 const CHART_H = 240;
+
+/**
+ * Calls per minute in each bucket, so the scale reads the same whatever the
+ * range (a 30 min bucket holds 30 times the calls of a 1 min one).
+ */
+function withCallRate(res: Result): Result | null {
+  const i = res.columns.indexOf("calls");
+  if (res.bucket <= 0 || i < 0) return null;
+  const perMin = (v: unknown) => {
+    const n = ((toNumber(v) ?? 0) * 60) / res.bucket;
+    return n >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
+  };
+  return { ...res, columns: [...res.columns, "calls_per_minute"], rows: res.rows.map((r) => [...r, perMin(r[i])]) };
+}
 
 function ms(v: unknown) {
   const n = toNumber(v);
@@ -65,6 +80,7 @@ export function SpanDetailDrawer({
   const cur = records(d?.summary)[0];
   const prev = records(d?.previous)[0];
   const isDB = kind === "db";
+  const rate = useMemo(() => (d ? withCallRate(d.timeline) : null), [d]);
 
   return (
     <Drawer
@@ -94,8 +110,8 @@ export function SpanDetailDrawer({
                 <VizView result={d.timeline} viz={TIMELINE} height={CHART_H} title={`${name} latency`} />
               </div>
               <div>
-                <div className="sd-chart-label">{d.timeline.bucket > 0 ? `Calls per ${bucketLabel(d.timeline.bucket)}` : "Calls"}</div>
-                <VizView result={d.timeline} viz={CALLS} height={CHART_H} title={`${name} calls`} />
+                <div className="sd-chart-label">{rate ? "Calls per minute" : "Calls"}</div>
+                <VizView result={rate ?? d.timeline} viz={rate ? CALL_RATE : CALLS} height={CHART_H} title={`${name} calls`} />
               </div>
             </div>
           </section>
