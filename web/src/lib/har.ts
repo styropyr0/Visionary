@@ -41,7 +41,6 @@ export function runHar(run: BrowserRunDetail, checkName: string) {
   };
 }
 
-/** Saves the run as a .har file. */
 export function downloadHar(run: BrowserRunDetail, checkName: string) {
   const blob = new Blob([JSON.stringify(runHar(run, checkName), null, 2)], { type: "application/json" });
   const a = document.createElement("a");

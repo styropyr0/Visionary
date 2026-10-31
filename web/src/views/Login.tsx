@@ -34,7 +34,6 @@ interface Props {
 export function Login({ notice, onSignedIn }: Props) {
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   const [cfgError, setCfgError] = useState("");
-  // A single sign-on that failed comes back with why, in the address.
   const [ssoError] = useState(() => new URLSearchParams(window.location.search).get("sso_error") ?? "");
 
   useEffect(() => {

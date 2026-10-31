@@ -1,8 +1,6 @@
 /**
- * Plays back what the browser SDK's recorder sends (sdks/browser/src/replay/record.ts):
- * events of [time ms, type, data], drawn into a sandboxed iframe that never
- * runs scripts. Recordings come from browsers with a public key, so nothing
- * in them is trusted: scripts, frames and meta refreshes are never built.
+ * Plays back the browser SDK's recordings in a sandboxed iframe. They come from
+ * browsers with a public key, so scripts, frames and meta refreshes are never built.
  */
 
 export type ReplayEvent = [number, number, unknown];

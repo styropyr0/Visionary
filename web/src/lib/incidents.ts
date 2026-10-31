@@ -204,7 +204,7 @@ export const incidentsApi = {
   removeAction: (id: number, actionID: number) => api<{ actions: ActionItem[] }>(`${base(id)}/actions/${actionID}`, { method: "DELETE" }),
 };
 
-/** Opens the Incidents page with the declare form filled from a source. */
+/** A link to the declare form, filled from a source. */
 export function declareHref(kind: "alert" | "uptime" | "error" | "log", ref: string | number): string {
   return `#/incidents?${new URLSearchParams({ declare: kind, ref: String(ref) })}`;
 }

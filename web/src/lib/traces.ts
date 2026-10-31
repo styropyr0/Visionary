@@ -52,7 +52,6 @@ export const tracesApi = {
   trace: (id: string, signal?: AbortSignal) => api<TraceResponse>(`/api/traces/${encodeURIComponent(id)}`, { signal }),
 };
 
-/** The address of one trace. */
 export function traceHref(id: string): string {
   return `#/traces/${encodeURIComponent(id)}`;
 }

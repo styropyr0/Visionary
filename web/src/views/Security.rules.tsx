@@ -312,7 +312,6 @@ export function MitreTags({ rule, list }: { rule: Pick<DetectionRule, "tactic" |
   );
 }
 
-/** Filter inputs for one step of a rule. */
 function FilterFields({ source, keys, value, onChange }: { source: RuleSource; keys: string[]; value: Record<string, string>; onChange: (v: Record<string, string>) => void }) {
   const set = (k: string, v: string) => onChange({ ...value, [k]: v });
   return (

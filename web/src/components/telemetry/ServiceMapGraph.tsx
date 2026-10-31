@@ -118,10 +118,8 @@ function fitView(nodes: Placed[], width: number, height: number): View {
 }
 
 /**
- * Services and what they call, as boxes and arrows on a canvas: drag to pan,
- * scroll or pinch to zoom, drag a box to move it. Arrows are as thick as the
- * calls are frequent and turn amber or red with failures; click one to list
- * its traces.
+ * Drag to pan, scroll or pinch to zoom, drag a box to move it. Arrows thicken
+ * with traffic, turn amber or red with failures, and list their traces on click.
  */
 export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEdge: (e: MapEdge) => void; onNode: (n: MapNode) => void }) {
   const laid = useMemo(() => layout(map), [map]);
@@ -144,8 +142,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
 
   const tipId = useId();
   const tipTimer = useRef<number>();
-  // A hovered tip sits at the pointer: an arrow's bounding box spans its whole
-  // curve, so anchoring to the element would put the tip far from the mouse.
+  // Tips follow the pointer, since an arrow's bounding box spans its whole curve.
   const mouse = useRef({ x: 0, y: 0 });
   const [tip, setTip] = useState<{ el: Element; anchor: Pick<Element, "getBoundingClientRect">; follow: boolean; body: ReactNode } | null>(null);
   const hideTip = useCallback(() => {
@@ -193,7 +190,6 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
     if (size.w > 0 && size.h > 0) setView(fitView(nodes, size.w, size.h));
   }, [nodes, size]);
 
-  // A new map, or the canvas getting its first size, starts fitted.
   const fitted = useRef<ServiceMap | null>(null);
   useEffect(() => {
     if (size.w === 0 || fitted.current === map) return;

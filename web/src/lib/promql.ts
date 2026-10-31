@@ -119,7 +119,6 @@ export function completionAt(text: string, cursor: number): Completion | null {
     }
     return null;
   }
-  // Inside a range or a string there is nothing to complete.
   if (before.lastIndexOf("[") > before.lastIndexOf("]") || (before.match(/"/g)?.length ?? 0) % 2 === 1) return null;
   const word = /[A-Za-z_:][\w:]*$/.exec(before);
   if (!word) return null;

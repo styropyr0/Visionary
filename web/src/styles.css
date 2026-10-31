@@ -1991,8 +1991,7 @@ pre.code {
   margin-bottom: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  /* The divider is drawn under the tabs and scrolls with them, so a scrollbar
-     sits below it and the active underline is never clipped. */
+  /* A scrolling background, so the scrollbar sits below it and the underline isn't clipped. */
   background: linear-gradient(var(--border), var(--border)) 0 33px / 100% 1px no-repeat local;
 }
 

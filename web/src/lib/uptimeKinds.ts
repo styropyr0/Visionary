@@ -180,5 +180,4 @@ export const newHeartbeatURL = (id: number) => api<{ path: string }>(`/api/uptim
 
 export const getPingStatus = (signal?: AbortSignal) => api<PingStatus>("/api/uptime/ping", { signal });
 
-/** The full heartbeat URL a job calls. */
 export const heartbeatURL = (path: string) => `${window.location.origin}${path}`;

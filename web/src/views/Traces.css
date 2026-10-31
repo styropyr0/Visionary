@@ -60,8 +60,7 @@
   white-space: nowrap;
 }
 
-/* Both tabs fill the height under the tab bar; the list and the map scroll or
-   pan inside their panel instead of the page scrolling. */
+/* The list and the map scroll inside their panel, not the page. */
 .content.tr-fill {
   display: flex;
   flex-direction: column;

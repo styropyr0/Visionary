@@ -61,7 +61,6 @@ export function IncidentDetail({ id }: { id: number }) {
   const { tick } = useApp();
   const toast = useToast();
   const [version, setVersion] = useState(0);
-  // #/incidents?id=4&tab=postmortem links straight to the postmortem.
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab") === "postmortem" ? "postmortem" : "timeline"));
   const [editing, setEditing] = useState(false);
   const reload = () => setVersion((v) => v + 1);

@@ -126,7 +126,6 @@ function TraceLists({ initialTab, initialFilters }: { initialTab: Tab | null; in
 
 function TraceSearch({ filters, onChange }: { filters: TraceFilters; onChange: (f: TraceFilters) => void }) {
   const meta = useMeta();
-  // Text settles before querying; selects apply at once.
   const [typed, setTyped] = useState(filters);
   useEffect(() => {
     const id = window.setTimeout(() => onChange(typed), 350);

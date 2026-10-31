@@ -428,7 +428,6 @@ export const getSummary = (id: number, signal?: AbortSignal) => api<Summary>(`/a
 
 export type PanelName = "latency" | "phases" | "results" | "availability" | "vitals" | "locations" | "location_latency" | "location_availability";
 
-/** location narrows results to one location. */
 export const getPanel = (id: number, panel: PanelName, from: Date, to: Date, signal?: AbortSignal, location?: string) =>
   api<Result>(`/api/uptime/checks/${id}/${panel}?${rangeQuery(from, to)}${location ? `&location=${encodeURIComponent(location)}` : ""}`, { signal });
 

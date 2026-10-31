@@ -15,9 +15,6 @@ import { heartbeatURL, newHeartbeatURL, type DetailRun, type HeartbeatView } fro
 import { heartbeatSchedule, msText } from "./Uptime.kinds";
 import { StateBadge } from "./Uptime.parts";
 
-// What the detail page shows for TCP, DNS, ping, certificate and heartbeat
-// checks, from their run details and pings.
-
 const asResult = (columns: string[], rows: unknown[][]): Result => ({ columns, rows, truncated: false, rows_read: rows.length, duration_ms: 0, sql: "", bucket: 0, from: "", to: "" });
 
 const ms = (v: unknown) => (toNumber(v) === null ? <span className="dim">—</span> : formatMs(toNumber(v)!));

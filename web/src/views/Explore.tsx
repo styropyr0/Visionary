@@ -524,7 +524,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         table={<DataTable result={panel.result} maxHeight={height} defaultUnit={panel.viz.unit} />}
         dashboard={toDashboard}
         extraActions={
-          // Viewers can explore but not save; saved panels hold SQL only.
+          // Saved panels hold SQL only.
           canEdit && !panel.promql ? (
             <button type="button" className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
               <BookmarkPlus size={15} />

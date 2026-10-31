@@ -147,7 +147,6 @@ function MoreFields({ s, set, files }: { s: BrowserStep; set: (patch: Partial<Br
   return null;
 }
 
-/** The ordered steps of a browser check. */
 export function StepsEditor({ steps, onChange, files = [] }: { steps: BrowserStep[]; onChange: (s: BrowserStep[]) => void; files?: BrowserFile[] }) {
   const set = (i: number, patch: Partial<BrowserStep>) => onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const move = (i: number, d: number) => {

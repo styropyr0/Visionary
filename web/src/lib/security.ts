@@ -300,7 +300,6 @@ export interface RuleSuppression {
   by?: string;
 }
 
-/** A detection rule, as saved. */
 export interface DetectionRule {
   id: number;
   name: string;

@@ -75,7 +75,6 @@ export function Settings({ user }: { user: SessionUser | null }) {
     window.history.replaceState(null, "", `#/settings?tab=${t}`);
   };
 
-  // Workspaces shows to admins and to the admins of a workspace.
   const wsAdmin = admin || (session?.workspaces ?? []).some((w) => w.role === "admin");
   const visible = TABS.filter((t) => (t.key === "workspaces" ? wsAdmin : !t.admin || admin));
   const current = visible.some((t) => t.key === tab) ? tab : "preferences";

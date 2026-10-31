@@ -52,7 +52,6 @@ export function PromQLEditor({
     }
   }, [value, setOpen]);
 
-  // Label names and values come from the server for the metric before the {.
   useEffect(() => {
     if (!comp || comp.kind === "name") return;
     let live = true;
