@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -338,5 +339,21 @@ func TestRuleSuppressionExpiry(t *testing.T) {
 	}
 	if r.suppressedBy(map[string]string{"user": "bob"}, now) == nil {
 		t.Fatal("suppression missed")
+	}
+}
+
+// A filter binds few enough values for D1's 100 parameters per statement.
+func TestRuleFilterArgsCapped(t *testing.T) {
+	s := securityTestServer(t, nil)
+	ips := make([]string, maxFilterArgs+1)
+	for i := range ips {
+		ips[i] = "10.0.0." + strconv.Itoa(i)
+	}
+	tr := timeRange{From: time.Now().Add(-time.Hour), To: time.Now()}
+	if _, _, err := s.filterSQL("requests", map[string]string{"ip": strings.Join(ips, ",")}, tr); err == nil {
+		t.Fatal("too many values accepted")
+	}
+	if _, args, err := s.filterSQL("requests", map[string]string{"ip": strings.Join(ips[:10], ",")}, tr); err != nil || len(args) != 10 {
+		t.Fatalf("%v %v", args, err)
 	}
 }

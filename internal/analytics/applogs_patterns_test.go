@@ -67,7 +67,7 @@ func TestPatternJobAndAnalysis(t *testing.T) {
 	if n, _ := s.patternPass(ctx); n != 0 {
 		t.Fatalf("second pass read %d", n)
 	}
-	res, _ := s.db.Query(ctx, `SELECT template, lines, first_version, severity, code_file FROM log_patterns ORDER BY lines DESC`)
+	res, _ := s.db.Query(ctx, `SELECT template, `+s.q.ident("lines")+`, first_version, severity, code_file FROM log_patterns ORDER BY `+s.q.ident("lines")+` DESC`)
 	if len(res.Rows) != 4 || res.Rows[0][0] != "served order <*>" || toInt(res.Rows[0][1]) != 30 || res.Rows[0][2] != "v1" || res.Rows[0][4] != "orders.go" {
 		t.Fatalf("patterns %+v", res.Rows)
 	}

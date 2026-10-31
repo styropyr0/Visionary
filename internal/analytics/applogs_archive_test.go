@@ -79,7 +79,7 @@ func TestArchiveAndRehydrate(t *testing.T) {
 	if len(fake.objects[key]) == 0 {
 		t.Fatalf("no object %s in %v", key, keys(fake.objects))
 	}
-	res, _ := s.db.Query(ctx, `SELECT hour, lines FROM log_archives ORDER BY hour`)
+	res, _ := s.db.Query(ctx, `SELECT hour, `+s.q.ident("lines")+` FROM log_archives ORDER BY hour`)
 	if len(res.Rows) != 3 || toInt(res.Rows[0][1]) != 2 || toInt(res.Rows[1][1]) != 1 {
 		t.Fatalf("archives %+v", res.Rows)
 	}
