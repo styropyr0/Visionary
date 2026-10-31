@@ -95,7 +95,7 @@ function TraceLists({ initialTab, initialFilters }: { initialTab: Tab | null; in
           </>
         }
       />
-      <div className="content">
+      <div className={`content ${connected && tab === "map" ? "smap-content" : ""}`}>
         {connected ? (
           <>
             <nav className="tabs" role="tablist" aria-label="Traces">
@@ -105,10 +105,16 @@ function TraceLists({ initialTab, initialFilters }: { initialTab: Tab | null; in
                 </button>
               ))}
             </nav>
-            <div className="grid" style={{ marginTop: 12 }}>
-              {tab === "search" && <TraceSearch filters={filters} onChange={setFilters} />}
-              {tab === "map" && <MapTab onOpen={openSearch} />}
-            </div>
+            {tab === "search" && (
+              <div className="grid" style={{ marginTop: 12 }}>
+                <TraceSearch filters={filters} onChange={setFilters} />
+              </div>
+            )}
+            {tab === "map" && (
+              <div className="smap-wrap">
+                <MapTab onOpen={openSearch} />
+              </div>
+            )}
           </>
         ) : (
           <ConnectCard title="Connect your services to follow requests across them" text="A trace follows one request through every service it calls, with each service's calls and logs on one timeline." />
@@ -283,7 +289,7 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
   return (
     <>
       <Panel
-        className="span-12"
+        className="smap-panel"
         title="Service map"
         description="Each box is a service, or a database, host, cache or queue they call. An arrow is calls from one to the other in the range: thicker is more often, amber or red when some failed. Calls between services come from traces; click an arrow, a box or a row of the table to list the traces behind it."
         result={table}

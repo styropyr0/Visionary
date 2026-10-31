@@ -60,13 +60,90 @@
   white-space: nowrap;
 }
 
-.smap-scroll {
+.content.smap-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.smap-wrap {
+  flex: 1 1 auto;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+
+.smap-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.smap-panel > .panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: auto;
-  max-height: 560px;
+}
+
+.smap-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--surface-1);
+  background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1.2px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.smap-canvas.panning {
+  cursor: grabbing;
+}
+
+.smap-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .smap {
   display: block;
+  position: absolute;
+  inset: 0;
+}
+
+.smap-controls {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  cursor: default;
+}
+
+.smap-zoom {
+  min-width: 56px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.smap-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  font-size: 11.5px;
+  pointer-events: none;
 }
 
 .smap-note {
@@ -86,7 +163,7 @@
 }
 
 .smap-node {
-  cursor: pointer;
+  cursor: move;
 }
 
 .smap-node:hover .smap-box,
