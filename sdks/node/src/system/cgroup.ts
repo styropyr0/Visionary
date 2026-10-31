@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Value } from "../store/sql.js";
 import { round } from "../util.js";
+import { parseCgroupMemEvents, parseCgroupMemStat } from "./hoststats.js";
 import { IS_LINUX } from "./linux.js";
 
 /** Reads the CPU and memory limits and use of the process's own cgroup
@@ -21,6 +22,7 @@ export class CgroupReader {
   private last = 0;
   /** The previous sample's counters; usage is CPU time in ns. */
   private prev: Counters = {};
+  private prevMem: MemCounters = {};
   private primed = false;
 
   /** root is "/" but for tests, which point it at a fake filesystem. */
@@ -55,6 +57,13 @@ export class CgroupReader {
       }
     }
     return c.cpuDir || c.memDir ? c : undefined;
+  }
+
+  /** Where the pressure columns come from: the cgroup v2 directory in a
+   * container, "" in a v1 container, undefined outside one */
+  pressureDir(): string | undefined {
+    if (!this.inCtr) return undefined;
+    return this.v2 ? this.cpuDir : "";
   }
 
   private at(p: string): string {
@@ -134,9 +143,36 @@ export class CgroupReader {
     return used;
   }
 
+  /** The memory.stat faults and memory.events limit hits */
+  private memCounters(): MemCounters {
+    if (!this.memDir) return {};
+    const stat = read(path.join(this.memDir, "memory.stat"));
+    const events = this.v2 ? read(path.join(this.memDir, "memory.events")) : undefined;
+    return {
+      faults: stat === undefined ? undefined : parseCgroupMemStat(stat),
+      events: events === undefined ? undefined : parseCgroupMemEvents(events),
+    };
+  }
+
+  private sampleMem(v: Record<string, Value | undefined>, secs: number): void {
+    const now = this.memCounters();
+    const { faults: f, events: e } = now;
+    const { faults: pf, events: pe } = this.prevMem;
+    this.prevMem = now;
+    if (f && pf && f.faults >= f.major && pf.faults >= pf.major && f.major >= pf.major && f.faults - f.major >= pf.faults - pf.major) {
+      v.container_minor_faults_ps = round((f.faults - f.major - (pf.faults - pf.major)) / secs, 1);
+      v.container_major_faults_ps = round((f.major - pf.major) / secs, 1);
+    }
+    if (e && pe && e.high >= pe.high && e.max >= pe.max) {
+      v.container_mem_high_events = e.high - pe.high;
+      v.container_mem_max_events = e.max - pe.max;
+    }
+  }
+
   /** The baseline the first sample's deltas start from. */
   prime(): void {
     this.prev = this.counters();
+    this.prevMem = this.memCounters();
     this.last = performance.now();
     this.primed = true;
   }
@@ -162,6 +198,7 @@ export class CgroupReader {
         v.container_cpu_throttled_percent = 0;
       }
       if (c.ooms !== undefined && p.ooms !== undefined && c.ooms >= p.ooms) v.container_oom_kills = c.ooms - p.ooms;
+      this.sampleMem(v, secs);
     }
     this.prev = c;
     this.last = now;
@@ -171,6 +208,11 @@ export class CgroupReader {
     if (used !== undefined) v.container_mem_used_mb = round(used / MB, 1);
     if (mem > 0) v.container_mem_limit_mb = round(mem / MB, 1);
   }
+}
+
+interface MemCounters {
+  faults?: { faults: number; major: number };
+  events?: { high: number; max: number };
 }
 
 interface Counters {

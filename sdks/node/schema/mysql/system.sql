@@ -76,7 +76,32 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     container_cpu_throttled_percent DOUBLE,
     container_mem_used_mb DOUBLE,
     container_mem_limit_mb DOUBLE,
-    container_oom_kills BIGINT
+    container_oom_kills BIGINT,
+    psi_cpu_some_avg10 DOUBLE,
+    psi_cpu_some_avg60 DOUBLE,
+    psi_mem_some_avg10 DOUBLE,
+    psi_mem_some_avg60 DOUBLE,
+    psi_mem_full_avg10 DOUBLE,
+    psi_io_some_avg10 DOUBLE,
+    psi_io_some_avg60 DOUBLE,
+    psi_io_full_avg10 DOUBLE,
+    minor_faults_ps DOUBLE,
+    major_faults_ps DOUBLE,
+    swap_in_ps DOUBLE,
+    swap_out_ps DOUBLE,
+    pages_scanned_ps DOUBLE,
+    pages_stolen_ps DOUBLE,
+    host_oom_kills BIGINT,
+    mem_dirty_mb DOUBLE,
+    mem_writeback_mb DOUBLE,
+    mem_slab_mb DOUBLE,
+    mem_shmem_mb DOUBLE,
+    mem_committed_mb DOUBLE,
+    mem_commit_limit_mb DOUBLE,
+    container_minor_faults_ps DOUBLE,
+    container_major_faults_ps DOUBLE,
+    container_mem_high_events BIGINT,
+    container_mem_max_events BIGINT
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX idx_system_metrics_instance_created ON system_metrics (instance, created_at);

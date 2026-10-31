@@ -4,11 +4,12 @@ import { PerformanceObserver } from "node:perf_hooks";
 import v8 from "node:v8";
 import type { Logger } from "../log.js";
 import { errMessage } from "../log.js";
-import { type Value, SYSTEM_COLUMNS, insertSQL } from "../store/sql.js";
+import { type Stmt, type Value, SYSTEM_COLUMNS, insertSQL } from "../store/sql.js";
 import type { Store } from "../store/store.js";
 import { RUNTIME } from "../telemetry/errors.js";
 import { formatTs, round } from "../util.js";
 import { CgroupReader } from "./cgroup.js";
+import { HostStats } from "./hoststats.js";
 import * as linux from "./linux.js";
 
 /** Pool stats for the db_* columns. acquires, emptyAcquires and
@@ -88,6 +89,7 @@ export class Recorder {
   private prev: Cumulative = {};
   /** undefined off Linux and when the process has no cgroup to read */
   private cgroup?: CgroupReader;
+  private host?: HostStats;
 
   constructor(
     private readonly opts: RecorderOptions,
@@ -136,6 +138,8 @@ export class Recorder {
     this.prev = readCumulative();
     this.cgroup = CgroupReader.open();
     this.cgroup?.prime();
+    this.host = new HostStats(this.cgroup?.pressureDir());
+    this.host.prime();
   }
 
   private tick(): void {
@@ -155,7 +159,7 @@ export class Recorder {
     this.buf = [];
     try {
       if (!(await this.ready())) throw new Error("system_metrics table not ready");
-      await this.store.batch(rows.map((args) => ({ sql: this.insert, args })));
+      await this.store.batch(rows.flatMap((args) => systemRowStmts(this.insert, this.store.stringParams, args)));
     } catch (e) {
       this.logger.warn(`visionary: system metrics write failed (${rows.length} rows kept): ${errMessage(e)}`);
       // Keep at most an hour of samples while the database is unreachable.
@@ -261,6 +265,7 @@ export class Recorder {
 
     this.node(v, secs);
     this.cgroup?.sample(v);
+    this.host?.sample(v, secs);
     return SYSTEM_COLUMNS.map((c) => v[c] ?? null);
   }
 
@@ -349,6 +354,26 @@ export class Recorder {
       v.proc_write_kbps = round((now.procIo.write - prev.procIo.write) / 1024 / secs, 1);
     }
   }
+}
+
+/** D1's limit of bound params per statement */
+const D1_MAX_PARAMS = 100;
+
+const D1_INSERT = `INSERT INTO system_metrics (${SYSTEM_COLUMNS.slice(0, D1_MAX_PARAMS).join(", ")}) VALUES (${SYSTEM_COLUMNS.slice(0, D1_MAX_PARAMS)
+  .map(() => "NULLIF(?, '')")
+  .join(", ")})`;
+const D1_UPDATE = `UPDATE system_metrics SET ${SYSTEM_COLUMNS.slice(D1_MAX_PARAMS)
+  .map((c) => `${c} = NULLIF(?, '')`)
+  .join(", ")} WHERE id = last_insert_rowid()`;
+
+/** A row's INSERT. D1 binds at most 100 params, so there the columns past the
+ * first 100 follow in an UPDATE of the row just inserted, in the same batch */
+export function systemRowStmts(insert: string, stringParams: boolean, row: Value[]): Stmt[] {
+  if (!stringParams || row.length <= D1_MAX_PARAMS) return [{ sql: insert, args: row }];
+  return [
+    { sql: D1_INSERT, args: row.slice(0, D1_MAX_PARAMS) },
+    { sql: D1_UPDATE, args: row.slice(D1_MAX_PARAMS) },
+  ];
 }
 
 /** Cumulative readings; a field is present only when its source worked.

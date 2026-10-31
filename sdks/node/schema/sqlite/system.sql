@@ -76,7 +76,32 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     container_cpu_throttled_percent REAL,
     container_mem_used_mb REAL,
     container_mem_limit_mb REAL,
-    container_oom_kills INTEGER
+    container_oom_kills INTEGER,
+    psi_cpu_some_avg10 REAL,
+    psi_cpu_some_avg60 REAL,
+    psi_mem_some_avg10 REAL,
+    psi_mem_some_avg60 REAL,
+    psi_mem_full_avg10 REAL,
+    psi_io_some_avg10 REAL,
+    psi_io_some_avg60 REAL,
+    psi_io_full_avg10 REAL,
+    minor_faults_ps REAL,
+    major_faults_ps REAL,
+    swap_in_ps REAL,
+    swap_out_ps REAL,
+    pages_scanned_ps REAL,
+    pages_stolen_ps REAL,
+    host_oom_kills INTEGER,
+    mem_dirty_mb REAL,
+    mem_writeback_mb REAL,
+    mem_slab_mb REAL,
+    mem_shmem_mb REAL,
+    mem_committed_mb REAL,
+    mem_commit_limit_mb REAL,
+    container_minor_faults_ps REAL,
+    container_major_faults_ps REAL,
+    container_mem_high_events INTEGER,
+    container_mem_max_events INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

@@ -440,7 +440,12 @@ On by default. Every 15 seconds a sample is taken from `os`, `process`, `v8`,
 `fs.statfs` and `perf_hooks` (GC count and pause time). On Linux the
 node-level columns (CPU breakdown with iowait/steal, memory available and
 cached, swap, disk and network I/O, TCP, processes, context switches,
-process I/O, threads, file descriptors) come from `/proc`. Columns a
+process I/O, threads, file descriptors) come from `/proc`, as do pressure
+stall information (`/proc/pressure`, or the container's own cgroup
+`*.pressure` files), page fault, swap and reclaim rates (`/proc/vmstat`) and
+dirty, writeback, slab, shmem and committed memory (`/proc/meminfo`). In a
+container the `container_*` columns also hold the cgroup's page faults and
+how often it hit its `memory.high` and `memory.max` limits. Columns a
 platform cannot report are empty; on Windows and macOS that is most of the
 I/O columns.
 
