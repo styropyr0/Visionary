@@ -281,7 +281,7 @@ func (ci *configImport) checks(doc configDoc) error {
 		c := UptimeCheck{Name: in.Name, Kind: in.Kind, URL: in.URL, Method: in.Method, ExpectStatus: in.ExpectStatus,
 			BodyContains: in.BodyContains, Headers: in.Headers, IntervalS: in.IntervalS, TimeoutMs: in.TimeoutMs, DegradedMs: in.DegradedMs,
 			FollowRedirects: orTrue(in.FollowRedirects), Enabled: orTrue(in.Enabled), OnStatusPage: in.OnStatusPage,
-			StatusShowURL: in.StatusShowURL, Steps: in.Steps, Secrets: in.Secrets, FinalScreenshot: in.FinalScreenshot}
+			StatusShowURL: in.StatusShowURL, Steps: in.Steps, Secrets: in.Secrets, FinalScreenshot: in.FinalScreenshot, Tags: in.Tags}
 		name := strings.TrimSpace(in.Name)
 		var cur *UptimeCheck
 		for i := range ci.st.checks {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -54,6 +55,7 @@ type checkModel struct {
 	Steps           []stepModel  `tfsdk:"steps"`
 	Secrets         types.Map    `tfsdk:"secrets"`
 	FinalScreenshot types.Bool   `tfsdk:"final_screenshot"`
+	Tags            types.Set    `tfsdk:"tags"`
 }
 
 type stepModel struct {
@@ -86,6 +88,7 @@ type apiCheck struct {
 	Steps           []apiStepB        `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	Tags            []string          `json:"tags"`
 }
 
 type apiStepB struct {
@@ -160,6 +163,11 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"secrets":          schema.MapAttribute{Description: "Browser check secrets, used in steps as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"final_screenshot": schema.BoolAttribute{Description: "Keep a screenshot of every browser run, not only failed ones.", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
+			"tags": schema.SetAttribute{
+				Description: "Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.",
+				Optional:    true, ElementType: types.StringType,
+				Validators: []validator.Set{setvalidator.SizeAtMost(20), setvalidator.ValueStringsAre(stringvalidator.RegexMatches(tagRe, "must be lower case letters, digits and _ . : -, up to 40"))},
+			},
 		},
 	}
 }
@@ -213,6 +221,10 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
 	}
+	in.Tags = []string{}
+	if !m.Tags.IsNull() && !m.Tags.IsUnknown() {
+		diags.Append(m.Tags.ElementsAs(ctx, &in.Tags, false)...)
+	}
 	for _, s := range m.Steps {
 		in.Steps = append(in.Steps, apiStepB{Action: s.Action.ValueString(), Selector: s.Selector.ValueString(), Text: s.Text.ValueString(),
 			Value: s.Value.ValueString(), Count: s.Count.ValueInt64(), Op: s.Op.ValueString(), Ms: s.Ms.ValueInt64(), Label: s.Label.ValueString()})
@@ -247,6 +259,7 @@ func (m *checkModel) fill(c apiCheck) {
 	m.IntervalS, m.TimeoutMs, m.DegradedMs = types.Int64Value(c.IntervalS), types.Int64Value(c.TimeoutMs), optInt(c.DegradedMs, m.DegradedMs)
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
+	m.Tags = optStringSet(c.Tags, m.Tags)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

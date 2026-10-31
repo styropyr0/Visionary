@@ -20,6 +20,7 @@ resource "visionary_uptime_check" "api" {
   expect_status = "200"
   body_contains = "ok"
   degraded_ms   = 800
+  tags          = ["smoke", "api"]
   headers       = { Authorization = "Bearer ${var.health_token}" }
 
   on_status_page = true
@@ -76,6 +77,7 @@ variable "probe_password" {
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
+- `tags` (Set of String) Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
 - `url` (String) Address probed (http checks). For browser checks it is the first step's URL.
 

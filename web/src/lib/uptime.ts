@@ -27,6 +27,8 @@ export interface UptimeCheck {
   /** Browser checks only; values always come back as MASK. */
   secrets?: Record<string, string>;
   final_screenshot?: boolean;
+  /** Lower case, sorted. */
+  tags?: string[];
 }
 
 export type StepAction =

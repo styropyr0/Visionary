@@ -383,7 +383,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Watch the list",
-        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it.",
+        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it. Give checks **Tags** in their form (`smoke`, `checkout`) to group them; the **Tag** menu above the list shows one group.",
       },
       {
         title: "Open a check",

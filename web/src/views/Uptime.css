@@ -402,3 +402,10 @@ table.data.up-table td {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+.up-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}

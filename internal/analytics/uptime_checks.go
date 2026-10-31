@@ -45,6 +45,7 @@ type UptimeCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	Tags            []string          `json:"tags"`
 }
 
 const (
@@ -108,6 +109,9 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadBrowserConfigs(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.loadCheckTags(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -122,7 +126,9 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 		return UptimeCheck{}, errCheckNotFound
 	}
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
-	err = s.loadBrowserConfigs(ctx, checks)
+	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
+		err = s.loadCheckTags(ctx, checks)
+	}
 	return checks[0], err
 }
 
@@ -133,6 +139,11 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	if c.Name == "" || len(c.Name) > 120 {
 		return errors.New("name must be 1–120 characters")
 	}
+	tags, err := normalizeTags(c.Tags)
+	if err != nil {
+		return err
+	}
+	c.Tags = tags
 	switch c.Kind {
 	case "", "http":
 		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
@@ -313,6 +324,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
 	if err != nil {
 		return err
 	}
+	if err := s.saveCheckTags(ctx, *c); err != nil {
+		return err
+	}
 	return s.saveBrowserConfig(ctx, *c)
 }
 
@@ -483,6 +497,7 @@ func checkChanges(a, b UptimeCheck) []string {
 	ka, _ := json.Marshal(a.Secrets)
 	kb, _ := json.Marshal(b.Secrets)
 	add("kind", a.Kind != b.Kind)
+	add("tags", strings.Join(a.Tags, ",") != strings.Join(b.Tags, ","))
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
@@ -551,6 +566,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
+	s.deleteCheckTags(r.Context(), c.ID)
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)

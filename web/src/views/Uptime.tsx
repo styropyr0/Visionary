@@ -13,6 +13,7 @@ import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
 import { BrowserNotice } from "./Uptime.steps";
+import { readTagParam, TagFilter, TagPills } from "./Uptime.tags";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -46,6 +47,7 @@ function UptimeList() {
   const [editing, setEditing] = useState<UptimeCheck | "new" | null>(null);
   const [fixing, setFixing] = useState<CheckList["checks"][number] | null>(null);
   const [running, setRunning] = useState<number | null>(null);
+  const [tag, setTag] = useState(readTagParam);
   const reload = () => setVersion((v) => v + 1);
 
   const run = async (c: UptimeCheck) => {
@@ -130,6 +132,7 @@ function UptimeList() {
               <header className="panel-head">
                 <h3 className="panel-title">Checks</h3>
                 <div className="panel-actions">
+                  <TagFilter checks={data.checks.map((c) => c.check)} value={tag} onChange={setTag} />
                   <BarsLegend />
                 </div>
               </header>
@@ -149,7 +152,7 @@ function UptimeList() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.checks.map(({ check: c, state: s, alert }) => (
+                    {tagged(data.checks, tag).map(({ check: c, state: s, alert }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
                           <span title={s.no_browser ? "Waiting for a browser on the server" : undefined}>
@@ -163,6 +166,7 @@ function UptimeList() {
                           <span className="mono dim" title={c.url}>
                             {c.kind === "browser" ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
                           </span>
+                          <TagPills tags={c.tags} />
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>
                         <td>
@@ -229,6 +233,12 @@ function UptimeList() {
       )}
     </>
   );
+}
+
+/** The checks with tag, or all of them when no check has it. */
+function tagged(checks: CheckList["checks"], tag: string) {
+  const hits = checks.filter((c) => c.check.tags?.includes(tag));
+  return hits.length ? hits : checks;
 }
 
 function Tiles({ data, loading }: { data: CheckList; loading: boolean }) {

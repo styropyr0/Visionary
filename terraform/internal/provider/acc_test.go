@@ -166,6 +166,7 @@ resource "visionary_uptime_check" "home" {
   interval_s    = %d
   expect_status = "2xx"
   headers       = { Authorization = "Bearer abc", Accept = "text/html" }
+  tags          = ["smoke", "deploy"]
 }
 
 resource "visionary_uptime_check" "login" {
@@ -225,6 +226,7 @@ EOT`
 					resource.TestCheckResourceAttr("visionary_alert_rule.traffic", "window", "15m"),
 					resource.TestCheckResourceAttr("visionary_alert_silence.maintenance", "once.starts_at", "2030-01-10T22:00:00+01:00"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.home", "method", "GET"),
+					resource.TestCheckTypeSetElemAttr("visionary_uptime_check.home", "tags.*", "smoke"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.home", "headers.Authorization", "Bearer abc"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "url", "https://example.com/login"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "interval_s", "300"),

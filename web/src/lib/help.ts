@@ -328,7 +328,7 @@ agent, err := visionary.New(cfg)`,
     id: "checks",
     title: "Add an uptime check",
     intro:
-      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form.",
+      "No code needed: this server calls the URL itself on a schedule, from outside your app, so it notices when the whole service is down, not just one route. Choose the method, the status codes that count as up (200-299 by default), optionally a word the body must contain, how often, the timeout, and a response time above which the check counts as degraded. Headers can carry a token; values that look secret are never shown again. Failing checks open incidents and alert: by the rule for every check, created with the first one, or by the check's own alert settings in its form. Tags (smoke, checkout, deploy) group checks, for the list's Tag filter and for running a group from CI.",
     any: { note: "Checks can't reach private or loopback addresses (localhost, 10.x, 192.168.x) unless an admin turns on Settings → Server → Other → Uptime checks may reach private addresses." },
   },
   browsercheck: {

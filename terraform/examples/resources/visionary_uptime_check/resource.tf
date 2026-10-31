@@ -5,6 +5,7 @@ resource "visionary_uptime_check" "api" {
   expect_status = "200"
   body_contains = "ok"
   degraded_ms   = 800
+  tags          = ["smoke", "api"]
   headers       = { Authorization = "Bearer ${var.health_token}" }
 
   on_status_page = true
