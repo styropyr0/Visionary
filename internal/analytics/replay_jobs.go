@@ -107,6 +107,8 @@ func (s *Server) deleteReplays(ctx context.Context, ids []any) error {
 	return nil
 }
 
+const replayArchivePage = 8
+
 // archiveReplays writes each idle session as one gzipped NDJSON object,
 // <prefix>/replays/2026/10/30/<session>.ndjson.gz, a line per chunk with its
 // payload as stored. A session that records again is written again.
@@ -120,16 +122,23 @@ func (s *Server) archiveReplays(ctx context.Context, c archiveConf, now time.Tim
 	for _, row := range res.Rows {
 		id := toString(row[0])
 		started, _ := time.Parse(tsLayout, toString(row[1]))
-		chunks, err := s.db.Query(ctx, `SELECT seq, created_at, ended_at, events, payload FROM replay_chunks WHERE session_id = ? ORDER BY seq`, id)
-		if err != nil {
-			return done, dbErr(err)
-		}
 		var buf bytes.Buffer
 		zw := gzip.NewWriter(&buf)
 		enc := json.NewEncoder(zw)
-		for _, ch := range chunks.Rows {
-			if err := enc.Encode(map[string]any{"session_id": id, "seq": toInt(ch[0]), "started": ch[1], "ended": ch[2], "events": toInt(ch[3]), "payload_gzip_base64": ch[4]}); err != nil {
-				return done, err
+		// a page at a time: chunks are up to half a megabyte and D1 caps a response
+		for after := int64(-1); ; {
+			chunks, err := s.db.Query(ctx, `SELECT seq, created_at, ended_at, events, payload FROM replay_chunks WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT `+strconv.Itoa(replayArchivePage), id, after)
+			if err != nil {
+				return done, dbErr(err)
+			}
+			for _, ch := range chunks.Rows {
+				after = toInt(ch[0])
+				if err := enc.Encode(map[string]any{"session_id": id, "seq": after, "started": ch[1], "ended": ch[2], "events": toInt(ch[3]), "payload_gzip_base64": ch[4]}); err != nil {
+					return done, err
+				}
+			}
+			if len(chunks.Rows) < replayArchivePage {
+				break
 			}
 		}
 		if err := zw.Close(); err != nil {

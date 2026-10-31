@@ -115,3 +115,39 @@ func TestReplayFrameHeaders(t *testing.T) {
 		t.Fatalf("headers %v", w.Header())
 	}
 }
+
+// An idle session's chunks are archived a page at a time, all of them in order.
+func TestReplayArchivePaged(t *testing.T) {
+	s := logsTestServer(t, nil)
+	ctx := context.Background()
+	fake := &fakeS3{objects: map[string][]byte{}}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	c := archiveConf{endpoint: srv.URL, bucket: "logs", region: "auto", access: "AKID", secret: "secret"}
+	old := time.Now().UTC().Add(-2 * replayArchiveIdle).Format(tsLayout)
+	if err := s.db.Exec(ctx, `INSERT INTO replay_sessions (session_id, started_at, created_at) VALUES ('s1', ?, ?)`, old, old); err != nil {
+		t.Fatal(err)
+	}
+	n := 2*replayArchivePage + 3
+	for i := 0; i < n; i++ {
+		if err := s.db.Exec(ctx, `INSERT INTO replay_chunks (session_id, seq, created_at, ended_at, events, bytes, payload) VALUES ('s1', ?, ?, ?, 1, 1, 'x')`, i, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if done, err := s.archiveReplays(ctx, c, time.Now()); err != nil || done != 1 {
+		t.Fatalf("archived %d %v", done, err)
+	}
+	for _, b := range fake.objects {
+		zr, err := gzip.NewReader(bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(zr)
+		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+		if len(lines) != n || !strings.Contains(lines[n-1], `"seq":`+strconv.Itoa(n-1)) {
+			t.Fatalf("%d lines, last %s", len(lines), lines[len(lines)-1])
+		}
+		return
+	}
+	t.Fatal("nothing written")
+}
