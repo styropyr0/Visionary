@@ -127,7 +127,7 @@ function eachKV(text: string, sep: string, fn: (k: string, v: number) => void): 
   }
 }
 
-/** Reads the pressure and virtual memory columns on Linux.
+/** Reads the pressure and virtual memory columns on Linux
  * sdks/go/hoststats is the reference */
 export class HostStats {
   private vm?: VMStat;

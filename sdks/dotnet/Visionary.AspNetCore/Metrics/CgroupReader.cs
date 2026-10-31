@@ -50,7 +50,7 @@ internal sealed class CgroupReader
 
     public bool IsContainer => _inContainer;
 
-    /// <summary>The cgroup v2 directory, where the *.pressure files are; null with v1</summary>
+    /// <summary>The cgroup v2 directory, where the *.pressure files are, null with v1</summary>
     public string? V2Dir => _v2 ? _cpuDir : null;
 
     /// <summary>The process's cgroup; null off Linux or when there is none to read.</summary>
