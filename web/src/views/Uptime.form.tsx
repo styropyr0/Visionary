@@ -7,6 +7,7 @@ import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, 
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
+import { LocationsField } from "./Uptime.locations";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
@@ -25,6 +26,9 @@ const BLANK: CheckInput = {
   enabled: true,
   on_status_page: false,
   status_show_url: false,
+  locations: ["server"],
+  location_rule: "majority",
+  status_show_locations: false,
 };
 
 const BLANK_BROWSER: Partial<CheckInput> = {
@@ -49,7 +53,7 @@ interface Props {
 /** Create or edit a check. Masked header values stay masked unless retyped. */
 export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const toast = useToast();
-  const [form, setForm] = useState<CheckInput>(() => (check ? { ...check } : { ...BLANK }));
+  const [form, setForm] = useState<CheckInput>(() => (check ? { ...BLANK, ...check, locations: check.locations?.length ? check.locations : ["server"] } : { ...BLANK }));
   const [headers, setHeaders] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.headers ?? {}).map(([k, v]) => ({ k, v })));
   const [steps, setSteps] = useState<BrowserStep[]>(() => (check?.steps?.length ? check.steps : FIRST_STEPS));
   const [secrets, setSecrets] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.secrets ?? {}).map(([k, v]) => ({ k, v })));
@@ -169,6 +173,8 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </>
         )}
 
+        <LocationsField kind={form.kind} value={form.locations} rule={form.location_rule} onChange={(v) => set("locations", v)} onRule={(r) => set("location_rule", r)} />
+
         <div className="up-row">
           <div className="field" style={{ flex: 1 }}>
             <span>Check every</span>
@@ -244,13 +250,23 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
             Enabled
           </label>
           <label>
-            <input type="checkbox" checked={form.on_status_page} onChange={(e) => setForm((f) => ({ ...f, on_status_page: e.target.checked, status_show_url: e.target.checked && f.status_show_url }))} />
+            <input
+              type="checkbox"
+              checked={form.on_status_page}
+              onChange={(e) => setForm((f) => ({ ...f, on_status_page: e.target.checked, status_show_url: e.target.checked && f.status_show_url, status_show_locations: e.target.checked && f.status_show_locations }))}
+            />
             Show on the public status page
           </label>
           <label className={form.on_status_page ? "" : "off"}>
             <input type="checkbox" disabled={!form.on_status_page} checked={form.status_show_url} onChange={(e) => set("status_show_url", e.target.checked)} />
             Show the URL there too
           </label>
+          {form.locations.length > 1 && (
+            <label className={form.on_status_page ? "" : "off"}>
+              <input type="checkbox" disabled={!form.on_status_page} checked={form.status_show_locations} onChange={(e) => set("status_show_locations", e.target.checked)} />
+              Show its state per location there (location names become public)
+            </label>
+          )}
         </fieldset>
 
         {(!check || current.data) && <CheckAlertSection current={current.data?.alert} draft={alertDraft} onChange={setDraft} />}
