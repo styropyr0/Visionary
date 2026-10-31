@@ -212,7 +212,7 @@ type SystemConfig struct {
 //	VISIONARY_SYSTEM_METRICS=true|false  (default true)
 //	VISIONARY_SYSTEM_INTERVAL            (default 15s)
 //	VISIONARY_SYSTEM_RETENTION_DAYS      (default 0, off: the server applies Settings → Retention)
-//	VISIONARY_SYSTEM_GPU=true|false      (default true; GPU columns through nvidia-smi or amdgpu)
+//	VISIONARY_SYSTEM_GPU=true|false      (default true, GPU columns through nvidia-smi or amdgpu)
 //	VISIONARY_SERVICE                   (default: none)
 //	VISIONARY_RELEASE                    (default: RAILWAY_GIT_COMMIT_SHA, RENDER_GIT_COMMIT,
 //	                                      VERCEL_GIT_COMMIT_SHA, HEROKU_SLUG_COMMIT, SOURCE_VERSION,
