@@ -190,6 +190,9 @@ type SystemConfig struct {
 	// DiskPath is the filesystem whose usage is reported (default: the
 	// working directory's volume).
 	DiskPath string
+	// GPUOff stops the GPU columns, which run nvidia-smi once per sample
+	// when it is installed
+	GPUOff bool
 }
 
 // FromEnv builds a Config from VISIONARY_* variables. Request logging and
@@ -211,7 +214,8 @@ type SystemConfig struct {
 //	VISIONARY_SYSTEM_METRICS=true|false  (default true)
 //	VISIONARY_SYSTEM_INTERVAL            (default 15s)
 //	VISIONARY_SYSTEM_RETENTION_DAYS      (default 0, off: the server applies Settings → Retention)
-//	VISIONARY_SERVICE                    (default: none)
+//	VISIONARY_SYSTEM_GPU=true|false      (default true; GPU columns through nvidia-smi or amdgpu)
+//	VISIONARY_SERVICE                   (default: none)
 //	VISIONARY_RELEASE                    (default: RAILWAY_GIT_COMMIT_SHA, RENDER_GIT_COMMIT,
 //	                                      VERCEL_GIT_COMMIT_SHA, HEROKU_SLUG_COMMIT, SOURCE_VERSION,
 //	                                      GIT_COMMIT, GITHUB_SHA or K_REVISION; hashes cut to 12)
@@ -262,6 +266,7 @@ func FromEnv() Config {
 			Enabled:       envBool("VISIONARY_SYSTEM_METRICS", true),
 			Interval:      envDuration("VISIONARY_SYSTEM_INTERVAL", 15*time.Second),
 			RetentionDays: envInt("VISIONARY_SYSTEM_RETENTION_DAYS", 0),
+			GPUOff:        !envBool("VISIONARY_SYSTEM_GPU", true),
 		},
 		Logs: LogsConfig{
 			Enabled: envBool("VISIONARY_LOGS", true),

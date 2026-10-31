@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/styropyr0/visionary/sdks/go/hoststats"
 )
 
 // cgroupReader reads the CPU and memory limits and use of the process's own
@@ -26,6 +28,43 @@ type cgroupReader struct {
 	ooms     uint64
 	oomsOK   bool // the kernel reports OOM kills (v1 only on newer kernels)
 	primed   bool
+	mem      cgroupMem
+}
+
+// cgroupMem holds the memory.stat faults and memory.events limit hits
+type cgroupMem struct {
+	faults, major, high, max uint64
+	faultsOK, eventsOK       bool
+}
+
+func (c *cgroupReader) readMem() cgroupMem {
+	var m cgroupMem
+	if c.memDir == "" {
+		return m
+	}
+	if b, err := os.ReadFile(filepath.Join(c.memDir, "memory.stat")); err == nil {
+		m.faults, m.major, m.faultsOK = hoststats.ParseCgroupMemStat(b)
+	}
+	if c.v2 {
+		if b, err := os.ReadFile(filepath.Join(c.memDir, "memory.events")); err == nil {
+			m.high, m.max, m.eventsOK = hoststats.ParseCgroupMemEvents(b)
+		}
+	}
+	return m
+}
+
+// sampleMem fills the container fault rates and memory limit hits
+func (c *cgroupReader) sampleMem(v map[string]any, secs float64) {
+	now, prev := c.readMem(), c.mem
+	c.mem = now
+	if now.faultsOK && prev.faultsOK && now.faults >= now.major && prev.faults >= prev.major && now.major >= prev.major && now.faults-now.major >= prev.faults-prev.major {
+		v["container_minor_faults_ps"] = round(float64((now.faults-now.major)-(prev.faults-prev.major))/secs, 1)
+		v["container_major_faults_ps"] = round(float64(now.major-prev.major)/secs, 1)
+	}
+	if now.eventsOK && prev.eventsOK && now.high >= prev.high && now.max >= prev.max {
+		v["container_mem_high_events"] = int64(now.high - prev.high)
+		v["container_mem_max_events"] = int64(now.max - prev.max)
+	}
 }
 
 // newCgroupReader finds the process's cgroup; nil when there is none to read.
@@ -215,6 +254,7 @@ func (c *cgroupReader) memUsed() (uint64, bool) {
 // prime takes the baseline the first sample's deltas start from.
 func (c *cgroupReader) prime() {
 	c.usage, c.periods, c.throttle, c.ooms, c.oomsOK = c.counters()
+	c.mem = c.readMem()
 	c.last, c.primed = time.Now(), true
 }
 
@@ -236,6 +276,7 @@ func (c *cgroupReader) sample(v map[string]any) {
 		if oomsOK && c.oomsOK && ooms >= c.ooms {
 			v["container_oom_kills"] = int64(ooms - c.ooms)
 		}
+		c.sampleMem(v, secs)
 	}
 	c.usage, c.periods, c.throttle, c.ooms, c.oomsOK, c.last, c.primed = usage, periods, throttled, ooms, oomsOK, now, true
 	if cpus > 0 {

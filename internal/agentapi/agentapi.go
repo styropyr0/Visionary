@@ -40,6 +40,9 @@ type Report struct {
 	// ContainerEvents are restarts, OOM kills, exits and failed health
 	// checks seen since the previous report.
 	ContainerEvents []ContainerEvent `json:"container_events,omitempty"`
+	// GPUProcesses and Sensors are snapshots at report time
+	GPUProcesses []GPUProcess `json:"gpu_processes,omitempty"`
+	Sensors      []Sensor     `json:"sensors,omitempty"`
 }
 
 // Inventory describes the machine.
@@ -59,6 +62,43 @@ type Inventory struct {
 type Sample struct {
 	At     string             `json:"at"`
 	Values map[string]float64 `json:"values"`
+	// GPUs are the host_gpus rows read with this sample
+	GPUs []GPU `json:"gpus,omitempty"`
+}
+
+// GPU is one device's reading. A nil value is one the driver did not report
+type GPU struct {
+	Index          int      `json:"index"`
+	UUID           string   `json:"uuid,omitempty"`
+	Name           string   `json:"name"`
+	Vendor         string   `json:"vendor"`
+	UtilPercent    *float64 `json:"util_percent,omitempty"`
+	MemUtilPercent *float64 `json:"mem_util_percent,omitempty"`
+	MemUsedMB      *float64 `json:"mem_used_mb,omitempty"`
+	MemTotalMB     *float64 `json:"mem_total_mb,omitempty"`
+	TempC          *float64 `json:"temp_c,omitempty"`
+	PowerW         *float64 `json:"power_w,omitempty"`
+	PowerLimitW    *float64 `json:"power_limit_w,omitempty"`
+	FanPercent     *float64 `json:"fan_percent,omitempty"`
+	ClockMHz       *float64 `json:"clock_mhz,omitempty"`
+	MaxClockMHz    *float64 `json:"max_clock_mhz,omitempty"`
+}
+
+// GPUProcess is a process holding GPU memory, from nvidia-smi
+type GPUProcess struct {
+	GPUUUID   string  `json:"gpu_uuid"`
+	GPUIndex  int     `json:"gpu_index"`
+	PID       int64   `json:"pid"`
+	Name      string  `json:"name"`
+	UsedMemMB float64 `json:"used_mem_mb"`
+}
+
+// Sensor is a temperature (unit C) or fan (unit rpm) reading
+type Sensor struct {
+	Name  string  `json:"name"`
+	Kind  string  `json:"kind"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
 }
 
 // Process is one row of the top-processes snapshot.

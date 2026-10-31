@@ -71,6 +71,8 @@ type config struct {
 	fileIntegrity  bool
 	processChecks  bool
 	containerRisks bool
+
+	gpu bool
 }
 
 func main() {
@@ -109,6 +111,7 @@ func loadConfig(args []string) (config, error) {
 	fs.BoolVar(&c.fileIntegrity, "file-integrity", envBool("VISIONARY_AGENT_FILE_INTEGRITY", true), "report changes to accounts, sudoers, cron, PAM, sshd and systemd files (VISIONARY_AGENT_FILE_INTEGRITY)")
 	fs.BoolVar(&c.processChecks, "process-checks", envBool("VISIONARY_AGENT_PROCESS_CHECKS", true), "report miners, reverse shells and programs run from /tmp (VISIONARY_AGENT_PROCESS_CHECKS)")
 	fs.BoolVar(&c.containerRisks, "container-risks", envBool("VISIONARY_AGENT_CONTAINER_RISKS", true), "report privileged, root and new-image containers (VISIONARY_AGENT_CONTAINER_RISKS)")
+	fs.BoolVar(&c.gpu, "gpu", envBool("VISIONARY_AGENT_GPU", true), "report GPUs through nvidia-smi and amdgpu (VISIONARY_AGENT_GPU)")
 	fs.StringVar(&c.docker, "docker", os.Getenv("VISIONARY_AGENT_DOCKER"), `container engine socket: a path, "off", or empty to find Docker or Podman (VISIONARY_AGENT_DOCKER)`)
 	logs := fs.String("logs", os.Getenv("VISIONARY_AGENT_LOGS"), `comma-separated log sources to send: journald, docker, and file globs such as /var/log/nginx/*.log (VISIONARY_AGENT_LOGS, default none)`)
 	fs.StringVar(&c.stateDir, "state", envStr("VISIONARY_AGENT_STATE", "/var/lib/visionary-agent"), "directory for where log sources got to (VISIONARY_AGENT_STATE)")
@@ -169,8 +172,13 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if len(cfg.disks) > 0 {
 		diskPath = cfg.disks[0]
 	}
-	sampler := visionary.NewHostSampler(diskPath, cfg.interval)
+	var opts []visionary.HostOption
+	if !cfg.gpu {
+		opts = append(opts, visionary.WithoutGPU())
+	}
+	sampler := visionary.NewHostSampler(diskPath, cfg.interval, opts...)
 	a := newAgent(cfg, logger)
+	a.sampler = sampler
 	snd := newSender(cfg, logger)
 	go snd.run(ctx)
 	if len(cfg.logs) > 0 {
@@ -180,7 +188,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 		go a.updates.run(ctx)
 	}
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
-		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"),
+		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"), "gpu", cfg.gpu,
 		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"))
 
 	sampleT := time.NewTicker(cfg.interval)
@@ -224,7 +232,7 @@ func sample(h *visionary.HostSampler) agentapi.Sample {
 			values[k] = float64(t)
 		}
 	}
-	return agentapi.Sample{At: at, Values: values}
+	return agentapi.Sample{At: at, Values: values, GPUs: gpus(h.GPUs())}
 }
 
 // procPath is a path under /proc.

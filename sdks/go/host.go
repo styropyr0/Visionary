@@ -1,17 +1,21 @@
 package visionary
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/host"
+
+	"github.com/styropyr0/visionary/sdks/go/hoststats"
 )
 
 // HostColumns are the system_metrics columns a HostSampler fills: the
-// machine's CPU, memory, swap, disk, network and process counts, plus
-// interval_s and uptime_s (the host's uptime). Process, runtime, database
-// and HTTP columns are not among them.
+// machine's CPU, memory, swap, disk, network and process counts, its
+// pressure, virtual memory, kernel limits, temperatures and GPUs, plus
+// interval_s and uptime_s (the host's uptime). Process, runtime, database,
+// HTTP and container columns are not among them
 var HostColumns = []string{
 	"interval_s",
 	"host_cpu_percent", "cpu_count", "cpu_user_percent", "cpu_system_percent", "cpu_iowait_percent", "cpu_steal_percent",
@@ -24,6 +28,14 @@ var HostColumns = []string{
 	"tcp_established", "tcp_retrans",
 	"host_procs", "procs_running", "procs_blocked", "ctx_switches_ps",
 	"uptime_s",
+	"psi_cpu_some_avg10", "psi_cpu_some_avg60", "psi_mem_some_avg10", "psi_mem_some_avg60", "psi_mem_full_avg10",
+	"psi_io_some_avg10", "psi_io_some_avg60", "psi_io_full_avg10",
+	"minor_faults_ps", "major_faults_ps", "swap_in_ps", "swap_out_ps", "pages_scanned_ps", "pages_stolen_ps", "host_oom_kills",
+	"mem_dirty_mb", "mem_writeback_mb", "mem_slab_mb", "mem_shmem_mb", "mem_committed_mb", "mem_commit_limit_mb",
+	"cpu_temp_c", "cpu_mhz", "cpu_max_mhz", "cpu_throttle_events",
+	"files_open", "files_max", "sockets_used", "tcp_time_wait", "tcp_orphans", "tcp_close_wait",
+	"conntrack_count", "conntrack_max", "udp_in_errors", "udp_buf_errors",
+	"gpu_count", "gpu_util_percent", "gpu_mem_percent", "gpu_temp_c",
 }
 
 // HostSampler reads the host-level system_metrics columns the same way the
@@ -36,10 +48,16 @@ var HostColumns = []string{
 // use.
 type HostSampler struct{ r *recorder }
 
+// HostOption changes what a HostSampler reads
+type HostOption func(*recorder)
+
+// WithoutGPU leaves out the GPU columns, so nvidia-smi never runs
+func WithoutGPU() HostOption { return func(r *recorder) { r.gpu = false } }
+
 // NewHostSampler takes baseline readings. diskPath is the filesystem the disk
 // space columns describe; empty means the root of the working directory's
 // volume.
-func NewHostSampler(diskPath string, interval time.Duration) *HostSampler {
+func NewHostSampler(diskPath string, interval time.Duration, opts ...HostOption) *HostSampler {
 	if diskPath == "" {
 		wd, _ := os.Getwd()
 		diskPath = filepath.VolumeName(wd) + string(filepath.Separator)
@@ -49,6 +67,10 @@ func NewHostSampler(diskPath string, interval time.Duration) *HostSampler {
 		diskDir:  diskPath,
 		started:  time.Now(),
 		hostOnly: true,
+		gpu:      true,
+	}
+	for _, o := range opts {
+		o(r)
 	}
 	r.prime()
 	return &HostSampler{r: r}
@@ -68,4 +90,15 @@ func (h *HostSampler) Sample() map[string]any {
 		}
 	}
 	return out
+}
+
+// GPUs is each GPU as the latest Sample read it
+func (h *HostSampler) GPUs() []hoststats.GPU { return h.r.stats.GPUs() }
+
+// Sensors is every temperature and fan reading of the latest Sample
+func (h *HostSampler) Sensors() []hoststats.Sensor { return h.r.stats.Sensors() }
+
+// GPUProcesses lists the processes holding GPU memory (NVIDIA only)
+func (h *HostSampler) GPUProcesses(ctx context.Context) []hoststats.GPUProcess {
+	return h.r.stats.GPUProcesses(ctx)
 }

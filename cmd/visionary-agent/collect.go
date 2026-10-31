@@ -26,6 +26,7 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 
 	"github.com/styropyr0/visionary/internal/agentapi"
+	visionary "github.com/styropyr0/visionary/sdks/go"
 )
 
 // agent builds reports. Only the main loop calls report, so the collectors'
@@ -44,6 +45,7 @@ type agent struct {
 	files   *fileCollector
 	suspect *procCollector
 	docker  *dockerCollector // nil when VISIONARY_AGENT_DOCKER is off
+	sampler *visionary.HostSampler
 }
 
 type procTime struct {
@@ -105,6 +107,7 @@ func (a *agent) report(ctx context.Context, samples []agentapi.Sample) *agentapi
 		rep.Containers, rep.ContainerEvents = a.docker.report(ctx)
 		rep.ContainerSamples = a.docker.takeSamples()
 	}
+	a.hardware(ctx, rep)
 	if a.cfg.security {
 		rep.Events = append(rep.Events, a.auth.collect(ctx)...)
 		rep.Events = append(rep.Events, a.ports.collect()...)

@@ -434,7 +434,12 @@ messages are never captured. `VISIONARY_LOGS=false` turns capture off.
 On by default, every 15 seconds: host CPU, memory, disk, network and load;
 this process's CPU, memory, threads and file descriptors; the container's
 cgroup limits and throttling; Go heap, GC and goroutines; request throughput;
-and pool stats when `cfg.System.DB` is set. `cfg.System.DiskPath` picks the
+and pool stats when `cfg.System.DB` is set. On Linux it adds pressure stall
+information (the container's own in a cgroup v2 container), page faults,
+swapping and reclaim, dirty and committed memory, file handles, sockets,
+connection tracking, UDP errors, CPU temperature and clock speed, and with a
+GPU (nvidia-smi on Linux and Windows, amdgpu on Linux) the busiest GPU's use,
+memory and temperature. `cfg.System.DiskPath` picks the
 filesystem whose usage is reported (default: the working directory's).
 `VISIONARY_SYSTEM_METRICS=false` turns it off.
 
@@ -619,6 +624,7 @@ and the dashboards flag the N+1.
 | `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |
+| `VISIONARY_SYSTEM_GPU` | `true` | `false`: leave out the GPU columns, so nvidia-smi never runs. |
 
 Options set only in code, on the `Config` that `FromEnv` returns:
 

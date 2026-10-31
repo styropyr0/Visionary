@@ -179,6 +179,9 @@ func (r *recorder) sampleExtra(v map[string]any, secs float64) {
 		v["proc_read_kbps"] = round(float64(now.procRead-prev.procRead)/1024/secs, 1)
 		v["proc_write_kbps"] = round(float64(now.procWrite-prev.procWrite)/1024/secs, 1)
 	}
+	if r.stats != nil {
+		r.stats.Sample(v, secs)
+	}
 }
 
 func isLinux() bool { return strings.EqualFold(goos, "linux") }

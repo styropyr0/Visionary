@@ -18,11 +18,19 @@ before v0.5.0 is no longer built or updated.
 
 ## What it reports
 
-Every 15 s it samples CPU, memory, swap, disks, network and load; once a
-minute it sends them with:
+Every 15 s it samples CPU, memory, swap, disks, network and load, and on
+Linux pressure stall information, page faults, swapping and reclaim, dirty and
+committed memory, file handles, sockets, connection tracking, UDP errors, the
+hottest CPU sensor, clock speed and thermal throttling. With an NVIDIA GPU
+(nvidia-smi on PATH or in the driver's usual place, Linux and Windows) or an
+AMD one (amdgpu sysfs, Linux) it reads each GPU's use, memory, temperature,
+power, fan and clock with every sample, running nvidia-smi once per sample
+with a 5 s timeout and backing off when it fails. Once a minute it sends them
+with:
 
 - the machine's details, every drive, the top processes and failed systemd
-  services (shown in **System**);
+  services, every temperature and fan sensor, and the processes holding GPU
+  memory (a second nvidia-smi call per report; shown in **System**);
 - every Docker or Podman container: state, health, restarts, CPU and memory
   against its limits, network, disk, and OOM kills, crashes and failed health
   checks (shown in **Containers**);
@@ -71,6 +79,10 @@ none runs when `VISIONARY_AGENT_SECURITY` is off):
 | `VISIONARY_AGENT_FILE_INTEGRITY=off` | `-file-integrity=false` | system file changes |
 | `VISIONARY_AGENT_PROCESS_CHECKS=off` | `-process-checks=false` | suspicious processes |
 | `VISIONARY_AGENT_CONTAINER_RISKS=off` | `-container-risks=false` | privileged, root and new-image containers |
+
+`VISIONARY_AGENT_GPU=off` (`-gpu=false`) stops GPU readings, so nvidia-smi
+never runs. Counting sockets in CLOSE_WAIT walks `/proc/net/tcp`, so it is
+skipped on hosts with more than 20,000 sockets in use.
 
 ## Logs
 

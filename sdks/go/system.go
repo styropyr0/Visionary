@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/metrics"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	gnet "github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
+
+	"github.com/styropyr0/visionary/sdks/go/hoststats"
 )
 
 // systemColumns is the insert order; sample builds rows in it.
@@ -48,18 +51,23 @@ var systemBaseColumns = []string{
 const samplesPerWrite = 4
 
 type recorder struct {
-	cfg     SystemConfig
-	ident   identity
-	db      store
-	insert  string
-	logger  *slog.Logger
-	proc    *process.Process
-	diskDir string
-	started time.Time
-	http    httpCounters
+	cfg    SystemConfig
+	ident  identity
+	db     store
+	insert string
+	// d1Insert and d1Update split a row on D1 (rowStmts)
+	d1Insert string
+	d1Update string
+	logger   *slog.Logger
+	proc     *process.Process
+	diskDir  string
+	started  time.Time
+	http     httpCounters
 	// hostOnly leaves out the process, runtime, database and HTTP columns
 	// (HostSampler).
 	hostOnly bool
+	gpu      bool
+	stats    *hoststats.Collector
 
 	last     time.Time
 	requests int64
@@ -96,6 +104,7 @@ func newRecorder(cfg SystemConfig, ident identity, db store, logger *slog.Logger
 		proc:    proc,
 		diskDir: dir,
 		started: time.Now(),
+		gpu:     !cfg.GPUOff,
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
@@ -139,11 +148,18 @@ func (r *recorder) prime() {
 		r.dbPrev = r.cfg.DB()
 	}
 	r.prev = readCounters(r.proc)
+	opt := hoststats.Options{GPU: r.gpu}
 	if !r.hostOnly {
 		if r.cgroup = newCgroupReader(); r.cgroup != nil {
 			r.cgroup.prime()
+			opt.Container = r.cgroup.inCtr
+			if r.cgroup.v2 {
+				opt.CgroupDir = r.cgroup.cpuDir
+			}
 		}
 	}
+	r.stats = hoststats.New(opt)
+	r.stats.Prime()
 }
 
 func (r *recorder) run(ctx context.Context) {
@@ -179,9 +195,9 @@ func (r *recorder) flush(ctx context.Context) {
 	if len(r.buf) == 0 {
 		return
 	}
-	stmts := make([]stmt, len(r.buf))
-	for i, row := range r.buf {
-		stmts[i] = stmt{sql: r.insert, args: row}
+	stmts := make([]stmt, 0, 2*len(r.buf))
+	for _, row := range r.buf {
+		stmts = append(stmts, r.rowStmts(row)...)
 	}
 	if err := r.db.batch(ctx, stmts); err != nil {
 		r.logger.Warn("visionary: system metrics write failed", "rows", len(r.buf), "err", err)
@@ -192,6 +208,27 @@ func (r *recorder) flush(ctx context.Context) {
 		return
 	}
 	r.buf = r.buf[:0]
+}
+
+// d1MaxParams is D1's limit of bound params per statement
+const d1MaxParams = 100
+
+// rowStmts is the row's INSERT. D1 binds at most 100 params, so there the
+// columns past the first 100 follow in an UPDATE of the row just inserted,
+// in the same batch
+func (r *recorder) rowStmts(row []any) []stmt {
+	if !r.db.stringParams() || len(row) <= d1MaxParams {
+		return []stmt{{sql: r.insert, args: row}}
+	}
+	if r.d1Update == "" {
+		r.d1Insert = insertSQL("system_metrics", systemColumns[:d1MaxParams], true)
+		set := make([]string, 0, len(systemColumns)-d1MaxParams)
+		for _, c := range systemColumns[d1MaxParams:] {
+			set = append(set, c+" = NULLIF(?, '')")
+		}
+		r.d1Update = "UPDATE system_metrics SET " + strings.Join(set, ", ") + " WHERE id = last_insert_rowid()"
+	}
+	return []stmt{{sql: r.d1Insert, args: row[:d1MaxParams]}, {sql: r.d1Update, args: row[d1MaxParams:]}}
 }
 
 // sample reads every source once. A source that fails (load average where
