@@ -400,7 +400,10 @@ A browser check plays scripted steps in a headless Chrome, Chromium or Edge on
 the server: go to a URL, click, type (values can be `{{secret.NAME}}`, masked in
 results), wait, and check text, the URL or an element. Each run records step
 times, LCP, CLS, TTFB, console and network errors, and a screenshot on
-failure. Runs share the schedule, alerts and status page of HTTP checks.
+failure. Each run sends a W3C `traceparent` to the first page's origin (or the
+origins the check lists), so a backend with a Visionary SDK records its side
+and the run links to that trace. Runs share the schedule, alerts and status
+page of HTTP checks.
 
 The default image has no browser, so browser checks stay paused in it. Build
 the variant with Chromium (about 400 MB larger):

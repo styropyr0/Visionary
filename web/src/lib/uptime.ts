@@ -27,6 +27,9 @@ export interface UptimeCheck {
   /** Browser checks only; values always come back as MASK. */
   secrets?: Record<string, string>;
   final_screenshot?: boolean;
+  /** Origins that get the run's traceparent; empty means the first page's. */
+  trace_origins?: string[];
+  no_trace?: boolean;
 }
 
 export type StepAction =
@@ -212,6 +215,9 @@ export interface BrowserRunDetail {
   ttfb_ms: number | null;
   status: number;
   retried: boolean;
+  /** The run's trace id, and whether a backend recorded anything under it. */
+  trace_id: string;
+  trace_found: boolean;
 }
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });

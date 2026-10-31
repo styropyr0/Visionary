@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -52,6 +54,7 @@ type browserRun struct {
 	Network    []netFailure `json:"network"`
 	Screenshot []byte       `json:"-"`
 	Final      []byte       `json:"-"`
+	TraceID    string       `json:"trace_id,omitempty"`
 }
 
 // vitalsScript records LCP and CLS on every page the run opens.
@@ -143,6 +146,11 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	}()
 	mask := masker(c.Secrets)
 	st := &runState{urls: map[network.RequestID]string{}, mask: mask}
+	traceID, spanID := newTraceIDs()
+	patterns := c.tracePatterns()
+	if len(patterns) > 0 {
+		run.TraceID = traceID
+	}
 
 	proxy := ""
 	if guard != nil {
@@ -157,8 +165,14 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		if err := chromedp.Do(ctx, chromedp.EmulateViewport(browserViewportW, browserViewportH)); err != nil {
 			return err
 		}
-		_, err := chromedp.Call(ctx, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: vitalsScript})
-		return err
+		if _, err := chromedp.Call(ctx, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: vitalsScript}); err != nil {
+			return err
+		}
+		if len(patterns) > 0 {
+			_, err := chromedp.Call(ctx, fetch.Enable, fetch.EnableParams{Patterns: patterns})
+			return err
+		}
+		return nil
 	}
 	// The tab's first action opens it and ties it to tab, not to the run's
 	// timeout, so a timed-out run can still be photographed.
@@ -169,6 +183,9 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	listen, stopListening := context.WithCancel(tab)
 	var wg sync.WaitGroup
 	collect(listen, &wg, st)
+	if len(patterns) > 0 {
+		propagateTrace(listen, tab, &wg, "00-"+traceID+"-"+spanID+"-01")
+	}
 	if err := setup(tab); err != nil {
 		stopListening()
 		wg.Wait()
@@ -216,6 +233,9 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		run.Screenshot = screenshot(after)
 	} else if c.FinalScreenshot {
 		run.Final = screenshot(after)
+	}
+	if len(patterns) > 0 {
+		_, _ = chromedp.Call(after, fetch.Disable, cdp.Empty{})
 	}
 	stopListening()
 	wg.Wait()

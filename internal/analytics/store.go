@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	sdk "github.com/styropyr0/visionary/sdks/go"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -122,7 +123,23 @@ func (s *Server) addColumns(ctx context.Context, table string, added []sdk.Colum
 			have = append(have, toString(row[0]))
 		}
 	}
-	for _, stmt := range d.MissingColumns(table, added, have) {
+	// "bigtext" holds JSON and images: TEXT, or MEDIUMTEXT on MySQL.
+	var plain []sdk.Column
+	var stmts []string
+	for _, c := range added {
+		if c.Kind != "bigtext" {
+			plain = append(plain, c)
+			continue
+		}
+		if !slices.ContainsFunc(have, func(h string) bool { return strings.EqualFold(h, c.Name) }) {
+			big := "TEXT"
+			if d == sdk.MySQL {
+				big = "MEDIUMTEXT"
+			}
+			stmts = append(stmts, "ALTER TABLE "+table+" ADD COLUMN "+c.Name+" "+big)
+		}
+	}
+	for _, stmt := range append(d.MissingColumns(table, plain, have), stmts...) {
 		if err := s.db.Exec(ctx, stmt); err != nil && !sdk.IsDuplicateColumn(err) {
 			return err
 		}

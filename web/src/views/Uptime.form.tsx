@@ -6,6 +6,7 @@ import { useToast } from "../components/Toast";
 import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
+import { TraceSettings } from "./Uptime.settings";
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -75,7 +76,9 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     for (const { k, v } of secrets) {
       if (k.trim()) sec[k.trim()] = v;
     }
-    const body = browser ? { ...form, headers: {}, steps, secrets: sec } : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined };
+    const body = browser
+      ? { ...form, headers: {}, steps, secrets: sec }
+      : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined, trace_origins: undefined, no_trace: undefined };
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
@@ -141,6 +144,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
         </label>
         {browser && <StepsEditor steps={steps} onChange={setSteps} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
+        {browser && <TraceSettings form={form} set={set} steps={steps} />}
         {!browser && (
           <>
             <div className="up-row">

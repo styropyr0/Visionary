@@ -54,6 +54,8 @@ type checkModel struct {
 	Steps           []stepModel  `tfsdk:"steps"`
 	Secrets         types.Map    `tfsdk:"secrets"`
 	FinalScreenshot types.Bool   `tfsdk:"final_screenshot"`
+	TraceOrigins    types.List   `tfsdk:"trace_origins"`
+	TraceHeaders    types.Bool   `tfsdk:"trace_headers"`
 }
 
 type stepModel struct {
@@ -86,6 +88,8 @@ type apiCheck struct {
 	Steps           []apiStepB        `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	TraceOrigins    []string          `json:"trace_origins,omitempty"`
+	NoTrace         bool              `json:"no_trace,omitempty"`
 }
 
 type apiStepB struct {
@@ -160,6 +164,14 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"secrets":          schema.MapAttribute{Description: "Browser check secrets, used in steps as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"final_screenshot": schema.BoolAttribute{Description: "Keep a screenshot of every browser run, not only failed ones.", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
+			"trace_headers": schema.BoolAttribute{
+				Description: "Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).",
+				Optional:    true, Computed: true, Default: booldefault.StaticBool(true),
+			},
+			"trace_origins": schema.ListAttribute{
+				Description: "Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.",
+				Optional:    true, ElementType: types.StringType, Validators: []validator.List{listvalidator.SizeAtMost(10)},
+			},
 		},
 	}
 }
@@ -188,7 +200,7 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		if !set("url") {
 			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
 		}
-		for _, n := range []string{"steps", "secrets"} {
+		for _, n := range []string{"steps", "secrets", "trace_origins"} {
 			if set(n) {
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
 			}
@@ -209,6 +221,7 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		IntervalS: m.IntervalS.ValueInt64(), TimeoutMs: m.TimeoutMs.ValueInt64(), DegradedMs: m.DegradedMs.ValueInt64(),
 		FollowRedirects: m.FollowRedirects.ValueBool(), Enabled: m.Enabled.ValueBool(), OnStatusPage: m.OnStatusPage.ValueBool(),
 		StatusShowURL: m.StatusShowURL.ValueBool(), Secrets: mapOf(ctx, m.Secrets, diags), FinalScreenshot: m.FinalScreenshot.ValueBool(),
+		TraceOrigins: stringsOf(ctx, m.TraceOrigins, diags), NoTrace: !m.TraceHeaders.IsNull() && !m.TraceHeaders.IsUnknown() && !m.TraceHeaders.ValueBool(),
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
@@ -247,6 +260,7 @@ func (m *checkModel) fill(c apiCheck) {
 	m.IntervalS, m.TimeoutMs, m.DegradedMs = types.Int64Value(c.IntervalS), types.Int64Value(c.TimeoutMs), optInt(c.DegradedMs, m.DegradedMs)
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
+	m.TraceOrigins, m.TraceHeaders = optStringList(c.TraceOrigins, m.TraceOrigins), types.BoolValue(!c.NoTrace)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

@@ -45,6 +45,7 @@ type UptimeCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	BrowserOptions
 }
 
 const (
@@ -135,7 +136,7 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	}
 	switch c.Kind {
 	case "", "http":
-		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
+		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot, c.BrowserOptions = "http", nil, nil, false, BrowserOptions{}
 	case "browser":
 		return c.normalizeBrowser(prev)
 	default:
@@ -486,6 +487,9 @@ func checkChanges(a, b UptimeCheck) []string {
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
+	oa, _ := json.Marshal(a.BrowserOptions)
+	ob, _ := json.Marshal(b.BrowserOptions)
+	add("browser_options", string(oa) != string(ob))
 	add("name", a.Name != b.Name)
 	add("url", a.URL != b.URL)
 	add("method", a.Method != b.Method)

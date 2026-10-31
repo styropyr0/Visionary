@@ -86,7 +86,8 @@ type configCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
-	Alert           *configCheckAlert `json:"alert,omitempty"`
+	BrowserOptions
+	Alert *configCheckAlert `json:"alert,omitempty"`
 }
 
 // configCheckAlert is a check's own alert (mode custom or off); checks
@@ -259,7 +260,7 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	out := configCheck{Name: m.Name, Kind: m.Kind, URL: m.URL, Method: m.Method, ExpectStatus: m.ExpectStatus, BodyContains: m.BodyContains,
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
-		FinalScreenshot: m.FinalScreenshot}
+		FinalScreenshot: m.FinalScreenshot, BrowserOptions: m.BrowserOptions}
 	if len(out.Headers) == 0 {
 		out.Headers = nil
 	}

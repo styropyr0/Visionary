@@ -36,6 +36,14 @@ type BrowserStep struct {
 	Label    string `json:"label,omitempty"`
 }
 
+// BrowserOptions are a browser check's settings beyond its steps, stored as
+// one JSON column.
+type BrowserOptions struct {
+	// TraceOrigins get the run's traceparent; empty means the first page's.
+	TraceOrigins []string `json:"trace_origins,omitempty"`
+	NoTrace      bool     `json:"no_trace,omitempty"`
+}
+
 const (
 	browserMaxSteps     = 50
 	browserMaxSecrets   = 20
@@ -53,8 +61,10 @@ var (
 // uptimeAddedColumns are columns added to the uptime tables after their
 // first release.
 var uptimeAddedColumns = map[string][]sdk.Column{
-	"uptime_checks":  {{Name: "kind", Kind: "text"}},
-	"uptime_results": {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
+	"uptime_checks":          {{Name: "kind", Kind: "text"}},
+	"uptime_results":         {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
+	"uptime_browser_checks":  {{Name: "options", Kind: "bigtext"}},
+	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}},
 }
 
 func (s *Server) uptimeBrowserSchema() []string {
@@ -182,6 +192,9 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	if c.Steps[0].Action != "goto" {
 		return errors.New("the first step must go to a URL")
 	}
+	if err := c.normalizeTrace(); err != nil {
+		return err
+	}
 	c.URL = c.Steps[0].Value
 	if c.IntervalS == 0 {
 		c.IntervalS = 300
@@ -275,13 +288,13 @@ func (s *Server) loadBrowserConfigs(ctx context.Context, checks []UptimeCheck) e
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := s.db.Query(ctx, `SELECT check_id, steps, secrets, final_screenshot FROM uptime_browser_checks WHERE check_id IN (`+strings.Join(ids, ", ")+`)`)
+	rows, err := s.db.Query(ctx, `SELECT check_id, steps, secrets, final_screenshot, options FROM uptime_browser_checks WHERE check_id IN (`+strings.Join(ids, ", ")+`)`)
 	if err != nil {
 		return err
 	}
 	byID := map[int64][]any{}
 	for _, row := range rows.Rows {
-		if len(row) == 4 {
+		if len(row) == 5 {
 			byID[toInt(row[0])] = row
 		}
 	}
@@ -295,6 +308,7 @@ func (s *Server) loadBrowserConfigs(ctx context.Context, checks []UptimeCheck) e
 			_ = json.Unmarshal([]byte(toString(row[1])), &c.Steps)
 			_ = json.Unmarshal([]byte(toString(row[2])), &c.Secrets)
 			c.FinalScreenshot = toInt(row[3]) == 1
+			_ = json.Unmarshal([]byte(toString(row[4])), &c.BrowserOptions)
 		}
 	}
 	return nil
@@ -315,8 +329,12 @@ func (s *Server) saveBrowserConfig(ctx context.Context, c UptimeCheck) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Exec(ctx, `INSERT INTO uptime_browser_checks (check_id, steps, secrets, final_screenshot) VALUES (?, ?, ?, ?)`,
-		c.ID, string(steps), string(secrets), boolInt(c.FinalScreenshot))
+	options, err := json.Marshal(c.BrowserOptions)
+	if err != nil {
+		return err
+	}
+	return s.db.Exec(ctx, `INSERT INTO uptime_browser_checks (check_id, steps, secrets, final_screenshot, options) VALUES (?, ?, ?, ?, ?)`,
+		c.ID, string(steps), string(secrets), boolInt(c.FinalScreenshot), string(options))
 }
 
 func (s *Server) deleteBrowserData(ctx context.Context, id int64) {
@@ -333,6 +351,9 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	network, _ := json.Marshal(b.Network)
 	cols := []string{"created_at", "check_id", "ok", "failed_step", "steps", "console", "network"}
 	vals := []any{r.CreatedAt, c.ID, boolInt(r.OK), b.FailedStep, string(steps), string(console), string(network)}
+	if b.TraceID != "" {
+		cols, vals = append(cols, "trace_id"), append(vals, b.TraceID)
+	}
 	if b.Screenshot != nil {
 		cols, vals = append(cols, "screenshot"), append(vals, base64.StdEncoding.EncodeToString(b.Screenshot))
 	}
@@ -526,7 +547,7 @@ func (s *Server) handleBrowserRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.created_at, b.ok, b.failed_step, b.steps, b.console, b.network, b.screenshot, b.final_screenshot,
-  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried
+  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	if err != nil {
@@ -555,5 +576,6 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 		"steps": nonNil(steps), "console": nonNil(console), "network": nonNil(network),
 		"screenshot": img(row[6]), "final_screenshot": img(row[7]),
 		"duration_ms": row[8], "error": toString(row[9]), "lcp_ms": row[10], "cls": row[11], "ttfb_ms": row[12], "status": toInt(row[13]), "retried": toInt(row[14]) == 1,
+		"trace_id": toString(row[15]), "trace_found": s.traceHasRows(r.Context(), toString(row[15])),
 	})
 }

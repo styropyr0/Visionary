@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, CircleDashed, ListChecks, XCircle } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, CircleDashed, ListChecks, Waypoints, XCircle } from "lucide-react";
 import { DataTable, type Column } from "../components/DataTable";
 import { Drawer } from "../components/Modal";
 import { Panel } from "../components/Panel";
@@ -7,6 +7,7 @@ import { ErrorNotice } from "../components/ErrorNotice";
 import type { Result } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { formatLogTime, formatRelative } from "../lib/time";
+import { traceHref } from "../lib/traces";
 import { getBrowserRun, type BrowserRunSummary, type StepResult, type StepStat } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { StateBadge } from "./Uptime.parts";
@@ -134,6 +135,23 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
               <>
                 <dt>Last page</dt>
                 <dd>HTTP {r.status}</dd>
+              </>
+            )}
+            {r.trace_id && (
+              <>
+                <dt>Trace</dt>
+                <dd>
+                  {r.trace_found ? (
+                    <a className="btn sm" href={traceHref(r.trace_id)}>
+                      <Waypoints size={14} />
+                      Open trace
+                    </a>
+                  ) : (
+                    <span className="dim" title={r.trace_id}>
+                      No backend recorded this run's trace
+                    </span>
+                  )}
+                </dd>
               </>
             )}
           </dl>

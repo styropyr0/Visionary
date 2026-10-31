@@ -77,6 +77,8 @@ variable "probe_password" {
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
+- `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).
+- `trace_origins` (List of String) Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.
 - `url` (String) Address probed (http checks). For browser checks it is the first step's URL.
 
 ### Read-Only
