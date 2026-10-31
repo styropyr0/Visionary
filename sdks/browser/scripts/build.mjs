@@ -4,8 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 
-// Session replay is its own file, loaded only for sessions it records: a
-// split chunk in the ESM build, visionary-replay.min.js for the script tag.
+// Replay is a split chunk in the ESM build and visionary-replay.min.js for the script tag
 const common = { bundle: true, target: "es2019", legalComments: "none" };
 
 await build({

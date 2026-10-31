@@ -61,7 +61,7 @@ internal sealed class SqlStore : IStore
         await using var lease = await OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await lease.Connection.BeginTransactionAsync(ct).ConfigureAwait(false);
         // Only SQLite prepares repeated statements. Npgsql fixes parameter types at prepare time,
-        // which breaks when a column is NULL in one row and a number in the next.
+        // which breaks when a column is NULL in one row and a number in the next
         var uses = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var st in stmts)
         {

@@ -6,7 +6,7 @@ exceptions into ``errors``, and samples host, process and runtime metrics
 into ``system_metrics``, what the app logs through ``logging`` into
 ``app_logs`` (``visionary.capture_logging()``), and custom metrics
 (``visionary.counter("orders", region="eu").add(1)``) into ``metrics``, from
-background threads. Requests and outbound calls carry W3C trace context.
+background threads
 
     import visionary
     agent = visionary.init()            # from VISIONARY_* / D1_* env vars

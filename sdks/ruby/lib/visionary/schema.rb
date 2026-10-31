@@ -58,7 +58,7 @@ module Visionary
       created_at request_id service instance kind name target detail offset_ms duration_ms status error row_count
     ].freeze
 
-    # spans columns added after the first release, in insert order.
+    # Added after the first release, in insert order
     ADDED_SPAN_COLUMNS = [%w[trace_id text], %w[span_id text], %w[parent_span_id text]].freeze
 
     ERROR_COLUMNS = %w[
@@ -92,8 +92,6 @@ module Visionary
       "metrics" => METRIC_COLUMNS
     }.freeze
 
-    # Which script creates a table, the columns older copies may lack, and
-    # whether it gets the trace_id index once they are there.
     GROUPS = {
       requests: { file: "requests.sql", table: "api_logs", added: ADDED_REQUEST_COLUMNS, trace_index: true },
       system: { file: "system.sql", table: "system_metrics", added: ADDED_SYSTEM_COLUMNS },
@@ -134,8 +132,7 @@ module Visionary
       end
     end
 
-    # Not in the shipped scripts: on an older table trace_id only exists
-    # after the upgrade. MySQL has no IF NOT EXISTS here (error 1061 is ignored).
+    # Not in the shipped scripts since older tables only get trace_id on upgrade
     def trace_index(dialect, table)
       ine = dialect == "mysql" ? "" : "IF NOT EXISTS "
       "CREATE INDEX #{ine}idx_#{table}_trace_id ON #{table} (trace_id)"
@@ -172,7 +169,6 @@ module Visionary
       "INSERT INTO #{table} (#{cols.join(', ')}) VALUES (#{([mark] * cols.size).join(', ')})"
     end
 
-    # One INSERT carrying n rows, for SQL backends.
     def insert_rows_sql(table, n)
       cols = TABLES.fetch(table)
       row = "(#{(['?'] * cols.size).join(', ')})"

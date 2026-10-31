@@ -68,7 +68,6 @@ SPAN_COLUMNS = [
     "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
     "offset_ms", "duration_ms", "status", "error", "row_count",
 ]
-# spans columns added later, appended after the ones above.
 ADDED_SPAN_COLUMNS = [("trace_id", "text"), ("span_id", "text"), ("parent_span_id", "text")]
 SPAN_COLUMNS = SPAN_COLUMNS + [name for name, _ in ADDED_SPAN_COLUMNS]
 ERROR_COLUMNS = [
@@ -105,7 +104,6 @@ _SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry"
                  "metrics": "metrics.sql"}
 _MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS),
                "telemetry": ("spans", ADDED_SPAN_COLUMNS)}
-# Tables indexed on trace_id once the added columns exist.
 _TRACE_INDEX = {"requests": "api_logs", "telemetry": "spans"}
 
 # Bound as-is on D1, like the Go SDK, so an empty log message doesn't become NULL.
@@ -119,9 +117,8 @@ _D1_REQUIRED = {
 
 PURGE_CHUNK = 5000
 
-# Parameters per multi-row INSERT; SQLite allows 32766, PostgreSQL and MySQL 65535.
+# SQLite allows 32766 parameters per statement, PostgreSQL and MySQL 65535
 MAX_PARAMS = 30000
-# PostgreSQL and MySQL connections, one per batch in flight.
 POOL_SIZE = 4
 
 # MySQL rejects over-long values in strict mode, which would fail the whole
@@ -181,7 +178,6 @@ def missing_column_statements(dialect: str, table: str, added: Sequence[Tuple[st
 
 
 def trace_index_sql(dialect: str, table: str) -> str:
-    """The trace_id index, created once the migration has added the column."""
     ine = "" if dialect == "mysql" else "IF NOT EXISTS "
     return "CREATE INDEX %sidx_%s_trace_id ON %s (trace_id)" % (ine, table, table)
 
@@ -203,7 +199,6 @@ def _purge_sql(dialect: str, table: str, ph: str) -> str:
 
 @lru_cache(maxsize=64)
 def insert_rows_sql(table: str, cols: Tuple[str, ...], n: int, ph: str) -> str:
-    """One INSERT carrying n rows; ph "$" numbers the placeholders ($1, $2...)."""
     head = "INSERT INTO %s (%s) VALUES " % (table, ", ".join(cols))
     k = len(cols)
     if ph == "$":
@@ -215,7 +210,6 @@ def insert_rows_sql(table: str, cols: Tuple[str, ...], n: int, ph: str) -> str:
 
 def insert_statements(table: str, cols: Sequence[str], rows: List[Tuple[Any, ...]], ph: str,
                       max_params: int = MAX_PARAMS) -> List[Tuple[str, List[Any], int]]:
-    """Split rows into INSERTs of at most max_params parameters, as (sql, params, count)."""
     per = max(1, max_params // len(cols))
     out = []
     for i in range(0, len(rows), per):
@@ -331,10 +325,7 @@ class D1Backend(Backend):
 class SQLBackend(Backend):
     """A DB-API connection obtained from ``connect``.
 
-    PostgreSQL and MySQL keep a pool of up to POOL_SIZE connections, so a few
-    batches can be written at once. SQLite gets one connection per worker
-    thread, because sqlite3 connections refuse cross-thread use by default
-    and are cheap to open.
+    SQLite gets one connection per thread since sqlite3 refuses cross-thread use
     """
 
     def __init__(self, dialect: str, connect: Callable[[], Any]) -> None:
@@ -462,7 +453,7 @@ class SQLBackend(Backend):
             try:
                 for table, rows in work:
                     if self.dialect == "mysql":
-                        # PyMySQL's executemany already batches rows to fit its packet size.
+                        # PyMySQL's executemany already batches rows to fit its packet size
                         cur.executemany(self._sql[table], rows)
                         continue
                     name, cols = TABLES[table]
@@ -474,8 +465,7 @@ class SQLBackend(Backend):
         self._run(write)
 
     def _insert_cursor(self, conn: Any) -> Tuple[Any, str]:
-        """A cursor and its placeholder. psycopg's RawCursor skips re-parsing long
-        multi-row INSERTs, which otherwise costs more than the write."""
+        """psycopg's RawCursor skips re-parsing long multi-row INSERTs, which costs more than the write"""
         psycopg = sys.modules.get("psycopg")
         raw = getattr(psycopg, "RawCursor", None)
         if raw is not None and isinstance(conn, psycopg.Connection):
@@ -625,7 +615,7 @@ def _sqlite_path(rest: str) -> str:
 def _sqlite_connect(path: str) -> Callable[[], Any]:
     import sqlite3
 
-    # The Visionary server shares the file, so wait for its lock instead of failing.
+    # The Visionary server shares the file, so wait for its lock instead of failing
     def connect() -> Any:
         conn = sqlite3.connect(path, timeout=5)
         conn.execute("PRAGMA journal_mode=WAL")

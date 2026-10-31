@@ -1,16 +1,13 @@
 # frozen_string_literal: true
 
 module Visionary
-  # W3C trace context (https://www.w3.org/TR/trace-context/). A request continues
-  # the caller's trace or starts one, and outbound Net::HTTP calls carry it on.
+  # W3C trace context (https://www.w3.org/TR/trace-context/)
   module TraceContext
     KEY = :visionary_span
     TRACEPARENT = "traceparent"
     TRACESTATE = "tracestate"
 
-    # The span that calls made now belong to. flags is the traceparent
-    # trace-flags byte in hex ("01" sampled); state the caller's tracestate,
-    # passed on unchanged.
+    # state is the caller's tracestate, passed on unchanged
     SpanContext = Struct.new(:trace_id, :span_id, :flags, :state) do
       def traceparent = "00-#{trace_id}-#{span_id}-#{flags || '01'}"
     end
@@ -19,8 +16,7 @@ module Visionary
 
     module_function
 
-    # The innermost span: a custom or background span, else the request's
-    # server span. nil outside any trace.
+    # The innermost custom, background or request span, nil outside a trace
     if Fiber.respond_to?(:[])
       def current = Fiber[KEY]
 
@@ -35,7 +31,6 @@ module Visionary
       end
     end
 
-    # Runs the block with sc as the current span.
     def with(sc)
       outer = current
       self.current = sc
@@ -44,15 +39,14 @@ module Visionary
       self.current = outer
     end
 
-    # A traceparent header as a SpanContext, or nil when malformed, version
-    # ff or an all-zero id ("no parent").
+    # nil when malformed, version ff or an all-zero id
     def parse(header)
       parts = String.new(header.to_s.strip, encoding: Encoding::UTF_8).split("-", -1)
       return nil if parts.size < 4
 
       version, trace, span, flags = parts
       return nil unless version.size == 2 && version != "ff" && trace.size == 32 && span.size == 16 && flags.size == 2
-      # Version 00 has exactly four fields; later versions may append more.
+      # Version 00 has exactly four fields, later versions may append more
       return nil if version == "00" && parts.size != 4
       return nil unless [version, trace, span, flags].all? { |p| p.match?(HEX) }
       return nil if trace.delete("0").empty? || span.delete("0").empty?
@@ -64,7 +58,7 @@ module Visionary
 
     def new_span_id = random_hex(8)
 
-    # Not secrets: Ruby's seeded generator is enough. Never all zero.
+    # Not secrets, so Ruby's seeded generator is enough
     def random_hex(bytes)
       loop do
         hex = Random.bytes(bytes).unpack1("H*")
@@ -72,9 +66,6 @@ module Visionary
       end
     end
 
-    # The server span of an incoming request (a Rack env) and the caller's
-    # span id: a child of the caller when traceparent names one (or of the
-    # active OpenTelemetry span), else the root of a new trace.
     def request_span(env)
       if (otel = otel_span)
         return [SpanContext.new(otel.trace_id, new_span_id, otel.flags, env["HTTP_TRACESTATE"]), otel.span_id]
@@ -86,17 +77,13 @@ module Visionary
       [SpanContext.new(new_trace_id, new_span_id, "01", nil), nil]
     end
 
-    # A new span inside the current one, and its parent's span id. Outside any
-    # trace it starts a new one.
     def child(parent = current)
       return [SpanContext.new(new_trace_id, new_span_id, "01", nil), nil] unless parent
 
       [SpanContext.new(parent.trace_id, new_span_id, parent.flags, parent.state), parent.span_id]
     end
 
-    # Sets traceparent (and tracestate) on an outbound request so the service
-    # it reaches continues the trace with sc as the parent. A traceparent the
-    # caller set itself is left alone. Returns the header names it added.
+    # Leaves a traceparent the caller set alone and returns the header names it added
     def inject(req, sc)
       return [] if sc.nil? || req[TRACEPARENT]
 
@@ -109,8 +96,7 @@ module Visionary
       added
     end
 
-    # The active OpenTelemetry span when the app also runs an OpenTelemetry
-    # SDK that already read the header.
+    # An OpenTelemetry SDK in the app has already read the header
     def otel_span
       return nil unless defined?(::OpenTelemetry::Trace)
 

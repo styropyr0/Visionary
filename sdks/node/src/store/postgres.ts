@@ -29,7 +29,7 @@ export class PostgresStore implements Store {
   static fromUrl(url: string, logger: Logger): PostgresStore {
     const pg = optionalRequire("pg");
     if (!pg?.Pool) throw new Error("visionary: PostgreSQL needs the pg package: npm install pg");
-    // Room for the writer's 4 parallel batches and a read.
+    // Room for the writer's 4 parallel batches and a read
     const pool: PgPool = new pg.Pool({ connectionString: url, max: 5, connectionTimeoutMillis: 10_000 });
     // An idle connection that drops emits "error"; unhandled it would crash the app.
     pool.on("error", (e) => logger.warn("visionary: postgres connection error: " + errMessage(e)));
@@ -49,7 +49,7 @@ export class PostgresStore implements Store {
   batch(stmts: Stmt[]): Promise<void> {
     return quietly(async () => {
       // A Pool gives a dedicated connection for the transaction; a single
-      // Client is shared with the app, so its statements go in one by one.
+      // Client is shared with the app, so its statements go in one by one
       if (!this.owned && !("totalCount" in this.db)) {
         for (const s of stmts) await this.db.query(rebind(s.sql), s.args.map(clean));
         return;

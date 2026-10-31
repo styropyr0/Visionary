@@ -11,10 +11,6 @@ did not wait for) keeps the request's id and offset but is not counted in its
 totals. The first ``span_max`` such late spans of a request are queued
 whatever their duration, later ones only when they took at least the
 threshold. ``background`` spans (the work itself) are never counted.
-
-Every span gets its own span id in the trace of the span current when it
-started (the request's, or a custom or background span's); one started
-outside any trace starts a new trace.
 """
 
 from __future__ import annotations
@@ -157,7 +153,6 @@ class Span:
         self.span_id = _tracecontext.new_span_id()
 
     def context(self) -> SpanContext:
-        """The span as the parent of the calls made inside it."""
         return self._parent.child(self.span_id)
 
     @property

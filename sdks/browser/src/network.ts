@@ -5,9 +5,6 @@ import { normalizePath, now, randomId, round, safe } from "./util";
  * Times fetch and XMLHttpRequest calls. The name is "METHOD /path" with ids
  * as :id; the URL loses its query string; status 0 is a network failure.
  * Aborted calls are not reported.
- *
- * Calls to a traced origin send a traceparent and the event keeps its trace
- * id, so the backend's request can be linked to it.
  */
 export function trackNetwork(report: Report, skip: (url: string) => boolean, traced: (origin: string) => boolean) {
   const done = safe((method: string, raw: string, status: number, t0: number, requestId?: string | null, traceId?: string) => {
@@ -28,7 +25,6 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean, tra
     });
   });
 
-  /** A new traceparent for a call to url, or null when its origin is not traced. */
   const traceFor = (url: string): { header: string; traceId: string } | null => {
     try {
       const u = new URL(url, location.href);
@@ -64,7 +60,7 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean, tra
           }
         }
       } catch {
-        // Headers it cannot copy: send the call as it was.
+        // Headers it cannot copy, so send the call as it was
       }
       const t0 = now();
       return originalFetch.call(this, input, init).then(
@@ -103,7 +99,7 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean, tra
           setHeader.call(this, "traceparent", t.header);
           traceId = t.traceId;
         } catch {
-          // not opened: send fails on its own
+          // not opened, send fails on its own
         }
       }
       const t0 = now();

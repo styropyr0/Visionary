@@ -138,7 +138,7 @@ class WriterTest {
         assertTrue(store.maxInFlight.get() <= 4, "in flight " + store.maxInFlight.get());
     }
 
-    /** Takes 500-row batches, up to four at once, slowly enough for them to overlap. */
+    /** Takes 500-row batches, up to four at once, slowly enough for them to overlap */
     private static final class BatchStore implements Store {
         final AtomicInteger batches = new AtomicInteger();
         final AtomicInteger inFlight = new AtomicInteger();
@@ -187,7 +187,7 @@ class WriterTest {
         }
     }
 
-    /** A DataSource over the URL that records every statement prepared. */
+    /** A DataSource over the URL that records every statement prepared */
     private static DataSource recording(String url, List<String> statements) {
         return (DataSource) Proxy.newProxyInstance(WriterTest.class.getClassLoader(), new Class<?>[] {DataSource.class},
                 (proxy, method, args) -> switch (method.getName()) {

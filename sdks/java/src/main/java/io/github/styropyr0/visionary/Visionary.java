@@ -89,9 +89,9 @@ public final class Visionary {
     }
 
     /**
-     * Starts a span; close it (try-with-resources) when the call is done. Until
+     * Starts a span, close it (try-with-resources) when the call is done. Until
      * then it is the parent of the calls made on this thread, in the trace view
-     * and in the {@code traceparent} of outbound requests.
+     * and in the {@code traceparent} of outbound requests
      *
      * @param kind {@code db}, {@code http}, {@code cache}, {@code queue}, {@code background} or {@code custom}
      *             (anything else is stored as {@code custom})
@@ -238,14 +238,7 @@ public final class Visionary {
         };
     }
 
-    /**
-     * The counter {@code name} with labels as key/value pairs; rows hold the increase
-     * over each interval. Keep the handle for hot paths.
-     *
-     * <pre>{@code
-     * Visionary.counter("orders_placed", "region", "eu").add(1);
-     * }</pre>
-     */
+    /** The counter {@code name} with key/value labels, rows hold the increase per interval */
     public static VisionaryCounter counter(String name, String... labels) {
         return new VisionaryCounter(Metrics.REGISTRY.get(name, Metrics.COUNTER, Metrics.pairs(labels)));
     }
@@ -254,7 +247,7 @@ public final class Visionary {
         return new VisionaryCounter(Metrics.REGISTRY.get(name, Metrics.COUNTER, labels));
     }
 
-    /** The gauge {@code name}; rows hold the last value set, every interval once it has been set. */
+    /** The gauge {@code name}, rows hold the last value set */
     public static VisionaryGauge gauge(String name, String... labels) {
         return new VisionaryGauge(Metrics.REGISTRY.get(name, Metrics.GAUGE, Metrics.pairs(labels)));
     }
@@ -263,7 +256,7 @@ public final class Visionary {
         return new VisionaryGauge(Metrics.REGISTRY.get(name, Metrics.GAUGE, labels));
     }
 
-    /** The histogram {@code name}; rows hold each interval's count, sum, min, max and bucket counts. */
+    /** The histogram {@code name}, rows hold count, sum, min, max and buckets per interval */
     public static VisionaryHistogram histogram(String name, String... labels) {
         return new VisionaryHistogram(Metrics.REGISTRY.get(name, Metrics.HISTOGRAM, Metrics.pairs(labels)));
     }
@@ -272,16 +265,12 @@ public final class Visionary {
         return new VisionaryHistogram(Metrics.REGISTRY.get(name, Metrics.HISTOGRAM, labels));
     }
 
-    /**
-     * Sets a metric's unit ({@code ms}, {@code bytes}; null for none) and histogram
-     * bucket upper bounds (none: the defaults). Call it before the metric's first
-     * use; series created earlier keep their buckets.
-     */
+    /** Sets a metric's unit and histogram buckets, call it before the metric's first use */
     public static void describeMetric(String name, String unit, double... buckets) {
         Metrics.REGISTRY.describe(name, unit, buckets);
     }
 
-    /** Rows the background writers have queued, written and dropped, for load tests and health checks. */
+    /** Rows the background writers have queued, written and dropped */
     public static VisionaryWriterStats writerStats() {
         return VisionaryWriterStats.snapshot();
     }

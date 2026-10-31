@@ -7,10 +7,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Runs a writer's batches, on several threads when the store allows parallel
- * writes (PostgreSQL, MySQL) so the writer can keep filling the next one.
- */
+/** Runs batches on several threads when the store allows parallel writes */
 final class WriterFlushes {
 
     private final Store store;
@@ -26,7 +23,7 @@ final class WriterFlushes {
         this.stackSize = stackSize;
     }
 
-    /** Called from the writer thread only. */
+    /** Called from the writer thread only */
     void run(Runnable write) {
         int n = store == null ? 1 : store.parallelWrites();
         if (n <= 1) {
@@ -57,7 +54,6 @@ final class WriterFlushes {
         }
     }
 
-    /** Waits for the writes in flight, at most {@code timeout}. */
     void finish(Duration timeout) {
         if (pool == null) {
             return;

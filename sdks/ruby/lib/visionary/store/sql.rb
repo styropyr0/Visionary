@@ -6,9 +6,7 @@ module Visionary
   module Store
     class ConfigError < StandardError; end
 
-    # Connections opened from VISIONARY_DATABASE_URL with whichever of pg, mysql2
-    # or sqlite3 the app has. Up to four on PostgreSQL and MySQL so batches write
-    # in parallel; one on SQLite, which takes one writer at a time.
+    # Up to four connections on PostgreSQL and MySQL, one on SQLite
     class SQL
       PARALLEL = 4
 
@@ -45,8 +43,7 @@ module Visionary
         run { |c| c.rows(sql) }
       end
 
-      # One transaction for the whole batch. Statements that repeat are
-      # prepared once; one-off ones (multi-row INSERTs) run directly.
+      # Repeated statements are prepared once, multi-row INSERTs run directly
       def batch(stmts)
         uses = Hash.new(0)
         stmts.each { |sql, _| uses[sql] += 1 }
@@ -70,8 +67,7 @@ module Visionary
         run { |c| c.execute(sql, args) }
       end
 
-      # The parent's sockets stay referenced so no finalizer closes them from
-      # the child; new connections open lazily.
+      # The parent's sockets stay referenced so no finalizer closes them from the child
       def after_fork
         (@inherited ||= []).concat(@all)
         reset_pool
@@ -294,7 +290,7 @@ module Visionary
         stmt.affected_rows
       end
 
-      # Not cached: the server caps prepared statements per connection.
+      # Not cached since the server caps prepared statements per connection
       def execute_once(sql, args)
         return execute(sql, args) if args.empty?
 
@@ -332,7 +328,7 @@ module Visionary
     class Sqlite3Conn
       def initialize(path)
         @db = SQLite3::Database.new(path)
-        # The Visionary server shares the file, so wait up to 5 s for its lock.
+        # The Visionary server shares the file, so wait for its lock
         @db.busy_timeout = 5000
         begin
           @db.execute("PRAGMA journal_mode=WAL")

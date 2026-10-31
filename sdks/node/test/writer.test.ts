@@ -11,7 +11,6 @@ import { Writer } from "../src/writer.js";
 
 const quiet = { info() {}, warn() {}, error() {} };
 
-/** Records what it is asked to write. */
 function fakeStore(dialect: Store["dialect"], stringParams = false, fail = false): Store & { written: Stmt[][] } {
   const written: Stmt[][] = [];
   return {

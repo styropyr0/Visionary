@@ -30,7 +30,6 @@ export class RequestState {
   done = false;
   /** Spans of background work stored after the request was logged. */
   late = 0;
-  /** The request's server span, and the caller's span from traceparent. */
   span?: SpanContext;
   parentSpanId = "";
   /** An error was captured, so the request counts as failed. */

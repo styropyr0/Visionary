@@ -133,7 +133,6 @@ export type Value = string | number | null;
 export interface Stmt {
   sql: string;
   args: Value[];
-  /** Rows a multi-row INSERT carries (default 1). */
   rows?: number;
 }
 
@@ -145,17 +144,15 @@ export function insertSQL(table: Table, stringParams: boolean): string {
   return `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => ph).join(", ")})`;
 }
 
-/** Bound parameters per statement, under every backend's limit (SQLite's is 32766). */
+/** Under every backend's limit (SQLite's is 32766) */
 export const MAX_PARAMS = 30_000;
 
-/** One INSERT carrying n rows, for SQL backends. */
 export function insertRowsSQL(table: Table, n: number): string {
   const cols = TABLE_COLUMNS[table];
   const row = `(${cols.map(() => "?").join(", ")})`;
   return `INSERT INTO ${table} (${cols.join(", ")}) VALUES ${Array(n).fill(row).join(", ")}`;
 }
 
-/** A table's rows as multi-row INSERTs, each under MAX_PARAMS. */
 export function insertRows(table: Table, rows: Value[][]): Stmt[] {
   const per = Math.max(1, Math.floor(MAX_PARAMS / TABLE_COLUMNS[table].length));
   const out: Stmt[] = [];
@@ -202,8 +199,7 @@ export function statements(script: string): string[] {
     .filter(Boolean);
 }
 
-/** The index on a table's trace_id, created after the added columns since
- * older tables only have trace_id from then on. */
+// Runs after the added columns, since older tables only get trace_id then
 export function traceIndexSQL(dialect: Dialect, table: Table): string {
   const ine = dialect === "mysql" ? "" : "IF NOT EXISTS ";
   return `CREATE INDEX ${ine}idx_${table}_trace_id ON ${table} (trace_id)`;

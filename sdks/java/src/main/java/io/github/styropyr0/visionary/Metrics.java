@@ -15,11 +15,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Counters, gauges and histograms, summed in memory and written as one row per
- * series every interval. Label sets past the per-name cap are dropped and counted,
- * so a label holding user ids can't fill the database.
- */
+/** Label sets past the per-name cap are dropped, so user ids in a label can't fill the database */
 final class Metrics {
 
     static final String COUNTER = "counter";
@@ -32,7 +28,7 @@ final class Metrics {
     static final int MAX_LABEL_VALUE = 200;
     static final int DEFAULT_MAX_SERIES = 1000;
 
-    /** OpenTelemetry's defaults, which suit milliseconds. */
+    /** OpenTelemetry's defaults, which suit milliseconds */
     static final double[] DEFAULT_BUCKETS = {0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000};
 
     static final Metrics REGISTRY = new Metrics();
@@ -42,13 +38,12 @@ final class Metrics {
     private Map<String, Long> dropped = new HashMap<>();
     private final Map<String, Options> options = new ConcurrentHashMap<>();
     volatile int maxSeries = DEFAULT_MAX_SERIES;
-    /** False with VISIONARY_METRICS=false: every call records nothing. */
     volatile boolean enabled = true;
 
     private record Options(String unit, double[] buckets) {
     }
 
-    /** One series: a name, a kind and a label set. Guarded by itself. */
+    /** One series, guarded by itself */
     static final class Series {
         final String name;
         final String kind;
@@ -117,7 +112,6 @@ final class Metrics {
         }
     }
 
-    /** One {@code metrics} row. */
     record Row(Instant at, String name, String kind, String unit, String labels, String series, double value,
             Long count, Double sum, Double min, Double max, String buckets) {
     }
@@ -134,7 +128,7 @@ final class Metrics {
         options.put(name, new Options(unit == null || unit.isBlank() ? null : unit, b));
     }
 
-    /** The series, or null when the name is empty or the name is over its series cap. */
+    /** Null when the name is empty or over its series cap */
     synchronized Series get(String name, String kind, Map<String, String> labels) {
         name = cleanName(name);
         if (!enabled || name.isEmpty()) {
@@ -161,7 +155,6 @@ final class Metrics {
         return s;
     }
 
-    /** Identifies a series in the registry without building its JSON. */
     private static String key(String name, String kind, Map<String, String> labels) {
         StringBuilder b = new StringBuilder(name).append('\u0000').append(kind);
         if (labels != null && !labels.isEmpty()) {
@@ -172,7 +165,7 @@ final class Metrics {
         return b.toString();
     }
 
-    /** Dropped series counts by name since the last call. */
+    /** Dropped series counts by name since the last call */
     synchronized Map<String, Long> takeDropped() {
         Map<String, Long> out = dropped;
         if (!out.isEmpty()) {
@@ -181,7 +174,7 @@ final class Metrics {
         return out;
     }
 
-    /** Counters and histograms that moved this interval, plus every gauge ever set. */
+    /** Counters and histograms that moved this interval, plus every gauge ever set */
     List<Row> collect(Instant now) {
         List<Series> all;
         synchronized (this) {
@@ -222,7 +215,7 @@ final class Metrics {
         return out;
     }
 
-    /** For tests: forgets every series and option. */
+    /** For tests: forgets every series and option */
     synchronized void reset() {
         series.clear();
         perName.clear();
@@ -250,7 +243,7 @@ final class Metrics {
         return b.append("]}").toString();
     }
 
-    /** A JSON number as Go writes a float64: no ".0" on whole numbers. */
+    /** A JSON number as Go writes a float64, with no ".0" on whole numbers */
     static String number(double v) {
         if (v == Math.rint(v) && Math.abs(v) < 1e21) {
             return Long.toString((long) v);
@@ -264,7 +257,7 @@ final class Metrics {
 
     /**
      * Labels as JSON with keys in UTF-8 byte order, and the series id: the first 16
-     * hex digits of SHA-256 over the name, a newline and that JSON.
+     * hex digits of SHA-256 over the name, a newline and that JSON
      */
     static String[] series(String name, Map<String, String> labels) {
         TreeMap<byte[], String[]> sorted = new TreeMap<>(Arrays::compareUnsigned);
@@ -301,7 +294,7 @@ final class Metrics {
         }
     }
 
-    /** Escapes only what JSON requires, so every SDK produces the same bytes. */
+    /** Escapes only what JSON requires, so every SDK produces the same bytes */
     private static void quote(StringBuilder b, String s) {
         b.append('"');
         for (int i = 0; i < s.length(); i++) {
@@ -321,7 +314,7 @@ final class Metrics {
         return name == null ? "" : cut(name.strip(), MAX_NAME);
     }
 
-    /** At most {@code max} bytes of UTF-8, cut on a character boundary; lone surrogates become U+FFFD. */
+    /** At most {@code max} bytes of UTF-8, cut on a character boundary, with lone surrogates as U+FFFD */
     static String cut(String s, int max) {
         StringBuilder valid = null;
         for (int i = 0; i < s.length(); i++) {
@@ -350,7 +343,7 @@ final class Metrics {
         return new String(b, 0, n, StandardCharsets.UTF_8);
     }
 
-    /** Key/value pairs; a key without a value gets "". */
+    /** Key/value pairs, and a key without a value gets "" */
     static Map<String, String> pairs(String... kv) {
         if (kv == null || kv.length == 0) {
             return Map.of();

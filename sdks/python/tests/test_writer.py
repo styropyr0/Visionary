@@ -1,8 +1,3 @@
-"""Tests for the batched writer (SPEC "Writing rows").
-
-Run from sdks/python:  python -m unittest discover -s tests -v
-"""
-
 from __future__ import annotations
 
 import logging

@@ -9,37 +9,37 @@ export type { PWTestCase, PWTestResult } from "./types.js";
 declare const __REPORTER_VERSION__: string;
 
 export interface VisionaryReporterOptions {
-  /** Visionary's address. Default: VISIONARY_URL. */
+  /** Visionary's address (default VISIONARY_URL) */
   server?: string;
-  /** An API key with the CI scope. Default: VISIONARY_KEY. */
+  /** An API key with the CI scope (default VISIONARY_KEY) */
   key?: string;
-  /** How often runs arrive, in seconds or "10m", "1h", "1d"; a check with no run for longer goes stale. Applies to new checks only. */
+  /** Seconds or "10m", "1h", "1d". A new check with no run for longer goes stale */
   expectedInterval?: string | number;
-  /** Shown with each run. Default: VISIONARY_RELEASE. */
+  /** Default VISIONARY_RELEASE */
   release?: string;
-  /** Shown with each run. Default: VISIONARY_COMMIT, then the CI's commit variable. */
+  /** Default VISIONARY_COMMIT, then the CI's commit variable */
   commit?: string;
-  /** Upload a failed test's screenshot when it is at most maxScreenshotBytes. Default true. */
+  /** Upload a failed test's screenshot up to maxScreenshotBytes (default true) */
   screenshots?: boolean;
-  /** Upload the trace when it is at most maxTraceBytes. Default true. */
+  /** Upload the trace up to maxTraceBytes (default true) */
   traces?: boolean;
   maxScreenshotBytes?: number;
   maxTraceBytes?: number;
-  /** Per request. Default 15000. */
+  /** Per request (default 15000) */
   timeoutMs?: number;
-  /** Print nothing but problems. Default false. */
+  /** Print only problems (default false) */
   quiet?: boolean;
-  /** For tests. */
+  /** For tests */
   fetch?: typeof fetch;
 }
 
-/** The server keeps screenshots and traces up to these sizes. */
+/** The server keeps screenshots and traces up to these sizes */
 const SCREENSHOT_LIMIT = 256 * 1024;
 const TRACE_LIMIT = 768 * 1024;
 const MAX_STEPS = 100;
 const PARALLEL = 4;
 
-/** One test run as the server takes it (POST /api/uptime/playwright). */
+/** POST /api/uptime/playwright */
 export interface RunPayload {
   project: string;
   title: string;
@@ -62,9 +62,8 @@ export interface RunPayload {
 }
 
 /**
- * Sends each test's final result (after its retries) to Visionary, where it
- * becomes a check of kind playwright keyed by project and title path.
- * Reporting never fails the test run: problems are printed and skipped.
+ * Sends each test's final result to Visionary as a playwright check
+ * Problems are printed and never fail the run
  */
 export default class VisionaryReporter {
   private readonly opts: VisionaryReporterOptions;
@@ -174,7 +173,7 @@ export default class VisionaryReporter {
   }
 }
 
-/** Only the last attempt counts: the one that passed, or the last retry. */
+/** Only the attempt that passed or the last retry counts */
 export function isFinal(test: PWTestCase, result: PWTestResult): boolean {
   return result.status === test.expectedStatus || result.status === "skipped" || result.retry >= test.retries || result.status === "interrupted";
 }
@@ -227,9 +226,8 @@ function errorText(result: PWTestResult): string {
 }
 
 /**
- * Test steps and the actions in them, in order. Hooks are left out but their
- * actions kept; fixtures only when they failed. Depth is how deep a step sits
- * in test.step().
+ * Hooks are left out but their actions kept, and fixtures only when they failed
+ * Depth is how deep a step sits in test.step()
  */
 export function flattenSteps(steps: PWStep[]): RunPayload["steps"] {
   const out: RunPayload["steps"] = [];
@@ -284,7 +282,6 @@ async function attachments(list: PWAttachment[], opts: VisionaryReporterOptions)
 
 const TRACEPARENT = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}/i;
 
-/** The trace id from a traceparent or trace_id annotation, or a traceparent attachment. */
 export function traceIdOf(annotations: PWAnnotation[], atts: PWAttachment[] = []): string | undefined {
   const values: string[] = [];
   for (const a of annotations) {
@@ -302,16 +299,14 @@ export function traceIdOf(annotations: PWAnnotation[], atts: PWAttachment[] = []
 }
 
 /**
- * A new W3C traceparent for a test: send `header` with the test's requests
- * (extraHTTPHeaders) and add it as a `traceparent` annotation, and the run
- * links to the trace your services recorded.
+ * Send `header` with the test's requests and add it as a `traceparent`
+ * annotation, so the run links to the trace your services recorded
  */
 export function newTraceparent(): { header: string; traceId: string } {
   const traceId = randomBytes(16).toString("hex");
   return { header: `00-${traceId}-${randomBytes(8).toString("hex")}-01`, traceId };
 }
 
-/** Seconds from 600, "600", "10m", "1h" or "1d". */
 export function parseInterval(v: string | number | undefined): number | undefined {
   if (v === undefined || v === "") return undefined;
   if (typeof v === "number") return v > 0 ? Math.round(v) : undefined;
@@ -322,9 +317,8 @@ export function parseInterval(v: string | number | undefined): number | undefine
 }
 
 /**
- * A POST without keep-alive. Playwright exits right after onEnd, and on
- * Windows the global fetch's pooled sockets closing at that moment can crash
- * Node and replace the test run's exit code.
+ * No keep-alive. Playwright exits right after onEnd, and on Windows pooled
+ * sockets closing then can crash Node and change the exit code
  */
 const post: typeof fetch = (input, init) =>
   new Promise<Response>((resolve, reject) => {

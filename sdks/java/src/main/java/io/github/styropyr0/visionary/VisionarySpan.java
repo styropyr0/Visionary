@@ -34,9 +34,7 @@ public final class VisionarySpan implements AutoCloseable {
     double durationMs;
     /** Rows returned or affected; -1 when unknown. Result sets update it as they are read. */
     volatile long rowCount = -1;
-    /** This span as the parent of calls made inside it; null for the no-op span. */
     final TraceContext context;
-    /** The span it was started in; null when it started a trace. */
     final String parentSpanId;
     private Thread owner;
     private TraceContext previous;
@@ -61,7 +59,7 @@ public final class VisionarySpan implements AutoCloseable {
         this.parentSpanId = parent == null ? null : parent.spanId;
     }
 
-    /** Makes this span the parent of calls made on this thread until it closes. */
+    /** Makes this span the parent of calls made on this thread until it closes */
     VisionarySpan makeCurrent() {
         if (context != null) {
             owner = Thread.currentThread();

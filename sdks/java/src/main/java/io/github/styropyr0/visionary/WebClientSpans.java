@@ -12,7 +12,6 @@ import reactor.core.publisher.Mono;
  * is on the classpath. The span joins the request that is current on the thread
  * that subscribes, which for {@code block()} in a servlet handler is the request
  * thread; exchanges subscribed on reactor threads are stored as background spans.
- * The request carries a W3C {@code traceparent} naming its span.
  */
 final class WebClientSpans implements ExchangeFilterFunction {
 
@@ -31,7 +30,7 @@ final class WebClientSpans implements ExchangeFilterFunction {
         });
     }
 
-    /** The request with traceparent (and tracestate) unless it has its own; the original is immutable. */
+    /** Adds traceparent and tracestate unless the request has its own */
     private static ClientRequest traced(ClientRequest request, TraceContext tc) {
         if (tc == null || request.headers().containsKey(TraceContext.TRACEPARENT)) {
             return request;

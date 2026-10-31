@@ -1,8 +1,3 @@
-"""Tests for custom metrics (SPEC "Custom metrics").
-
-Run from sdks/python:  python -m unittest discover -s tests -v
-"""
-
 from __future__ import annotations
 
 import os

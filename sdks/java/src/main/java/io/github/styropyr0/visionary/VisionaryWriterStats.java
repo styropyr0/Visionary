@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * How far behind the database the background writers are, summed across
- * requests, logs and metrics.
+ * requests, logs and metrics
  *
  * @param queued  rows waiting for the database
  * @param written rows written since start
@@ -13,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public record VisionaryWriterStats(int queued, long written, long dropped) {
 
-    /** A running writer's counters. */
     interface Source {
         int queued();
 

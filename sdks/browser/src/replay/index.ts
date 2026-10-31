@@ -2,14 +2,12 @@ import type { ReplayOptions } from "../types";
 import { onHidden } from "../util";
 import { FULL, Recorder, type Ev } from "./record";
 
-/** What the base SDK hands the recorder when it loads it. */
 export interface ReplayContext {
-  /** .../api/ingest/replay */
   url: string;
   key: string;
   sid: string;
   app: string;
-  /** See replayMode in replay-load.ts. */
+  /** See replayMode in replay-load.ts */
   mode: string;
   user: () => string | undefined;
   fetch: typeof fetch;
@@ -22,7 +20,7 @@ export interface ReplayHandle {
 
 const FLUSH_MS = 5000;
 const CHECKOUT_MS = 30_000;
-/** Under the server's 512 KB limit. */
+/** Under the server's 512 KB limit */
 const MAX_BODY = 500_000;
 const BEACON_MAX = 60_000;
 const MAX_PAGE_MS = 2 * 3600_000;
@@ -44,11 +42,6 @@ async function gzip(text: string): Promise<ArrayBuffer | null> {
   return new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
 }
 
-/**
- * Records the page. A recorded session uploads a chunk every few seconds; an
- * error-sampled one keeps 30 to 60 s in memory and uploads it only when an
- * error happens, then records the rest of the session.
- */
 export function record(ctx: ReplayContext): ReplayHandle {
   let full = ctx.mode === "1" || ctx.mode === "x";
   const reason = ctx.mode === "1" ? "sample" : "error";
@@ -102,7 +95,7 @@ export function record(ctx: ReplayContext): ReplayHandle {
       })
       .then(
         (r) => {
-          // 4xx: replays are off, over a limit or the key is wrong.
+          // 4xx means replays are off, over a limit or the key is wrong
           if (r.status >= 400 && r.status < 500) stop();
         },
         () => {},
@@ -129,14 +122,14 @@ export function record(ctx: ReplayContext): ReplayHandle {
     events = [];
     lastFull = 0;
     if (beacon && navigator.sendBeacon) {
-      // The page may be unloading, so there's no time to compress.
+      // The page may be unloading, so there's no time to compress
       const json = JSON.stringify(batch);
       const q = query(batch, "json");
       q.set("key", ctx.key);
       try {
         if (json.length <= BEACON_MAX && navigator.sendBeacon(`${ctx.url}?${q}`, json)) return;
       } catch {
-        // Fall through to fetch.
+        // Fall through to fetch
       }
     }
     queue = queue.then(() => upload(batch)).catch(() => {});
@@ -170,11 +163,11 @@ export function record(ctx: ReplayContext): ReplayHandle {
       try {
         sessionStorage.setItem("vis.replay", `${ctx.sid}:x`);
       } catch {
-        // This page still records.
+        // This page still records
       }
       clearInterval(timer);
       timer = setInterval(tick, FLUSH_MS);
-      // A moment later, so the page's reaction to the error is in it.
+      // A moment later, so the page's reaction to the error is in it
       setTimeout(() => flush(false), 1000);
     },
   };

@@ -33,35 +33,28 @@ export interface InitOptions {
   app?: string;
   /** fetch/XHR calls to skip, by substring or pattern of the URL. */
   ignoreUrls?: (string | RegExp)[];
-  /**
-   * Other origins whose fetch/XHR calls get a W3C traceparent header, e.g.
-   * "https://api.example.com" or /\.example\.com$/. The page's own origin
-   * always does. Their CORS must allow the header (Access-Control-Allow-Headers).
-   */
+  /** Other origins that get a traceparent header (the page's own always does). Their CORS must allow it */
   traceOrigins?: (string | RegExp)[];
   /** Also send console lines to Logs (they still print). Off by default; at most 120 a minute. */
   captureConsole?: boolean;
   /** The lowest console level sent when captureConsole is on. Default "info". */
   logLevel?: LogLevel;
-  /** Session replay; off unless set. The recorder is loaded only for sessions it records. */
+  /** Session replay, off unless set */
   replay?: ReplayOptions;
 }
 
 export interface ReplayOptions {
-  /** Share of sessions recorded from the start, 0 to 1. Default 0. */
+  /** Share of sessions recorded from the start, 0 to 1 (default 0) */
   sampleRate?: number;
-  /** Share of the other sessions whose last minute is sent when an error happens, 0 to 1. Default 0. */
+  /** Share of other sessions whose last minute is sent on an error, 0 to 1 (default 0) */
   onErrorSampleRate?: number;
-  /**
-   * Input values are recorded as asterisks. Default true. Passwords, emails,
-   * phone numbers, card fields and hidden inputs are never recorded either way.
-   */
+  /** Mask input values as asterisks (default true). Passwords, emails and card fields are never recorded */
   maskInputs?: boolean;
-  /** Record all text as asterisks. Default false; data-visionary-mask masks one element's text. */
+  /** Mask all text (default false). data-visionary-mask masks one element */
   maskAllText?: boolean;
-  /** Elements recorded as an empty box, besides those with data-visionary-block. */
+  /** Elements recorded as an empty box, besides data-visionary-block ones */
   blockSelector?: string;
-  /** Where the script-tag build loads the recorder from. Default: visionary-replay.min.js next to visionary.min.js. */
+  /** Recorder URL for the script-tag build (default visionary-replay.min.js beside visionary.min.js) */
   src?: string;
 }
 

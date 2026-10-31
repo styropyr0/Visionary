@@ -61,8 +61,6 @@ const MIGRATIONS: Partial<Record<Schema, [Table, [string, Kind][]]>> = {
   telemetry: ["spans", ADDED_SPAN_COLUMNS],
 };
 
-/** Creates a schema's tables, adds the columns an older table is missing,
- * then the trace index of api_logs and spans. */
 export async function createSchema(store: Store, schema: Schema): Promise<void> {
   await store.execScript(SCHEMAS[store.dialect][schema]);
   const migration = MIGRATIONS[schema];

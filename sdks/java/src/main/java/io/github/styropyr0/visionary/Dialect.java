@@ -83,7 +83,7 @@ enum Dialect {
         };
     }
 
-    /** The trace index of a table; MySQL has no IF NOT EXISTS here (error 1061 when it exists). */
+    /** MySQL has no IF NOT EXISTS here, so error 1061 means the index exists */
     String traceIndex(String table) {
         return "CREATE INDEX " + (this == MYSQL ? "" : "IF NOT EXISTS ") + "idx_" + table + "_trace_id ON "
                 + table + " (trace_id)";

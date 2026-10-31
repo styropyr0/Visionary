@@ -13,8 +13,7 @@ import { currentSpan, traceparent } from "./trace.js";
  * and the http/https modules (axios, got, node-fetch, SDKs) by wrapping
  * request/get. A span ends when the response headers arrive, like Go's
  * RoundTripper; status is "error" on a transport error or a 5xx. Each
- * request carries a traceparent naming its span, so the service it reaches
- * can continue the trace.
+ * request carries a traceparent naming its span
  */
 let installed = false;
 
@@ -42,8 +41,7 @@ function startHttpSpan(method: string, origin: string, path: string): ActiveSpan
   return startSpan({ kind: "http", name: `${m} ${host}`, target: host, detail: `${m} ${base}${path.split("?")[0]}` });
 }
 
-/** The span an outbound request names as its parent: its own http span, else
- * (span capture off) the current span. The SDK's own calls carry none. */
+// Its own http span, else the current span when span capture is off
 function outgoing(s: ActiveSpan | undefined): SpanContext | undefined {
   if (s) return s.context();
   return isQuiet() ? undefined : currentSpan();
@@ -85,7 +83,7 @@ function subscribeUndici(): void {
   });
 }
 
-/** Undici keeps request headers as flat [name, value, ...] (v6+) or as raw text (v5). */
+// Undici keeps headers as flat [name, value, ...] (v6+) or raw text (v5)
 function undiciHas(headers: unknown, name: string): boolean {
   if (Array.isArray(headers)) {
     for (let i = 0; i < headers.length; i += 2) if (String(headers[i]).toLowerCase() === name) return true;
@@ -108,7 +106,7 @@ function wrapModule(mod: typeof http | typeof https): void {
     }
     return req;
   };
-  // get must use the wrapped request so traceparent is set before end().
+  // get must use the wrapped request so traceparent is set before end()
   const get = function (this: unknown, ...args: any[]) {
     const req = request.apply(this, args);
     req.end();

@@ -42,9 +42,7 @@ module Visionary
         @limiter = Errors::Limiter.new
       end
 
-      # start_mono and duration_ms are CLOCK_MONOTONIC milliseconds. trace is a
-      # [SpanContext, parent span id] pair from TraceContext.child; without it the
-      # span is a child of the current one.
+      # start_mono and duration_ms are CLOCK_MONOTONIC milliseconds
       def span(kind:, name:, start_mono:, duration_ms:, target: nil, detail: nil, status: "ok", error: nil,
                row_count: nil, trace: nil)
         return unless @spans_on && @writer

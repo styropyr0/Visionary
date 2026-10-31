@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>One write with typed args: string, long, double or null. Rows counts the rows a multi-row INSERT carries.</summary>
+// Rows counts the rows a multi-row INSERT carries
 internal readonly record struct Stmt(string Sql, object?[] Args, int Rows = 1);
 
 /// <summary>Where rows go: D1 over REST, or an ADO.NET database.</summary>

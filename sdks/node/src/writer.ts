@@ -11,7 +11,7 @@ import type { Store } from "./store/store.js";
 import { formatTs, sleep } from "./util.js";
 
 const QUEUE_SIZE = 5000;
-/** D1 takes 50 statements a call, one per row. */
+/** D1 takes 50 statements a call, one per row */
 const D1_BATCH = 50;
 const SQL_BATCH = 500;
 const MAX_SQL_BATCH = 2000;
@@ -26,7 +26,6 @@ export interface WriterOptions {
   logRow?: (r: LogRecord) => Value[];
 }
 
-/** Rows waiting for the database, and rows written or dropped since start. */
 export interface WriterStats {
   queued: number;
   written: number;
@@ -34,8 +33,8 @@ export interface WriterStats {
 }
 
 /**
- * Queues rows without blocking and writes them in batches every 3 s, or as
- * soon as a batch fills. A full queue drops rows and counts them.
+ * Queues rows without blocking and writes them in batches every 3 s or when
+ * one fills. A full queue drops rows and counts them
  */
 export class Writer {
   private queue: Item[] = [];
@@ -118,8 +117,6 @@ export class Writer {
     if (late) this.logger.warn(`visionary: flush timed out; ${this.queue.length} rows pending`);
   }
 
-  /** Writes full batches (or, with partial, whatever is queued) while a
-   * writer is free; each write that finishes starts the next. */
   private kick(partial: boolean): void {
     while (this.flights.size < this.parallel && (this.queue.length >= this.batchSize || (partial && this.queue.length > 0))) {
       const flight: Promise<void> = this.write(this.queue.splice(0, this.batchSize))
@@ -164,7 +161,6 @@ export class Writer {
     this.logger.error(`visionary: batch write failed; ${batch.length} rows dropped: ${errMessage(err)}`);
   }
 
-  /** One INSERT per row on D1; elsewhere each table's rows as multi-row INSERTs. */
   async statements(batch: Item[]): Promise<Stmt[]> {
     const users = await this.lookupUsers(batch);
     const rows = batch.map((item): [Table, Value[]] => {

@@ -195,7 +195,7 @@ module Visionary
         !local.nil? && n < local
       end
 
-      # Falls back to the active OpenTelemetry span outside any Visionary span.
+      # Falls back to the active OpenTelemetry span outside any Visionary span
       def otel(rec)
         return unless defined?(::OpenTelemetry::Trace)
         return if TraceContext.current

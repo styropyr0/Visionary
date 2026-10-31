@@ -38,7 +38,6 @@ export interface Entry {
   dbMs: number | null;
   httpCount: number | null;
   httpMs: number | null;
-  /** The request's trace, with spanId as its server span. */
   traceId: string;
   spanId: string;
   parentSpanId: string;

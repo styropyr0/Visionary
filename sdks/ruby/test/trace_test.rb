@@ -27,7 +27,6 @@ class TraceTest < Minitest::Test
     %i[debug info warn error].each { |m| define_method(m) { |_msg = nil| nil } }
   end
 
-  # Just enough of an Agent for the middleware and Visionary.span.
   class FakeAgent
     attr_reader :config, :http, :telemetry, :logger, :writer
 
@@ -90,7 +89,6 @@ class TraceTest < Minitest::Test
 
   def request = @writer.of(:request).last
 
-  # A server that answers every request with 200 and remembers its headers.
   def with_server
     server = TCPServer.new("127.0.0.1", 0)
     seen = Queue.new
@@ -128,7 +126,7 @@ class TraceTest < Minitest::Test
     ].each { |bad| assert_nil T.parse(bad), bad }
   end
 
-  # Rack headers are binary strings, which database drivers store as blobs.
+  # Rack headers are binary strings, which database drivers store as blobs
   def test_parse_returns_utf8_ids
     sc = T.parse(TP.b)
     assert_equal Encoding::UTF_8, sc.trace_id.encoding
@@ -268,7 +266,7 @@ class TraceTest < Minitest::Test
   end
 
   def test_old_tables_gain_trace_columns_and_index
-    # Not Dir.mktmpdir: Windows may still hold the file when the block ends.
+    # Not Dir.mktmpdir since Windows may still hold the file when the block ends
     dir = Dir.mktmpdir
     begin
       path = "#{dir}/t.db"

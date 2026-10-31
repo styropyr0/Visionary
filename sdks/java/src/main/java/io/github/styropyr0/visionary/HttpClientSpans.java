@@ -11,8 +11,6 @@ import org.springframework.http.client.ClientHttpResponse;
 /**
  * An {@code http} span per {@code RestTemplate} or {@code RestClient} call, timed
  * until the response headers arrive. A transport error or a 5xx marks it failed.
- * Each request carries a W3C {@code traceparent} naming its span (the current
- * span when spans are off), so the service it reaches continues the trace.
  */
 final class HttpClientSpans implements ClientHttpRequestInterceptor {
 
@@ -36,7 +34,6 @@ final class HttpClientSpans implements ClientHttpRequestInterceptor {
         }
     }
 
-    /** Sets traceparent (and tracestate) unless the application set its own. */
     static void inject(HttpHeaders headers, TraceContext tc) {
         if (tc == null || headers.containsKey(TraceContext.TRACEPARENT)) {
             return;

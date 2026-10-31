@@ -221,10 +221,7 @@ public sealed class TraceTests : IDisposable
         Assert.Equal((InTrace, server.SpanId), (line.TraceId, line.SpanId));
     }
 
-    /// <summary>
-    /// /a continues the caller's trace and calls /b inside a custom span; /b should land in the
-    /// same trace under the http span.
-    /// </summary>
+    // /b should land in the caller's trace under /a's http span
     [Fact]
     public async Task ATraceSpansTwoRequests()
     {
@@ -256,7 +253,7 @@ public sealed class TraceTests : IDisposable
         await app.StartAsync();
         try
         {
-            // Stopping before the tables exist would leave nothing to read.
+            // Stopping before the tables exist would leave nothing to read
             for (var i = 0; i < 100 && Rows("SELECT name FROM sqlite_master WHERE name = 'idx_spans_trace_id'").Count == 0; i++)
             {
                 await Task.Delay(50);
@@ -283,7 +280,7 @@ public sealed class TraceTests : IDisposable
         var a = Assert.Single(requests, r => r[0] == "/a");
         var b = requests.First(r => r[0] == "/b");
         var custom = Assert.Single(spans, s => s[0] == "custom");
-        // The test's own call to /a is an http span too.
+        // The test's own call to /a is an http span too
         var http = Assert.Single(spans, s => s[0] == "http" && s[4] == custom[3]);
 
         Assert.NotNull(activitySpan);

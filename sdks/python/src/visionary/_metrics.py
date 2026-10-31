@@ -1,16 +1,4 @@
-"""Counters, gauges and histograms the application defines.
-
-Values add up in memory and the agent writes one ``metrics`` row per series
-every interval (15 s by default). Recording never waits for the database::
-
-    visionary.counter("orders_placed", region="eu").add(1)
-    visionary.gauge("queue_depth", queue="emails").set(n)
-    visionary.histogram("checkout_ms").observe(took_ms)
-
-Each label set is one series. Past ``VISIONARY_METRICS_MAX_SERIES`` (1000)
-series per name, new ones are dropped, so a label holding user ids can't fill
-the database.
-"""
+"""Counters, gauges and histograms, written as one ``metrics`` row per series every interval"""
 
 from __future__ import annotations
 
@@ -34,7 +22,7 @@ MAX_LABEL_VALUE = 200
 DEFAULT_MAX_SERIES = 1000
 QUEUE_SIZE = 20000
 
-# OpenTelemetry's default bucket bounds, which suit milliseconds.
+# OpenTelemetry's default bounds, in milliseconds
 DEFAULT_BUCKETS = (0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0, 250.0, 500.0, 750.0, 1000.0, 2500.0, 5000.0, 7500.0,
                    10000.0)
 
@@ -68,15 +56,13 @@ class _Series:
 
 
 class Counter:
-    """One counter series; rows hold the increase over each interval."""
-
     __slots__ = ("_s",)
 
     def __init__(self, s: Optional[_Series]) -> None:
         self._s = s
 
     def add(self, n: float = 1) -> None:
-        """Add ``n`` (ignored unless positive and finite)."""
+        """Add ``n``, ignored unless positive and finite"""
         v = _finite(n)
         s = self._s
         if s is None or v is None or v <= 0:
@@ -90,8 +76,6 @@ class Counter:
 
 
 class Gauge:
-    """One gauge series; rows hold the last value, every interval once set."""
-
     __slots__ = ("_s",)
 
     def __init__(self, s: Optional[_Series]) -> None:
@@ -106,7 +90,7 @@ class Gauge:
             s.value, s.touched = v, True
 
     def add(self, delta: float) -> None:
-        """Move the gauge by ``delta``, from 0 when it was never set."""
+        """Move the gauge by ``delta``, from 0 when it was never set"""
         v = _finite(delta)
         s = self._s
         if s is None or v is None:
@@ -117,8 +101,6 @@ class Gauge:
 
 
 class Histogram:
-    """One histogram series; rows hold count, sum, min, max and buckets per interval."""
-
     __slots__ = ("_s",)
 
     def __init__(self, s: Optional[_Series]) -> None:
@@ -170,7 +152,6 @@ class Registry:
             return s
 
     def collect(self, at: float) -> Tuple[List["MetricRow"], Dict[str, int]]:
-        """Rows for series that moved and gauges ever set, plus dropped counts by name."""
         with self.lock:
             all_series = list(self.series.values())
             dropped, self.dropped = self.dropped, {}
@@ -210,27 +191,22 @@ registry = Registry()
 
 
 def counter(name: str, labels: Optional[Mapping[str, Any]] = None, /, **kw: Any) -> Counter:
-    """The counter ``name`` with labels as keyword arguments (or a dict)::
-
-        visionary.counter("orders_placed", region="eu").add(1)
-    """
+    """The counter ``name``, labels as keyword arguments or a dict"""
     return Counter(registry.get(name, COUNTER, _labels(labels, kw)))
 
 
 def gauge(name: str, labels: Optional[Mapping[str, Any]] = None, /, **kw: Any) -> Gauge:
-    """The gauge ``name``: ``visionary.gauge("queue_depth", queue="emails").set(n)``."""
+    """The gauge ``name``, labels as keyword arguments or a dict"""
     return Gauge(registry.get(name, GAUGE, _labels(labels, kw)))
 
 
 def histogram(name: str, labels: Optional[Mapping[str, Any]] = None, /, **kw: Any) -> Histogram:
-    """The histogram ``name``: ``visionary.histogram("checkout_ms").observe(ms)``."""
+    """The histogram ``name``, labels as keyword arguments or a dict"""
     return Histogram(registry.get(name, HISTOGRAM, _labels(labels, kw)))
 
 
 def describe_metric(name: str, unit: Optional[str] = None, buckets: Optional[Sequence[float]] = None) -> None:
-    """Set a metric's unit ("ms", "bytes") and histogram buckets.
-
-    Call it before first use; series created earlier keep their buckets."""
+    """Set a metric's unit and histogram buckets, before its first use"""
     name = clean_name(name)
     if not name:
         return
@@ -261,8 +237,7 @@ def clean_name(name: Any) -> str:
 
 
 def series_id(name: str, labels: Mapping[str, str]) -> Tuple[str, str]:
-    """The labels as JSON with keys in byte order, and the series id: the first
-    16 hex digits of SHA-256 over name, a newline and that JSON."""
+    """Labels as JSON with sorted keys, and the first 16 hex digits of SHA-256 over name, newline, JSON"""
     clean: Dict[str, str] = {}
     for k, v in labels.items():
         k = _cut(k.strip(), MAX_LABEL_KEY)
@@ -275,7 +250,7 @@ def series_id(name: str, labels: Mapping[str, str]) -> Tuple[str, str]:
 
 
 def _json_str(s: str) -> str:
-    """Escape only what JSON requires, so every SDK writes the same bytes."""
+    """Escape only what JSON requires, so every SDK writes the same bytes"""
     out = ['"']
     for c in s:
         if c == '"' or c == "\\":
@@ -289,7 +264,7 @@ def _json_str(s: str) -> str:
 
 
 def _num(v: float) -> str:
-    """A number as Go's encoding/json writes it."""
+    """A number as Go's encoding/json writes it"""
     if v == int(v) and abs(v) < 1e21:
         return str(int(v))
     a = abs(v)
@@ -304,8 +279,7 @@ def encode_buckets(bounds: Sequence[float], counts: Sequence[int]) -> str:
 
 
 class MetricsWriter(RequestWriter):
-    """Metrics rows on their own thread and queue. The table is created on the
-    first write, so services without custom metrics never get it."""
+    """The table is created on the first write, so services without custom metrics never get it"""
 
     _THREAD = "visionary-metrics"
     _WHAT = "metric"
@@ -322,7 +296,6 @@ class MetricsWriter(RequestWriter):
         return [("metrics", [self.row(r) for r in batch if isinstance(r, MetricRow)])]
 
     def row(self, r: MetricRow) -> Tuple[Any, ...]:
-        """The metrics row in METRIC_COLUMNS order."""
         count = total = lo = hi = buckets = None
         if r.histogram is not None:
             count, total, lo, hi, buckets = r.histogram
@@ -331,8 +304,6 @@ class MetricsWriter(RequestWriter):
 
 
 class MetricsRecorder:
-    """Writes the registry every interval through its own writer."""
-
     def __init__(self, cfg: Any, backend: Any, logger: logging.Logger, instance: str) -> None:
         self.writer = MetricsWriter(cfg, backend, logger, instance)
         self._logger = logger
@@ -370,7 +341,6 @@ class MetricsRecorder:
             self.writer.log(r)
 
     def close(self, timeout: float) -> bool:
-        """Write the last interval, then flush the writer."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(min(timeout, 1.0))

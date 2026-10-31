@@ -67,7 +67,7 @@ public static partial class Visionary
 
     /// <summary>
     /// Times an operation the SDK can't see by itself (a cache or queue call, a database without
-    /// diagnostics); dispose the span when it ends. Calls made inside it nest under it in the trace.
+    /// diagnostics). Dispose the span when it ends, and calls made inside it nest under it
     /// </summary>
     /// <param name="kind">db, http, cache, queue, custom, graphql or background.</param>
     /// <param name="name">Short and low-cardinality, used for grouping, e.g. "GET session".</param>

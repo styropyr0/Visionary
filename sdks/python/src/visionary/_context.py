@@ -83,7 +83,6 @@ _current: ContextVar[Optional[Annotations]] = ContextVar("visionary_request", de
 
 def begin(trace: Any = None, request: Optional[RequestInfo] = None, traceparent: Optional[str] = None,
           tracestate: Optional[str] = None) -> tuple:
-    """Start a request, continuing the caller's trace or starting a new one."""
     span, parent = _tracecontext.request_span(traceparent, tracestate)
     ann = Annotations(trace, request, span.trace_id)
     ann.span, ann.parent_span_id = span, parent

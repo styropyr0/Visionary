@@ -61,7 +61,7 @@ public sealed class VisionaryOptions
     public int MaxBodyBytes { get; set; } = 8192;
 
     /// <summary>VISIONARY_LOG_RETENTION_DAYS (default 0, off: the Visionary server applies Settings → Retention).
-    /// Above 0 the SDK also deletes older api_logs, spans, errors, profiles, app_logs and metrics rows.</summary>
+    /// Above 0 the SDK also deletes older api_logs, spans, errors, profiles, app_logs and metrics rows</summary>
     public int LogRetentionDays { get; set; }
 
     /// <summary>VISIONARY_LOG_REDACT_HEADERS: added to the default redacted headers.</summary>
@@ -124,16 +124,16 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_LOG_LEVEL (default info): the lowest level kept until Settings, Logs has been read.</summary>
     public string LogLevel { get; set; } = "info";
 
-    /// <summary>VISIONARY_METRICS (default true): false turns every metrics call into a no-op.</summary>
+    /// <summary>VISIONARY_METRICS (default true), false turns every metrics call into a no-op</summary>
     public bool Metrics { get; set; } = true;
 
-    /// <summary>VISIONARY_METRICS_INTERVAL (default 15s): how often each series is written.</summary>
+    /// <summary>VISIONARY_METRICS_INTERVAL (default 15s), how often each series is written</summary>
     public TimeSpan MetricsInterval { get; set; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>VISIONARY_METRICS_MAX_SERIES (default 1000): label sets per metric name; extra ones are dropped.</summary>
+    /// <summary>VISIONARY_METRICS_MAX_SERIES (default 1000), label sets per metric name beyond it are dropped</summary>
     public int MetricsMaxSeries { get; set; } = 1000;
 
-    /// <summary>VISIONARY_METRICS_METERS: comma-separated meter names whose instruments are recorded too.</summary>
+    /// <summary>VISIONARY_METRICS_METERS, comma-separated meter names whose instruments are recorded too</summary>
     public List<string> MetricsMeters { get; set; } = new();
 
     /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
@@ -151,7 +151,7 @@ public sealed class VisionaryOptions
     /// </summary>
     public Func<string, CancellationToken, ValueTask<VisionaryUser?>>? LookupUser { get; set; }
 
-    /// <summary>Rows per write: 500 by default (up to 2000), always 50 on D1.</summary>
+    /// <summary>Rows per write, 500 by default (up to 2000) and always 50 on D1</summary>
     public int BatchSize { get; set; }
 
     /// <summary>Database pool statistics for the db_* columns of system_metrics; optional.</summary>

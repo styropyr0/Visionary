@@ -3,10 +3,7 @@ package io.github.styropyr0.visionary;
 import java.lang.reflect.Method;
 import java.util.concurrent.ThreadLocalRandom;
 
-/**
- * W3C trace context (https://www.w3.org/TR/trace-context/) for the current thread.
- * A request continues the caller's trace or starts one, and outbound calls pass it on.
- */
+/** W3C trace context for the current thread (https://www.w3.org/TR/trace-context/) */
 final class TraceContext {
 
     static final String TRACEPARENT = "traceparent";
@@ -16,9 +13,9 @@ final class TraceContext {
 
     final String traceId;
     final String spanId;
-    /** The traceparent trace-flags byte in hex ("01" sampled). */
+    /** The trace-flags byte in hex ("01" sampled) */
     final String flags;
-    /** The caller's tracestate, passed on unchanged; null when none. */
+    /** The caller's tracestate, passed on unchanged, or null */
     final String state;
 
     TraceContext(String traceId, String spanId, String flags, String state) {
@@ -28,7 +25,7 @@ final class TraceContext {
         this.state = state == null || state.isEmpty() ? null : state;
     }
 
-    /** The innermost span on this thread: a custom or background span, else the request's; null outside any trace. */
+    /** The innermost span on this thread, or null outside any trace */
     static TraceContext current() {
         return CURRENT.get();
     }
@@ -47,23 +44,21 @@ final class TraceContext {
         }
     }
 
-    /** The same trace with {@code spanId} as the current span. */
     TraceContext child(String spanId) {
         return new TraceContext(traceId, spanId, flags, state);
     }
 
-    /** The header value naming this span as the parent. */
     String traceparent() {
         return "00-" + traceId + "-" + spanId + "-" + flags;
     }
 
-    /** The server span of an incoming request and its caller's span id (null when it starts a trace). */
+    /** The server span of an incoming request and its caller's span id, null when it starts a trace */
     record Server(TraceContext context, String parentSpanId) {
     }
 
     /**
      * A child of the active OpenTelemetry span when there is one, else of the
-     * caller's span when {@code traceparent} names one, else the root of a new trace.
+     * caller's span when {@code traceparent} names one, else the root of a new trace
      */
     static Server server(String traceparent, String tracestate) {
         TraceContext in = OpenTelemetry.current();
@@ -77,7 +72,7 @@ final class TraceContext {
         return new Server(new TraceContext(newTraceId(), newSpanId(), "01", null), null);
     }
 
-    /** Null for anything malformed, for version ff and for all-zero ids, which mean "no parent". */
+    /** Null for anything malformed, version ff and all-zero ids */
     static TraceContext parse(String header) {
         if (header == null) {
             return null;
@@ -87,7 +82,7 @@ final class TraceContext {
                 || parts[2].length() != 16 || parts[3].length() != 2) {
             return null;
         }
-        // Version 00 has exactly four fields; later versions may append more.
+        // Version 00 has exactly four fields, later versions may append more
         if (parts[0].equals("00") && parts.length != 4) {
             return null;
         }
@@ -146,7 +141,7 @@ final class TraceContext {
         return "0".repeat(16 - s.length()) + s;
     }
 
-    /** The active OpenTelemetry span, read by reflection so the SDK needs no OpenTelemetry dependency. */
+    /** Read by reflection so the SDK needs no OpenTelemetry dependency */
     private static final class OpenTelemetry {
 
         private static final Method CURRENT_SPAN;

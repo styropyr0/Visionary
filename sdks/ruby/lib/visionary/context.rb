@@ -15,8 +15,6 @@ module Visionary
     attr_reader :request_id, :method, :path, :started_at, :started_mono, :errors, :db_visible, :trace_id,
                 :span_id, :parent_span_id
 
-    # span is the request's server span (a TraceContext::SpanContext);
-    # parent_span_id the caller's span from traceparent, if any.
     def initialize(request_id:, method:, path:, started_at:, started_mono:, span_max:, db_visible:, trace_id: nil,
                    span: nil, parent_span_id: nil)
       @request_id = request_id

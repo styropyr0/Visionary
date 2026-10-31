@@ -1,5 +1,5 @@
 dist/
 test-dist/
 node_modules/
-# Copied from the repository root when packing.
+# Copied from the repository root when packing
 /LICENSE

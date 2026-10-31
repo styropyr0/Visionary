@@ -48,7 +48,7 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
         {
             return Task.CompletedTask;
         }
-        // Watched even with spans off so outbound requests still carry the trace.
+        // Watched even with spans off so outbound requests still carry the trace
         if (_agent.SpansOn)
         {
             _activities = new ActivityListener
@@ -177,11 +177,8 @@ internal sealed class SpanListeners : IHostedService, IObserver<DiagnosticListen
             Stopwatch.GetElapsedTime(call.Started).TotalMilliseconds, error, null, call.Ids);
     }
 
-    /// <summary>
-    /// Ids matching the traceparent the next service receives. HttpClient sends its own activity
-    /// after this event, so the span reuses its ids when it belongs to this trace; otherwise we set
-    /// the header ourselves and HttpClient leaves it alone.
-    /// </summary>
+    // HttpClient sends its own activity after this event, so the span reuses its ids when it
+    // belongs to this trace. Otherwise we set the header and HttpClient leaves it alone
     internal static SpanIds OutboundTrace(HttpRequestMessage request)
     {
         var current = TraceContext.Current;

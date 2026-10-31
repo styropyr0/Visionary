@@ -9,8 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// Writes api_logs, spans, errors and releases when a batch fills or every 3 seconds, retries a
-/// failed batch twice, and drains the queue on shutdown.
+/// Writes api_logs, spans, errors and releases when a batch fills or every 3 seconds
 /// </summary>
 internal sealed class TelemetryWriter : BackgroundService
 {

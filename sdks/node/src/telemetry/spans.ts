@@ -71,7 +71,6 @@ export class ActiveSpan {
   private readonly state: RequestState | undefined;
   private readonly slot: number;
   private ended = false;
-  /** The enclosing span, or the root of a new trace when there was none. */
   private readonly parent: SpanContext;
   private readonly parentSpanId: string;
   readonly spanId = newSpanId();
@@ -84,7 +83,6 @@ export class ActiveSpan {
     this.parentSpanId = parent?.spanId ?? "";
   }
 
-  /** The span as the parent of the calls made inside it. */
   context(): SpanContext {
     return { ...this.parent, spanId: this.spanId };
   }
@@ -185,7 +183,7 @@ export function background<T>(name: string, fn: () => T | Promise<T>): Promise<T
 /**
  * Records a span around `fn` (sync or async): a cache or queue call, or any
  * operation worth seeing on the request's timeline. Calls made inside `fn`
- * nest under it in the trace.
+ * nest under it
  *
  *     const user = await visionary.span("cache", "GET user", () => redis.get(key));
  */

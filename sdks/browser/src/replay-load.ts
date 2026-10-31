@@ -3,29 +3,25 @@ import type { ReplayOptions } from "./types";
 
 declare const __IIFE__: boolean;
 
-// Read at load time: document.currentScript is only set while the script runs.
+// document.currentScript is only set while the script runs
 const scriptSrc = typeof document !== "undefined" ? (document.currentScript as HTMLScriptElement | null)?.src || "" : "";
 
 let handle: ReplayHandle | null = null;
 let errored = false;
 
-/**
- * The session's replay mode, decided once per tab: "1" records it all, "e"
- * keeps the last minute in memory for an error, "x" is an "e" session that
- * had one and now records it all, "" records nothing.
- */
+/** "1" records all, "e" buffers for an error, "x" is an "e" session that had one, "" is off */
 function replayMode(sid: string, o: ReplayOptions): string {
   try {
     const kept = sessionStorage.getItem("vis.replay");
     if (kept && kept.startsWith(sid + ":")) return kept.slice(sid.length + 1);
   } catch {
-    // No storage: decide for this page only.
+    // No storage, so decide for this page only
   }
   const mode = Math.random() < (o.sampleRate ?? 0) ? "1" : Math.random() < (o.onErrorSampleRate ?? 0) ? "e" : "";
   try {
     sessionStorage.setItem("vis.replay", `${sid}:${mode}`);
   } catch {
-    // As above.
+    // As above
   }
   return mode;
 }
@@ -47,10 +43,9 @@ function loadScript(o: ReplayOptions): Promise<Module> {
   });
 }
 
-// The script-tag build has no chunks to import, so it loads a second script.
+// The script-tag build has no chunks, so it loads a second script
 const load = (o: ReplayOptions): Promise<Module> => (__IIFE__ ? loadScript(o) : import("./replay"));
 
-/** Loads the recorder when this session is to be recorded. */
 export function startReplay(ctx: Omit<ReplayContext, "mode">) {
   const mode = replayMode(ctx.sid, ctx.options);
   if (!mode) return;
@@ -63,7 +58,6 @@ export function startReplay(ctx: Omit<ReplayContext, "mode">) {
   );
 }
 
-/** Tells the recorder an error happened, which sends an error-sampled session's buffer. */
 export function replayError() {
   errored = true;
   handle?.error();

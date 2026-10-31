@@ -27,7 +27,7 @@ require_relative "visionary/fork"
 # Visionary collects what the Visionary server analyses, straight from a Ruby
 # service: one api_logs row per HTTP request, spans for database and outbound
 # HTTP calls, errors, deploy markers, periodic system_metrics samples, the
-# app's own log lines (app_logs) and its custom metrics (metrics).
+# app's own log lines (app_logs) and its custom metrics (metrics)
 #
 #   # config.ru (Sinatra, Roda, Hanami, any Rack app)
 #   require "visionary"
@@ -108,8 +108,7 @@ module Visionary
     # The agent's span and error recorder, or nil when collection is off.
     def telemetry = @agent&.telemetry
 
-    # How far behind the database the writers are, for load tests and health
-    # checks: rows queued, and rows written and dropped since start.
+    # Rows queued, written and dropped since start
     def writer_stats
       @agent ? @agent.writer_stats : WriterStats.new(queued: 0, written: 0, dropped: 0)
     end
@@ -149,8 +148,7 @@ module Visionary
 
     # Measures the block as a span and returns its value. kind is "custom",
     # "cache", "queue", "db", "http", "graphql" or "background"; name should be low-cardinality (the
-    # operation, not its arguments). Calls made inside the block nest under
-    # it in the trace.
+    # operation, not its arguments)
     #
     #   Visionary.span("charge card", kind: "http", target: "api.stripe.com") { stripe.charge(...) }
     def span(name, kind: "custom", target: nil, detail: nil, &block)
@@ -179,8 +177,7 @@ module Visionary
     # request_id and offset_ms even after the response was sent; those ending
     # after the request was logged are written on their own and never change
     # its totals. Outside a request the span is a lone span (kept when it
-    # takes at least VISIONARY_SPAN_THRESHOLD_MS). It keeps the request's
-    # trace: calls inside it are children of the background span.
+    # takes at least VISIONARY_SPAN_THRESHOLD_MS)
     #
     # If the block raises, the span gets status "error" and the message, and
     # the exception is re-raised in the thread as Ruby normally does: printed
@@ -200,25 +197,14 @@ module Visionary
       end
     end
 
-    # A counter: rows hold its increase over each interval. Labels are a
-    # Hash or keywords; each distinct set is one series. Keep the handle for
-    # hot paths.
-    #
-    #   Visionary.counter("orders_placed", region: "eu").add(1)
+    # Labels are a Hash or keywords, and each distinct set is one series
     def counter(name, labels = nil, **kw) = Metrics.counter(name, Metrics.labels(labels, kw))
 
-    # A gauge: rows hold the last value set, every interval once it has been set.
-    #
-    #   Visionary.gauge("queue_depth", queue: "emails").set(jobs.size)
     def gauge(name, labels = nil, **kw) = Metrics.gauge(name, Metrics.labels(labels, kw))
 
-    # A histogram: rows hold each interval's count, sum, min, max and buckets.
-    #
-    #   Visionary.histogram("checkout_ms", method: "card").observe(took_ms)
     def histogram(name, labels = nil, **kw) = Metrics.histogram(name, Metrics.labels(labels, kw))
 
-    # Sets a metric's unit and histogram bucket upper bounds. Call it before
-    # the metric's first use; series created earlier keep their buckets.
+    # Sets a metric's unit and bucket upper bounds, before its first use
     def describe_metric(name, unit: nil, buckets: nil)
       Metrics.describe(name, unit: unit, buckets: buckets)
       nil
