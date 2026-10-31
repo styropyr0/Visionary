@@ -561,7 +561,7 @@ FROM ci_jobs WHERE run_key = ? ORDER BY created_at, started_at, id LIMIT 500`, r
 		}
 	}
 	for len(hashes) > 0 {
-		chunk := head(hashes, 200)
+		chunk := head(hashes, maxInArgs)
 		hashes = hashes[len(chunk):]
 		fr, err := s.db.Query(ctx, `SELECT test_hash FROM ci_flaky_tests WHERE test_hash IN (`+placeholders(len(chunk))+`)`, chunk...)
 		if err != nil {
@@ -778,7 +778,7 @@ func (s *Server) handleCIFlaky(w http.ResponseWriter, r *http.Request) {
 	}
 	first := map[string]string{}
 	for len(ids) > 0 {
-		chunk := head(ids, 200)
+		chunk := head(ids, maxInArgs)
 		ids = ids[len(chunk):]
 		res, err := s.db.Query(ctx, `SELECT test_hash, created_at FROM ci_flaky_tests WHERE test_hash IN (`+placeholders(len(chunk))+`)`, chunk...)
 		if err != nil {

@@ -157,7 +157,8 @@ func (s *Server) rumPrompt() string {
   - 'error': name = error type, message, stack, url, fingerprint (the same error has the same fingerprint: GROUP BY fingerprint).
   - 'custom': name, value, duration_ms, attrs.
 - attrs: JSON object text with extra flat values.
-Count sessions with COUNT(DISTINCT session_id) and users with COUNT(DISTINCT user_id). Always filter on kind.`
+Count sessions with COUNT(DISTINCT session_id) and users with COUNT(DISTINCT user_id). Always filter on kind.
+Table replay_sessions: one row per recorded session replay (opt-in and sampled): session_id (= client_events.session_id), started_at, created_at, app, user_id, url, reason ('sample' or 'error'), chunks, bytes, archived (1 once written to the archive). The recording itself is in replay_chunks; never select its payload.`
 }
 
 func parseOrigins(raw string) []string {

@@ -251,7 +251,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Query with PromQL",
-        text: "Switch the top bar to **PromQL** and write a query, e.g. `sum by (route) (rate(visionary_http_requests_total[5m]))`. **Tab** completes metric names, functions, labels and values; **Ctrl+Enter** runs it. An error points at the character it is about. Your own metrics keep their names; Visionary's requests, spans, errors and system readings are `visionary_*` series. **Add to dashboard** keeps the query, a dashboard's **Add panel → PromQL** writes one there, and an alert on **PromQL expression** fires per series it returns.",
+        text: "Switch the top bar to **PromQL** and write a query, e.g. `sum by (route) (rate(visionary_http_requests_total[5m]))`. **Tab** completes metric names, functions, labels and values; **Ctrl+Enter** runs it. An error points at the character it is about. On a long range a chart point covers a whole bucket, so `[5m]` reads the bucket's span rather than its last five minutes. Your own metrics keep their names; Visionary's requests, spans, errors and system readings are `visionary_*` series. **Add to dashboard** keeps the query, a dashboard's **Add panel → PromQL** writes one there, and an alert on **PromQL expression** fires per series it returns.",
       },
       {
         title: "Use Visionary in Grafana",

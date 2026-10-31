@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -381,11 +379,7 @@ func TestCSVCell(t *testing.T) {
 // shape of the first release, so Init has to add the newer columns.
 func openTestDB(t *testing.T) *Server {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "alerts.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "alerts.db", nil)
 	ctx := context.Background()
 	old := `CREATE TABLE alert_state (
     rule_id INTEGER NOT NULL, series_key TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', state TEXT NOT NULL,
@@ -396,6 +390,9 @@ CREATE TABLE alert_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, rule_id INTEGER NOT NULL, rule_name TEXT NOT NULL,
     kind TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL, series_key TEXT NOT NULL DEFAULT '',
     value REAL, threshold REAL, message TEXT NOT NULL, explanation TEXT NOT NULL DEFAULT '', notified INTEGER NOT NULL DEFAULT 0)`
+	if onSharedTestDatabase() {
+		old = ""
+	}
 	if err := s.db.ExecScript(ctx, old); err != nil {
 		t.Fatal(err)
 	}

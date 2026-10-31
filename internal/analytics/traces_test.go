@@ -3,10 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -16,11 +13,7 @@ import (
 // database, and shop also calls Stripe.
 func traceTestServer(t *testing.T) (*Server, time.Time) {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "traces.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "traces.db", nil)
 	t.Cleanup(func() { _ = s.db.Close() })
 	ctx := context.Background()
 	old := `CREATE TABLE api_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -32,6 +25,9 @@ func traceTestServer(t *testing.T) (*Server, time.Time) {
 CREATE TABLE spans (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, request_id TEXT, service TEXT,
     instance TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, target TEXT, detail TEXT, offset_ms REAL,
     duration_ms REAL NOT NULL, status TEXT NOT NULL, error TEXT, row_count INTEGER)`
+	if onSharedTestDatabase() {
+		old = ""
+	}
 	if err := s.db.ExecScript(ctx, old); err != nil {
 		t.Fatal(err)
 	}

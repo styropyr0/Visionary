@@ -48,6 +48,9 @@ type metricInfo struct {
 	Truncated bool   `json:"-"`
 }
 
+// maxInlineSeries keeps a statement listing series ids well under D1's 100 KB.
+const maxInlineSeries = 2000
+
 func defaultAgg(kind string) string {
 	switch kind {
 	case "counter":
@@ -168,7 +171,13 @@ func (s *Server) runMetricQuery(ctx context.Context, mq metricQuery, from, to ti
 	where, args := metricWhere(mq.Name, mq.Service, from, to)
 	where += " AND kind = ?"
 	args = append(args, info.Kind)
-	if len(matched) < len(catalog) {
+	var keep map[string]bool
+	if len(matched) > maxInlineSeries && len(matched) < len(catalog) {
+		keep = map[string]bool{}
+		for _, id := range matched {
+			keep[id] = true
+		}
+	} else if len(matched) < len(catalog) {
 		ids := make([]string, 0, len(matched))
 		for _, id := range matched {
 			if seriesID.MatchString(id) {
@@ -228,6 +237,9 @@ FROM metrics WHERE ` + where + ` GROUP BY ` + groupBy + ` ORDER BY 1`
 		off = 3
 	}
 	for _, row := range res.Rows {
+		if keep != nil && !keep[toString(row[1])] {
+			continue
+		}
 		k := cellKey{toInt(row[0]), groupOf(row)}
 		c := cells[k]
 		if c == nil {

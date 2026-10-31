@@ -39,8 +39,8 @@ func (s *Server) digestLogsData(ctx context.Context, start, mid, now time.Time) 
 		return nil
 	}
 	d := &digestLogs{Lines: lines, PrevLines: prevLines, Errors: errs, PrevErrors: prevErrs}
-	if res, err := s.db.Query(ctx, `SELECT service, level, template, lines FROM log_patterns WHERE first_seen >= ? AND first_seen < ? AND severity >= 4
-ORDER BY severity DESC, lines DESC LIMIT 8`, mid.UTC().Format(tsLayout), now.UTC().Format(tsLayout)); err == nil {
+	if res, err := s.db.Query(ctx, `SELECT service, level, template, `+s.q.ident("lines")+` FROM log_patterns WHERE first_seen >= ? AND first_seen < ? AND severity >= 4
+ORDER BY severity DESC, `+s.q.ident("lines")+` DESC LIMIT 8`, mid.UTC().Format(tsLayout), now.UTC().Format(tsLayout)); err == nil {
 		for _, row := range res.Rows {
 			d.New = append(d.New, digestLogMessage{Service: toString(row[0]), Level: toString(row[1]), Template: toString(row[2]), Lines: toInt(row[3])})
 		}

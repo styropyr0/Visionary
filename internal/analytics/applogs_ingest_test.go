@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -23,18 +24,7 @@ import (
 
 func logsTestServer(t *testing.T, settings map[string]string) *Server {
 	t.Helper()
-	// set VISIONARY_TEST_DATABASE_URL to run on a scratch PostgreSQL or MySQL; each test wipes it
-	dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "sqlite:///" + filepath.ToSlash(filepath.Join(t.TempDir(), "logs.db"))
-	}
-	s, err := New(Config{DatabaseURL: dsn}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" {
-		emptyTestDatabase(t, s)
-	}
+	s := newTestServer(t, "logs.db", nil)
 	if err := s.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -452,21 +442,58 @@ func TestStripLeadingTime(t *testing.T) {
 	}
 }
 
-func emptyTestDatabase(t *testing.T, s *Server) {
-	t.Helper()
-	ctx := context.Background()
-	q := `SELECT tablename FROM pg_tables WHERE schemaname = current_schema()`
-	if s.q.d == sdk.MySQL {
-		q = `SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()`
+// testDatabaseURL is VISIONARY_TEST_DATABASE_URL, a scratch PostgreSQL or
+// MySQL that every test wipes, or else a fresh SQLite file.
+func testDatabaseURL(t *testing.T, file string) string {
+	if dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL"); dsn != "" {
+		return dsn
 	}
-	res, err := s.db.Query(ctx, q)
+	return "sqlite:///" + filepath.ToSlash(filepath.Join(t.TempDir(), file))
+}
+
+func onSharedTestDatabase() bool { return os.Getenv("VISIONARY_TEST_DATABASE_URL") != "" }
+
+// newTestServer is a server on an empty test database, before Init.
+func newTestServer(t *testing.T, file string, web fs.FS) *Server {
+	t.Helper()
+	s, err := New(Config{DatabaseURL: testDatabaseURL(t, file)}, slog.New(slog.NewTextHandler(io.Discard, nil)), web)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if onSharedTestDatabase() {
+		emptyTestDatabase(t, s)
+	}
+	return s
+}
+
+// testTables lists the tables in the server's database.
+func testTables(t *testing.T, s *Server) []string {
+	t.Helper()
+	q := `SELECT name FROM sqlite_master WHERE type = 'table'`
+	switch s.q.d {
+	case sdk.Postgres:
+		q = `SELECT tablename FROM pg_tables WHERE schemaname = current_schema()`
+	case sdk.MySQL:
+		q = `SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()`
+	}
+	res, err := s.db.Query(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
 	for _, row := range res.Rows {
-		stmt := `DROP TABLE IF EXISTS "` + toString(row[0]) + `" CASCADE`
+		out = append(out, toString(row[0]))
+	}
+	return out
+}
+
+func emptyTestDatabase(t *testing.T, s *Server) {
+	t.Helper()
+	ctx := context.Background()
+	for _, name := range testTables(t, s) {
+		stmt := `DROP TABLE IF EXISTS "` + name + `" CASCADE`
 		if s.q.d == sdk.MySQL {
-			stmt = "DROP TABLE IF EXISTS `" + toString(row[0]) + "`"
+			stmt = "DROP TABLE IF EXISTS `" + name + "`"
 		}
 		if err := s.db.Exec(ctx, stmt); err != nil {
 			t.Fatal(err)

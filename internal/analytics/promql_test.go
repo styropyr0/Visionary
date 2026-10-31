@@ -384,3 +384,31 @@ func seriesHex(s string) string {
 	}
 	return string(out)
 }
+
+// A chart whose buckets are longer than rate's window still has a point in
+// every bucket with traffic, not a few minutes' sample of each.
+func TestPromChartWidensWindows(t *testing.T) {
+	s := metricsTestServer(t)
+	ctx := context.Background()
+	to := time.Now().UTC().Truncate(30 * time.Minute)
+	from := to.Add(-6 * time.Hour)
+	// a request every 20 minutes
+	for at := from.Add(time.Minute); at.Before(to); at = at.Add(20 * time.Minute) {
+		if err := s.db.Exec(ctx, `INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms, service) VALUES ('r', ?, 'GET', '/x', '/x', 200, 5, 'shop')`,
+			at.Format(tsLayout)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := s.promResult(ctx, `sum(rate(visionary_http_requests_total[5m]))`, timeRange{From: from, To: to, Bucket: 1800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Rows) < 11 {
+		t.Fatalf("%d points over 12 buckets: %v", len(res.Rows), res.Rows)
+	}
+	for _, r := range res.Rows {
+		if v := r[2].(float64); v <= 0 || v > 2.0/1800 {
+			t.Fatalf("rate %v, want one or two requests per 30 minutes", v)
+		}
+	}
+}

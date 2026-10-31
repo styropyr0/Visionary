@@ -250,7 +250,7 @@ func (s *Server) archivePass(ctx context.Context, now time.Time) (int, error) {
 		if err != nil {
 			return wrote, err
 		}
-		if err := s.db.Exec(ctx, `INSERT INTO log_archives (hour, object, lines, bytes, created_at) VALUES (?, ?, ?, ?, ?)`,
+		if err := s.db.Exec(ctx, `INSERT INTO log_archives (hour, object, `+s.q.ident("lines")+`, bytes, created_at) VALUES (?, ?, ?, ?, ?)`,
 			key, c.objectKey(h), lines, bytes, time.Now().UTC().Format(tsLayout)); err != nil {
 			return wrote, dbErr(err)
 		}
@@ -324,7 +324,7 @@ func (s *Server) handleLogArchives(w http.ResponseWriter, r *http.Request) {
 	if !last.IsZero() {
 		out["last_run"] = last.UTC().Format(tsLayout)
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT hour, object, lines, bytes, created_at FROM log_archives ORDER BY hour DESC LIMIT 500`)
+	rows, err := s.db.Query(r.Context(), `SELECT hour, object, `+s.q.ident("lines")+`, bytes, created_at FROM log_archives ORDER BY hour DESC LIMIT 500`)
 	if err == nil {
 		out["hours"] = newResult(rows, 500, "", timeRange{})
 	}

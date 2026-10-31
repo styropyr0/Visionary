@@ -280,7 +280,7 @@ func (s *Server) handleAppLog(w http.ResponseWriter, r *http.Request) {
 	s.maskLogRows(r, res)
 	out := map[string]any{"line": rowMap(res, 0)}
 	if p := toString(rowMap(res, 0)["pattern"]); p != "" {
-		pr, err := s.db.Query(r.Context(), `SELECT id, template, first_seen, last_seen, first_version, lines FROM log_patterns WHERE id = ?`, p)
+		pr, err := s.db.Query(r.Context(), `SELECT id, template, first_seen, last_seen, first_version, `+s.q.ident("lines")+` FROM log_patterns WHERE id = ?`, p)
 		if err == nil && len(pr.Rows) > 0 {
 			out["pattern"] = rowMap(&Result{Columns: pr.Columns, Rows: pr.Rows}, 0)
 			_ = s.db.Exec(r.Context(), `UPDATE log_patterns SET viewed_at = ? WHERE id = ?`, time.Now().UTC().Format(tsLayout), p)

@@ -93,9 +93,9 @@ export function ConfigIOTab() {
           </>
         }
       >
-        <p className="settings-desc">
+        <div className="settings-body dim">
           To manage the same things from Terraform instead, see <strong>Help → Configuration as code</strong>.
-        </p>
+        </div>
       </Card>
 
       <Card
@@ -109,7 +109,7 @@ export function ConfigIOTab() {
           </label>
         }
       >
-        <div className="settings-form">
+        <div className="settings-body settings-form">
           <label className="field">
             <span>{fileName ? `File: ${fileName}` : "Or paste the file"}</span>
             <textarea
@@ -137,7 +137,7 @@ export function ConfigIOTab() {
         </div>
 
         {shown && (
-          <div className="cio-result">
+          <div className="settings-body cio-result">
             <div className="cio-counts">
               <strong>{applied ? "Applied" : "Preview"}:</strong>
               {(Object.keys(ACTION_LABEL) as Action[]).map((a) => (

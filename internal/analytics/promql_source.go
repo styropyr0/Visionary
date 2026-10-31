@@ -318,7 +318,8 @@ func (src *sqlPromSource) loadCustom(ctx context.Context, t promTarget, ms []lab
 	}
 	where := "name = ? AND kind = ? AND created_at >= ? AND created_at < ?"
 	args := append([]any{t.base, t.kind}, windowArgs(w)...)
-	if len(byKey) < len(all) {
+	// past maxInlineSeries the rows are matched to byKey below instead
+	if len(byKey) < len(all) && len(ids) <= maxInlineSeries {
 		where += " AND series IN (" + strings.Join(ids, ", ") + ")"
 	}
 	tcol := s.q.bucketPhase(w.res, w.phase)

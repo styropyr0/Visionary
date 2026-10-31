@@ -150,7 +150,7 @@ GROUP BY ip, `+acct+`, route HAVING COUNT(DISTINCT path) >= ? LIMIT 2000`, appen
 	var conds []string
 	for _, c := range injectionOrder {
 		cond := injectionCond(q, c)
-		cols = append(cols, countIf(cond)+" AS "+c)
+		cols = append(cols, countIf(cond)+" AS inj_"+c)
 		conds = append(conds, cond)
 	}
 	anyCond := "(" + strings.Join(conds, " OR ") + ")"

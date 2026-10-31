@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,11 +106,7 @@ type wsFixture struct {
 
 func newWSFixture(t *testing.T) *wsFixture {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "ws.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "ws.db", nil)
 	t.Cleanup(func() { _ = s.db.Close() })
 	ctx := context.Background()
 	if err := s.Init(ctx); err != nil {
@@ -145,7 +140,7 @@ VALUES (?, ?, ?, ?, ?, 'POST', ?, ?, ?, ?, ?, ?, 0)`, ts, svc.name, svc.host, m+
 			ts, svc.host, svc.name, m+"-v1")
 		exec(`INSERT INTO app_logs (created_at, service, instance, version, source, host, level, severity, logger, message, attrs, request_id, trace_id, pattern, size)
 VALUES (?, ?, ?, ?, 'sdk', ?, 'error', 17, ?, ?, ?, ?, ?, ?, 10)`, ts, svc.name, svc.host, m+"-v1", svc.host, m+"-logger", m+" line failed", `{"k":"`+m+`"}`, "req"+svc.num, svc.trace, "p"+svc.num)
-		exec(`INSERT INTO log_patterns (id, service, template, sample, level, severity, first_seen, last_seen, lines, bytes) VALUES (?, ?, ?, ?, 'error', 17, ?, ?, 1, 10)`,
+		exec(`INSERT INTO log_patterns (id, service, template, sample, level, severity, first_seen, last_seen, `+s.q.ident("lines")+`, bytes) VALUES (?, ?, ?, ?, 'error', 17, ?, ?, 1, 10)`,
 			"p"+svc.num, svc.name, m+" line <*>", m+" line failed", ts, ts)
 		exec(`INSERT INTO metrics (created_at, service, instance, name, kind, labels, series, value) VALUES (?, ?, ?, 'orders_total', 'counter', ?, ?, 5)`,
 			ts, svc.name, svc.host, `{"tenant":"`+m+`"}`, "000000000000000"+svc.num)
@@ -175,20 +170,20 @@ VALUES (?, ?, 'github', ?, ?, 'main', ?, ?, ?, ?, ?, 'failed', 10, ?)`, ts, "run
 			ts, svc.host, svc.name, m+"-actor", "10.2.0."+svc.num, "/"+m+"/login")
 		exec(`INSERT INTO security_known (account, kind, value, first_seen, last_seen) VALUES (?, 'ip', ?, ?, ?)`, "acct"+svc.num, "10.0.0."+svc.num, ts, ts)
 		exec(`INSERT INTO explain_requests (created_at, target, statement, status, plan) VALUES (?, ?, ?, 'done', ?)`, ts, m+"-db", "SELECT "+m, m+" seq scan")
-		exec(`INSERT INTO log_archives (hour, object, lines, bytes, created_at) VALUES (?, ?, 1, 1, ?)`, ts, m+"/obj", ts)
+		exec(`INSERT INTO log_archives (hour, object, `+s.q.ident("lines")+`, bytes, created_at) VALUES (?, ?, 1, 1, ?)`, ts, m+"/obj", ts)
 		exec(`INSERT INTO incidents (title, severity, status, services, impact, source_kind, source_ref, created_by, started_at, declared_at, updated_at)
 VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["`+svc.name+`"]`, m+" impact", m+"-oncall", ts, ts, ts)
 		exec(`INSERT INTO incident_timeline (incident_id, at, kind, actor, body, detail) VALUES (?, ?, 'note', ?, ?, '{}')`, svc.num, ts, m+"-oncall", m+" note")
 		exec(`INSERT INTO incident_roles (incident_id, role, user_name, assigned_by, assigned_at) VALUES (?, 'commander', ?, 'x', ?)`, svc.num, m+"-cmdr", ts)
 		exec(`INSERT INTO incident_actions (incident_id, body, owner, created_at) VALUES (?, ?, ?, ?)`, svc.num, m+" action", m+"-owner", ts)
-		exec(`INSERT INTO alert_rules (name, kind, spec, severity, channels, created_at, updated_at, workspace_id) VALUES (?, 'threshold', ?, 'critical', '[]', ?, ?, ?)`,
+		exec(`INSERT INTO alert_rules (name, kind, spec, severity, channels, runbook, created_at, updated_at, workspace_id) VALUES (?, 'threshold', ?, 'critical', '[]', '', ?, ?, ?)`,
 			m+" rule", `{"metric":"error_rate","scope":{},"op":">","threshold":1,"window":"5m"}`, ts, ts, svc.num)
-		exec(`INSERT INTO alert_events (created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message) VALUES (?, ?, ?, 'threshold', 'critical', 'firing', '', 9, 1, ?)`,
+		exec(`INSERT INTO alert_events (created_at, rule_id, rule_name, kind, severity, state, series_key, value, threshold, message, explanation) VALUES (?, ?, ?, 'threshold', 'critical', 'firing', '', 9, 1, ?, '')`,
 			ts, svc.num, m+" rule", m+" fired")
-		exec(`INSERT INTO alert_state (rule_id, series_key, label, state, state_since, value, threshold, message) VALUES (?, '', ?, 'firing', ?, 9, 1, ?)`, svc.num, m+" label", ts, m+" firing")
+		exec(`INSERT INTO alert_state (rule_id, series_key, label, state, state_since, value, threshold, message, recent) VALUES (?, '', ?, 'firing', ?, 9, 1, ?, '')`, svc.num, m+" label", ts, m+" firing")
 		exec(`INSERT INTO alert_incidents (rule_id, series_key, opened_at, ack_note) VALUES (?, '', ?, ?)`, svc.num, ts, m+" ack")
 		exec(`INSERT INTO alert_rule_history (rule_id, at, actor, action, changes, rule) VALUES (?, ?, ?, 'create', '[]', ?)`, svc.num, ts, m+"-editor", `{"name":"`+m+` rule"}`)
-		exec(`INSERT INTO uptime_checks (name, url, created_at, updated_at, workspace_id) VALUES (?, ?, ?, ?, ?)`, m+" check", "https://"+m+".example/health", ts, ts, svc.num)
+		exec(`INSERT INTO uptime_checks (name, url, headers, body_contains, created_at, updated_at, workspace_id) VALUES (?, ?, '{}', '', ?, ?, ?)`, m+" check", "https://"+m+".example/health", ts, ts, svc.num)
 		exec(`INSERT INTO uptime_results (created_at, check_id, check_name, url, ok, status, duration_ms, error) VALUES (?, ?, ?, ?, 0, 500, 100, ?)`,
 			ts, svc.num, m+" check", "https://"+m+".example/health", m+" down")
 		exec(`INSERT INTO dashboards (name, description, layout, created_by, created_at, updated_at, workspace_id) VALUES (?, ?, '{"panels":[],"variables":[]}', ?, ?, ?, ?)`,
@@ -205,7 +200,7 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,
 			m+" detection", "rule_"+svc.num, `{"logic":"threshold","source":"api","threshold":5,"window":"5m","where":"path LIKE '/`+m+`%'"}`, ts, ts)
 	}
-	exec(`INSERT INTO dashboards (name, layout, created_at, updated_at) VALUES ('Shared board', '{"panels":[],"variables":[]}', ?, ?)`, ts, ts)
+	exec(`INSERT INTO dashboards (name, description, layout, created_by, created_at, updated_at) VALUES ('Shared board', '', '{"panels":[],"variables":[]}', '', ?, ?)`, ts, ts)
 	// Rows without a service are seen only by people who see everything.
 	exec(`INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms) VALUES ('reqnull', ?, 'GET', ?, ?, 503, 10)`, ts, "/"+leak+"-null", "/"+leak+"-null")
 
@@ -591,12 +586,8 @@ func TestEveryTableClassified(t *testing.T) {
 		"ROLLUP_STATE": true, "SECURITY_SUPPRESSIONS": true, "WORKSPACES": true, "SQLITE_SEQUENCE": true,
 		"VISIONARY_LEASES": true, "VISIONARY_REPLICAS": true, "VISIONARY_CHANGES": true, "VISIONARY_ONCE": true,
 	}
-	res, err := f.s.db.Query(context.Background(), `SELECT name FROM sqlite_master WHERE type = 'table'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, row := range res.Rows {
-		name := strings.ToUpper(toString(row[0]))
+	for _, table := range testTables(t, f.s) {
+		name := strings.ToUpper(table)
 		if _, ok := scopedTables[name]; !ok && !shared[name] {
 			t.Errorf("table %s is neither filtered by workspaces nor listed as shared", name)
 		}

@@ -285,8 +285,14 @@ func (s *Server) filterSQL(src string, f map[string]string, tr timeRange) (strin
 	if len(conds) == 0 {
 		return "1=1", nil, nil
 	}
+	// the evaluator adds a few of its own; D1 binds at most 100 per statement
+	if len(args) > maxFilterArgs {
+		return "", nil, badInput(fmt.Sprintf("the filters list too many values (%d, at most %d)", len(args), maxFilterArgs))
+	}
 	return strings.Join(conds, " AND "), args, nil
 }
+
+const maxFilterArgs = 60
 
 // spanArgs are a time range as the two bound created_at bounds.
 func spanArgs(from, to time.Time) []any {

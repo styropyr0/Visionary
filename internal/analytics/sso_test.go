@@ -11,12 +11,10 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"io"
-	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -33,11 +31,7 @@ const testPublicURL = "http://visionary.test"
 // yet, so the first calls act as the local admin.
 func newSSOServer(t *testing.T) *Server {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "sso.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), fstest.MapFS{"index.html": {Data: []byte("<html></html>")}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "sso.db", fstest.MapFS{"index.html": {Data: []byte("<html></html>")}})
 	t.Cleanup(func() { _ = s.db.Close() })
 	ctx := context.Background()
 	if err := s.Init(ctx); err != nil {

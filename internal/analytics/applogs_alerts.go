@@ -110,7 +110,7 @@ func (s *Server) observeLogNewPatterns(ctx context.Context, r alertRule, now tim
 		where += " AND service = ?"
 		args = append(args, r.Spec.Scope.Service)
 	}
-	res, err := s.db.Query(ctx, `SELECT service, level, template, lines FROM log_patterns WHERE `+where+` ORDER BY severity DESC, lines DESC LIMIT 20`, args...)
+	res, err := s.db.Query(ctx, `SELECT service, level, template, `+s.q.ident("lines")+` FROM log_patterns WHERE `+where+` ORDER BY severity DESC, `+s.q.ident("lines")+` DESC LIMIT 20`, args...)
 	if err != nil {
 		if missingTable(err, "log_patterns") {
 			return nil, nil

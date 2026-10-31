@@ -99,22 +99,27 @@ func detailIDs(d map[string]any, key string) []int64 {
 
 func (s *Server) deliveriesByID(ctx context.Context, ids []int64) (map[int64]deliveryView, error) {
 	out := map[int64]deliveryView{}
-	args := make([]any, 0, len(ids))
-	for _, id := range head(ids, 500) {
-		args = append(args, id)
-	}
-	res, err := s.db.Query(ctx, `SELECT id, channel_id, channel_name, channel_kind, status, attempts, error, created_at, sent_at, next_at
-FROM alert_deliveries WHERE id IN (`+placeholders(len(args))+`)`, args...)
-	if err != nil {
-		if missingTable(err, "alert_deliveries") {
-			return out, nil
+	ids = head(ids, 500)
+	for len(ids) > 0 {
+		chunk := head(ids, maxInArgs)
+		ids = ids[len(chunk):]
+		args := make([]any, 0, len(chunk))
+		for _, id := range chunk {
+			args = append(args, id)
 		}
-		return nil, err
-	}
-	for _, row := range res.Rows {
-		d := deliveryView{ID: toInt(row[0]), ChannelID: toInt(row[1]), ChannelName: toString(row[2]), ChannelKind: toString(row[3]), Event: "incident",
-			Status: toString(row[4]), Attempts: int(toInt(row[5])), Error: toString(row[6]), CreatedAt: toString(row[7]), SentAt: toString(row[8]), NextAt: toString(row[9])}
-		out[d.ID] = d
+		res, err := s.db.Query(ctx, `SELECT id, channel_id, channel_name, channel_kind, status, attempts, error, created_at, sent_at, next_at
+FROM alert_deliveries WHERE id IN (`+placeholders(len(args))+`)`, args...)
+		if err != nil {
+			if missingTable(err, "alert_deliveries") {
+				return out, nil
+			}
+			return nil, err
+		}
+		for _, row := range res.Rows {
+			d := deliveryView{ID: toInt(row[0]), ChannelID: toInt(row[1]), ChannelName: toString(row[2]), ChannelKind: toString(row[3]), Event: "incident",
+				Status: toString(row[4]), Attempts: int(toInt(row[5])), Error: toString(row[6]), CreatedAt: toString(row[7]), SentAt: toString(row[8]), NextAt: toString(row[9])}
+			out[d.ID] = d
+		}
 	}
 	return out, nil
 }
