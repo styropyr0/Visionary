@@ -67,6 +67,7 @@ variable "probe_password" {
 - `device` (String) Screen a browser check runs at: desktop (1280×800, default), laptop (1440×900), tablet (768×1024), phone (390×844, mobile user agent, touch, pixel ratio 3) or custom (viewport_w × viewport_h).
 - `enabled` (Boolean) Default true.
 - `expect_status` (String) Accepted statuses: 200, 200-299, 2xx, comma separated (default 200-299).
+- `files` (Attributes List) Small files upload steps send, 256 KB each and 512 KB in all. (see [below for nested schema](#nestedatt--files))
 - `final_screenshot` (Boolean) Keep a screenshot of every browser run, not only failed ones.
 - `follow_redirects` (Boolean) Default true.
 - `headers` (Map of String, Sensitive) Request headers.
@@ -101,18 +102,38 @@ variable "probe_password" {
 
 Required:
 
-- `action` (String) goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait or script.
+- `action` (String) goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait, script, extract, hover, drag, upload, frame, set_cookie, set_storage or grant_permission.
 
 Optional:
 
+- `attr` (String) What extract reads: text (default), value or an attribute name.
 - `count` (Number) Expected count (assert_count).
 - `label` (String) Name shown in results.
+- `lat` (Number) Latitude for grant_permission geolocation.
+- `lon` (Number) Longitude for grant_permission geolocation.
 - `max_ms` (Number) Fail the step when it takes longer than this.
 - `ms` (Number) Milliseconds (wait).
+- `name` (String) The variable extract sets (used later as {{var.NAME}}), the cookie of set_cookie, the key of set_storage or the file of upload.
 - `op` (String) Comparison for assert_count: eq, gte or lte.
+- `permission` (String) grant_permission: geolocation, notifications or clipboard.
+- `regex` (String) For extract: keep the first group (or the whole match) of this regular expression.
+- `scope` (String) set_cookie: the cookie's URL or domain (default the current page); set_storage: local (default) or session; grant_permission: the origin (default the current page's).
 - `selector` (String) CSS selector.
+- `target` (String) CSS selector drag drops on.
 - `text` (String) Text to find.
 - `value` (String) URL, text to type, key, option, script; {{secret.NAME}} uses a secret.
+
+<a id="nestedatt--files"></a>
+### Nested Schema for `files`
+
+Required:
+
+- `content_base64` (String) The file, base64 encoded, e.g. filebase64("avatar.png").
+- `name` (String) File name an upload step refers to.
+
+Optional:
+
+- `type` (String) MIME type.
 
 ## Import
 

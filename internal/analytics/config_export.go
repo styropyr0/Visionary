@@ -261,6 +261,8 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
 		FinalScreenshot: m.FinalScreenshot, BrowserOptions: m.BrowserOptions}
+	// Files are configuration, not secrets: they travel whole.
+	out.Files = c.Files
 	if len(out.Headers) == 0 {
 		out.Headers = nil
 	}

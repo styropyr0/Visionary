@@ -42,6 +42,7 @@ func TestBrowserCheckNormalize(t *testing.T) {
 		func(c *UptimeCheck) { c.Steps = nil },
 		func(c *UptimeCheck) { c.Steps = c.Steps[1:] },
 		func(c *UptimeCheck) { c.Steps = append(c.Steps, BrowserStep{Action: "hover"}) },
+		func(c *UptimeCheck) { c.Steps = append(c.Steps, BrowserStep{Action: "teleport"}) },
 		func(c *UptimeCheck) {
 			c.Steps = append(c.Steps, BrowserStep{Action: "type", Selector: "#x", Value: "{{secret.NOPE}}"})
 		},

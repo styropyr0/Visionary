@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -242,6 +243,14 @@ func (c UptimeCheck) masked() UptimeCheck {
 		}
 		c.Secrets = sec
 	}
+	if c.Files != nil {
+		files := make([]BrowserFile, len(c.Files))
+		for i, f := range c.Files {
+			f.Data = ""
+			files[i] = f
+		}
+		c.Files = files
+	}
 	return c
 }
 
@@ -384,7 +393,7 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Fields left out of the body keep these defaults.
 	body := checkWithAlert{UptimeCheck: UptimeCheck{FollowRedirects: true, Enabled: true}}
-	if err := readJSON(r, &body); err != nil {
+	if err := readCheckJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -434,7 +443,7 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body checkWithAlert
-	if err := readJSON(r, &body); err != nil {
+	if err := readCheckJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -466,6 +475,16 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"check": c.masked()})
+}
+
+// readCheckJSON is readJSON with room for a browser check's files.
+func readCheckJSON(r *http.Request, dst any) error {
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return errors.New("invalid JSON body")
+	}
+	return nil
 }
 
 // checkChanges names the fields an update changed, for the audit log; values

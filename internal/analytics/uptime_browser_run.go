@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 )
@@ -37,6 +39,8 @@ type stepResult struct {
 	Status     string  `json:"status"` // passed, failed, skipped
 	DurationMs float64 `json:"duration_ms"`
 	Error      string  `json:"error,omitempty"`
+	// Detail is what the step found, such as an extracted value.
+	Detail string `json:"detail,omitempty"`
 }
 
 type netFailure struct {
@@ -88,6 +92,12 @@ type runState struct {
 	order     []*netRequest
 	wallBase  float64
 	shotBytes int
+	// variables, the frame chain the steps work in and upload files
+	vars     map[string]string
+	frames   []string
+	frameCtx []runtime.ExecutionContextID
+	files    map[string]BrowserFile
+	tmpDir   string
 	// navigations seen when the previous step began
 	lastDoc int
 }
@@ -163,7 +173,16 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	}()
 	mask := masker(c.Secrets)
 	dev := c.device()
-	st := &runState{urls: map[network.RequestID]string{}, reqs: map[network.RequestID]*netRequest{}, mask: mask, touch: dev.Mobile}
+	st := &runState{urls: map[network.RequestID]string{}, reqs: map[network.RequestID]*netRequest{}, mask: mask, touch: dev.Mobile,
+		vars: map[string]string{}, files: map[string]BrowserFile{}}
+	for _, f := range c.Files {
+		st.files[f.Name] = f
+	}
+	defer func() {
+		if st.tmpDir != "" {
+			_ = os.RemoveAll(st.tmpDir)
+		}
+	}()
 	traceID, spanID := newTraceIDs()
 	patterns := c.tracePatterns()
 	if len(patterns) > 0 {
@@ -225,7 +244,8 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 			continue
 		}
 		t0 := time.Now()
-		status, err := playStep(runCtx, step, c.Secrets, st, guard)
+		status, detail, err := playStep(runCtx, step, c.Secrets, st, guard)
+		sr.Detail = clip(mask(detail), 200)
 		sr.DurationMs = float64(time.Since(t0).Microseconds()) / 1000
 		if status > 0 {
 			res.Status = int(status)
@@ -424,12 +444,12 @@ func jsString(s string) string {
 
 // waitJS evaluates expr until it returns a truthy value, across page loads,
 // for at most wait (or until ctx ends). It returns the last value.
-func waitJS[T any](ctx context.Context, expr string, wait time.Duration, ok func(T) bool) (T, error) {
+func waitJS[T any](ctx context.Context, st *runState, expr string, wait time.Duration, ok func(T) bool) (T, error) {
 	var last T
 	var lastErr error
 	deadline := time.Now().Add(wait)
 	for {
-		v, err := chromedp.Run(ctx, chromedp.Evaluate[T](expr))
+		v, err := evalJS[T](ctx, st, expr)
 		if err == nil && ok(v) {
 			return v, nil
 		}
@@ -498,8 +518,29 @@ var stepKeys = map[string]string{
 	"home": kb.Home, "end": kb.End, "pagedown": kb.PageDown, "pageup": kb.PageUp,
 }
 
-// playStep runs one step. It returns the HTTP status of a page it opened.
-func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st *runState, guard *guardProxy) (int64, error) {
+// playStep runs one step. It returns the HTTP status of a page it opened,
+// and what the step found.
+func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st *runState, guard *guardProxy) (int64, string, error) {
+	s = st.resolve(s, secrets)
+	switch s.Action {
+	case "extract", "hover", "drag", "upload", "frame", "set_cookie", "set_storage", "grant_permission":
+		what := s.Selector
+		if what == "" {
+			what = "“" + s.Text + "”"
+		}
+		detail, err := playMore(ctx, s, st, func(err error) error {
+			if errors.Is(err, errStepTimeout) {
+				return fmt.Errorf("%s was not found or not visible", what)
+			}
+			return err
+		})
+		return 0, detail, err
+	}
+	status, err := playBasic(ctx, s, secrets, st, guard)
+	return status, "", err
+}
+
+func playBasic(ctx context.Context, s BrowserStep, secrets map[string]string, st *runState, guard *guardProxy) (int64, error) {
 	navBefore := st.navCount()
 	defer func() {
 		st.mu.Lock()
@@ -520,6 +561,7 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 	}
 	switch s.Action {
 	case "goto":
+		st.frames, st.frameCtx = nil, nil
 		target := resolveSecrets(s.Value, secrets)
 		if guard != nil {
 			u, err := url.Parse(target)
@@ -547,7 +589,7 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 		}
 		return 0, nil
 	case "click":
-		p, err := waitJS[*elementAt](ctx, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
+		p, err := st.locate(ctx, s)
 		if err != nil {
 			return 0, notFound(err)
 		}
@@ -558,7 +600,7 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 	case "type":
 		focus := `(() => { const e = document.querySelector(` + jsString(s.Selector) + `); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false;
   e.scrollIntoView({ block: "center" }); e.focus(); if ("value" in e) { e.value = ""; e.dispatchEvent(new Event("input", { bubbles: true })); } else if (e.isContentEditable) { e.textContent = ""; } return document.activeElement === e; })()`
-		if _, err := waitJS[bool](ctx, focus, remaining(ctx), func(b bool) bool { return b }); err != nil {
+		if _, err := waitJS[bool](ctx, st, focus, remaining(ctx), func(b bool) bool { return b }); err != nil {
 			return 0, notFound(err)
 		}
 		return 0, chromedp.Do(ctx, chromedp.KeyEvent(resolveSecrets(s.Value, secrets)))
@@ -574,7 +616,7 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
   const o = [...e.options].find((o) => o.value === want) || [...e.options].find((o) => o.text.trim() === want);
   if (!o) return "no option";
   e.value = o.value; e.dispatchEvent(new Event("input", { bubbles: true })); e.dispatchEvent(new Event("change", { bubbles: true })); return "ok"; })()`
-		v, err := waitJS[string](ctx, js, remaining(ctx), func(v string) bool { return v != "missing" })
+		v, err := waitJS[string](ctx, st, js, remaining(ctx), func(v string) bool { return v != "missing" })
 		if err != nil {
 			return 0, notFound(err)
 		}
@@ -583,10 +625,10 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 		}
 		return 0, nil
 	case "wait_selector":
-		_, err := waitJS[*elementAt](ctx, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
+		_, err := waitJS[*elementAt](ctx, st, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
 		return 0, notFound(err)
 	case "wait_text":
-		_, err := waitJS[bool](ctx, textJS(s, true), remaining(ctx), func(b bool) bool { return b })
+		_, err := waitJS[bool](ctx, st, textJS(s, true), remaining(ctx), func(b bool) bool { return b })
 		if errors.Is(err, errStepTimeout) {
 			return 0, fmt.Errorf("text “%s” did not appear", s.Text)
 		}
@@ -602,14 +644,14 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 			case <-time.After(browserPollEvery):
 			}
 		}
-		_, err := waitJS[bool](ctx, `document.readyState === "complete" && location.href.includes(`+jsString(s.Value)+`)`, remaining(ctx), func(b bool) bool { return b })
+		_, err := waitJS[bool](ctx, nil, `document.readyState === "complete" && location.href.includes(`+jsString(s.Value)+`)`, remaining(ctx), func(b bool) bool { return b })
 		if errors.Is(err, errStepTimeout) {
 			return 0, fmt.Errorf("the page did not finish loading at a URL containing %q", s.Value)
 		}
 		return 0, err
 	case "assert_text", "assert_no_text":
 		want := s.Action == "assert_text"
-		_, err := waitJS[bool](ctx, textJS(s, want), min(browserAssertWait, remaining(ctx)), func(b bool) bool { return b })
+		_, err := waitJS[bool](ctx, st, textJS(s, want), min(browserAssertWait, remaining(ctx)), func(b bool) bool { return b })
 		if errors.Is(err, errStepTimeout) {
 			if want {
 				return 0, fmt.Errorf("text “%s” is not on the page", s.Text)
@@ -618,13 +660,13 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 		}
 		return 0, err
 	case "assert_url":
-		href, err := waitJS[string](ctx, `location.href`, min(browserAssertWait, remaining(ctx)), func(h string) bool { return strings.Contains(h, s.Value) })
+		href, err := waitJS[string](ctx, nil, `location.href`, min(browserAssertWait, remaining(ctx)), func(h string) bool { return strings.Contains(h, s.Value) })
 		if errors.Is(err, errStepTimeout) {
 			return 0, fmt.Errorf("the URL %s does not contain %q", redactURL(href), s.Value)
 		}
 		return 0, err
 	case "assert_count":
-		n, err := waitJS[int](ctx, `document.querySelectorAll(`+jsString(s.Selector)+`).length`, min(browserAssertWait, remaining(ctx)), func(n int) bool { return countMatches(s.Op, n, s.Count) })
+		n, err := waitJS[int](ctx, st, `document.querySelectorAll(`+jsString(s.Selector)+`).length`, min(browserAssertWait, remaining(ctx)), func(n int) bool { return countMatches(s.Op, n, s.Count) })
 		if errors.Is(err, errStepTimeout) {
 			return 0, fmt.Errorf("found %d of %s, expected %s %d", n, s.Selector, opWord(s.Op), s.Count)
 		}
@@ -641,7 +683,7 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 		if !strings.Contains(body, "return") {
 			body = "return (" + body + ");"
 		}
-		v, err := chromedp.Run(ctx, chromedp.Evaluate[json.RawMessage](`(async () => { `+body+` })()`, chromedp.EvalAwaitPromise))
+		v, err := evalJS[json.RawMessage](ctx, st, `(async () => { `+body+` })()`, chromedp.EvalAwaitPromise)
 		if err != nil {
 			return 0, fmt.Errorf("script failed: %s", clip(err.Error(), 200))
 		}

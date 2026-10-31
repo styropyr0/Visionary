@@ -7,7 +7,7 @@ import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, 
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
 import { DeviceSettings, LimitSettings, TraceSettings } from "./Uptime.settings";
-import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
+import { BrowserNotice, FilesEditor, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
@@ -97,6 +97,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           viewport_w: undefined,
           viewport_h: undefined,
           step_screenshots: undefined,
+          files: undefined,
         };
     setBusy(true);
     try {
@@ -161,9 +162,10 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <span>Name</span>
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
         </label>
-        {browser && <StepsEditor steps={steps} onChange={setSteps} />}
+        {browser && <StepsEditor steps={steps} onChange={setSteps} files={form.files ?? []} />}
         {browser && <DeviceSettings form={form} set={set} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
+        {browser && (form.files?.length || steps.some((s) => s.action === "upload")) ? <FilesEditor files={form.files ?? []} onChange={(f) => set("files", f)} /> : null}
         {browser && <TraceSettings form={form} set={set} steps={steps} />}
         {!browser && (
           <>

@@ -1,8 +1,10 @@
-import { AlertTriangle, ArrowDown, ArrowUp, Globe, Plus, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, FileUp, Globe, Plus, X } from "lucide-react";
 import { Select } from "../components/Select";
+import { formatBytes } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
-import { getBrowserStatus, MASK, type BrowserStep, type StepAction } from "../lib/uptime";
+import { getBrowserStatus, MASK, type BrowserFile, type BrowserStep, type StepAction } from "../lib/uptime";
 
 /** What each step asks for, in the order the menu lists them. */
 const ACTIONS: { value: StepAction; label: string; fields: ("selector" | "text" | "value" | "count" | "ms")[]; target?: boolean; hint?: string }[] = [
@@ -20,6 +22,14 @@ const ACTIONS: { value: StepAction; label: string; fields: ("selector" | "text" 
   { value: "assert_count", label: "Count elements", fields: ["selector", "count"] },
   { value: "wait", label: "Pause", fields: ["ms"] },
   { value: "script", label: "JavaScript check (advanced)", fields: ["value"], hint: "An expression, or a body with return; passes when the result is truthy. Runs in the page; await works." },
+  { value: "extract", label: "Read a value into a variable", fields: [], hint: "Later steps use it as {{var.NAME}}. A regex keeps its first group, or the whole match." },
+  { value: "hover", label: "Hover", fields: ["selector", "text"], target: true },
+  { value: "drag", label: "Drag and drop", fields: [] },
+  { value: "upload", label: "Upload a file", fields: [], hint: "Add the file under Files below; at most 256 KB." },
+  { value: "frame", label: "Switch frame", fields: [], hint: "Later steps work inside this iframe, until a Switch frame with no selector goes back to the page." },
+  { value: "set_cookie", label: "Set a cookie", fields: [] },
+  { value: "set_storage", label: "Set local or session storage", fields: [] },
+  { value: "grant_permission", label: "Grant a permission", fields: [], hint: "For the current page's origin unless one is given." },
 ];
 
 const actionOf = (a: StepAction) => ACTIONS.find((x) => x.value === a) ?? ACTIONS[0];
@@ -34,8 +44,111 @@ const PLACEHOLDER: Record<string, string> = {
   script: "document.querySelectorAll('.row').length > 0",
 };
 
+const EXTRACT_ATTRS = [
+  { value: "text", label: "Its text" },
+  { value: "value", label: "Its value" },
+  { value: "attr", label: "An attribute" },
+];
+
+/** The fields of the steps beyond clicking and checking. */
+function MoreFields({ s, set, files }: { s: BrowserStep; set: (patch: Partial<BrowserStep>) => void; files: BrowserFile[] }) {
+  const input = (k: "selector" | "name" | "value" | "target" | "scope" | "regex" | "attr", placeholder: string, label: string, mono = true) => (
+    <input className={`input ${mono ? "mono" : ""}`} value={(s[k] as string | undefined) ?? ""} placeholder={placeholder} aria-label={label} onChange={(e) => set({ [k]: e.target.value })} />
+  );
+  switch (s.action) {
+    case "extract": {
+      const kind = !s.attr || s.attr === "text" ? "text" : s.attr === "value" ? "value" : "attr";
+      return (
+        <>
+          {input("selector", "CSS selector, e.g. #order-number", "CSS selector")}
+          <div className="up-row">
+            <Select label="Read" value={kind} align="left" options={EXTRACT_ATTRS} onChange={(v) => set({ attr: v === "attr" ? "href" : v })} />
+            {kind === "attr" && <input className="input mono" style={{ flex: 1 }} value={s.attr ?? ""} placeholder="href, data-id, …" aria-label="Attribute" onChange={(e) => set({ attr: e.target.value })} />}
+          </div>
+          {input("regex", "Regex (optional), e.g. #(\\d+)", "Regex")}
+          {input("name", "Variable name, e.g. ORDER_ID", "Variable name")}
+        </>
+      );
+    }
+    case "drag":
+      return (
+        <>
+          {input("selector", "Drag from: CSS selector, e.g. .card:first-child", "Drag from")}
+          {input("target", "Drop on: CSS selector, e.g. #done", "Drop on")}
+        </>
+      );
+    case "upload":
+      return (
+        <>
+          {input("selector", "File input, e.g. input[type=file]", "File input")}
+          {files.length === 0 ? (
+            <small className="up-warn">Add a file under Files first.</small>
+          ) : (
+            <Select label="File" value={s.name ?? ""} align="left" options={[{ value: "", label: "Choose a file" }, ...files.map((f) => ({ value: f.name, label: f.name }))]} onChange={(v) => set({ name: v })} />
+          )}
+        </>
+      );
+    case "frame":
+      return input("selector", "iframe CSS selector, e.g. iframe#payment; empty goes back to the page", "Frame selector");
+    case "set_cookie":
+      return (
+        <>
+          <div className="up-row">
+            <input className="input mono" style={{ flex: 1 }} value={s.name ?? ""} placeholder="Name, e.g. consent" aria-label="Cookie name" onChange={(e) => set({ name: e.target.value })} />
+            <input className="input mono" style={{ flex: 1.4 }} value={s.value ?? ""} placeholder="Value, e.g. accepted or {{secret.TOKEN}}" aria-label="Cookie value" onChange={(e) => set({ value: e.target.value })} />
+          </div>
+          {input("scope", "URL or domain (optional), e.g. https://app.example.com or .example.com", "Cookie URL or domain")}
+        </>
+      );
+    case "set_storage":
+      return (
+        <div className="up-row">
+          <Select
+            label="Storage"
+            value={s.scope || "local"}
+            align="left"
+            options={[
+              { value: "local", label: "localStorage" },
+              { value: "session", label: "sessionStorage" },
+            ]}
+            onChange={(v) => set({ scope: v })}
+          />
+          <input className="input mono" style={{ flex: 1 }} value={s.name ?? ""} placeholder="Key, e.g. onboarding_done" aria-label="Key" onChange={(e) => set({ name: e.target.value })} />
+          <input className="input mono" style={{ flex: 1 }} value={s.value ?? ""} placeholder="Value, e.g. true" aria-label="Value" onChange={(e) => set({ value: e.target.value })} />
+        </div>
+      );
+    case "grant_permission":
+      return (
+        <>
+          <div className="up-row">
+            <Select
+              label="Permission"
+              value={s.permission || ""}
+              align="left"
+              options={[
+                { value: "", label: "Choose a permission" },
+                { value: "geolocation", label: "Location" },
+                { value: "notifications", label: "Notifications" },
+                { value: "clipboard", label: "Clipboard" },
+              ]}
+              onChange={(v) => set({ permission: v as BrowserStep["permission"] })}
+            />
+            {s.permission === "geolocation" && (
+              <>
+                <input className="input" type="number" step="any" min={-90} max={90} style={{ width: 120 }} value={s.lat ?? ""} placeholder="Latitude" aria-label="Latitude" onChange={(e) => set({ lat: e.target.value === "" ? undefined : Number(e.target.value) })} />
+                <input className="input" type="number" step="any" min={-180} max={180} style={{ width: 120 }} value={s.lon ?? ""} placeholder="Longitude" aria-label="Longitude" onChange={(e) => set({ lon: e.target.value === "" ? undefined : Number(e.target.value) })} />
+              </>
+            )}
+          </div>
+          {input("scope", "Origin (optional), e.g. https://app.example.com", "Origin")}
+        </>
+      );
+  }
+  return null;
+}
+
 /** The ordered steps of a browser check. */
-export function StepsEditor({ steps, onChange }: { steps: BrowserStep[]; onChange: (s: BrowserStep[]) => void }) {
+export function StepsEditor({ steps, onChange, files = [] }: { steps: BrowserStep[]; onChange: (s: BrowserStep[]) => void; files?: BrowserFile[] }) {
   const set = (i: number, patch: Partial<BrowserStep>) => onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const move = (i: number, d: number) => {
     const next = [...steps];
@@ -123,6 +236,7 @@ export function StepsEditor({ steps, onChange }: { steps: BrowserStep[]; onChang
                 {a.fields.includes("ms") && (
                   <input className="input" type="number" min={1} max={30000} value={s.ms ?? 1000} aria-label="Milliseconds" onChange={(e) => set(i, { ms: Number(e.target.value) || 0 })} />
                 )}
+                <MoreFields s={s} set={(patch) => set(i, patch)} files={files} />
                 <div className="up-row">
                   <input className="input up-step-label" style={{ flex: 1 }} value={s.label ?? ""} placeholder="Name in results (optional)" aria-label="Step name" maxLength={120} onChange={(e) => set(i, { label: e.target.value })} />
                   <input
@@ -150,7 +264,58 @@ export function StepsEditor({ steps, onChange }: { steps: BrowserStep[]; onChang
           Add step
         </button>
       </div>
-      <small>Steps run in order in a fresh private browser window. A step that waits for something gives up when the check's timeout runs out; checks of text, URL and counts wait up to 5 seconds.</small>
+      <small>
+        Steps run in order in a fresh private browser window. A step that waits for something gives up when the check's timeout runs out; checks of text, URL and counts wait up to 5 seconds. Values can use <code>{"{{secret.NAME}}"}</code> and <code>{"{{var.NAME}}"}</code> from an earlier Read step.
+      </small>
+    </div>
+  );
+}
+
+const MAX_FILE = 256 * 1024;
+
+/** Small files upload steps send, kept with the check. */
+export function FilesEditor({ files, onChange }: { files: BrowserFile[]; onChange: (f: BrowserFile[]) => void }) {
+  const pick = useRef<HTMLInputElement>(null);
+  const [err, setErr] = useState("");
+  const add = (list: FileList | null) => {
+    setErr("");
+    for (const f of Array.from(list ?? [])) {
+      if (f.size > MAX_FILE) {
+        setErr(`${f.name} is over 256 KB`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = String(reader.result).replace(/^data:[^,]*,/, "");
+        onChange([...files.filter((x) => x.name !== f.name), { name: f.name, type: f.type, size: f.size, data }]);
+      };
+      reader.readAsDataURL(f);
+    }
+  };
+  return (
+    <div className="field">
+      <span>Files</span>
+      {files.map((f, i) => (
+        <div className="up-row up-file" key={f.name}>
+          <FileUp size={14} aria-hidden className="dim" />
+          <span className="mono" style={{ flex: 1 }}>
+            {f.name}
+          </span>
+          <span className="dim">{formatBytes(f.size)}</span>
+          <button type="button" className="icon-btn" aria-label={`Remove ${f.name}`} title="Remove" onClick={() => onChange(files.filter((_, j) => j !== i))}>
+            <X size={15} />
+          </button>
+        </div>
+      ))}
+      <div>
+        <button type="button" className="btn ghost sm" disabled={files.length >= 5} onClick={() => pick.current?.click()}>
+          <Plus size={14} />
+          Add file
+        </button>
+        <input ref={pick} type="file" hidden multiple onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
+      </div>
+      {err && <small className="up-warn">{err}</small>}
+      <small>For Upload a file steps: up to 5 files, 256 KB each and 512 KB in all, stored with the check.</small>
     </div>
   );
 }

@@ -37,6 +37,20 @@ type BrowserStep struct {
 	Label    string `json:"label,omitempty"`
 	// MaxMs fails the step when it takes longer.
 	MaxMs int `json:"max_ms,omitempty"`
+	// Name is the variable of extract, the cookie of set_cookie, the key of
+	// set_storage and the file of upload.
+	Name string `json:"name,omitempty"`
+	// Attr is what extract reads: text (default), value or an attribute.
+	Attr  string `json:"attr,omitempty"`
+	Regex string `json:"regex,omitempty"`
+	// Target is where drag drops.
+	Target string `json:"target,omitempty"`
+	// Scope is the cookie's URL or domain, local or session storage, or the
+	// origin a permission is granted to.
+	Scope      string  `json:"scope,omitempty"`
+	Permission string  `json:"permission,omitempty"`
+	Lat        float64 `json:"lat,omitempty"`
+	Lon        float64 `json:"lon,omitempty"`
 }
 
 // BrowserOptions are a browser check's settings beyond its steps, stored as
@@ -53,6 +67,8 @@ type BrowserOptions struct {
 	ViewportH int    `json:"viewport_h,omitempty"`
 	// StepScreenshots keeps a small screenshot after every step.
 	StepScreenshots bool `json:"step_screenshots,omitempty"`
+	// Files are what upload steps send.
+	Files []BrowserFile `json:"files,omitempty"`
 }
 
 const (
@@ -64,7 +80,8 @@ const (
 var (
 	browserActions = map[string]bool{"goto": true, "click": true, "type": true, "press": true, "select": true, "wait_selector": true,
 		"wait_text": true, "wait_navigation": true, "assert_text": true, "assert_no_text": true, "assert_url": true, "assert_count": true,
-		"wait": true, "script": true}
+		"wait": true, "script": true, "extract": true, "hover": true, "drag": true, "upload": true, "frame": true, "set_cookie": true,
+		"set_storage": true, "grant_permission": true}
 	secretNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 	secretRefRe  = regexp.MustCompile(`\{\{secret\.([A-Za-z0-9_]+)\}\}`)
 )
@@ -151,6 +168,25 @@ func (b BrowserStep) describe() string {
 		return fmt.Sprintf("wait %d ms", b.Ms)
 	case "script":
 		return "script"
+	case "extract":
+		return "read " + b.Selector + " into " + b.Name
+	case "hover":
+		return "hover " + what
+	case "drag":
+		return "drag " + b.Selector + " to " + b.Target
+	case "upload":
+		return "upload " + b.Name + " to " + b.Selector
+	case "frame":
+		if b.Selector == "" {
+			return "back to the page"
+		}
+		return "into frame " + b.Selector
+	case "set_cookie":
+		return "set cookie " + b.Name
+	case "set_storage":
+		return "set " + b.Scope + "Storage " + b.Name
+	case "grant_permission":
+		return "grant " + b.Permission
 	}
 	return b.Action
 }
@@ -186,13 +222,33 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 		secrets[k] = v
 	}
 	c.Secrets = secrets
+	if err := c.normalizeFiles(prev); err != nil {
+		return err
+	}
+	files := map[string]bool{}
+	for _, f := range c.Files {
+		files[f.Name] = true
+	}
+	vars := map[string]bool{}
 	for i := range c.Steps {
 		st := &c.Steps[i]
 		st.Action = strings.TrimSpace(st.Action)
 		st.Selector = strings.TrimSpace(st.Selector)
+		st.Target = strings.TrimSpace(st.Target)
 		st.Label = strings.TrimSpace(st.Label)
 		if err := st.validate(); err != nil {
 			return fmt.Errorf("step %d: %w", i+1, err)
+		}
+		if err := st.validateMore(files); err != nil {
+			return fmt.Errorf("step %d: %w", i+1, err)
+		}
+		for _, v := range st.refs() {
+			if !vars[v] {
+				return fmt.Errorf("step %d uses variable %s, which no earlier extract step sets", i+1, v)
+			}
+		}
+		if st.Action == "extract" {
+			vars[st.Name] = true
 		}
 		for _, m := range secretRefRe.FindAllStringSubmatch(st.Value, -1) {
 			if _, ok := secrets[m[1]]; !ok {

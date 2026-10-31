@@ -44,6 +44,7 @@ export interface UptimeCheck {
   viewport_h?: number;
   /** Keep a small screenshot after every step. */
   step_screenshots?: boolean;
+  files?: BrowserFile[];
 }
 
 export type Device = "desktop" | "laptop" | "tablet" | "phone" | "custom";
@@ -76,7 +77,15 @@ export type StepAction =
   | "assert_url"
   | "assert_count"
   | "wait"
-  | "script";
+  | "script"
+  | "extract"
+  | "hover"
+  | "drag"
+  | "upload"
+  | "frame"
+  | "set_cookie"
+  | "set_storage"
+  | "grant_permission";
 
 export interface BrowserStep {
   action: StepAction;
@@ -89,6 +98,26 @@ export interface BrowserStep {
   label?: string;
   /** Fails the step when it takes longer. */
   max_ms?: number;
+  /** The variable of extract, the cookie of set_cookie, the key of set_storage, the file of upload. */
+  name?: string;
+  /** What extract reads: text, value or an attribute. */
+  attr?: string;
+  regex?: string;
+  /** Where drag drops. */
+  target?: string;
+  /** set_cookie: URL or domain; set_storage: local or session; grant_permission: origin. */
+  scope?: string;
+  permission?: "geolocation" | "notifications" | "clipboard";
+  lat?: number;
+  lon?: number;
+}
+
+/** A file upload steps send; data (base64) comes back empty, and sending it empty keeps the stored file. */
+export interface BrowserFile {
+  name: string;
+  type?: string;
+  size: number;
+  data?: string;
 }
 
 export const MASK = "********";
@@ -202,6 +231,8 @@ export interface StepResult {
   status: "passed" | "failed" | "skipped";
   duration_ms: number;
   error?: string;
+  /** What the step found, such as an extracted value. */
+  detail?: string;
 }
 
 export interface BrowserRunSummary {

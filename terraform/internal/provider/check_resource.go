@@ -24,7 +24,8 @@ import (
 const uptimeMask = "********"
 
 var browserActions = []string{"goto", "click", "type", "press", "select", "wait_selector", "wait_text", "wait_navigation",
-	"assert_text", "assert_no_text", "assert_url", "assert_count", "wait", "script"}
+	"assert_text", "assert_no_text", "assert_url", "assert_count", "wait", "script", "extract", "hover", "drag", "upload", "frame",
+	"set_cookie", "set_storage", "grant_permission"}
 
 type uptimeCheckResource struct{ base }
 
@@ -67,18 +68,39 @@ type checkModel struct {
 	ViewportW       types.Int64   `tfsdk:"viewport_w"`
 	ViewportH       types.Int64   `tfsdk:"viewport_h"`
 	StepScreenshots types.Bool    `tfsdk:"step_screenshots"`
+	Files           []fileModel   `tfsdk:"files"`
+}
+
+type fileModel struct {
+	Name    types.String `tfsdk:"name"`
+	Type    types.String `tfsdk:"type"`
+	Content types.String `tfsdk:"content_base64"`
+}
+
+type apiFile struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+	Data string `json:"data,omitempty"`
 }
 
 type stepModel struct {
-	Action   types.String `tfsdk:"action"`
-	Selector types.String `tfsdk:"selector"`
-	Text     types.String `tfsdk:"text"`
-	Value    types.String `tfsdk:"value"`
-	Count    types.Int64  `tfsdk:"count"`
-	Op       types.String `tfsdk:"op"`
-	Ms       types.Int64  `tfsdk:"ms"`
-	Label    types.String `tfsdk:"label"`
-	MaxMs    types.Int64  `tfsdk:"max_ms"`
+	Action     types.String  `tfsdk:"action"`
+	Selector   types.String  `tfsdk:"selector"`
+	Text       types.String  `tfsdk:"text"`
+	Value      types.String  `tfsdk:"value"`
+	Count      types.Int64   `tfsdk:"count"`
+	Op         types.String  `tfsdk:"op"`
+	Ms         types.Int64   `tfsdk:"ms"`
+	Label      types.String  `tfsdk:"label"`
+	MaxMs      types.Int64   `tfsdk:"max_ms"`
+	Name       types.String  `tfsdk:"name"`
+	Attr       types.String  `tfsdk:"attr"`
+	Regex      types.String  `tfsdk:"regex"`
+	Target     types.String  `tfsdk:"target"`
+	Scope      types.String  `tfsdk:"scope"`
+	Permission types.String  `tfsdk:"permission"`
+	Lat        types.Float64 `tfsdk:"lat"`
+	Lon        types.Float64 `tfsdk:"lon"`
 }
 
 type apiCheck struct {
@@ -113,18 +135,27 @@ type apiCheck struct {
 	ViewportW       int64             `json:"viewport_w,omitempty"`
 	ViewportH       int64             `json:"viewport_h,omitempty"`
 	StepScreenshots bool              `json:"step_screenshots,omitempty"`
+	Files           []apiFile         `json:"files,omitempty"`
 }
 
 type apiStepB struct {
-	Action   string `json:"action"`
-	Selector string `json:"selector,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Value    string `json:"value,omitempty"`
-	Count    int64  `json:"count,omitempty"`
-	Op       string `json:"op,omitempty"`
-	Ms       int64  `json:"ms,omitempty"`
-	Label    string `json:"label,omitempty"`
-	MaxMs    int64  `json:"max_ms,omitempty"`
+	Action     string  `json:"action"`
+	Selector   string  `json:"selector,omitempty"`
+	Text       string  `json:"text,omitempty"`
+	Value      string  `json:"value,omitempty"`
+	Count      int64   `json:"count,omitempty"`
+	Op         string  `json:"op,omitempty"`
+	Ms         int64   `json:"ms,omitempty"`
+	Label      string  `json:"label,omitempty"`
+	MaxMs      int64   `json:"max_ms,omitempty"`
+	Name       string  `json:"name,omitempty"`
+	Attr       string  `json:"attr,omitempty"`
+	Regex      string  `json:"regex,omitempty"`
+	Target     string  `json:"target,omitempty"`
+	Scope      string  `json:"scope,omitempty"`
+	Permission string  `json:"permission,omitempty"`
+	Lat        float64 `json:"lat,omitempty"`
+	Lon        float64 `json:"lon,omitempty"`
 }
 
 func (r *uptimeCheckResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -133,15 +164,24 @@ func (r *uptimeCheckResource) Metadata(_ context.Context, req resource.MetadataR
 
 func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	step := map[string]schema.Attribute{
-		"action":   schema.StringAttribute{Description: "goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait or script.", Required: true, Validators: []validator.String{stringvalidator.OneOf(browserActions...)}},
-		"selector": optStr("CSS selector."),
-		"text":     optStr("Text to find."),
-		"value":    optStr("URL, text to type, key, option, script; {{secret.NAME}} uses a secret."),
-		"count":    schema.Int64Attribute{Description: "Expected count (assert_count).", Optional: true},
-		"op":       optStr("Comparison for assert_count: eq, gte or lte."),
-		"ms":       schema.Int64Attribute{Description: "Milliseconds (wait).", Optional: true},
-		"label":    optStr("Name shown in results."),
-		"max_ms":   schema.Int64Attribute{Description: "Fail the step when it takes longer than this.", Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}},
+		"action": schema.StringAttribute{Description: "goto, click, type, press, select, wait_selector, wait_text, wait_navigation, assert_text, assert_no_text, assert_url, assert_count, wait, script, " +
+			"extract, hover, drag, upload, frame, set_cookie, set_storage or grant_permission.", Required: true, Validators: []validator.String{stringvalidator.OneOf(browserActions...)}},
+		"name":       optStr("The variable extract sets (used later as {{var.NAME}}), the cookie of set_cookie, the key of set_storage or the file of upload."),
+		"attr":       optStr("What extract reads: text (default), value or an attribute name."),
+		"regex":      optStr("For extract: keep the first group (or the whole match) of this regular expression."),
+		"target":     optStr("CSS selector drag drops on."),
+		"scope":      optStr("set_cookie: the cookie's URL or domain (default the current page); set_storage: local (default) or session; grant_permission: the origin (default the current page's)."),
+		"permission": optStr("grant_permission: geolocation, notifications or clipboard."),
+		"lat":        schema.Float64Attribute{Description: "Latitude for grant_permission geolocation.", Optional: true},
+		"lon":        schema.Float64Attribute{Description: "Longitude for grant_permission geolocation.", Optional: true},
+		"selector":   optStr("CSS selector."),
+		"text":       optStr("Text to find."),
+		"value":      optStr("URL, text to type, key, option, script; {{secret.NAME}} uses a secret."),
+		"count":      schema.Int64Attribute{Description: "Expected count (assert_count).", Optional: true},
+		"op":         optStr("Comparison for assert_count: eq, gte or lte."),
+		"ms":         schema.Int64Attribute{Description: "Milliseconds (wait).", Optional: true},
+		"label":      optStr("Name shown in results."),
+		"max_ms":     schema.Int64Attribute{Description: "Fail the step when it takes longer than this.", Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}},
 	}
 	limit := func(what string) schema.Int64Attribute {
 		return schema.Int64Attribute{Description: what, Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}}
@@ -208,6 +248,16 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:    true, Computed: true, Default: stringdefault.StaticString("desktop"),
 				Validators: []validator.String{stringvalidator.OneOf("desktop", "laptop", "tablet", "phone", "custom")},
 			},
+			"files": schema.ListNestedAttribute{
+				Description: "Small files upload steps send, 256 KB each and 512 KB in all.",
+				Optional:    true,
+				Validators:  []validator.List{listvalidator.SizeAtMost(5)},
+				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+					"name":           schema.StringAttribute{Description: "File name an upload step refers to.", Required: true},
+					"type":           optStr("MIME type."),
+					"content_base64": schema.StringAttribute{Description: "The file, base64 encoded, e.g. filebase64(\"avatar.png\").", Required: true},
+				}},
+			},
 			"step_screenshots": schema.BoolAttribute{Description: "Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
 			"viewport_w":       schema.Int64Attribute{Description: "Width of a custom device, 320 to 3840.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 3840)}},
 			"viewport_h":       schema.Int64Attribute{Description: "Height of a custom device, 320 to 2160.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 2160)}},
@@ -243,7 +293,7 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		if !set("url") {
 			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
 		}
-		for _, n := range []string{"steps", "secrets", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms", "viewport_w", "viewport_h"} {
+		for _, n := range []string{"steps", "secrets", "files", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms", "viewport_w", "viewport_h"} {
 			if set(n) {
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
 			}
@@ -278,9 +328,21 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 	for _, s := range m.Steps {
 		in.Steps = append(in.Steps, apiStepB{Action: s.Action.ValueString(), Selector: s.Selector.ValueString(), Text: s.Text.ValueString(),
 			Value: s.Value.ValueString(), Count: s.Count.ValueInt64(), Op: s.Op.ValueString(), Ms: s.Ms.ValueInt64(), Label: s.Label.ValueString(),
-			MaxMs: s.MaxMs.ValueInt64()})
+			MaxMs: s.MaxMs.ValueInt64(), Name: s.Name.ValueString(), Attr: s.Attr.ValueString(), Regex: s.Regex.ValueString(), Target: s.Target.ValueString(),
+			Scope: s.Scope.ValueString(), Permission: s.Permission.ValueString(), Lat: s.Lat.ValueFloat64(), Lon: s.Lon.ValueFloat64()})
+	}
+	for _, f := range m.Files {
+		in.Files = append(in.Files, apiFile{Name: f.Name.ValueString(), Type: f.Type.ValueString(), Data: f.Content.ValueString()})
 	}
 	return in
+}
+
+// optDefault is optString for a field the server fills with def when left out.
+func optDefault(v, def string, ref types.String) types.String {
+	if v == def && ref.IsNull() {
+		return types.StringNull()
+	}
+	return optString(v, ref)
 }
 
 // unmask puts back the values the API hides, from ref.
@@ -303,6 +365,13 @@ func unmask(server map[string]string, ref types.Map) types.Map {
 	return optStringMap(out, ref)
 }
 
+func defaultScope(action string) string {
+	if action == "set_storage" {
+		return "local"
+	}
+	return ""
+}
+
 func fallbackStr(v, def string) string {
 	if v == "" {
 		return def
@@ -322,6 +391,22 @@ func (m *checkModel) fill(c apiCheck) {
 	m.WarnLCPMs, m.WarnCLS, m.WarnTTFBMs = optInt(c.WarnLCPMs, m.WarnLCPMs), optFloat(c.WarnCLS, m.WarnCLS), optInt(c.WarnTTFBMs, m.WarnTTFBMs)
 	m.Device, m.ViewportW, m.ViewportH = types.StringValue(fallbackStr(c.Device, "desktop")), optInt(c.ViewportW, m.ViewportW), optInt(c.ViewportH, m.ViewportH)
 	m.StepScreenshots = types.BoolValue(c.StepScreenshots)
+	// The API leaves file contents out; they stay as configured.
+	if len(c.Files) > 0 || m.Files != nil {
+		known := map[string]fileModel{}
+		for _, f := range m.Files {
+			known[f.Name.ValueString()] = f
+		}
+		files := make([]fileModel, len(c.Files))
+		for i, f := range c.Files {
+			ref, ok := known[f.Name]
+			if !ok {
+				ref = fileModel{Type: types.StringNull(), Content: types.StringValue("")}
+			}
+			files[i] = fileModel{Name: types.StringValue(f.Name), Type: optString(f.Type, ref.Type), Content: ref.Content}
+		}
+		m.Files = files
+	}
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return
@@ -329,13 +414,18 @@ func (m *checkModel) fill(c apiCheck) {
 	steps := make([]stepModel, len(c.Steps))
 	for i, s := range c.Steps {
 		ref := stepModel{Selector: types.StringNull(), Text: types.StringNull(), Value: types.StringNull(), Count: types.Int64Null(),
-			Op: types.StringNull(), Ms: types.Int64Null(), Label: types.StringNull(), MaxMs: types.Int64Null()}
+			Op: types.StringNull(), Ms: types.Int64Null(), Label: types.StringNull(), MaxMs: types.Int64Null(), Name: types.StringNull(),
+			Attr: types.StringNull(), Regex: types.StringNull(), Target: types.StringNull(), Scope: types.StringNull(), Permission: types.StringNull(),
+			Lat: types.Float64Null(), Lon: types.Float64Null()}
 		if i < len(m.Steps) {
 			ref = m.Steps[i]
 		}
 		steps[i] = stepModel{Action: types.StringValue(s.Action), Selector: optString(s.Selector, ref.Selector), Text: optString(s.Text, ref.Text),
 			Value: optString(s.Value, ref.Value), Count: optInt(s.Count, ref.Count), Op: optString(s.Op, ref.Op), Ms: optInt(s.Ms, ref.Ms),
-			Label: optString(s.Label, ref.Label), MaxMs: optInt(s.MaxMs, ref.MaxMs)}
+			Label: optString(s.Label, ref.Label), MaxMs: optInt(s.MaxMs, ref.MaxMs), Name: optString(s.Name, ref.Name),
+			Attr: optDefault(s.Attr, "text", ref.Attr), Regex: optString(s.Regex, ref.Regex), Target: optString(s.Target, ref.Target),
+			Scope: optDefault(s.Scope, defaultScope(s.Action), ref.Scope), Permission: optString(s.Permission, ref.Permission),
+			Lat: optFloat(s.Lat, ref.Lat), Lon: optFloat(s.Lon, ref.Lon)}
 	}
 	m.Steps = steps
 }

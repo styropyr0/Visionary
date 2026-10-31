@@ -193,6 +193,7 @@ export function RunDrawer({ checkId, checkName, runId, onClose }: { checkId: num
                       {i + 1}. {s.label}
                     </span>
                     {s.error && <span className="up-err">{s.error}</span>}
+                    {s.detail && <span className="dim mono">{s.detail}</span>}
                     {img && shot === i && (
                       <a href={img} target="_blank" rel="noreferrer" className="up-shot up-step-shot">
                         <img src={img} alt={`The page after step ${i + 1}`} />

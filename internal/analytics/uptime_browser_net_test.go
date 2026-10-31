@@ -33,7 +33,7 @@ func TestBrowserRequestsAndStepShots(t *testing.T) {
 	}))
 	defer site.Close()
 	c := UptimeCheck{Name: "Shop", Kind: "browser", Enabled: true, Secrets: map[string]string{"KEY": "hunter22-secret"},
-		Steps: []BrowserStep{{Action: "goto", Value: site.URL + "/"}, {Action: "wait_text", Text: "Shop"}, {Action: "wait", Ms: 200}},
+		Steps:          []BrowserStep{{Action: "goto", Value: site.URL + "/"}, {Action: "wait_text", Text: "Shop"}, {Action: "wait", Ms: 200}},
 		BrowserOptions: BrowserOptions{StepScreenshots: true}}
 	res, run := playCheck(t, u, c, false)
 	if len(run.StepShots) != 3 || run.StepShots[0] == nil || len(run.StepShots[2]) > browserStepShot {

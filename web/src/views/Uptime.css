@@ -347,6 +347,7 @@ table.data.up-table td {
 }
 .up-step-fields .up-step-label { font-size: 12px; }
 .up-warn { color: var(--warning-text); }
+.up-file { align-items: center; }
 .up-step-shot { margin-top: 6px; }
 .up-step-shot img { max-height: 320px; }
 .up-run-step > .icon-btn { flex: none; margin-top: -3px; }
