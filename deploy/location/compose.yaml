@@ -21,6 +21,7 @@ services:
       VISIONARY_URL: ${VISIONARY_URL:?set the Visionary server URL}
       VISIONARY_KEY: ${VISIONARY_KEY:?set the location key}
       VISIONARY_AGENT_LOCATION: ${VISIONARY_AGENT_LOCATION:?set the location name}
-      # Set to true to let checks reach private addresses on this network.
-      VISIONARY_AGENT_ALLOW_PRIVATE: ${VISIONARY_AGENT_ALLOW_PRIVATE:-false}
+      # true or false: may checks reach private addresses on this network.
+      # Empty follows the server's setting for its own checks.
+      VISIONARY_AGENT_ALLOW_PRIVATE: ${VISIONARY_AGENT_ALLOW_PRIVATE:-}
     restart: unless-stopped

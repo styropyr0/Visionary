@@ -701,4 +701,4 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_AGENT_SECURITY` | `true` | `false` turns off all security findings. |
 | `VISIONARY_AGENT_SSH_KEYS`, `VISIONARY_AGENT_FILE_INTEGRITY`, `VISIONARY_AGENT_PROCESS_CHECKS`, `VISIONARY_AGENT_CONTAINER_RISKS` | `true` | Turn off one kind of security check. |
 | `VISIONARY_AGENT_LOCATION` | none | Run as an uptime location (with that location's key) instead of reporting the host. |
-| `VISIONARY_AGENT_ALLOW_PRIVATE` | `false` | Location mode: let checks reach private addresses. |
+| `VISIONARY_AGENT_ALLOW_PRIVATE` | the server's setting | Location mode: `true` or `false`, may checks reach private addresses. |

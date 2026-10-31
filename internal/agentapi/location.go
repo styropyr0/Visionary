@@ -39,9 +39,8 @@ type LocationChecks struct {
 	// included; empty unless Active.
 	Checks []uptimecore.Check `json:"checks"`
 	PollS  int                `json:"poll_s"`
-	// AllowPrivate is the server's setting for reaching private addresses;
-	// the runner allows them when either it or VISIONARY_AGENT_ALLOW_PRIVATE
-	// says so.
+	// AllowPrivate is the server's setting for reaching private addresses,
+	// which the runner follows unless VISIONARY_AGENT_ALLOW_PRIVATE is set.
 	AllowPrivate bool   `json:"allow_private"`
 	Message      string `json:"message,omitempty"`
 }

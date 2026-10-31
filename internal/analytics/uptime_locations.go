@@ -334,6 +334,16 @@ func locationsDown(rule string, failed, n int) bool {
 	return 2*failed > n
 }
 
+// ownError is a location's own reason from a row's error, without the
+// "down in a, b: " the vote put in front.
+func ownError(msg string) string {
+	if rest, ok := strings.CutPrefix(msg, "down in "); ok {
+		_, own, _ := strings.Cut(rest, ": ")
+		return own
+	}
+	return msg
+}
+
 // locationState is how one location sees a check now.
 type locationState struct {
 	Name           string  `json:"name"`
@@ -392,7 +402,10 @@ FROM uptime_results r JOIN (
 			ls := locationState{Name: name, State: "pending"}
 			l, known := byName[name]
 			if row, ok := latest[key{c.ID, name}]; ok {
-				ls.LastAt, ls.LastStatus, ls.LastError = toString(row[2]), toInt(row[5]), toString(row[7])
+				ls.LastAt, ls.LastStatus = toString(row[2]), toInt(row[5])
+				if toInt(row[3]) != 1 {
+					ls.LastError = ownError(toString(row[7]))
+				}
 				ls.LastDurationMs, _ = asFloat(row[6])
 				switch {
 				case toInt(row[3]) != 1:

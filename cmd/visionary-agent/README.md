@@ -123,14 +123,14 @@ run; browser checks run when a Chrome or Chromium is found on the machine
 (`VISIONARY_CHROME` points at one), which the poll reports, and the form
 greys out browser checks for locations without one. Only one runner per
 location runs checks: a second one started with the same key stands by
-until the first stops. Checks may not reach private or loopback addresses
-unless `VISIONARY_AGENT_ALLOW_PRIVATE=true` (or the server allows it for its
-own checks).
+until the first stops. Whether checks may reach private and loopback addresses follows the
+server's setting for its own checks, unless `VISIONARY_AGENT_ALLOW_PRIVATE`
+says `true` or `false` for this location.
 
 | Variable | Default | |
 |---|---|---|
 | `VISIONARY_AGENT_LOCATION` | none | The location's name; turns location mode on. |
-| `VISIONARY_AGENT_ALLOW_PRIVATE` | `false` | Let checks reach private, loopback and link-local addresses. |
+| `VISIONARY_AGENT_ALLOW_PRIVATE` | the server's setting | `true` or `false`: may checks reach private, loopback and link-local addresses. |
 | `VISIONARY_AGENT_BROWSER_WORKERS` | `1` | Browser checks run at once. |
 | `VISIONARY_CHROME` | auto | The browser for browser checks. |
 

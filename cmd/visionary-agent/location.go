@@ -65,7 +65,7 @@ func runLocation(ctx context.Context, cfg config, logger *slog.Logger) error {
 	l := newLocationRunner(cfg, logger)
 	defer l.browser.Close()
 	logger.Info("visionary-agent started as an uptime location", "version", version, "location", cfg.location, "server", cfg.url,
-		"browser", l.browser.Available(), "allow_private", cfg.allowPrivate)
+		"browser", l.browser.Available(), "allow_private", fallbackStr(cfg.allowPrivate, "as the server"))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -80,10 +80,15 @@ func runLocation(ctx context.Context, cfg config, logger *slog.Logger) error {
 	return nil
 }
 
+// allowPrivate follows VISIONARY_AGENT_ALLOW_PRIVATE when it is set, and
+// the server's setting when not.
 func (l *locationRunner) allowPrivate() bool {
+	if l.cfg.allowPrivate != "" {
+		return l.cfg.allowPrivate == "true"
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.cfg.allowPrivate || l.serverAllows
+	return l.serverAllows
 }
 
 func (l *locationRunner) load(context.Context) ([]uptimecore.Check, error) {
