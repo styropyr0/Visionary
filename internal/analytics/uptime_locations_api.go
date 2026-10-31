@@ -283,6 +283,8 @@ func (s *Server) observeLocations(ctx context.Context, r alertRule, now time.Tim
 		if ob.Breach {
 			ob.Message = fmt.Sprintf("Uptime location %s has not reported for %s (threshold %s %s). Its checks are left out of the vote until it is back.",
 				l.Name, humanDuration(now.Sub(seen)), r.Spec.Op, formatUnit(r.Spec.Threshold, "minutes"))
+		} else if now.Sub(seen) >= locationStaleAfter {
+			ob.Message = fmt.Sprintf("Uptime location %s has not reported for %s; its checks leave it out of the vote.", l.Name, humanDuration(now.Sub(seen)))
 		} else {
 			ob.Message = fmt.Sprintf("Uptime location %s is reporting.", l.Name)
 		}
