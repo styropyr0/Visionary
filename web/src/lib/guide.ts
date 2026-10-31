@@ -392,6 +392,10 @@ export const GUIDE: GuideSection[] = [
         caption: "One check: response time split into its phases, and its incidents.",
       },
       {
+        title: "Run checks from CI",
+        text: "Create a key with the **CI** scope in **Settings → API keys**; it can only run checks and report tests. In your pipeline, after the deploy, use the `styropyr0/Visionary/.github/actions/run-checks` action (or the `visionary-checks` CLI) with a tag: it runs those checks once, now, prints each result, can write JUnit XML and fails the job when one fails. Pass `url-override` to run them against a preview deployment; those results stay with the run and never count toward uptime. Runs appear under **Runs from CI** below the list, and on the **CI** page beside the pipeline of the same commit. **Run a tag** starts one from here.",
+      },
+      {
         title: "Publish a status page",
         text: "Tick **Show on the public status page** on the checks you want public, then switch on **Public status page** in **Settings → Status page**. **Status page** in the top bar opens it.",
       },

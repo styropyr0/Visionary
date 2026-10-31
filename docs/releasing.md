@@ -24,6 +24,12 @@ Some packages need no upload:
   are attached to the GitHub Release, where
   [`deploy/agent/install.sh`](../deploy/agent/install.sh) downloads them. It runs on the host, so
   there is no image.
+- **Uptime checks CLI**: the same job builds `visionary-checks-<os>-<arch>` (Linux, macOS and
+  Windows, amd64 and arm64) from [`cmd/visionary-checks`](../cmd/visionary-checks) and adds them
+  to `SHA256SUMS`. The composite action [`.github/actions/run-checks`](../.github/actions/run-checks/action.yml)
+  downloads the binary from the release and checks its sum; with `version: source`, or when a
+  release has no binary, it builds the CLI from its own checkout with Go. To build it by hand:
+  `go build -o visionary-checks ./cmd/visionary-checks`.
 - **CocoaPods** is skipped on purpose: its trunk is being sunset (it is scheduled to become read-only).
 
 The version always comes from the tag (`v0.4.0` becomes `0.4.0`, and `v0.4.0-rc.1` becomes a

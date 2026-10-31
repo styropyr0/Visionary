@@ -1,0 +1,117 @@
+name: Run Visionary checks
+description: Run Visionary uptime checks by tag, for example after a deploy or against a preview deployment, and fail the job when one fails.
+author: styropyr0
+
+inputs:
+  server:
+    description: Visionary's address, e.g. https://visionary.example.com
+    required: true
+  key:
+    description: An API key with the CI scope (Settings → API keys). Pass it from a secret.
+    required: true
+  tags:
+    description: Run the checks with these tags, comma separated.
+    default: ""
+  checks:
+    description: Run the checks with these ids, comma separated.
+    default: ""
+  url-override:
+    description: Run the checks against this origin instead of their own, e.g. https://pr-12.example.com.
+    default: ""
+  release:
+    description: Release the run tested, shown with the results.
+    default: ""
+  commit:
+    description: Commit the run tested; it links the run to this pipeline on the CI page.
+    default: ${{ github.event.pull_request.head.sha || github.sha }}
+  timeout:
+    description: How long to wait for the results (a Go duration such as 10m).
+    default: 10m
+  junit:
+    description: Write the results as JUnit XML to this path, for test reporting.
+    default: ""
+  version:
+    description: Release of the visionary-checks CLI to download (a tag such as v0.5.0, or latest). "source" builds it from this action's checkout instead.
+    default: latest
+
+outputs:
+  exit-code:
+    description: 0 when every check passed, 1 when one failed, 2 for a usage or API error, 3 when the run did not finish in time.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: cli
+      name: Download visionary-checks
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO: styropyr0/Visionary
+      run: |
+        set -u
+        os=$(echo "$RUNNER_OS" | tr '[:upper:]' '[:lower:]'); [ "$os" = macos ] && os=darwin
+        case "$RUNNER_ARCH" in X64) arch=amd64 ;; ARM64) arch=arm64 ;; *) arch=unsupported ;; esac
+        ext=""; [ "$os" = windows ] && ext=".exe"
+        name="visionary-checks-$os-$arch$ext"
+        dest="$RUNNER_TEMP/visionary-checks$ext"
+        if [ "$VERSION" = latest ]; then base="https://github.com/$REPO/releases/latest/download"; else base="https://github.com/$REPO/releases/download/$VERSION"; fi
+        path=""
+        if [ "$VERSION" != source ] && [ "$arch" != unsupported ] \
+          && curl -fsSL -o "$dest" "$base/$name" && curl -fsSL -o "$RUNNER_TEMP/SHA256SUMS" "$base/SHA256SUMS"; then
+          want=$(grep " $name\$" "$RUNNER_TEMP/SHA256SUMS" | cut -d' ' -f1)
+          got=$( (sha256sum "$dest" 2>/dev/null || shasum -a 256 "$dest") | cut -d' ' -f1)
+          if [ -n "$want" ] && [ "$want" = "$got" ]; then
+            chmod +x "$dest"; path="$dest"
+          else
+            echo "::warning::visionary-checks checksum did not match; building it from source"
+          fi
+        elif [ "$VERSION" != source ]; then
+          echo "::notice::No visionary-checks binary for $os/$arch on $VERSION; building it from source"
+        fi
+        echo "path=$path" >> "$GITHUB_OUTPUT"
+        echo "dest=$dest" >> "$GITHUB_OUTPUT"
+
+    - if: steps.cli.outputs.path == ''
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.action_path }}/../../../go.mod
+        cache: false
+
+    - if: steps.cli.outputs.path == ''
+      name: Build visionary-checks
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        DEST: ${{ steps.cli.outputs.dest }}
+      run: CGO_ENABLED=0 go build -trimpath -o "$DEST" ./cmd/visionary-checks
+
+    - id: run
+      name: Run the checks
+      shell: bash
+      env:
+        CLI: ${{ steps.cli.outputs.dest }}
+        VISIONARY_URL: ${{ inputs.server }}
+        VISIONARY_KEY: ${{ inputs.key }}
+        TAGS: ${{ inputs.tags }}
+        CHECKS: ${{ inputs.checks }}
+        OVERRIDE: ${{ inputs.url-override }}
+        RELEASE: ${{ inputs.release }}
+        COMMIT: ${{ inputs.commit }}
+        TIMEOUT: ${{ inputs.timeout }}
+        JUNIT: ${{ inputs.junit }}
+      run: |
+        args=(run --timeout "$TIMEOUT")
+        [ -n "$TAGS" ] && args+=(--tag "$TAGS")
+        [ -n "$CHECKS" ] && args+=(--check "$CHECKS")
+        [ -n "$OVERRIDE" ] && args+=(--url-override "$OVERRIDE")
+        [ -n "$RELEASE" ] && args+=(--release "$RELEASE")
+        [ -n "$COMMIT" ] && args+=(--commit "$COMMIT")
+        [ -n "$JUNIT" ] && args+=(--junit "$JUNIT")
+        set +e
+        "$CLI" "${args[@]}" | tee "$RUNNER_TEMP/visionary-checks.txt"
+        code=${PIPESTATUS[0]}
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        { echo '### Visionary checks'; echo '```'; cat "$RUNNER_TEMP/visionary-checks.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        exit "$code"
