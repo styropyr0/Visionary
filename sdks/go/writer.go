@@ -8,12 +8,9 @@ import (
 	"time"
 )
 
-// maxStatementsPerCall is D1's per-batch limit, where every row is its own
-// statement.
 const maxStatementsPerCall = 50
 
-// SQL backends get each table's rows as multi-row INSERTs in one transaction,
-// kept under every backend's bound-parameter limit (SQLite's is 32766).
+// Kept under every backend's bound-parameter limit (SQLite's is 32766)
 const (
 	maxParamsPerStatement = 30000
 	defaultSQLBatch       = 500
@@ -31,8 +28,8 @@ type writer struct {
 	logger   *slog.Logger
 	redact   *redactor
 	requests bool // api_logs is written (and purged)
-	// logsOnly marks the writer of app_logs, which purges only that table;
-	// metricsOnly the writer of metrics.
+	// logsOnly marks the writer of app_logs, which purges only that table,
+	// and metricsOnly the writer of metrics
 	logsOnly    bool
 	metricsOnly bool
 	logSecrets  map[string]bool
@@ -42,7 +39,6 @@ type writer struct {
 	// queue holds *entry, *spanRecord and *errorRecord values.
 	queue   chan any
 	dropped atomic.Int64
-	// lost and written count rows since start, for WriterStats.
 	lost    atomic.Int64
 	written atomic.Int64
 	stop    chan struct{}
@@ -181,8 +177,7 @@ func (w *writer) run() {
 	}
 }
 
-// flushers is how many batches may be written at once. SQLite and D1 take
-// one writer at a time; PostgreSQL and MySQL insert in parallel.
+// SQLite and D1 take one writer at a time, PostgreSQL and MySQL insert in parallel
 func (w *writer) flushers() int {
 	if w.db.stringParams() || w.db.dialect() == SQLite {
 		return 1
@@ -223,7 +218,7 @@ func (w *writer) write(batch []any) {
 		stmts = g.statements(stmts, d1)
 	}
 	// D1 takes 50 statements a call, so a batch can need several calls, each
-	// retried on its own.
+	// retried on its own
 	perCall := len(stmts)
 	if d1 {
 		perCall = maxStatementsPerCall
@@ -244,13 +239,10 @@ func (w *writer) write(batch []any) {
 type rowGroup struct {
 	table   string
 	columns []string
-	// insert is the single-row statement D1 runs once per row.
-	insert string
-	rows   [][]any
+	insert  string
+	rows    [][]any
 }
 
-// statements appends the group's inserts: one per row for D1, otherwise
-// multi-row INSERTs as large as the parameter limit allows.
 func (g *rowGroup) statements(out []stmt, d1 bool) []stmt {
 	if d1 {
 		for _, r := range g.rows {

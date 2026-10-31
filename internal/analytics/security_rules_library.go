@@ -155,8 +155,6 @@ var mitreTactics = []mitreEntry{
 	{"TA0010", "Exfiltration"}, {"TA0040", "Impact"},
 }
 
-// mitreTechniques lists the techniques the templates use; a rule may name
-// any technique id.
 var mitreTechniques = []mitreEntry{
 	{"T1078", "Valid Accounts"}, {"T1078.004", "Valid Accounts: Cloud Accounts"},
 	{"T1110", "Brute Force"}, {"T1110.001", "Brute Force: Password Guessing"}, {"T1110.003", "Brute Force: Password Spraying"},
@@ -171,7 +169,6 @@ var mitreTechniques = []mitreEntry{
 	{"T1539", "Steal Web Session Cookie"}, {"T1059", "Command and Scripting Interpreter"}, {"T1610", "Deploy Container"},
 }
 
-// mitreName is "TA0006 Credential Access", or the id when unknown.
 func mitreName(id string) string {
 	for _, list := range [][]mitreEntry{mitreTactics, mitreTechniques} {
 		for _, e := range list {

@@ -251,8 +251,7 @@ func (r *alertRuleResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-// ruleCheck is a rule's configuration as plan-time validation sees it; any
-// value may still be unknown.
+// Any value may still be unknown at plan time
 type ruleCheck struct {
 	kind, metric                                                  string
 	set                                                           func(name string) bool
@@ -288,8 +287,7 @@ func readRuleCheck(ctx context.Context, cfg tfsdk.Config) (ruleCheck, diag.Diagn
 	return rc, diags
 }
 
-// problems lists what does not fit the rule's kind and metric: the server
-// would drop it, and the plan would not match what it stores.
+// The server would drop these, and the plan wouldn't match what it stores
 func (rc ruleCheck) problems() map[string]string {
 	out := map[string]string{}
 	not := func(why string, names ...string) {
@@ -413,7 +411,7 @@ func (m *ruleModel) fill(r apiRule) {
 	m.Op, m.Threshold, m.Window = optString(sp.Op, m.Op), optFloat(sp.Threshold, m.Threshold), types.StringValue(sp.Window)
 	m.For, m.Repeat = optString(sp.For, m.For), optString(sp.Repeat, m.Repeat)
 	m.Sensitivity, m.Direction, m.Target = types.StringValue(sp.Sensitivity), optString(sp.Direction, m.Direction), types.Float64Value(sp.Target)
-	// The server stores "ok", the default, as nothing.
+	// The server stores "ok", the default, as nothing
 	if !(sp.NoData == "" && m.NoData.ValueString() == "ok") {
 		m.NoData = optString(sp.NoData, m.NoData)
 	}

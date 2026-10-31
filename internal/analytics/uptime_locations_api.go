@@ -16,9 +16,7 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// The Locations tab's API and the two endpoints location runners call: poll for
-// checks, post results. A location's key is an API key of scope "location",
-// tied to it by key_id.
+// A location's key is an API key of scope "location", tied to it by key_id
 
 const defaultLocationRuleName = "Uptime location offline"
 
@@ -111,8 +109,6 @@ func (s *Server) handleLocationCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"location": l, "secret": secret})
 }
 
-// createLocation adds a location, with a key unless withKey is false (a
-// config import, whose key is made later in the Locations tab).
 func (s *Server) createLocation(r *http.Request, name string, withKey bool) (uptimeLocation, string, error) {
 	ctx := r.Context()
 	name = strings.ToLower(strings.TrimSpace(name))
@@ -155,7 +151,6 @@ func (s *Server) createLocation(r *http.Request, name string, withKey bool) (upt
 	return l, secret, nil
 }
 
-// handleLocationKey replaces a location's key; the old one stops working.
 func (s *Server) handleLocationKey(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
@@ -225,8 +220,6 @@ func (s *Server) handleLocationDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ensureLocationOfflineRule makes the rule that tells admins a location
-// stopped reporting, with the first location.
 func (s *Server) ensureLocationOfflineRule(r *http.Request) error {
 	ctx := r.Context()
 	rules, err := s.listRules(ctx, false)
@@ -257,8 +250,6 @@ func (s *Server) ensureLocationOfflineRule(r *http.Request) error {
 	return nil
 }
 
-// observeLocations is the uptime_location_offline metric: minutes since each
-// location's runner last polled.
 func (s *Server) observeLocations(ctx context.Context, r alertRule, now time.Time) ([]observation, error) {
 	locs, err := s.listLocations(ctx)
 	if err != nil {
@@ -292,8 +283,6 @@ func (s *Server) observeLocations(ctx context.Context, r alertRule, now time.Tim
 	return out, nil
 }
 
-// incidentLocations names the locations that failed during each incident: those
-// the vote counted as failing, or the location of a check that runs from one place.
 func (s *Server) incidentLocations(ctx context.Context, id int64, tr timeRange, list []incident) error {
 	if len(list) == 0 {
 		return nil
@@ -390,8 +379,7 @@ func (s *Server) handleLocationPoll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 	nowS, until := now.Format(tsLayout), now.Add(locationLease).Format(tsLayout)
-	// The lease goes to whichever instance holds it, or to anyone once it
-	// lapsed; one conditional update, so two runners cannot both take it.
+	// One conditional update, so two runners can't both take the lease
 	err := s.db.Exec(ctx, `UPDATE uptime_locations SET instance = ?, lease_until = ?, last_seen_at = ?, version = ?, host = ?, browser = ?,
   browser_version = ?, kinds = ?
 WHERE id = ? AND (instance IS NULL OR instance = '' OR instance = ? OR lease_until IS NULL OR lease_until < ?)`,
@@ -468,8 +456,8 @@ func (s *Server) handleLocationResults(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		res := in.Result
-		// The runner's clock may drift; a time outside the last day or in the
-		// future becomes now.
+		// The runner's clock may drift, so a time outside the last day or in the
+		// future becomes now
 		if at, err := time.Parse(tsLayout, res.CreatedAt); err != nil || at.After(now.Add(time.Minute)) || at.Before(now.Add(-24*time.Hour)) {
 			res.CreatedAt = now.Format(tsLayout)
 		}

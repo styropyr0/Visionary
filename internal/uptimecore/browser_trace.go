@@ -13,10 +13,8 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Each browser run is a trace: the browser sends a W3C traceparent with the
-// run's trace id, so a backend with a Visionary SDK records its side under it.
-// Only the check's trace origins (default the first page's) get the header,
-// since it can fail the CORS preflight of a cross-origin request.
+// Only the check's trace origins get a traceparent, since it can fail
+// the CORS preflight of a cross-origin request
 
 const browserMaxTraceOrigins = 10
 
@@ -28,8 +26,6 @@ func newTraceIDs() (trace, span string) {
 	return hex.EncodeToString(b[:16]), hex.EncodeToString(b[16:])
 }
 
-// NormalizeOrigin reads "https://app.example.com" or "https://*.example.com",
-// with or without a trailing slash, into scheme://host[:port].
 func NormalizeOrigin(raw string) (string, error) {
 	raw = strings.TrimSuffix(strings.TrimSpace(raw), "/")
 	host, wild := raw, false
@@ -98,9 +94,7 @@ func (c Check) tracePatterns() []*fetch.RequestPattern {
 	return out
 }
 
-// propagateTrace adds traceparent to every request the tab pauses on, until
-// ctx ends. Requests are continued from tab, which outlives ctx, so none is
-// left hanging.
+// Requests are continued from tab, which outlives ctx, so none is left hanging
 func propagateTrace(ctx, tab context.Context, wg *sync.WaitGroup, traceparent string) {
 	paused := chromedp.Events(ctx, fetch.RequestPaused)
 	wg.Add(1)

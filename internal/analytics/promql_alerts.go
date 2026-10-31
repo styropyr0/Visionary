@@ -9,7 +9,7 @@ import (
 )
 
 // The promql alert evaluates an expression at each check and compares every
-// series it returns with the threshold, so it fires per series.
+// series it returns with the threshold, so it fires per series
 
 func promqlMetricDefs() []metricDef {
 	return []metricDef{{ID: "promql", Label: "PromQL expression", Group: "metrics", Unit: "none",

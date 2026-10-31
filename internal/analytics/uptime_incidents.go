@@ -36,7 +36,7 @@ type incident struct {
 	Error     string  `json:"error,omitempty"`
 	Ongoing   bool    `json:"ongoing"`
 	// Locations that failed during it, for checks that run from more than
-	// the server.
+	// the server
 	Locations []string `json:"locations,omitempty"`
 }
 

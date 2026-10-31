@@ -39,7 +39,6 @@ func (q sqlDialect) round(expr string, n int) string {
 	return "ROUND(" + expr + ", " + strconv.Itoa(n) + ")"
 }
 
-// ident quotes a column name that MySQL reserves, such as lines.
 func (q sqlDialect) ident(name string) string {
 	if q.d == sdk.MySQL {
 		return "`" + name + "`"
@@ -49,7 +48,7 @@ func (q sqlDialect) ident(name string) string {
 
 // text casts expr to text. On MySQL the cast takes the connection's
 // collation, which mixed with a column's in COALESCE can't be compared, so it
-// is pinned to a binary one: case-sensitive, as on the other databases.
+// is pinned to a binary one: case-sensitive, as on the other databases
 func (q sqlDialect) text(expr string) string {
 	if q.d == sdk.MySQL {
 		return "CAST(" + expr + " AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin"

@@ -6,8 +6,8 @@ import (
 	"strconv"
 )
 
-// Only the latest runs of a check keep their step screenshots; passing runs
-// keep their requests for longer, failed ones for as long as the run is kept.
+// Only the latest runs of a check keep their step screenshots. Passing runs
+// keep their requests for longer, failed ones for as long as the run is kept
 const (
 	browserKeepStepRuns = 24
 	browserKeepReqRuns  = 200
@@ -23,8 +23,6 @@ func encodeShots(shots [][]byte) []string {
 	return out
 }
 
-// pruneRunDetail drops the step screenshots of all but a check's latest
-// runs, and the requests of all but its latest passing runs.
 func (s *Server) pruneRunDetail(ctx context.Context, checkID int64) error {
 	for _, p := range []struct {
 		col, where string

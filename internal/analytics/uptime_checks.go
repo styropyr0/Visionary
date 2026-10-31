@@ -52,8 +52,8 @@ type UptimeCheck struct {
 	Tags            []string          `json:"tags"`
 	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 	BrowserOptions
-	// Locations the check runs from (uptime_locations.go), the rule that
-	// combines them, and whether the status page breaks it down by them.
+	// Locations the check runs from, the rule that combines them,
+	// and whether the status page breaks it down by them
 	Locations           []string         `json:"locations"`
 	LocationRule        string           `json:"location_rule"`
 	StatusShowLocations bool             `json:"status_show_locations"`

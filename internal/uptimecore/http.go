@@ -24,9 +24,8 @@ const (
 	redirects  = 5
 )
 
-// ProbeWithRetry tries again once, shortly, before calling a check failed,
-// so one dropped packet does not open an incident. allowPrivate is read on
-// every request, so changing it applies at once.
+// ProbeWithRetry tries again once before calling a check failed,
+// so one dropped packet doesn't open an incident
 func ProbeWithRetry(ctx context.Context, c Check, allowPrivate func() bool) Result {
 	res := ProbeKind(ctx, c, allowPrivate)
 	if res.OK || ctx.Err() != nil || res.blocked || res.Skip != "" {
@@ -42,8 +41,7 @@ func ProbeWithRetry(ctx context.Context, c Check, allowPrivate func() bool) Resu
 	return res
 }
 
-// phases collects httptrace timings of the latest request in a redirect
-// chain. Hooks can fire on other goroutines, hence the lock.
+// Hooks can fire on other goroutines, hence the lock
 type phases struct {
 	mu sync.Mutex
 	t  phaseTimes
@@ -196,8 +194,7 @@ func Probe(ctx context.Context, c Check, allowPrivate func() bool) (res Result) 
 	return res
 }
 
-// ProbeError turns a client error into a short reason. url.Error repeats the
-// full URL, which can carry credentials, so only its cause is kept.
+// url.Error repeats the full URL, which can carry credentials, so only its cause is kept
 func ProbeError(err error, timeoutMs int) string {
 	var ue *url.Error
 	if errors.As(err, &ue) {
@@ -226,7 +223,7 @@ type StatusRange struct{ lo, hi int }
 
 var expectStatusPart = regexp.MustCompile(`^([1-5])xx$|^(\d{3})(?:-(\d{3}))?$`)
 
-// ParseExpectStatus reads "200-299", "2xx", "200,204,301" or a mix.
+// ParseExpectStatus reads "200-299", "2xx", "200,204,301" or a mix
 func ParseExpectStatus(spec string) ([]StatusRange, error) {
 	var out []StatusRange
 	for _, part := range strings.Split(spec, ",") {

@@ -21,12 +21,10 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Extract, hover, drag, upload, iframe, cookie, storage and permission steps.
 // Steps in a frame run in an isolated world of that frame, which sees its DOM
-// but not the page's own scripts.
+// but not the page's own scripts
 
-// BrowserFile is a small file an upload step sends. The API shows its size
-// without its data; sending it back without data keeps the stored file.
+// The API shows a file's size without its data, and sending it back without data keeps the stored file
 type BrowserFile struct {
 	Name string `json:"name"`
 	Type string `json:"type,omitempty"`
@@ -46,8 +44,6 @@ var (
 	browserPerms = map[string][]string{"geolocation": {"geolocation"}, "notifications": {"notifications"}, "clipboard": {"clipboard-read", "clipboard-write"}}
 )
 
-// NormalizeFiles checks the files, keeping the stored data (prev) of those
-// sent back without it.
 func (o *BrowserOptions) NormalizeFiles(prev []BrowserFile) error {
 	if len(o.Files) > browserMaxFiles {
 		return fmt.Errorf("at most %d files", browserMaxFiles)
@@ -101,8 +97,6 @@ func (st *runState) resolve(s BrowserStep, secrets map[string]string) BrowserSte
 	return s
 }
 
-// evalJS evaluates expr in the frame the run is in, or in the page when st
-// is nil or in no frame.
 func evalJS[T any](ctx context.Context, st *runState, expr string, opts ...chromedp.EvaluateOption) (T, error) {
 	if st == nil || len(st.frames) == 0 {
 		return chromedp.Run(ctx, chromedp.Evaluate[T](expr, opts...))
@@ -124,8 +118,6 @@ func inContext(id runtime.ExecutionContextID) chromedp.EvaluateOption {
 	return func(p *runtime.EvaluateParams) { p.ContextID = id }
 }
 
-// frameContexts are the execution contexts of each frame of the chain, an
-// isolated world in each, found again after a frame navigates.
 func (st *runState) frameContexts(ctx context.Context) ([]runtime.ExecutionContextID, error) {
 	if len(st.frameCtx) == len(st.frames) {
 		return st.frameCtx, nil
@@ -161,8 +153,6 @@ func (st *runState) frameContexts(ctx context.Context) ([]runtime.ExecutionConte
 	return ids, nil
 }
 
-// frameOffset is where the current frame's content starts in the viewport,
-// to turn a point inside it into one the mouse can go to.
 func (st *runState) frameOffset(ctx context.Context) (elementAt, error) {
 	var off elementAt
 	if len(st.frames) == 0 {
@@ -191,7 +181,7 @@ func (st *runState) frameOffset(ctx context.Context) (elementAt, error) {
 	return off, nil
 }
 
-// viewport.
+// viewport
 func (st *runState) locate(ctx context.Context, s BrowserStep) (elementAt, error) {
 	p, err := waitJS[*elementAt](ctx, st, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
 	if err != nil {
@@ -216,7 +206,6 @@ func pageURL(ctx context.Context) (*url.URL, error) {
 	return u, nil
 }
 
-// playMore runs the newer step types; detail is what the step found.
 func playMore(ctx context.Context, s BrowserStep, st *runState, notFound func(error) error) (detail string, err error) {
 	switch s.Action {
 	case "extract":
@@ -355,8 +344,6 @@ func playMore(ctx context.Context, s BrowserStep, st *runState, notFound func(er
 	return "", fmt.Errorf("unknown step %q", s.Action)
 }
 
-// writeFile puts an upload's file in the run's own folder, for the browser
-// to read.
 func (st *runState) writeFile(f BrowserFile) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(f.Data)
 	if err != nil {

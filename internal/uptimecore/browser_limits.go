@@ -7,11 +7,7 @@ import (
 	"strings"
 )
 
-// A browser run that passes every step still fails when its Web Vitals, total
-// time or one step's time go over a hard limit, and is degraded over a warn
-// value. degraded_ms is the warn value of the total time.
-
-// BrowserLimits are a check's optional limits; zero is no limit.
+// BrowserLimits are a check's optional limits, zero is no limit
 type BrowserLimits struct {
 	MaxLCPMs      int     `json:"max_lcp_ms,omitempty"`
 	MaxCLS        float64 `json:"max_cls,omitempty"`
@@ -22,7 +18,6 @@ type BrowserLimits struct {
 	WarnTTFBMs    int     `json:"warn_ttfb_ms,omitempty"`
 }
 
-// Validate checks the limits; degradedMs is the warning of the total time.
 func (l BrowserLimits) Validate(degradedMs int) error {
 	for _, v := range []struct {
 		name      string

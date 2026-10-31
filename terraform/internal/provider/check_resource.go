@@ -21,8 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// uptimeMask is what the API shows instead of a secret header value or a
-// browser secret.
 const uptimeMask = "********"
 
 var browserActions = []string{"goto", "click", "type", "press", "select", "wait_selector", "wait_text", "wait_navigation",
@@ -408,7 +406,6 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 	return in
 }
 
-// optDefault is optString for a field the server fills with def when left out.
 func optDefault(v, def string, ref types.String) types.String {
 	if v == def && ref.IsNull() {
 		return types.StringNull()

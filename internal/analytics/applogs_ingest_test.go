@@ -442,8 +442,7 @@ func TestStripLeadingTime(t *testing.T) {
 	}
 }
 
-// testDatabaseURL is VISIONARY_TEST_DATABASE_URL, a scratch PostgreSQL or
-// MySQL that every test wipes, or else a fresh SQLite file.
+// VISIONARY_TEST_DATABASE_URL points at a scratch PostgreSQL or MySQL, else a fresh SQLite file is used
 func testDatabaseURL(t *testing.T, file string) string {
 	if dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL"); dsn != "" {
 		return dsn

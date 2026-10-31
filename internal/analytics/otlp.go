@@ -22,11 +22,6 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-// OTLP/HTTP and OTLP/gRPC (otlp_grpc.go) ingestion, mapped onto Visionary's
-// tables (docs/otlp.md). The Export bodies match TracesData, MetricsData and
-// LogsData on the wire, so only the data packages are linked, not the generated
-// service stubs.
-
 const (
 	// otlpMaxBody caps a request body, on the wire and decompressed.
 	otlpMaxBody = 8 << 20
@@ -35,9 +30,8 @@ const (
 )
 
 type otlpSignal struct {
-	name    string
-	service string
-	// rejected names the partial_success count in OTLP/JSON.
+	name     string
+	service  string
 	rejected string
 	ingest   func(o *otlpState, ctx context.Context, decode func(proto.Message) error) (int64, error)
 }
@@ -83,8 +77,7 @@ type otlpRequest struct {
 }
 
 var (
-	// errOTLPBadData marks a body that does not decode; the exporter must
-	// not retry it.
+	// errOTLPBadData marks a body that doesn't decode, which the exporter must not retry
 	errOTLPBadData = errors.New("bad data")
 	errOTLPKey     = errors.New("missing or invalid ingest key")
 	errOTLPBusy    = errors.New("too many concurrent exports")
@@ -114,8 +107,7 @@ func otlpUnmarshal(body []byte, m proto.Message) error {
 	return nil
 }
 
-// otlpAdmit checks the key and the limits both transports share. When it
-// admits the export, release must be called once the export is done.
+// When it admits the export, release must be called once the export is done
 func (s *Server) otlpAdmit(key string) (o *otlpState, release func(), err error) {
 	if !s.ingestKeyValid(key, "server") {
 		return nil, nil, errOTLPKey
@@ -134,8 +126,6 @@ func (s *Server) otlpAdmit(key string) (o *otlpState, release func(), err error)
 	return o, func() { <-o.inflight }, nil
 }
 
-// otlpIngest turns an export into rows. An error other than errOTLPBadData
-// is a failed write, logged here; the exporter should retry it.
 func (s *Server) otlpIngest(ctx context.Context, o *otlpState, sig otlpSignal, decode func(proto.Message) error) (int64, error) {
 	rejected, err := sig.ingest(o, ctx, decode)
 	if err != nil && !errors.Is(err, errOTLPBadData) {
@@ -254,8 +244,6 @@ func (req *otlpRequest) respond(w http.ResponseWriter, rejectedField string, rej
 	_, _ = w.Write(out)
 }
 
-// otlpExportResponse encodes Export<Signal>ServiceResponse; the three share
-// the layout of partial_success.
 func otlpExportResponse(rejected int64, msg string) []byte {
 	if rejected == 0 && msg == "" {
 		return []byte{}

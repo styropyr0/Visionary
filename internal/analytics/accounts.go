@@ -53,8 +53,7 @@ type account struct {
 	LastSignIn string `json:"last_sign_in_at,omitempty"`
 	PasswordAt string `json:"password_changed_at"`
 	TwoStep    bool   `json:"two_step"`
-	// Source is empty for an account with a password, else oidc, saml or
-	// scim (sso_users.go).
+	// Source is empty for a password account, else oidc, saml or scim
 	Source     string `json:"source"`
 	Email      string `json:"email,omitempty"`
 	ExternalID string `json:"-"`
@@ -130,9 +129,7 @@ func (s *Server) findAccount(ctx context.Context, column, value string) (*accoun
 	return &a, nil
 }
 
-// enabledAdmins counts the accounts that can still administer Visionary
-// with a password. Single sign-on admins don't count: they depend on the
-// identity provider.
+// SSO admins don't count since they depend on the identity provider
 func (s *Server) enabledAdmins(ctx context.Context) (int, error) {
 	res, err := s.db.Query(ctx, `SELECT COUNT(*) FROM visionary_users WHERE role = 'admin' AND disabled = 0 AND password_hash <> ''`)
 	if err != nil {

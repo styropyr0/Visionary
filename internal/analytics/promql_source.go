@@ -13,11 +13,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Where PromQL selectors read from: custom metrics in the metrics table,
-// histograms exposed Prometheus-style as name_bucket{le}, name_sum and
-// name_count, and Visionary's own data as built-in visionary_* series
-// aggregated from api_logs, system_metrics, spans and errors.
-
 const (
 	maxPromRows    = 500000
 	maxPromCatalog = 20000
@@ -27,11 +22,11 @@ type promBuiltin struct {
 	name, kind, help, unit string
 	table                  string
 	labels                 [][2]string
-	// value is a gauge's column; dur a histogram's.
+	// value is a gauge's column and dur a histogram's
 	value, dur string
 }
 
-// durationBounds are the le bounds of the built-in duration histograms, in ms.
+// durationBounds are the le bounds of the built-in duration histograms, in ms
 var durationBounds = []float64{5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000}
 
 var systemGauges = []struct{ col, help, unit string }{
@@ -178,7 +173,6 @@ func (src *sqlPromSource) load(ctx context.Context, vs *vectorSel, w promWindow)
 	return out, nil
 }
 
-// bucketPhase is created_at floored to res seconds counted from phase, as epoch seconds.
 func (q sqlDialect) bucketPhase(res, phase int64) string {
 	e := q.epoch()
 	if phase != 0 {
@@ -192,7 +186,6 @@ func (q sqlDialect) bucketPhase(res, phase int64) string {
 	return "((" + e + div + r + ") * " + r + " + " + strconv.FormatInt(phase, 10) + ")"
 }
 
-// windowArgs are the created_at bounds of the buckets ending in (from, to].
 func windowArgs(w promWindow) []any {
 	return []any{time.UnixMilli(w.from).UTC().Format(tsLayout), time.UnixMilli(w.to).UTC().Format(tsLayout)}
 }
@@ -546,7 +539,6 @@ func filterOut(ms []labelMatcher, name string, drop bool) []labelMatcher {
 	return slices.DeleteFunc(slices.Clone(ms), func(m labelMatcher) bool { return m.name == name })
 }
 
-// builtinWhere pushes equality matchers on a family's labels into SQL.
 func builtinWhere(b *promBuiltin, ms []labelMatcher) (string, []any) {
 	var where string
 	var args []any

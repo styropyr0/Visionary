@@ -6,9 +6,7 @@ import (
 	"time"
 )
 
-// Run plays a check once, retrying once on failure like HTTP checks. An
-// error (no browser, or it would not start) means the check could not run
-// at all.
+// Run retries once on failure like HTTP checks. An error means the check couldn't run at all
 func (p *BrowserPool) Run(ctx context.Context, c Check, allowPrivate bool) (Result, BrowserRun, error) {
 	res, run, err := p.PlayOnce(ctx, c, allowPrivate)
 	if err != nil || res.OK || res.blocked || ctx.Err() != nil {
@@ -27,9 +25,8 @@ func (p *BrowserPool) Run(ctx context.Context, c Check, allowPrivate bool) (Resu
 	return res2, run2, nil
 }
 
-// PlayOnce runs the check in the pooled browser. A run that outlives its
-// timeout by far has hung the browser, which is then killed so the next run
-// starts a new one.
+// A run that outlives its timeout by far has hung the browser,
+// which is then killed so the next run starts a new one
 func (p *BrowserPool) PlayOnce(ctx context.Context, c Check, allowPrivate bool) (Result, BrowserRun, error) {
 	b, err := p.acquire(ctx)
 	if err != nil {

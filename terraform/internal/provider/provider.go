@@ -1,6 +1,4 @@
-// Package provider is the Terraform provider for Visionary: alert rules,
-// channels and silences, uptime checks, dashboards and API keys, managed
-// through Visionary's HTTP API with an editor or admin API key.
+// Package provider is the Terraform provider for Visionary
 package provider
 
 import (
@@ -59,7 +57,7 @@ func (p *visionaryProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 	if cfg.URL.IsUnknown() || cfg.APIKey.IsUnknown() {
-		// Known only after another resource is applied; resources wait for it.
+		// Known only after another resource is applied, so resources wait for it
 		return
 	}
 	url, key := os.Getenv("VISIONARY_URL"), os.Getenv("VISIONARY_API_KEY")

@@ -13,7 +13,7 @@ import (
 )
 
 // On Windows the ICMP helper API (IcmpSendEcho) pings without
-// administrator rights, for IPv4.
+// administrator rights, for IPv4
 
 var (
 	iphlpapi        = syscall.NewLazyDLL("iphlpapi.dll")

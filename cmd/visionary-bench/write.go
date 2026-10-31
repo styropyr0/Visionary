@@ -183,8 +183,6 @@ var (
 	body      = `{"items":[{"id":1,"name":"Blue mug","price":12.5,"qty":2},{"id":2,"name":"Tea, loose leaf","price":8,"qty":1}],"total":33,"currency":"EUR","note":"leave at the door"}`
 )
 
-// benchMux answers like a small shop API: each request makes a few calls,
-// logs a few lines and counts itself.
 func benchMux(o options) http.Handler {
 	logger := slog.New(visionary.LogHandler(slog.DiscardHandler))
 	mux := http.NewServeMux()
@@ -261,8 +259,6 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// uncapLogs lifts Settings → Logs' per-minute cap, so the log writer sees
-// the full load. The table is created as the server would.
 func uncapLogs(ctx context.Context, conn db.DB) error {
 	name, ts := "TEXT", "TEXT"
 	if conn.Dialect() == visionary.MySQL {
@@ -288,7 +284,6 @@ func countRows(ctx context.Context, conn db.DB) map[string]int64 {
 	return out
 }
 
-// dbSize is the database's size on disk in bytes, or 0 when unknown.
 func dbSize(ctx context.Context, conn db.DB) int64 {
 	q := `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
 	switch conn.Dialect() {

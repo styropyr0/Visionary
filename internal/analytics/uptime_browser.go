@@ -19,10 +19,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Browser checks are uptime checks of kind "browser" that play a list of steps
-// in a headless browser (uptime_browser_run.go). Steps and secrets live in
-// uptime_browser_checks, run results in uptime_browser_results.
-
 type BrowserStep struct {
 	Action   string `json:"action"`
 	Selector string `json:"selector,omitempty"`
@@ -32,18 +28,18 @@ type BrowserStep struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int    `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
-	// MaxMs fails the step when it takes longer.
+	// MaxMs fails the step when it takes longer
 	MaxMs int `json:"max_ms,omitempty"`
 	// Name is the variable of extract, the cookie of set_cookie, the key of
-	// set_storage and the file of upload.
+	// set_storage and the file of upload
 	Name string `json:"name,omitempty"`
-	// Attr is what extract reads: text (default), value or an attribute.
+	// Attr is what extract reads: text (default), value or an attribute
 	Attr  string `json:"attr,omitempty"`
 	Regex string `json:"regex,omitempty"`
-	// Target is where drag drops.
+	// Target is where drag drops
 	Target string `json:"target,omitempty"`
 	// Scope is the cookie's URL or domain, local or session storage, or the
-	// origin a permission is granted to.
+	// origin a permission is granted to
 	Scope      string  `json:"scope,omitempty"`
 	Permission string  `json:"permission,omitempty"`
 	Lat        float64 `json:"lat,omitempty"`
@@ -65,8 +61,6 @@ var (
 	secretRefRe  = regexp.MustCompile(`\{\{secret\.([A-Za-z0-9_]+)\}\}`)
 )
 
-// uptimeAddedColumns are columns added to the uptime tables after their
-// first release.
 var uptimeAddedColumns = map[string][]sdk.Column{
 	"uptime_checks":          {{Name: "kind", Kind: "text"}},
 	"uptime_results":         {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
@@ -109,8 +103,7 @@ CREATE INDEX ` + ine + `idx_uptime_browser_results_check ON uptime_browser_resul
 CREATE INDEX ` + ine + `idx_uptime_browser_results_created ON uptime_browser_results (created_at)`}
 }
 
-// normalizeBrowser validates a browser check; the start URL is its first
-// step's. prev is the stored check on update, whose masked secrets survive.
+// prev is the stored check on update, whose masked secrets survive
 func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	c.Method, c.ExpectStatus, c.BodyContains, c.Headers, c.FollowRedirects = "GET", "200-299", "", map[string]string{}, true
 	if len(c.Steps) == 0 || len(c.Steps) > browserMaxSteps {

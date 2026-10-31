@@ -11,10 +11,7 @@ import (
 	"time"
 )
 
-// Every node is computed for all steps at once. Selectors read series bucketed
-// in SQL at a resolution that divides the step, ranges and offsets. Counters
-// are stored as increases, so rate and increase sum them exactly; a bare
-// counter reads as its running total.
+// Counters are stored as increases, so rate and increase sum them exactly
 
 const (
 	promLookback      = 5 * time.Minute
@@ -84,9 +81,7 @@ func (l promLabels) only(names ...string) promLabels {
 	return out
 }
 
-// rawSample is one bucket of a series: T is its end in ms. V is the mean
-// for gauges and the increase for counters; Min and Max are the extremes of
-// the readings and N how many there were.
+// T is the bucket's end in ms. V is the mean for gauges and the increase for counters
 type rawSample struct {
 	T        int64
 	V        float64
@@ -108,8 +103,6 @@ func (rs *rawSeries) value(i int) float64 {
 	return rs.samples[i].V
 }
 
-// promWindow is what a selector reads: buckets of res seconds offset by
-// phase, ending in (from, to], both in ms.
 type promWindow struct {
 	from, to   int64
 	res, phase int64
@@ -132,9 +125,9 @@ type promVal struct {
 	scalar   []float64
 	vec      []*vecSeries
 	str      *string
-	// sort is 1 or -1 for sort and sort_desc.
+	// sort is 1 or -1 for sort and sort_desc
 	sort int
-	// matrix is a bare range selector read at a single instant.
+	// matrix is a bare range selector read at a single instant
 	matrix []*rawSeries
 }
 
@@ -148,8 +141,7 @@ type promEval struct {
 	points           int
 }
 
-// newPromEval plans an evaluation from start to end (ms) every step ms; an
-// instant query has start == end and step 0.
+// An instant query has start == end and step 0
 func newPromEval(ctx context.Context, src promSource, expr promExpr, start, end, step int64) *promEval {
 	e := &promEval{ctx: ctx, src: src, start: start, end: end, step: step, n: 1}
 	if step > 0 {
@@ -265,8 +257,6 @@ func (e *promEval) constant(v float64) promVal {
 	return promVal{isScalar: true, scalar: s}
 }
 
-// read loads a selector's series over the window the query needs, rng
-// before the first step.
 func (e *promEval) read(vs *vectorSel, rng time.Duration) ([]*rawSeries, error) {
 	if err := e.ctx.Err(); err != nil {
 		return nil, err
@@ -361,7 +351,6 @@ func (e *promEval) eval(x promExpr) (promVal, error) {
 	return promVal{}, promErrorf(x.position(), "unsupported expression")
 }
 
-// instant reads the latest sample at or before each step, within the lookback.
 func (e *promEval) instant(vs *vectorSel) (promVal, error) {
 	series, err := e.read(vs, 0)
 	if err != nil {
@@ -431,8 +420,7 @@ func (e *promEval) window(m *matrixSel, f func(rs *rawSeries, lo, hi int, t int6
 	return promVal{vec: out}, nil
 }
 
-// increaseOf is a series' increase over samples [lo, hi): exact for
-// counters, with resets for anything else.
+// Exact for counters, with resets for anything else
 func increaseOf(rs *rawSeries, lo, hi int) (float64, bool) {
 	if rs.counter {
 		sum := 0.0
@@ -742,8 +730,6 @@ func (e *promEval) rangeFunc(fn string, m *matrixSel) (promVal, error) {
 	return promVal{}, promErrorf(m.pos, "%s does not take a range vector", fn)
 }
 
-// histogramQuantile reads Prometheus-style cumulative buckets: series that
-// differ only in le.
 func (e *promEval) histogramQuantile(q []float64, vec []*vecSeries) (promVal, error) {
 	type bucket struct {
 		le float64

@@ -15,10 +15,6 @@ import (
 	"time"
 )
 
-// API checks play an ordered list of HTTP requests. Responses feed variables
-// ({{var.NAME}}) and assertions; secrets ({{secret.NAME}}) are masked in
-// everything a run records.
-
 type APIConfig struct {
 	Requests []APIRequest `json:"requests"`
 }
@@ -35,18 +31,13 @@ type APIRequest struct {
 	Assert    []APIAssertion    `json:"assert,omitempty"`
 }
 
-// APIExtract saves part of a response as a variable. Source is json (Path
-// is a JSON path such as $.data.token), header (Path is its name), regex
-// (Path is a pattern on the body; its first group, else the whole match) or
-// status.
+// APIExtract saves part of a response as a variable. Source is json, header, regex or status
 type APIExtract struct {
 	Var    string `json:"var"`
 	Source string `json:"source"`
 	Path   string `json:"path,omitempty"`
 }
 
-// APIAssertion is a condition on a response. Source is status, json,
-// header, body or time.
 type APIAssertion struct {
 	Source string `json:"source"`
 	Path   string `json:"path,omitempty"`
@@ -75,8 +66,7 @@ var (
 	numericOps = map[string]bool{"lt": true, "lte": true, "gt": true, "gte": true}
 )
 
-// Normalize validates the requests; prev is the stored config on update,
-// whose masked header values survive, and secrets the check's secrets.
+// prev is the stored config on update, whose masked header values survive
 func (a *APIConfig) Normalize(prev *APIConfig, secrets map[string]string) error {
 	var prevReqs []APIRequest
 	if prev != nil {
@@ -288,7 +278,6 @@ type pathStep struct {
 	isIdx bool
 }
 
-// parseJSONPath reads $.a.b[0]['c d'] (the $ is optional).
 func parseJSONPath(p string) ([]pathStep, error) {
 	if p == "" || len(p) > 500 {
 		return nil, errors.New("give a JSON path such as $.data.token")
@@ -528,9 +517,8 @@ func (ex APIExtract) extract(r *apiResponse) (string, error) {
 	return jsonText(v), nil
 }
 
-// APIRequestResult is how one request of a run did. Nothing in it holds a
-// secret: URLs and texts are masked, and only a short excerpt of a failed
-// response's body is kept.
+// Nothing in it holds a secret: URLs and texts are masked, and only a short
+// excerpt of a failed response's body is kept
 type APIRequestResult struct {
 	Name       string  `json:"name"`
 	Method     string  `json:"method"`
@@ -622,8 +610,6 @@ func probeAPI(ctx context.Context, c Check, allowPrivate func() bool) (res Resul
 	return res
 }
 
-// apiRequest sends one request and checks its response, filling rr. It
-// returns why the request failed, or "".
 func apiRequest(ctx context.Context, allowPrivate func() bool, c Check, rq APIRequest, vars map[string]string, rr *APIRequestResult) (string, bool) {
 	target, err := fill(rq.URL, vars, c.Secrets)
 	if err != nil {

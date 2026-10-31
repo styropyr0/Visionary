@@ -12,16 +12,6 @@ import (
 	"time"
 )
 
-// Detection rules: the team's own detectors over requests, app logs, security
-// events or the audit log. A rule writes what it finds as a finding with source
-// 'rule' (a signal), so triage, suppressions, alerts and the report all apply.
-//
-//	security_rules.go          the rule, its checks, the store and the API
-//	security_rules_sql.go      sources, fields and filters as SQL
-//	security_rules_eval.go     the background job, each logic, signals
-//	security_rules_preview.go  testing a rule against the last 24 hours
-//	security_rules_library.go  the built-in templates and MITRE ATT&CK names
-
 type detectionRule struct {
 	ID          int64             `json:"id"`
 	Name        string            `json:"name"`
@@ -34,21 +24,21 @@ type detectionRule struct {
 	Technique   string            `json:"technique,omitempty"`
 	Source      string            `json:"source"`
 	Filter      map[string]string `json:"filter,omitempty"`
-	// Logic is threshold, new_value, sequence or anomaly.
+	// Logic is threshold, new_value, sequence or anomaly
 	Logic     string   `json:"logic"`
 	GroupBy   []string `json:"group_by,omitempty"`
 	Window    string   `json:"window"`
 	Threshold int      `json:"threshold"`
-	// Distinct counts different values of a field instead of rows.
+	// Distinct counts different values of a field instead of rows
 	Distinct string `json:"distinct,omitempty"`
 	// Field and Learn: a new_value rule flags a Field value its group has not
-	// had in the Learn period before.
+	// had in the Learn period before
 	Field string `json:"field,omitempty"`
 	Learn string `json:"learn,omitempty"`
 	// Then is a sequence's second step: Threshold matches of Filter, then one
-	// of Then, by the same group within Window.
+	// of Then, by the same group within Window
 	Then map[string]string `json:"then,omitempty"`
-	// Factor: an anomaly is a group at Factor times its usual count.
+	// Factor: an anomaly is a group at Factor times its usual count
 	Factor    float64           `json:"factor,omitempty"`
 	Suppress  []ruleSuppression `json:"suppress,omitempty"`
 	Channels  []int64           `json:"channels,omitempty"`
@@ -58,8 +48,6 @@ type detectionRule struct {
 	UpdatedAt string            `json:"updated_at,omitempty"`
 }
 
-// ruleSuppression skips a rule's signals whose group (or new value) has
-// Field = Value, until Until when set.
 type ruleSuppression struct {
 	Field string `json:"field"`
 	Value string `json:"value"`
@@ -99,13 +87,12 @@ func (r *detectionRule) learn() time.Duration {
 	return min(d, maxRuleLearn)
 }
 
-// every is how often a rule runs: a fifth of its window, between one and ten
-// minutes, so long windows are not re-read every minute.
+// A fifth of the window, between one and ten minutes, so long windows aren't re-read every minute
 func (r *detectionRule) every() time.Duration {
 	return min(max(r.window()/5, time.Minute), 10*time.Minute)
 }
 
-// dedupe is how long one group's signal keeps growing before a new one opens.
+// dedupe is how long one group's signal keeps growing before a new one opens
 func (r *detectionRule) dedupe() time.Duration { return max(r.window(), 10*time.Minute) }
 
 func (s *Server) checkDetectionRule(r *detectionRule) error {
@@ -329,8 +316,7 @@ func (r *detectionRule) specJSON() string {
 	return string(b)
 }
 
-// ruleKind names a new rule's signals: rule_ and its name, unique, kept
-// when the rule is renamed so its history stays together.
+// Kept when the rule is renamed so its history stays together
 func (s *Server) ruleKind(ctx context.Context, name string) (string, error) {
 	base := strings.Trim(ruleSlug.ReplaceAllString(strings.ToLower(name), "_"), "_")
 	base = "rule_" + strings.TrimRight(clip(fallback(base, "custom"), 40), "_")

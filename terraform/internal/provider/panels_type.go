@@ -13,9 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
-// A dashboard's panels are a JSON string. Two strings that describe the same
-// panels are equal whatever their spacing, key order or empty fields, so
-// the JSON Visionary answers with never shows up as a change.
+// Two panel JSON strings are equal whatever their spacing, key order or empty fields,
+// so the JSON Visionary answers with never shows up as a change
 
 type panel struct {
 	ID          string            `json:"id"`
@@ -50,8 +49,6 @@ func parsePanels(s string) ([]panel, error) {
 	return out, nil
 }
 
-// canonicalPanels writes panels the one way they compare: empty fields left
-// out and keys sorted, as jsonencode() writes them.
 func canonicalPanels(list []panel) (string, error) {
 	for i := range list {
 		v := list[i].Viz

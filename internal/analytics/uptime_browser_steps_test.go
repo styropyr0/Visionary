@@ -74,7 +74,7 @@ func TestBrowserMoreStepsRun(t *testing.T) {
 		_, _ = io.WriteString(w, `<!doctype html><button onclick="document.getElementById('out').textContent='paid '+location.host">Pay</button><p id="out"></p>`)
 	}))
 	defer inner.Close()
-	// localhost and 127.0.0.1 are different sites, so the frame is cross-site.
+	// localhost and 127.0.0.1 are different sites, so the frame is cross-site
 	frameURL := strings.Replace(inner.URL, "127.0.0.1", "localhost", 1)
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

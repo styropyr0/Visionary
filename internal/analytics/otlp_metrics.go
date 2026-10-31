@@ -14,7 +14,7 @@ import (
 // Host and process metrics in the OpenTelemetry semantic conventions become
 // system_metrics rows: datapoints of one instance in one 15 s window make one
 // row, and whatever the exporter did not send stays NULL. Other metrics go
-// to the metrics table (metrics_otlp.go).
+// to the metrics table (metrics_otlp.go)
 
 const otlpMetricWindow = 15 // seconds
 

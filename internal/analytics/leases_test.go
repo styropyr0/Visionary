@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// replicaPair is two servers on one database, as two replicas would be. Set
-// VISIONARY_TEST_DATABASE_URL to run on a scratch PostgreSQL or MySQL.
 func replicaPair(t *testing.T) (a, b *Server) {
 	t.Helper()
 	dsn := os.Getenv("VISIONARY_TEST_DATABASE_URL")

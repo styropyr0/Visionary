@@ -48,8 +48,6 @@ func TestCheckLocationsNormalize(t *testing.T) {
 	}
 }
 
-// Two runner locations and the server vote on a check by majority; a
-// location that stops polling drops out of the vote.
 func TestLocationRunnersVote(t *testing.T) {
 	s := logsTestServer(t, nil)
 	ctx := context.Background()

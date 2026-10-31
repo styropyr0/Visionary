@@ -53,9 +53,8 @@ func parseID(v types.String) (int64, error) {
 	return strconv.ParseInt(v.ValueString(), 10, 64)
 }
 
-// The helpers below turn the server's answers into state. Optional attributes
-// stay null when the server holds the empty value, so a plan stays clean; ref
-// is the plan after a change, or the prior state on a refresh.
+// Optional attributes stay null when the server holds the empty value, so a plan stays clean.
+// ref is the plan after a change, or the prior state on a refresh
 
 func optString(v string, ref types.String) types.String {
 	if v == "" && ref.IsNull() {

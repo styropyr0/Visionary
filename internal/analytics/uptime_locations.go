@@ -13,15 +13,12 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Locations are the places a check runs from. "server" is Visionary itself;
-// every other is a host agent that polls for checks and posts results.
-// ok is the check's verdict across locations by its rule; location_ok is one
-// location's. Stale locations are left out of the vote.
+// "server" is Visionary itself, every other location is a host agent.
+// Stale locations are left out of the vote
 
 const (
 	serverLocation = "server"
-	// locationPollS is how often runners poll; a location that has not
-	// polled for locationStaleAfter is offline.
+	// A location that hasn't polled for locationStaleAfter is offline
 	locationPollS      = 15
 	locationLease      = 60 * time.Second
 	locationStaleAfter = 2 * time.Minute
@@ -85,12 +82,11 @@ type uptimeLocation struct {
 	Browser        bool   `json:"browser"`
 	BrowserVersion string `json:"browser_version,omitempty"`
 	Kinds          string `json:"-"`
-	// KindList is the check kinds its runner said it can run; empty for the
-	// server, which runs every kind.
+	// KindList is empty for the server, which runs every kind
 	KindList   []string `json:"kinds,omitempty"`
 	Instance   string   `json:"-"`
 	LeaseUntil string   `json:"-"`
-	// State is online, offline or new (never polled).
+	// State is online, offline or new (never polled)
 	State  string `json:"state"`
 	Checks int    `json:"checks"`
 }
@@ -145,8 +141,6 @@ func (s *Server) getLocation(ctx context.Context, name string) (uptimeLocation, 
 	return scanLocation(rows.Rows[0]), true, nil
 }
 
-// normalizeLocations fills the defaults of a check's locations and rule and
-// checks their form; whether the locations exist is checkLocations' job.
 func (c *UptimeCheck) normalizeLocations() error {
 	seen := map[string]bool{}
 	var locs []string
@@ -204,8 +198,7 @@ func (s *Server) checkLocations(ctx context.Context, c UptimeCheck) error {
 	return nil
 }
 
-// loadLocationConfigs fills in each check's locations; a check without a row
-// runs from the server alone.
+// A check without a row runs from the server alone
 func (s *Server) loadLocationConfigs(ctx context.Context, checks []UptimeCheck) error {
 	for i := range checks {
 		checks[i].Locations, checks[i].LocationRule = []string{serverLocation}, "majority"
@@ -250,8 +243,7 @@ func splitLocations(s string) []string {
 	return out
 }
 
-// saveLocationConfig stores a check's locations; the default (the server,
-// majority, no breakdown) needs no row.
+// The default (the server, majority, no breakdown) needs no row
 func (s *Server) saveLocationConfig(ctx context.Context, c UptimeCheck) error {
 	if err := s.db.Exec(ctx, `DELETE FROM uptime_check_locations WHERE check_id = ?`, c.ID); err != nil {
 		return err
@@ -264,8 +256,6 @@ func (s *Server) saveLocationConfig(ctx context.Context, c UptimeCheck) error {
 		c.ID, strings.Join(c.Locations, ","), fallback(c.LocationRule, "majority"), boolInt(c.StatusShowLocations))
 }
 
-// locationVerdict is a check's state across its locations, given that loc
-// just returned ok: whether it is up, and which locations fail.
 func (s *Server) locationVerdict(ctx context.Context, c UptimeCheck, loc string, ok bool) (bool, []string, error) {
 	now := time.Now().UTC()
 	since := now.Add(-time.Duration(2*c.IntervalS)*time.Second - 90*time.Second)
@@ -324,8 +314,6 @@ func locationsDown(rule string, failed, n int) bool {
 	return 2*failed > n
 }
 
-// ownError is a location's own reason from a row's error, without the
-// "down in a, b: " the vote put in front.
 func ownError(msg string) string {
 	if rest, ok := strings.CutPrefix(msg, "down in "); ok {
 		_, own, _ := strings.Cut(rest, ": ")
@@ -343,8 +331,6 @@ type locationState struct {
 	LastError      string  `json:"last_error,omitempty"`
 }
 
-// locationStates reads each check's latest result per location, for checks
-// that run from more than the server.
 func (s *Server) locationStates(ctx context.Context, checks []UptimeCheck) (map[int64][]locationState, error) {
 	out := map[int64][]locationState{}
 	var multi []UptimeCheck

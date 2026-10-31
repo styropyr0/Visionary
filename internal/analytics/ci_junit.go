@@ -16,10 +16,6 @@ import (
 	"time"
 )
 
-// JUnit XML uploads: pytest, Jest (jest-junit), Maven Surefire and
-// Gradle, go-junit-report, and anything else that writes the format. One
-// row per test case per upload, tied to a run, commit, branch and service.
-
 const (
 	ciMaxReport     = 32 << 20
 	ciMaxUpload     = 64 << 20
@@ -65,12 +61,11 @@ type ciTestCase struct {
 	Message                   string
 }
 
-// parseJUnit reads one report. A test that passed on a rerun (Surefire's
-// flakyFailure) is a pass plus a failure on the same commit, which is what
-// makes it flaky.
+// A test that passed on a rerun (Surefire's flakyFailure) counts as a pass and a failure
+// on the same commit, which is what makes it flaky
 func parseJUnit(data []byte) ([]ciTestCase, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
-	// Reports declare ISO-8859-1 now and then; their test names are ASCII.
+	// Reports declare ISO-8859-1 now and then, but their test names are ASCII
 	dec.CharsetReader = func(_ string, r io.Reader) (io.Reader, error) { return r, nil }
 	var root junitNode
 	if err := dec.Decode(&root); err != nil {
@@ -128,8 +123,6 @@ func parseJUnit(data []byte) ([]ciTestCase, error) {
 	return out, nil
 }
 
-// junitTestName joins class and name, unless the name already starts with
-// the class (jest-junit repeats it by default).
 func junitTestName(class, name string) string {
 	class, name = strings.TrimSpace(class), strings.TrimSpace(name)
 	switch {
@@ -141,7 +134,7 @@ func junitTestName(class, name string) string {
 	return class + "." + name
 }
 
-// junitSeconds reads a time attribute; Surefire writes "1,234.5" in some locales.
+// Surefire writes "1,234.5" in some locales
 func junitSeconds(v string) (float64, bool) {
 	v = strings.ReplaceAll(strings.TrimSpace(v), ",", "")
 	if v == "" {

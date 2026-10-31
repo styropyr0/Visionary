@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// Testing a rule before it is saved: what it would have flagged over the
-// last 24 hours. New-value rules compare against up to 7 days before that.
-
 const rulePreviewSpan = 24 * time.Hour
 
 type previewHit struct {
@@ -132,8 +129,6 @@ func (s *Server) previewRule(ctx context.Context, r *detectionRule, to time.Time
 	return nil, "", nil
 }
 
-// previewBuckets counts each group per window over the day and keeps the
-// buckets a threshold or anomaly rule would flag.
 func (s *Server) previewBuckets(ctx context.Context, r *detectionRule, from, to time.Time) ([]previewHit, error) {
 	src := s.q.ruleSources()[r.Source]
 	where, fargs, err := s.filterSQL(r.Source, r.Filter, timeRange{From: from, To: to})

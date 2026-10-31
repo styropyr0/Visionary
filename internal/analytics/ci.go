@@ -11,10 +11,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// CI visibility: pipelines, their jobs and the tests they ran. GitHub Actions
-// posts to a signed webhook; other CI systems post JSON and JUnit XML with a
-// server key.
-
 func init() {
 	for _, t := range []string{"CI_PIPELINES", "CI_JOBS", "CI_TESTS", "CI_FLAKY_TESTS"} {
 		allowedTables[t] = true
@@ -154,14 +150,11 @@ func ciRunKey(provider, repo, runID string, attempt int64) string {
 	return provider + ":" + repo + ":" + runID + ":" + strconv.FormatInt(max(attempt, 1), 10)
 }
 
-// ciTestHash groups one test's results: the same name in another service
-// or repository is another test.
 func ciTestHash(scope, test string) string {
 	sum := sha256.Sum256([]byte(scope + "\x00" + test))
 	return hex.EncodeToString(sum[:16])
 }
 
-// ciClip shortens free text to n bytes on a rune boundary.
 func ciClip(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= n {

@@ -15,9 +15,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Runs from CI: POST /api/uptime/runs runs the picked checks once, now, and
-// returns a batch the caller polls. With environment_url_override the checks run
-// against another origin and their results never count toward uptime.
+// With environment_url_override the checks run against another origin
+// and their results never count toward uptime
 
 const (
 	runMaxChecks   = 50
@@ -107,8 +106,7 @@ type runBatch struct {
 	deadline       string
 }
 
-// runItem is one check of a batch. Status is queued, running, passed,
-// failed, error (it could not run) or skipped.
+// Status is queued, running, passed, failed, error (it couldn't run) or skipped
 type runItem struct {
 	id         int64
 	CheckID    int64           `json:"check_id"`
@@ -126,7 +124,6 @@ type runItem struct {
 
 func runItemDone(status string) bool { return status != "queued" && status != "running" }
 
-// canTrigger: editors, and CI keys, may run checks.
 func (s *Server) canTrigger(r *http.Request) bool {
 	return s.can(r, "edit") || isCIKey(r)
 }
@@ -248,7 +245,7 @@ func (s *Server) createBatch(r *http.Request, picked []UptimeCheck, tags []strin
 	if err != nil {
 		return b, nil, err
 	}
-	// Seven values a row keeps each statement under D1's 100 parameters.
+	// Seven values a row keeps each statement under D1's 100 parameters
 	for chunk := range slices.Chunk(picked, 12) {
 		marks := make([]string, len(chunk))
 		args := make([]any, 0, 7*len(chunk))
@@ -331,8 +328,7 @@ func scanBatch(row []any) runBatch {
 	return b
 }
 
-// listBatches are the newest batches, those testing commit when it is set
-// (either SHA may be the short one).
+// Either SHA may be the short one
 func (s *Server) listBatches(ctx context.Context, commit string, limit int) ([]runBatch, error) {
 	where, args := "", []any{}
 	if commit != "" {

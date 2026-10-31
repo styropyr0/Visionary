@@ -11,9 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 )
 
-// keepIfSame plans a value the server fills in (a default) as unchanged
-// while the attributes it depends on stay the same, so an unrelated change
-// does not show it as "known after apply".
+// Plans a server-filled default as unchanged while the attributes it depends on
+// stay the same, so an unrelated change doesn't show it as "known after apply"
 type keepIfSame struct{ on []string }
 
 func keepIf(on ...string) keepIfSame { return keepIfSame{on: on} }

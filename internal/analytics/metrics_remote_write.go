@@ -16,11 +16,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Prometheus remote_write (v1): snappy-compressed protobufs, read with
-// protowire so the Prometheus module is not linked in. _total series are
-// counters, _bucket series with an le label are histograms, the rest gauges.
-// The job label becomes the service.
-
 const remoteWriteMaxDecoded = 32 << 20
 
 func (s *Server) handleRemoteWrite(w http.ResponseWriter, r *http.Request) {
@@ -164,8 +159,6 @@ func parseWriteRequest(b []byte) ([]promSeries, map[string]string, error) {
 
 var promTypeNames = map[uint64]string{1: "counter", 2: "gauge", 3: "histogram", 4: "gaugehistogram", 5: "summary", 6: "info", 7: "stateset"}
 
-// protoFields calls f for each field of a message: bytes fields get v,
-// varint and fixed fields get n.
 func protoFields(b []byte, f func(num protowire.Number, typ protowire.Type, v []byte, n uint64) error) error {
 	for len(b) > 0 {
 		num, typ, n := protowire.ConsumeTag(b)
@@ -220,8 +213,6 @@ func (mi *metricIngest) promType(family string) string {
 	return mi.promTypes[family]
 }
 
-// promPoints turns series into readings, assembling classic histograms from
-// their _bucket, _sum and _count series at the same timestamp.
 func (mi *metricIngest) promPoints(series []promSeries) []metricPoint {
 	type histKey struct {
 		family, labels string
@@ -349,15 +340,12 @@ func (mi *metricIngest) promCounter(name string) bool {
 	return false
 }
 
-// canonicalLabels is the contract's labels text and series id with an empty name.
 func canonicalLabels(labels map[string]string) (string, string) {
 	return sdk.MetricSeries("", labels)
 }
 
 var errSnappy = errors.New("snappy: corrupt input")
 
-// snappyDecode decodes the snappy block format (not the framed stream
-// format), which remote_write uses.
 func snappyDecode(src []byte, maxLen int) ([]byte, error) {
 	n, k := binary.Uvarint(src)
 	if k <= 0 || n > uint64(maxLen) {
@@ -427,7 +415,6 @@ func snappyDecode(src []byte, maxLen int) ([]byte, error) {
 	return dst, nil
 }
 
-// snappyCopy appends length bytes from offset back; copies may overlap.
 func snappyCopy(dst []byte, offset, length, limit int) []byte {
 	if offset <= 0 || offset > len(dst) || len(dst)+length > limit {
 		return nil

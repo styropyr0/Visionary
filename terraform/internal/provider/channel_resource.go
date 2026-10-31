@@ -24,7 +24,7 @@ var (
 	channelKinds = []string{"slack", "discord", "teams", "google_chat", "webhook", "email", "pagerduty", "opsgenie", "telegram", "sms"}
 	urlKinds     = []string{"slack", "discord", "teams", "google_chat", "webhook"}
 	secretKinds  = []string{"webhook", "pagerduty", "opsgenie", "telegram", "sms"}
-	// Paging services and SMS get alerts only, not the weekly digest.
+	// Paging services and SMS get alerts only, not the weekly digest
 	noDigestKinds = []string{"pagerduty", "opsgenie", "sms"}
 )
 
@@ -55,7 +55,6 @@ type channelModel struct {
 	HasSecret     types.Bool   `tfsdk:"has_secret"`
 }
 
-// apiChannel is a channel as the API shows it: no URL or secret in the clear.
 type apiChannel struct {
 	ID            int64    `json:"id"`
 	Name          string   `json:"name"`
@@ -190,8 +189,7 @@ func (m *channelModel) input(ctx context.Context, prior *channelModel, diags *di
 	return in
 }
 
-// fill copies the server's view into the model. The URL and secret are
-// never shown, so they keep their values unless the server has none.
+// The URL and secret are never shown, so they keep their values unless the server has none
 func (m *channelModel) fill(c apiChannel) {
 	m.ID = idString(c.ID)
 	m.Name, m.Kind = types.StringValue(c.Name), types.StringValue(c.Kind)

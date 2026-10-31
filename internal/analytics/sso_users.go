@@ -19,9 +19,6 @@ import (
 	"github.com/styropyr0/visionary/internal/authbridge"
 )
 
-// What single sign-on and SCIM keep in visionary_users: where the person
-// came from (empty for an account with a password), the identity provider's
-// id for them (SCIM externalId) and their email.
 var ssoAddedColumns = map[string][]sdk.Column{
 	"visionary_users": {
 		{Name: "source", Kind: "text"},
@@ -35,7 +32,7 @@ type ssoIdentity struct {
 	Email         string
 	EmailVerified *bool
 	Name          string
-	// Groups is nil when the provider sent no groups claim at all.
+	// Groups is nil when the provider sent no groups claim at all
 	Groups []string
 	Claims map[string]any
 }
@@ -55,9 +52,8 @@ type ssoDecision struct {
 	roleFrom string
 }
 
-// decide applies the provider's rules: a verified email in an allowed
-// domain, a role from the groups or the default, and an account that exists
-// or may be created.
+// A verified email in an allowed domain, a role from the groups or the default,
+// and an account that exists or may be created
 func (s *Server) ssoDecide(ctx context.Context, p *ssoProvider, id *ssoIdentity) (*ssoDecision, error) {
 	email := strings.ToLower(strings.TrimSpace(id.Email))
 	if email == "" {
@@ -168,7 +164,7 @@ func (s *Server) ssoUpsert(r *http.Request, p *ssoProvider, id *ssoIdentity, d *
 	err := s.db.Exec(ctx, `INSERT INTO visionary_users (id, username, name, role, password_hash, password_at, disabled, created_by, created_at, last_sign_in_at, source, email)
 VALUES (?, ?, ?, ?, '', ?, 0, ?, ?, ?, ?, ?)`, a.ID, a.Username, a.Name, a.Role, now, a.CreatedBy, now, now, a.Source, email)
 	if err != nil {
-		// Two first sign-ins at once: the other one made it.
+		// Two first sign-ins at once: the other one made it
 		if again, ferr := s.findAccount(ctx, "username", d.username); ferr == nil && again != nil && again.Source != "" {
 			return again, nil
 		}
@@ -179,7 +175,6 @@ VALUES (?, ?, ?, ?, '', ?, 0, ?, ?, ?, ?, ?)`, a.ID, a.Username, a.Name, a.Role,
 	return a, nil
 }
 
-// touchUser makes this server re-read a person's account on their next request.
 func (s *Server) touchUser(id string) {
 	st := s.sso()
 	st.mu.Lock()
@@ -201,9 +196,7 @@ func (s *Server) touchedSince(id string, t time.Time) bool {
 	return ok && !at.Before(t)
 }
 
-// confirmSSO re-reads a single sign-on account once a minute, or at once
-// when this server just changed it. The provider must still be on, and the
-// account still enabled with a role.
+// Re-read once a minute, or at once when this server just changed it
 func (s *Server) confirmSSO(ctx context.Context, sess *session) (*session, bool, error) {
 	id := strings.TrimPrefix(sess.UserID, ssoPrefix)
 	rest, _ := strings.CutPrefix(sess.Token, ssoPrefix)

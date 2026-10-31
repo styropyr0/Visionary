@@ -9,13 +9,10 @@ import (
 	"time"
 )
 
-// Ping checks send ICMP echo requests without raw-socket privileges: datagram
-// sockets on Linux and macOS (Linux needs net.ipv4.ping_group_range, which Docker
-// allows), a raw socket as fallback, the ICMP helper API on Windows. Where none
-// works, checks wait without recording results and the dashboard says why.
+// Ping uses datagram sockets on Linux and macOS, a raw socket as fallback
+// and the ICMP helper API on Windows, so it needs no raw-socket privileges
 
-// PingConfig is the settings of a ping check. The check fails when more
-// than MaxLossPct of the packets are lost.
+// The check fails when more than MaxLossPct of the packets are lost
 type PingConfig struct {
 	Host       string `json:"host"`
 	Packets    int    `json:"packets"`
@@ -72,8 +69,7 @@ var pingProbe struct {
 	state PingState
 }
 
-// PingStatus says whether ping checks can run here, tested at most once a
-// minute.
+// PingStatus says whether ping checks can run here, tested at most once a minute
 func PingStatus() PingState {
 	pingProbe.Lock()
 	defer pingProbe.Unlock()

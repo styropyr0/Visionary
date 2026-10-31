@@ -27,8 +27,6 @@ import (
 
 const testPublicURL = "http://visionary.test"
 
-// newSSOServer is a server on a fresh SQLite file with sign-in not set up
-// yet, so the first calls act as the local admin.
 func newSSOServer(t *testing.T) *Server {
 	t.Helper()
 	s := newTestServer(t, "sso.db", fstest.MapFS{"index.html": {Data: []byte("<html></html>")}})
@@ -86,8 +84,8 @@ type fakeOIDC struct {
 	kid  string
 	mu   sync.Mutex
 	auth map[string]fakeGrant
-	// Claims go into the next ID token; signWith and nonce, when set, make
-	// it wrong in that way.
+	// Claims go into the next ID token, and signWith and nonce, when set,
+	// make it wrong in that way
 	claims   map[string]any
 	signWith *rsa.PrivateKey
 	nonce    string

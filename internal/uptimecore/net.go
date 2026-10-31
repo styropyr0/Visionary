@@ -14,12 +14,7 @@ import (
 	"time"
 )
 
-// TCP, DNS and SSL certificate checks. Each connects through the same
-// address guard as HTTP checks; a DNS check's own server is guarded too.
-
-// TCPConfig is the settings of a TCP check: the port must accept a
-// connection, and when Expect is set the first bytes it sends (after Send,
-// if any) must contain it.
+// When Expect is set the first bytes the port sends (after Send) must contain it
 type TCPConfig struct {
 	Host   string `json:"host"`
 	Port   int    `json:"port"`
@@ -27,9 +22,7 @@ type TCPConfig struct {
 	Expect string `json:"expect,omitempty"`
 }
 
-// DNSConfig is the settings of a DNS check. Match is "" (any answer will
-// do), contains (every value is among the answers) or equals (the answers
-// are exactly the values). Server is empty for the system resolver.
+// Match is "" (any answer), contains or equals. Server is empty for the system resolver
 type DNSConfig struct {
 	Name       string   `json:"name"`
 	RecordType string   `json:"record_type"`
@@ -38,8 +31,7 @@ type DNSConfig struct {
 	Values     []string `json:"values,omitempty"`
 }
 
-// SSLConfig is the settings of a certificate check. Below WarnDays left the
-// check is degraded, below FailDays (or expired) it fails.
+// Below WarnDays left the check is degraded, below FailDays (or expired) it fails
 type SSLConfig struct {
 	Host           string `json:"host"`
 	Port           int    `json:"port"`
@@ -161,12 +153,11 @@ func (s *SSLConfig) Normalize() error {
 	return nil
 }
 
-// unescape reads \r, \n, \t and \\ in what a TCP check sends or expects.
 func unescape(s string) string {
 	return strings.NewReplacer(`\r`, "\r", `\n`, "\n", `\t`, "\t", `\\`, `\`).Replace(s)
 }
 
-// Printable keeps text readable: control characters become a dot.
+// Printable turns control characters into dots
 func Printable(b []byte) string {
 	out := make([]rune, 0, len(b))
 	for _, r := range strings.ToValidUTF8(string(b), "") {
@@ -266,8 +257,7 @@ func dnsNorm(recordType, v string) string {
 	return v
 }
 
-// dnsHas is whether an answer is the value; an MX answer ("10 mx.host")
-// also matches its host alone.
+// An MX answer ("10 mx.host") also matches its host alone
 func dnsHas(recordType string, answers []string, value string) bool {
 	want := dnsNorm(recordType, value)
 	for _, a := range answers {
@@ -479,7 +469,7 @@ func probeSSL(ctx context.Context, c Check, allowPrivate func() bool) (res Resul
 	if _, err := netip.ParseAddr(sni); err == nil {
 		serverName = ""
 	}
-	// Verified below instead, so each problem can be named and some ignored.
+	// Verified below instead, so each problem can be named and some ignored
 	conn := tls.Client(raw, &tls.Config{ServerName: serverName, InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}) //nolint:gosec
 	t0 := time.Now()
 	if err := conn.HandshakeContext(ctx); err != nil {

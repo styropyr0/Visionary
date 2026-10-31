@@ -19,8 +19,8 @@ import (
 
 // Modes. otp and password delegate to an existing API; shared is one team
 // password and accounts a username and password per person, both checked by
-// Visionary itself; sso is single sign-on only (an identity provider, set
-// up apart); none skips sign-in.
+// Visionary itself, sso is single sign-on only (an identity provider, set
+// up apart) and none skips sign-in
 const (
 	TypeOTP      = "otp"
 	TypePassword = "password"

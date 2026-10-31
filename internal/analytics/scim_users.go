@@ -9,9 +9,7 @@ import (
 	"strings"
 )
 
-// SCIM Users. Only people from single sign-on or SCIM are visible here;
-// accounts with a password are Visionary's own and SCIM can't see or change
-// them.
+// Accounts with a password are Visionary's own, and SCIM can't see or change them
 
 func (s *Server) scimUsers(ctx context.Context, attr, value string) ([]account, error) {
 	where, args := "source <> ''", []any{}
@@ -87,9 +85,6 @@ func (u *scimUserState) name() string {
 	return ""
 }
 
-// set applies one attribute by its path, lowercased. Attributes Visionary
-// doesn't keep (title, locale, enterprise extensions) are ignored. A nil
-// value clears it.
 func (u *scimUserState) set(path string, v json.RawMessage) error {
 	str := func() string {
 		var s string
@@ -300,9 +295,7 @@ func (s *Server) handleSCIMPatchUser(w http.ResponseWriter, r *http.Request) {
 	s.scimSaveUser(w, r, func(u *scimUserState) (*scimUserState, error) { return u, u.apply(ops) })
 }
 
-// scimSaveUser changes a user with change, which gets the current state.
-// Turning someone inactive signs them out: at once on this server, within a
-// minute on the others.
+// Turning someone inactive signs them out at once here and within a minute on the others
 func (s *Server) scimSaveUser(w http.ResponseWriter, r *http.Request, change func(*scimUserState) (*scimUserState, error)) {
 	ctx := r.Context()
 	a, err := s.scimUser(ctx, r.PathValue("id"))

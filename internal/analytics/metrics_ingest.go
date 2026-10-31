@@ -11,9 +11,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Rows for the metrics table from OTLP and remote_write. Cumulative counters
-// and histograms become increases against the previous point of the same
-// series; the first point of a series only sets the baseline.
+// Cumulative counters and histograms become increases against the series' previous point,
+// and its first point only sets the baseline
 
 const (
 	maxSeriesPerMetric = 1000
@@ -25,8 +24,7 @@ var metricsTable = &otlpTable{"metrics", []string{
 	"created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
 }}
 
-// histPoint is a histogram reading: per-bucket counts, one more than bounds
-// for values above the last bound. min and max are NaN when unknown.
+// Counts has one more entry than bounds, for values above the last bound
 type histPoint struct {
 	count    float64
 	sum      float64
@@ -173,8 +171,6 @@ func (mi *metricIngest) trimBaselines() {
 	}
 }
 
-// histDelta is cur minus prev, bucket by bucket on matching upper bounds.
-// min and max of an interval are unknown from totals.
 func histDelta(cur, prev *histPoint) *histPoint {
 	before := map[float64]float64{}
 	for i, c := range prev.counts {
