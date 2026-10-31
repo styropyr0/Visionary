@@ -34,6 +34,7 @@ export const LATENCY_TEXT: Record<CheckKind, { label: string; title: string; tex
   dns: { label: "Resolution", title: "Resolution time", text: "Median and 95th percentile of the time to resolve the name, for runs that passed." },
   ping: { label: "Round trip", title: "Round trip", text: "Median and 95th percentile of the average round trip of each run." },
   ssl: { label: "Handshake", title: "Connect and handshake", text: "Median and 95th percentile of the time to connect and complete the TLS handshake, for runs that passed." },
+  playwright: { label: "Test time", title: "Test time", text: "Median and 95th percentile of the test's duration per interval, for runs that passed." },
   heartbeat: { label: "Job run time", title: "Job run time", text: "Median and 95th percentile of the time between each start ping and its success ping, for jobs that send /start." },
 };
 

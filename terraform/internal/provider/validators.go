@@ -11,6 +11,9 @@ import (
 
 var clockRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 
+// tagRe matches an uptime check tag as the server stores it.
+var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:-]{0,39}$`)
+
 type rfc3339Validator struct{}
 
 func (rfc3339Validator) Description(context.Context) string { return "must be an RFC 3339 time" }

@@ -95,6 +95,8 @@ type configCheck struct {
 	Ping            *PingConfig       `json:"ping,omitempty"`
 	SSL             *SSLConfig        `json:"ssl,omitempty"`
 	Heartbeat       *HeartbeatConfig  `json:"heartbeat,omitempty"`
+	Tags            []string          `json:"tags,omitempty"`
+	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 	Alert           *configCheckAlert `json:"alert,omitempty"`
 	// Locations default to the server alone, and the rule to majority.
 	Locations           []string `json:"locations,omitempty"`
@@ -277,7 +279,8 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	out := configCheck{Name: m.Name, Kind: m.Kind, URL: m.URL, Method: m.Method, ExpectStatus: m.ExpectStatus, BodyContains: m.BodyContains,
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
-		FinalScreenshot: m.FinalScreenshot, API: m.API, TCP: m.TCP, DNS: m.DNS, Ping: m.Ping, SSL: m.SSL, Heartbeat: m.Heartbeat}
+		FinalScreenshot: m.FinalScreenshot, API: m.API, TCP: m.TCP, DNS: m.DNS, Ping: m.Ping, SSL: m.SSL, Heartbeat: m.Heartbeat,
+		Tags: m.Tags, Playwright: m.Playwright}
 	if settingsKinds[m.Kind] {
 		// The address comes from the kind's settings; a heartbeat's URL
 		// (its token) stays behind and a new one is made on import.
@@ -285,6 +288,9 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 		if m.Kind != "api" {
 			out.FollowRedirects = nil
 		}
+	}
+	if len(out.Tags) == 0 {
+		out.Tags = nil
 	}
 	if len(out.Headers) == 0 {
 		out.Headers = nil
@@ -299,6 +305,9 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	if m.Kind == "browser" {
 		// The start URL is the first step's; the rest does not apply.
 		out.URL, out.Method, out.ExpectStatus, out.FollowRedirects = "", "", "", nil
+	}
+	if m.Kind == "playwright" {
+		out.Method, out.ExpectStatus, out.FollowRedirects = "", "", nil
 	}
 	if a, ok := st.alerts[c.ID]; ok && (a.Mode == "custom" || a.Mode == "off") {
 		out.Alert = &configCheckAlert{Mode: a.Mode, Channels: idNames(a.ChannelIDs, st.chanName), Failures: a.Failures, Severity: a.Severity}

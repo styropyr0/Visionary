@@ -56,13 +56,16 @@ func TestConfigExportImport(t *testing.T) {
 		"spec":{"metric":"latency_p95","op":">","threshold":800,"window":"5m","for":"2m"}}`, http.StatusCreated)
 	incidentDo(t, a, "POST", "/api/alerts/silences", `{"name":"Nights","matchers":{"severities":["info"]},
 		"schedule":{"kind":"weekly","days":[1,2],"from":"22:00","to":"06:00","tz":"UTC"}}`, http.StatusCreated)
-	incidentDo(t, a, "POST", "/api/uptime/checks", `{"name":"Home","url":"https://example.com","alert":{"mode":"custom","channels":[`+itoa(ch.ID)+`],"failures":3}}`, http.StatusCreated)
+	incidentDo(t, a, "POST", "/api/uptime/checks", `{"name":"Home","url":"https://example.com","tags":["Smoke","deploy","smoke"],"alert":{"mode":"custom","channels":[`+itoa(ch.ID)+`],"failures":3}}`, http.StatusCreated)
 	incidentDo(t, a, "POST", "/api/uptime/checks", `{"name":"API","url":"https://example.com/api","headers":{"Authorization":"Bearer x"}}`, http.StatusCreated)
 	incidentDo(t, a, "POST", "/api/dashboards", `{"name":"Main","layout":{"panels":[{"id":"p1","kind":"builtin","ref":"overview/latency","x":0,"y":0,"w":6,"h":4}]}}`, http.StatusCreated)
 
 	doc := string(incidentDo(t, a, "GET", "/api/config/export", "", http.StatusOK))
 	if strings.Contains(doc, "secret") || strings.Contains(doc, "Bearer x") {
 		t.Fatalf("export leaks a secret:\n%s", doc)
+	}
+	if !strings.Contains(doc, "- deploy\n") || !strings.Contains(doc, "- smoke\n") {
+		t.Fatalf("tags not exported:\n%s", doc)
 	}
 	if !strings.Contains(doc, "kind: visionary-config") || !strings.Contains(doc, "check: ") && !strings.Contains(doc, "mode: custom") {
 		t.Fatalf("unexpected export:\n%s", doc)

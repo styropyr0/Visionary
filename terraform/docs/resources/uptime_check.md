@@ -3,12 +3,12 @@
 page_title: "visionary_uptime_check Resource - visionary"
 subcategory: ""
 description: |-
-  An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+  An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, a heartbeat that a job pings, or a Playwright test your own runs report (declared here so it exists before its first run). Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 ---
 
 # visionary_uptime_check (Resource)
 
-An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, a heartbeat that a job pings, or a Playwright test your own runs report (declared here so it exists before its first run). Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 
 ## Example Usage
 
@@ -20,6 +20,7 @@ resource "visionary_uptime_check" "api" {
   expect_status = "200"
   body_contains = "ok"
   degraded_ms   = 800
+  tags          = ["smoke", "api"]
   headers       = { Authorization = "Bearer ${var.health_token}" }
 
   on_status_page = true
@@ -109,6 +110,20 @@ output "backup_heartbeat_path" {
   sensitive = true
 }
 
+# A Playwright test your CI runs with visionary-playwright-reporter; declared so it
+# is alerted on before its first run, and stale when no run arrives for 20 minutes.
+resource "visionary_uptime_check" "checkout_test" {
+  name       = "Checkout pays by card"
+  kind       = "playwright"
+  interval_s = 1200
+  tags       = ["checkout"]
+
+  playwright = {
+    project = "chromium"
+    title   = "checkout.spec.ts › pays by card"
+  }
+}
+
 variable "health_token" {
   type      = string
   sensitive = true
@@ -139,18 +154,20 @@ variable "probe_password" {
 - `follow_redirects` (Boolean) Default true.
 - `headers` (Map of String, Sensitive) Request headers.
 - `heartbeat` (Attributes) Heartbeat check (kind heartbeat): a job calls its URL; it is down when no ping arrives in time or the job reports a failure. (see [below for nested schema](#nestedatt--heartbeat))
-- `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
-- `kind` (String) http (default), browser, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.
+- `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.
+- `kind` (String) http (default), browser, playwright, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.
 - `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
 - `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `ping` (Attributes) Ping check (kind ping): ICMP echo, reporting loss and round trip time. timeout_ms is each reply's wait (default 2000). (see [below for nested schema](#nestedatt--ping))
+- `playwright` (Attributes) The Playwright test a playwright check follows, as visionary-playwright-reporter reports it. (see [below for nested schema](#nestedatt--playwright))
 - `secrets` (Map of String, Sensitive) Browser and api check secrets, used as {{secret.NAME}}.
 - `ssl` (Attributes) Certificate check (kind ssl): validity, days to expiry, hostname, chain and TLS version, without an HTTP request. (see [below for nested schema](#nestedatt--ssl))
 - `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
+- `tags` (Set of String) Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.
 - `tcp` (Attributes) TCP check (kind tcp): the port accepts a connection, and optionally answers what is sent. (see [below for nested schema](#nestedatt--tcp))
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser and api checks; for ping checks each reply's wait, default 2000).
 - `url` (String) Address probed (http checks). For other kinds it is derived: the first step's or request's URL, or tcp://, dns://, ping:// or ssl:// with the target.
@@ -241,6 +258,17 @@ Optional:
 - `port` (Number) Port (default 443).
 - `server_name` (String) Name sent as SNI and checked against the certificate (default: host).
 - `warn_days` (Number) Degraded below this many days left (default 14).
+
+<a id="nestedatt--playwright"></a>
+### Nested Schema for `playwright`
+
+Required:
+
+- `title` (String) Title path: file › describe › test, e.g. checkout.spec.ts › pays by card.
+
+Optional:
+
+- `project` (String) Playwright project name (empty without projects).
 
 
 <a id="nestedatt--steps"></a>

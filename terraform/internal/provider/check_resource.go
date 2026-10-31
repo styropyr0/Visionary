@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -58,6 +59,8 @@ type checkModel struct {
 	Locations       types.List      `tfsdk:"locations"`
 	LocationRule    types.String    `tfsdk:"location_rule"`
 	StatusShowLocs  types.Bool      `tfsdk:"status_show_locations"`
+	Tags            types.Set       `tfsdk:"tags"`
+	Playwright      *pwModel        `tfsdk:"playwright"`
 	API             *apiModel       `tfsdk:"api"`
 	TCP             *tcpModel       `tfsdk:"tcp"`
 	DNS             *dnsModel       `tfsdk:"dns"`
@@ -65,6 +68,11 @@ type checkModel struct {
 	SSL             *sslModel       `tfsdk:"ssl"`
 	Heartbeat       *heartbeatModel `tfsdk:"heartbeat"`
 	HeartbeatPath   types.String    `tfsdk:"heartbeat_path"`
+}
+
+type pwModel struct {
+	Project types.String `tfsdk:"project"`
+	Title   types.String `tfsdk:"title"`
 }
 
 type stepModel struct {
@@ -100,12 +108,19 @@ type apiCheck struct {
 	Locations       []string          `json:"locations"`
 	LocationRule    string            `json:"location_rule"`
 	StatusShowLocs  bool              `json:"status_show_locations"`
+	Tags            []string          `json:"tags"`
+	Playwright      *apiPlaywright    `json:"playwright,omitempty"`
 	API             *apiAPI           `json:"api,omitempty"`
 	TCP             *apiTCP           `json:"tcp,omitempty"`
 	DNS             *apiDNS           `json:"dns,omitempty"`
 	Ping            *apiPing          `json:"ping,omitempty"`
 	SSL             *apiSSL           `json:"ssl,omitempty"`
 	Heartbeat       *apiHeartbeat     `json:"heartbeat,omitempty"`
+}
+
+type apiPlaywright struct {
+	Project string `json:"project"`
+	Title   string `json:"title"`
 }
 
 type apiStepB struct {
@@ -136,13 +151,14 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 	}
 	resp.Schema = schema.Schema{
 		Description: "An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, " +
-			"a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. " +
+			"a TCP, DNS, ping or certificate check, a heartbeat that a job pings, or a Playwright test " +
+			"your own runs report (declared here so it exists before its first run). " +
 			"Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).",
 		Attributes: map[string]schema.Attribute{
 			"id":   idAttribute(),
 			"name": schema.StringAttribute{Description: "Name.", Required: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 120)}},
 			"kind": schema.StringAttribute{
-				Description: "http (default), browser, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.",
+				Description: "http (default), browser, playwright, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.",
 				Optional:    true, Computed: true, Default: stringdefault.StaticString("http"),
 				Validators: []validator.String{stringvalidator.OneOf(checkKinds...)},
 			},
@@ -160,9 +176,10 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"body_contains": schema.StringAttribute{Description: "Text the body must contain.", Optional: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 512)}},
 			"headers":       schema.MapAttribute{Description: "Request headers.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"interval_s": schema.Int64Attribute{
-				Description: "Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).", Optional: true, Computed: true,
+				Description: "Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.",
+				Optional:    true, Computed: true,
 				PlanModifiers: []planmodifier.Int64{keepIf("kind")},
-				Validators:    []validator.Int64{int64validator.Between(30, 3600)},
+				Validators:    []validator.Int64{int64validator.Between(30, 604800)},
 			},
 			"timeout_ms": schema.Int64Attribute{
 				Description: "Timeout in ms (default 10000; 30000 for browser and api checks; for ping checks each reply's wait, default 2000).", Optional: true, Computed: true,
@@ -182,6 +199,19 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"secrets":          schema.MapAttribute{Description: "Browser and api check secrets, used as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"final_screenshot": schema.BoolAttribute{Description: "Keep a screenshot of every browser run, not only failed ones.", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
+			"tags": schema.SetAttribute{
+				Description: "Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.",
+				Optional:    true, ElementType: types.StringType,
+				Validators: []validator.Set{setvalidator.SizeAtMost(20), setvalidator.ValueStringsAre(stringvalidator.RegexMatches(tagRe, "must be lower case letters, digits and _ . : -, up to 40"))},
+			},
+			"playwright": schema.SingleNestedAttribute{
+				Description: "The Playwright test a playwright check follows, as visionary-playwright-reporter reports it.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"project": schema.StringAttribute{Description: "Playwright project name (empty without projects).", Optional: true, Computed: true, Default: stringdefault.StaticString("")},
+					"title":   schema.StringAttribute{Description: "Title path: file › describe › test, e.g. checkout.spec.ts › pays by card.", Required: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 1000)}},
+				},
+			},
 			"locations": schema.ListAttribute{
 				Description: `Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).`,
 				Optional:    true, Computed: true, ElementType: types.StringType,
@@ -223,6 +253,9 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 	if hb != nil && !hb.PeriodS.IsUnknown() && !hb.Cron.IsUnknown() && hb.PeriodS.IsNull() == hb.Cron.IsNull() {
 		resp.Diagnostics.AddAttributeError(path.Root("heartbeat"), "Period or cron", "Give heartbeat.period_s or heartbeat.cron, not both.")
 	}
+	if kind.ValueString() != "playwright" && set("playwright") {
+		resp.Diagnostics.AddAttributeError(path.Root("playwright"), "Only for playwright checks", `Set kind = "playwright" to use playwright.`)
+	}
 	var onPage, showURL types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("on_status_page"), &onPage)...)
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("status_show_url"), &showURL)...)
@@ -242,6 +275,13 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
+	}
+	if m.Playwright != nil {
+		in.Playwright = &apiPlaywright{Project: m.Playwright.Project.ValueString(), Title: m.Playwright.Title.ValueString()}
+	}
+	in.Tags = []string{}
+	if !m.Tags.IsNull() && !m.Tags.IsUnknown() {
+		diags.Append(m.Tags.ElementsAs(ctx, &in.Tags, false)...)
 	}
 	for _, s := range m.Steps {
 		in.Steps = append(in.Steps, apiStepB{Action: s.Action.ValueString(), Selector: s.Selector.ValueString(), Text: s.Text.ValueString(),
@@ -278,6 +318,11 @@ func (m *checkModel) fill(c apiCheck) {
 	m.IntervalS, m.TimeoutMs, m.DegradedMs = types.Int64Value(c.IntervalS), types.Int64Value(c.TimeoutMs), optInt(c.DegradedMs, m.DegradedMs)
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
+	m.Tags = optStringSet(c.Tags, m.Tags)
+	m.Playwright = nil
+	if c.Playwright != nil {
+		m.Playwright = &pwModel{Project: types.StringValue(c.Playwright.Project), Title: types.StringValue(c.Playwright.Title)}
+	}
 	if len(c.Locations) == 0 {
 		c.Locations = []string{"server"}
 	}

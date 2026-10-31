@@ -198,6 +198,14 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO uptime_check_settings (check_id, settings, secrets, token) VALUES (?, ?, '{}', ?)`, svc.num, `{"host":"`+m+`.example","port":5432}`, m+"token")
 		exec(`INSERT INTO uptime_run_details (created_at, check_id, ok, detail) VALUES (?, ?, 0, ?)`, ts, svc.num, `{"requests":[{"name":"`+m+` request"}]}`)
 		exec(`INSERT INTO uptime_heartbeat_pings (created_at, check_id, kind, message) VALUES (?, ?, 'fail', ?)`, ts, svc.num, m+" backup failed")
+		exec(`INSERT INTO uptime_check_tags (check_id, tag) VALUES (?, ?)`, svc.num, m+"-tag")
+		exec(`INSERT INTO uptime_playwright_checks (check_id, test_key, project, title) VALUES (?, ?, ?, ?)`, svc.num, "key"+svc.num, m+"-project", m+".spec.ts › works")
+		exec(`INSERT INTO uptime_playwright_results (created_at, check_id, ok, status, steps, attachments, error, project) VALUES (?, ?, 0, 'failed', ?, '[]', ?, ?)`,
+			ts, svc.num, `[{"title":"`+m+` step","duration_ms":1}]`, m+" assertion", m+"-project")
+		exec(`INSERT INTO uptime_run_batches (id, created_at, deadline_at, status, workspace_id, release_name, commit_sha, tags, created_by, total)
+VALUES (?, ?, ?, 'failed', ?, ?, ?, '[]', ?, 1)`, svc.num, ts, ts, svc.num, m+"-release", "abcdef"+svc.num, m+"-ci")
+		exec(`INSERT INTO uptime_run_items (batch_id, created_at, check_id, check_name, kind, status, error) VALUES (?, ?, ?, ?, 'http', 'failed', ?)`,
+			svc.num, ts, svc.num, m+" check", m+" failed")
 		exec(`INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count) VALUES (?, 'rule', ?, 'high', ?, ?, ?, ?, ?, ?, 3)`,
 			ts, "rule_"+svc.num, svc.host, svc.name, m+"-attacker", "10.3.0."+svc.num, "/"+m+"/admin", `{"rule":"`+m+` rule"}`)
 		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,

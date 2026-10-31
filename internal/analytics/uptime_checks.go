@@ -48,17 +48,19 @@ type UptimeCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	Tags            []string          `json:"tags"`
+	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 	// Locations the check runs from (uptime_locations.go), the rule that
 	// combines them, and whether the status page breaks it down by them.
-	Locations           []string `json:"locations"`
-	LocationRule        string   `json:"location_rule"`
-	StatusShowLocations bool     `json:"status_show_locations"`
-	API             *APIConfig        `json:"api,omitempty"`
-	TCP             *TCPConfig        `json:"tcp,omitempty"`
-	DNS             *DNSConfig        `json:"dns,omitempty"`
-	Ping            *PingConfig       `json:"ping,omitempty"`
-	SSL             *SSLConfig        `json:"ssl,omitempty"`
-	Heartbeat       *HeartbeatConfig  `json:"heartbeat,omitempty"`
+	Locations           []string         `json:"locations"`
+	LocationRule        string           `json:"location_rule"`
+	StatusShowLocations bool             `json:"status_show_locations"`
+	API                 *APIConfig       `json:"api,omitempty"`
+	TCP                 *TCPConfig       `json:"tcp,omitempty"`
+	DNS                 *DNSConfig       `json:"dns,omitempty"`
+	Ping                *PingConfig      `json:"ping,omitempty"`
+	SSL                 *SSLConfig       `json:"ssl,omitempty"`
+	Heartbeat           *HeartbeatConfig `json:"heartbeat,omitempty"`
 }
 
 const (
@@ -124,6 +126,9 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadKindSettings(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.loadCheckExtras(ctx, out); err != nil {
+		return nil, err
+	}
 	if err := s.loadLocationConfigs(ctx, out); err != nil {
 		return nil, err
 	}
@@ -143,6 +148,9 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
 	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
 		if err = s.loadKindSettings(ctx, checks); err == nil {
+			err = s.loadCheckExtras(ctx, checks)
+		}
+		if err == nil {
 			err = s.loadLocationConfigs(ctx, checks)
 		}
 	}
@@ -156,6 +164,14 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	if c.Name == "" || len(c.Name) > 120 {
 		return errors.New("name must be 1–120 characters")
 	}
+	tags, err := normalizeTags(c.Tags)
+	if err != nil {
+		return err
+	}
+	c.Tags = tags
+	if c.Kind != "playwright" {
+		c.Playwright = nil
+	}
 	if err := c.normalizeLocations(); err != nil {
 		return err
 	}
@@ -168,6 +184,9 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 		return c.normalizeBrowser(prev)
 	case "api", "tcp", "dns", "ping", "ssl", "heartbeat":
 		return c.normalizeKind(prev)
+	case "playwright":
+		c.API, c.TCP, c.DNS, c.Ping, c.SSL, c.Heartbeat = nil, nil, nil, nil, nil, nil
+		return c.normalizePlaywright()
 	default:
 		return fmt.Errorf("unknown check kind %q", c.Kind)
 	}
@@ -302,6 +321,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
   kind = ?, updated_at = ? WHERE id = ?`, append(args, now, c.ID)...)
 	}
 	if err != nil {
+		return err
+	}
+	if err := s.saveCheckExtras(ctx, *c); err != nil {
 		return err
 	}
 	if err := s.saveBrowserConfig(ctx, *c); err != nil {
@@ -496,6 +518,8 @@ func checkChanges(a, b UptimeCheck) []string {
 	ga, _ := json.Marshal(a.kindSettingsOrNil())
 	gb, _ := json.Marshal(b.kindSettingsOrNil())
 	add("settings", string(ga) != string(gb))
+	add("tags", strings.Join(a.Tags, ",") != strings.Join(b.Tags, ","))
+	add("playwright", fmt.Sprint(a.Playwright) != fmt.Sprint(b.Playwright))
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
@@ -568,6 +592,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
 	s.deleteKindData(r.Context(), c.ID)
+	s.deleteCheckExtras(r.Context(), c.ID)
 	if err := s.db.Exec(r.Context(), `DELETE FROM uptime_check_locations WHERE check_id = ?`, c.ID); err != nil {
 		s.logger.Warn("check locations not deleted", "check_id", c.ID, "err", err)
 	}
@@ -585,6 +610,10 @@ func (s *Server) handleUptimeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	c, ok := s.loadCheck(w, r)
 	if !ok {
+		return
+	}
+	if c.Kind == "playwright" {
+		writeError(w, http.StatusConflict, "Playwright checks are reported by your test runs; they can't be run from here")
 		return
 	}
 	run := runnerFor(s)

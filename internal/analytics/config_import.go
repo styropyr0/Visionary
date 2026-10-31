@@ -282,7 +282,7 @@ func (ci *configImport) checks(doc configDoc) error {
 			BodyContains: in.BodyContains, Headers: in.Headers, IntervalS: in.IntervalS, TimeoutMs: in.TimeoutMs, DegradedMs: in.DegradedMs,
 			FollowRedirects: orTrue(in.FollowRedirects), Enabled: orTrue(in.Enabled), OnStatusPage: in.OnStatusPage,
 			StatusShowURL: in.StatusShowURL, Steps: in.Steps, Secrets: in.Secrets, FinalScreenshot: in.FinalScreenshot,
-			Locations: in.Locations, LocationRule: in.LocationRule, StatusShowLocations: in.StatusShowLocations,
+			Locations: in.Locations, LocationRule: in.LocationRule, StatusShowLocations: in.StatusShowLocations, Tags: in.Tags, Playwright: in.Playwright,
 			API: in.API, TCP: in.TCP, DNS: in.DNS, Ping: in.Ping, SSL: in.SSL, Heartbeat: in.Heartbeat}
 		name := strings.TrimSpace(in.Name)
 		var cur *UptimeCheck

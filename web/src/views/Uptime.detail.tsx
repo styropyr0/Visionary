@@ -15,6 +15,8 @@ import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckA
 import { Select } from "../components/Select";
 import { LocationsPanel } from "./Uptime.locations";
 import { BrowserRunsPanel, LastRunTile, StepStatsPanel } from "./Uptime.browser";
+import { everyLabel, PlaywrightLastTile, PlaywrightRunsPanel } from "./Uptime.playwright";
+import { getPlaywrightRuns } from "../lib/uptimePlaywright";
 import { BrowserNotice } from "./Uptime.steps";
 import { CheckAlertLine, DefaultRuleModal } from "./Uptime.alerts";
 import { useQuery } from "../lib/useQuery";
@@ -57,6 +59,8 @@ export function UptimeDetail({ id }: { id: number }) {
   const st = s?.state;
   const browser = c?.kind === "browser";
   const multi = !!c && !isServerOnly(c);
+  const playwright = c?.kind === "playwright";
+  const pwRuns = useQuery(playwright ? `up-pw-${key}` : null, (signal) => getPlaywrightRuns(id, resolved.from, resolved.to, signal));
   const results = useQuery(c?.kind === "http" ? `up-res-${key}#${where}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal, where || undefined));
   const kind = c?.kind ?? "http";
   const details = useQuery(c && SETTINGS_KINDS.includes(kind) && kind !== "heartbeat" ? `up-det-${key}` : null, (signal) => getDetails(id, resolved.from, resolved.to, signal));
@@ -112,10 +116,12 @@ export function UptimeDetail({ id }: { id: number }) {
             <RefreshControl busy={summary.loading || latency.loading} />
             {c && s?.can_edit && (
               <>
-                <button type="button" className="btn" onClick={() => void run()} disabled={running}>
-                  <RotateCw size={14} className={running ? "spin" : undefined} />
-                  Run now
-                </button>
+                {!playwright && (
+                  <button type="button" className="btn" onClick={() => void run()} disabled={running}>
+                    <RotateCw size={14} className={running ? "spin" : undefined} />
+                    Run now
+                  </button>
+                )}
                 <button type="button" className="btn" onClick={() => void toggle(c)}>
                   {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                   {c.enabled ? "Pause" : "Resume"}
@@ -145,7 +151,7 @@ export function UptimeDetail({ id }: { id: number }) {
                 <div className="up-head-text">
                   <div className="mono up-url">{describeTarget(c)}</div>
                   <div className="dim">
-                    {kind === "heartbeat" ? "Looked for every minute" : `Every ${formatInterval(c.interval_s)} · ${kind === "ping" ? "waits" : "timeout"} ${c.timeout_ms / 1000}s`}
+                    {playwright ? `A run expected every ${everyLabel(c.interval_s)}, reported by your test runs` : kind === "heartbeat" ? "Looked for every minute" : `Every ${formatInterval(c.interval_s)} · ${kind === "ping" ? "waits" : "timeout"} ${c.timeout_ms / 1000}s`}
                     {describeExpect(c)}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
@@ -220,7 +226,9 @@ export function UptimeDetail({ id }: { id: number }) {
                 />
               )}
             </div>
-            {browser ? (
+            {playwright ? (
+              <PlaywrightLastTile run={pwRuns.data?.runs[0]} intervalS={c.interval_s} />
+            ) : browser ? (
               <LastRunTile run={runs.data?.runs[0]} />
             ) : kind === "http" || kind === "ssl" ? (
               <CertTile expires={st.cert_expires_at} https={kind === "ssl" || c.url.startsWith("https:")} />
@@ -248,7 +256,7 @@ export function UptimeDetail({ id }: { id: number }) {
 
             {kind !== "ping" && kind !== "heartbeat" && (
             <Panel
-              className={wideLatency ? "span-12" : "span-6"}
+              className={wideLatency || playwright ? "span-12" : "span-6"}
               title={LATENCY_TEXT[kind].title}
               description={browser ? "Median and 95th percentile of the whole script per interval, for runs that passed." : LATENCY_TEXT[kind].text}
               result={latency.data}
@@ -310,6 +318,7 @@ export function UptimeDetail({ id }: { id: number }) {
               />
             )}
             {browser && <StepStatsPanel steps={runs.data?.steps} loading={runs.loading} error={runs.error} />}
+            {playwright && <StepStatsPanel steps={pwRuns.data?.steps} loading={pwRuns.loading} error={pwRuns.error} />}
 
             <Panel
               className="span-12"
@@ -336,7 +345,9 @@ export function UptimeDetail({ id }: { id: number }) {
 
             {kind === "api" && <ApiRunsPanel runs={details.data?.runs} loading={details.loading} error={details.error} />}
             {kind === "tcp" && <TcpPanels runs={details.data?.runs} loading={details.loading} error={details.error} />}
-            {browser ? (
+            {playwright ? (
+              <PlaywrightRunsPanel checkId={id} runs={pwRuns.data?.runs} loading={pwRuns.loading} error={pwRuns.error} />
+            ) : browser ? (
               <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
             ) : kind !== "http" ? null : (
               <Panel

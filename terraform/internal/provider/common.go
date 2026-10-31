@@ -91,6 +91,17 @@ func optStringList(v []string, ref types.List) types.List {
 	return types.ListValueMust(types.StringType, elems)
 }
 
+func optStringSet(v []string, ref types.Set) types.Set {
+	if len(v) == 0 && ref.IsNull() {
+		return types.SetNull(types.StringType)
+	}
+	elems := make([]attr.Value, len(v))
+	for i, s := range v {
+		elems[i] = types.StringValue(s)
+	}
+	return types.SetValueMust(types.StringType, elems)
+}
+
 func optIDList(v []int64, ref types.List) types.List {
 	out := make([]string, len(v))
 	for i, id := range v {

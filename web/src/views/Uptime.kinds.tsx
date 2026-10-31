@@ -1,4 +1,4 @@
-import { AlertTriangle, Globe, HeartPulse, Network, Plug, Radar, ShieldCheck, Signpost, Workflow, X, Plus, type LucideIcon } from "lucide-react";
+import { AlertTriangle, FlaskConical, Globe, HeartPulse, Network, Plug, Radar, ShieldCheck, Signpost, Workflow, X, Plus, type LucideIcon } from "lucide-react";
 import { Select } from "../components/Select";
 import { formatMs } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -15,10 +15,11 @@ export const KIND_INFO: Record<CheckKind, { label: string; icon: LucideIcon; tex
   dns: { label: "DNS", icon: Signpost, text: "A name resolves (A, AAAA, CNAME, MX, TXT, NS), optionally to the values you expect." },
   ping: { label: "Ping", icon: Radar, text: "ICMP echo to a host, with packet loss and round trip time." },
   ssl: { label: "Certificate", icon: ShieldCheck, text: "A TLS certificate is valid, trusted, names the host and is not about to expire. No HTTP request." },
+  playwright: { label: "Playwright", icon: FlaskConical, text: "A test from your own Playwright suite, run in your CI or on your hosts; visionary-playwright-reporter reports each run. Declare it here to alert on it before its first run." },
   heartbeat: { label: "Heartbeat", icon: HeartPulse, text: "Your cron job, backup or worker calls a secret URL when it runs; down when a ping is late or reports a failure." },
 };
 
-export const KIND_ORDER: CheckKind[] = ["http", "api", "browser", "tcp", "dns", "ping", "ssl", "heartbeat"];
+export const KIND_ORDER: CheckKind[] = ["http", "api", "browser", "playwright", "tcp", "dns", "ping", "ssl", "heartbeat"];
 
 /** Kinds whose settings live in their own field of the check. */
 export const SETTINGS_KINDS: CheckKind[] = ["api", "tcp", "dns", "ping", "ssl", "heartbeat"];
@@ -88,6 +89,8 @@ export function describeTarget(c: UptimeCheck): string {
       return `Certificate ${hostPort(c.ssl?.host ?? "", c.ssl?.port ?? 443)}`;
     case "heartbeat":
       return `Heartbeat · ${heartbeatSchedule(c.heartbeat)}`;
+    case "playwright":
+      return `Playwright · ${[c.playwright?.project, c.playwright?.title].filter(Boolean).join(" · ")}`;
   }
   return `${c.method} ${c.url}`;
 }

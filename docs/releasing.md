@@ -7,6 +7,7 @@ which publishes:
 | --- | --- | --- |
 | npm | `visionary-sdk` | `sdks/node` |
 | npm | `visionary-browser` | `sdks/browser` |
+| npm | `visionary-playwright-reporter` | `sdks/playwright-reporter` |
 | PyPI | `visionary-sdk` | `sdks/python` |
 | RubyGems | `visionary-sdk` | `sdks/ruby` |
 | NuGet | `Visionary.AspNetCore` | `sdks/dotnet` |
@@ -24,6 +25,12 @@ Some packages need no upload:
   are attached to the GitHub Release, where
   [`deploy/agent/install.sh`](../deploy/agent/install.sh) downloads them. It runs on the host, so
   there is no image.
+- **Uptime checks CLI**: the same job builds `visionary-checks-<os>-<arch>` (Linux, macOS and
+  Windows, amd64 and arm64) from [`cmd/visionary-checks`](../cmd/visionary-checks) and adds them
+  to `SHA256SUMS`. The composite action [`.github/actions/run-checks`](../.github/actions/run-checks/action.yml)
+  downloads the binary from the release and checks its sum; with `version: source`, or when a
+  release has no binary, it builds the CLI from its own checkout with Go. To build it by hand:
+  `go build -o visionary-checks ./cmd/visionary-checks`.
 - **CocoaPods** is skipped on purpose: its trunk is being sunset (it is scheduled to become read-only).
 
 The version always comes from the tag (`v0.4.0` becomes `0.4.0`, and `v0.4.0-rc.1` becomes a
@@ -137,11 +144,11 @@ first versions still get provenance.
      so you cannot pick them)
    - Tick **Bypass two-factor authentication**, because CI cannot type a one-time code.
 2. Add it as the secret `NPM_TOKEN` in the `npm` GitHub environment.
-3. Push the release tag. The two npm jobs publish `visionary-sdk` and `visionary-browser` with
-   that token.
+3. Push the release tag. The three npm jobs publish `visionary-sdk`, `visionary-browser` and
+   `visionary-playwright-reporter` with that token.
 
 Alternatively, publish the first version by hand. From `sdks/node`, then again from
-`sdks/browser`, run:
+`sdks/browser` and `sdks/playwright-reporter`, run:
 
 ```sh
 npm login
@@ -153,8 +160,8 @@ git checkout package.json package-lock.json
 
 The workflow then skips that version on npm.
 
-**3b. Add the trusted publisher to each package.** Do this for both `visionary-sdk` and
-`visionary-browser`. On https://www.npmjs.com/package/visionary-sdk, go to **Settings** and find
+**3b. Add the trusted publisher to each package.** Do this for `visionary-sdk`,
+`visionary-browser` and `visionary-playwright-reporter`. On https://www.npmjs.com/package/visionary-sdk, go to **Settings** and find
 **Trusted Publisher**, then choose **GitHub Actions** and enter:
 
 - Organization or user: `styropyr0`
@@ -177,8 +184,8 @@ if it expires.
 optionally, under each package's **Settings > Publishing access**, choose "Require two-factor
 authentication and disallow tokens". Trusted publishing keeps working with that setting.
 
-npm also refuses names it considers too similar to an existing package. `visionary-sdk` and
-`visionary-browser` were unused in October 2026, but that rule is only checked when you publish.
+npm also refuses names it considers too similar to an existing package. `visionary-sdk`,
+`visionary-browser` and `visionary-playwright-reporter` were unused in October 2026, but that rule is only checked when you publish.
 
 ### 4. RubyGems: pending trusted publisher
 
@@ -328,7 +335,7 @@ A tag with a suffix, like `v0.4.0-rc.1`, is a prerelease:
 These are the same build steps CI runs, minus the upload.
 
 ```sh
-# npm (each of sdks/node and sdks/browser)
+# npm (each of sdks/node, sdks/browser and sdks/playwright-reporter)
 npm ci && npm run build && npm pack --dry-run
 
 # PyPI

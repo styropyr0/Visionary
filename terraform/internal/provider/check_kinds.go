@@ -25,7 +25,7 @@ import (
 
 var varNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
-var checkKinds = []string{"http", "browser", "api", "tcp", "dns", "ping", "ssl", "heartbeat"}
+var checkKinds = []string{"http", "browser", "playwright", "api", "tcp", "dns", "ping", "ssl", "heartbeat"}
 
 // kindBlocks are the blocks, by the kind that uses each.
 var kindBlocks = []string{"api", "tcp", "dns", "ping", "ssl", "heartbeat"}
@@ -293,7 +293,19 @@ func kindProblems(kind string, set func(string) bool) map[string]string {
 			out[b] = `Set kind = "` + b + `" to use the ` + b + " block."
 		}
 	}
+	if kind != "playwright" && set("playwright") {
+		out["playwright"] = `Set kind = "playwright" to use the playwright block.`
+	}
 	switch kind {
+	case "playwright":
+		if !set("playwright") {
+			out["playwright"] = "Playwright checks need the test's project and title."
+		}
+		for _, n := range []string{"method", "expect_status", "body_contains", "headers", "steps", "secrets", "timeout_ms", "locations", "location_rule"} {
+			if set(n) {
+				out[n] = n + " does not apply: the test's own runs report the result."
+			}
+		}
 	case "http":
 		if !set("url") {
 			out["url"] = "HTTP checks need a url."

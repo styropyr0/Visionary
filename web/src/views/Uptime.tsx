@@ -14,6 +14,9 @@ import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
 import { BrowserNotice } from "./Uptime.steps";
 import { describeTarget, KindIcon, PingNotice } from "./Uptime.kinds";
+import { readTagParam, TagFilter, TagPills } from "./Uptime.tags";
+import { RunsPanel } from "./Uptime.runs";
+import { isStale } from "../lib/uptimePlaywright";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import { LocationDots, LocationsTab } from "./Uptime.locations";
@@ -62,6 +65,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
   const [editing, setEditing] = useState<UptimeCheck | "new" | null>(null);
   const [fixing, setFixing] = useState<CheckList["checks"][number] | null>(null);
   const [running, setRunning] = useState<number | null>(null);
+  const [tag, setTag] = useState(readTagParam);
   const reload = () => setVersion((v) => v + 1);
 
   const run = async (c: UptimeCheck) => {
@@ -162,6 +166,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
               <header className="panel-head">
                 <h3 className="panel-title">Checks</h3>
                 <div className="panel-actions">
+                  <TagFilter checks={data.checks.map((c) => c.check)} value={tag} onChange={setTag} />
                   <BarsLegend />
                 </div>
               </header>
@@ -181,12 +186,13 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.checks.map(({ check: c, state: s, alert, locations }) => (
+                    {tagged(data.checks, tag).map(({ check: c, state: s, alert, locations }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
-                          <span title={s.no_browser ? "Waiting for a browser on the server" : s.unavailable}>
+                          <span title={s.no_browser ? "Waiting for a browser on the server" : isStale(c, s) ? "No run reported within the expected interval" : s.unavailable}>
                             <StateBadge state={s.state} />
                           </span>
+                          {isStale(c, s) && <div className="up-sub">stale</div>}
                         </td>
                         <td className="up-name">
                           <a href={`#/uptime?check=${c.id}`} title={c.name} onClick={(e) => e.stopPropagation()}>
@@ -196,6 +202,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
                             <KindIcon kind={c.kind} size={12} />
                             {describeTarget(c)}
                           </span>
+                          <TagPills tags={c.tags} />
                           {locations && locations.length > 0 && <LocationDots locations={locations} />}
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>
@@ -211,14 +218,18 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
                         </td>
                         <td className="dim" title={s.last_at}>
                           {s.last_at ? formatRelative(s.last_at) : "never"}
-                          <div className="up-sub">every {formatInterval(c.interval_s)}</div>
+                          <div className="up-sub">
+                            {c.kind === "playwright" ? "expected " : ""}every {formatInterval(c.interval_s)}
+                          </div>
                         </td>
                         <td className="num" onClick={(e) => e.stopPropagation()}>
                           {canEdit && (
                             <div className="up-actions">
-                              <button type="button" className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
-                                <RotateCw size={14} className={running === c.id ? "spin" : undefined} />
-                              </button>
+                              {c.kind !== "playwright" && (
+                                <button type="button" className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
+                                  <RotateCw size={14} className={running === c.id ? "spin" : undefined} />
+                                </button>
+                              )}
                               <button type="button" className="icon-btn" title={c.enabled ? "Pause" : "Resume"} aria-label={c.enabled ? `Pause ${c.name}` : `Resume ${c.name}`} onClick={() => void toggle(c)}>
                                 {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                               </button>
@@ -234,6 +245,7 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
                 </table>
               </div>
             </section>
+            <RunsPanel checks={data.checks.map((c) => c.check)} tick={tick} canEdit={canEdit} />
           </div>
         )}
       </div>
@@ -263,6 +275,12 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
       )}
     </>
   );
+}
+
+/** The checks with tag, or all of them when no check has it. */
+function tagged(checks: CheckList["checks"], tag: string) {
+  const hits = checks.filter((c) => c.check.tags?.includes(tag));
+  return hits.length ? hits : checks;
 }
 
 function Tiles({ data, loading }: { data: CheckList; loading: boolean }) {

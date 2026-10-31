@@ -9,6 +9,8 @@ import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alert
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
 import { ApiRequestsEditor } from "./Uptime.api";
 import { DnsFields, HeartbeatFields, KindPicker, kindDefaults, PingFields, PingNotice, SETTINGS_KINDS, SslFields, TcpFields } from "./Uptime.kinds";
+import { TagsField } from "./Uptime.tags";
+import { BLANK_PLAYWRIGHT, PlaywrightFields } from "./Uptime.playwright";
 import { LocationsField } from "./Uptime.locations";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -49,6 +51,7 @@ const NAME_HINT: Record<CheckKind, string> = {
   ping: "Office gateway",
   ssl: "example.com certificate",
   heartbeat: "Nightly backup",
+  playwright: "Checkout pays by card",
 };
 
 const FIRST_STEPS: BrowserStep[] = [
@@ -72,8 +75,17 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [secrets, setSecrets] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.secrets ?? {}).map(([k, v]) => ({ k, v })));
   const browser = form.kind === "browser";
   const http = form.kind === "http";
+  const playwright = form.kind === "playwright";
   const setKind = (k: CheckKind) =>
-    setForm((f) => (k === "browser" ? { ...f, ...BLANK_BROWSER } : k === "http" ? { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms } : { ...f, kind: k, ...kindDefaults(k) }));
+    setForm((f) =>
+      k === "browser"
+        ? { ...f, ...BLANK_BROWSER }
+        : k === "playwright"
+          ? { ...f, ...BLANK_PLAYWRIGHT }
+          : k === "http"
+            ? { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms }
+            : { ...f, kind: k, ...kindDefaults(k) },
+    );
   const settingsKind = SETTINGS_KINDS.includes(form.kind);
   const maxTimeoutS = browser || form.kind === "api" ? 120 : form.kind === "ping" ? 10 : 60;
   const [err, setErr] = useState("");
@@ -150,6 +162,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <span>Name</span>
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={NAME_HINT[form.kind]} maxLength={120} required autoFocus />
         </label>
+        <TagsField value={form.tags ?? []} onChange={(t) => set("tags", t)} />
         {browser && <StepsEditor steps={steps} onChange={setSteps} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
         {form.kind === "api" && form.api && <ApiRequestsEditor requests={form.api.requests} onChange={(requests) => set("api", { requests })} />}
@@ -159,6 +172,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
         {form.kind === "ping" && form.ping && <PingFields value={form.ping} onChange={(v) => set("ping", v)} />}
         {form.kind === "ssl" && form.ssl && <SslFields value={form.ssl} onChange={(v) => set("ssl", v)} />}
         {form.kind === "heartbeat" && form.heartbeat && <HeartbeatFields value={form.heartbeat} onChange={(v) => set("heartbeat", v)} />}
+        {playwright && <PlaywrightFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />}
         {http && (
           <>
             <div className="up-row">
@@ -187,9 +201,9 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </>
         )}
 
-        {form.kind !== "heartbeat" && <LocationsField kind={form.kind} value={form.locations} rule={form.location_rule} onChange={(v) => set("locations", v)} onRule={(r) => set("location_rule", r)} />}
+        {form.kind !== "heartbeat" && !playwright && <LocationsField kind={form.kind} value={form.locations} rule={form.location_rule} onChange={(v) => set("locations", v)} onRule={(r) => set("location_rule", r)} />}
 
-        <div className="up-row" style={form.kind === "heartbeat" ? { display: "none" } : undefined}>
+        <div className="up-row" style={form.kind === "heartbeat" || playwright ? { display: "none" } : undefined}>
           <div className="field" style={{ flex: 1 }}>
             <span>Check every</span>
             <Select label="Interval" value={String(form.interval_s)} align="left" onChange={(v) => set("interval_s", Number(v))} options={intervalOptions} />

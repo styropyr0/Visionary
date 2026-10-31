@@ -1,0 +1,74 @@
+{
+  "name": "visionary-playwright-reporter",
+  "version": "0.1.0",
+  "description": "Playwright reporter that sends each test run to Visionary as an uptime check, with steps, errors, screenshots and traces.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "styropyr0",
+  "homepage": "https://github.com/styropyr0/Visionary/tree/main/sdks/playwright-reporter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/styropyr0/Visionary.git",
+    "directory": "sdks/playwright-reporter"
+  },
+  "bugs": {
+    "url": "https://github.com/styropyr0/Visionary/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "tsup --config tsup.test.config.ts --silent && node --test test-dist/*.test.js",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE','LICENSE')\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "visionary",
+    "playwright",
+    "reporter",
+    "synthetic monitoring",
+    "uptime",
+    "e2e"
+  ],
+  "peerDependencies": {
+    "@playwright/test": ">=1.40"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "tsup": "8.3.5",
+    "typescript": "5.6.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
