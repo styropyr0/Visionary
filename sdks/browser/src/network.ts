@@ -6,9 +6,8 @@ import { normalizePath, now, randomId, round, safe } from "./util";
  * as :id; the URL loses its query string; status 0 is a network failure.
  * Aborted calls are not reported.
  *
- * Calls to a traced origin start a W3C trace: they send traceparent and the
- * event keeps the trace id, so the backend's request continues the page's
- * trace and the two can be linked.
+ * Calls to a traced origin send a traceparent and the event keeps its trace
+ * id, so the backend's request can be linked to it.
  */
 export function trackNetwork(report: Report, skip: (url: string) => boolean, traced: (origin: string) => boolean) {
   const done = safe((method: string, raw: string, status: number, t0: number, requestId?: string | null, traceId?: string) => {
@@ -16,7 +15,6 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean, tra
     if (!/^https?:$/.test(u.protocol)) return;
     method = method.toUpperCase();
     const attrs: Record<string, string> = {};
-    // The server's X-Request-ID links the call to its request and logs.
     if (requestId) attrs.request_id = requestId.slice(0, 128);
     if (traceId) attrs.trace_id = traceId;
     report({
@@ -59,7 +57,6 @@ export function trackNetwork(report: Report, skip: (url: string) => boolean, tra
         const t = traceFor(url);
         if (t) {
           const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-          // A traceparent the app set itself is left alone.
           if (!headers.has("traceparent")) {
             headers.set("traceparent", t.header);
             init = { ...init, headers };

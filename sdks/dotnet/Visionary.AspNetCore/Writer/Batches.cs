@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// How the writers batch: D1 gets one INSERT per row, 50 to a call; SQL backends get each
-/// table's rows as multi-row INSERTs, kept under every backend's bound-parameter limit.
+/// D1 gets one INSERT per row, 50 to a call; SQL backends get multi-row INSERTs kept under the
+/// bound-parameter limit.
 /// </summary>
 internal static class Batches
 {
@@ -17,8 +17,7 @@ internal static class Batches
     public const int MaxSqlSize = 2000;
     public const int MaxParamsPerStatement = 30_000;
 
-    // Microsoft.Data.Sqlite binds every parameter by name, which costs the square of a
-    // statement's parameters: 30000 takes seconds, a few hundred a millisecond.
+    // Microsoft.Data.Sqlite binds parameters by name in quadratic time: 30000 take seconds.
     public const int MaxSqliteParams = 250;
     public const int ParallelFlushes = 4;
 
@@ -36,10 +35,7 @@ internal static class Batches
     public static int Flushers(IStore? store) =>
         store is null || store.StringParams || store.Dialect == VisionaryDialect.Sqlite ? 1 : ParallelFlushes;
 
-    /// <summary>
-    /// Merges single-row INSERTs into multi-row ones per table, for SQL backends; D1 statements
-    /// pass through unchanged.
-    /// </summary>
+    /// <summary>Merges single-row INSERTs into multi-row ones; D1 statements pass through.</summary>
     public static List<Stmt> Combine(IStore? store, List<Stmt> stmts)
     {
         if (store is null || store.StringParams || stmts.Count < 2)
@@ -117,10 +113,7 @@ internal static class Batches
     }
 }
 
-/// <summary>
-/// Runs up to a fixed number of batch writes at once; the writer loop waits for a free slot
-/// while the queue absorbs the load.
-/// </summary>
+/// <summary>Caps concurrent batch writes; the writer loop waits for a free slot.</summary>
 internal sealed class Flushes
 {
     private readonly SemaphoreSlim _slots;

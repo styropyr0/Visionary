@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
 module Visionary
-  # W3C trace context (https://www.w3.org/TR/trace-context/). A request
-  # continues the trace in its traceparent header or starts one; the request
-  # and every call it makes get their own span id; outbound Net::HTTP requests
-  # carry the trace on, so the service they reach joins it.
+  # W3C trace context (https://www.w3.org/TR/trace-context/). A request continues
+  # the caller's trace or starts one, and outbound Net::HTTP calls carry it on.
   module TraceContext
     KEY = :visionary_span
     TRACEPARENT = "traceparent"
@@ -88,9 +86,8 @@ module Visionary
       [SpanContext.new(new_trace_id, new_span_id, "01", nil), nil]
     end
 
-    # A new span inside the current one, and its parent's span id. Outside
-    # any trace it starts one, so the service a call reaches can still be
-    # followed.
+    # A new span inside the current one, and its parent's span id. Outside any
+    # trace it starts a new one.
     def child(parent = current)
       return [SpanContext.new(new_trace_id, new_span_id, "01", nil), nil] unless parent
 

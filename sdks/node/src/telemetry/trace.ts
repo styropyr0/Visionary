@@ -1,12 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomFillSync } from "node:crypto";
 
-/**
- * W3C trace context (https://www.w3.org/TR/trace-context/). A request
- * continues the trace in its traceparent header or starts one; the request
- * and every call it makes get their own span id; outbound requests carry the
- * trace on, so the service they reach joins it.
- */
+/** A span's place in a W3C trace (https://www.w3.org/TR/trace-context/). */
 export interface SpanContext {
   traceId: string;
   spanId: string;

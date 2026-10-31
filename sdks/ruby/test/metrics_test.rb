@@ -104,7 +104,7 @@ class MetricsTest < Minitest::Test
   def test_series_cap_drops_and_counts
     M.registry.max_series = 3
     5.times { |i| Visionary.counter("by_user", user: i.to_s).add(1) }
-    Visionary.counter("by_user", user: "0").add(1) # existing series still records
+    Visionary.counter("by_user", user: "0").add(1)
     Visionary.counter("other").add(1)
     got, dropped = M.registry.collect
     assert_equal 4, got.size

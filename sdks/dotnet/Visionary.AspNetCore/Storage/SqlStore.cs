@@ -60,9 +60,8 @@ internal sealed class SqlStore : IStore
         }
         await using var lease = await OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await lease.Connection.BeginTransactionAsync(ct).ConfigureAwait(false);
-        // On SQLite, statements that repeat are prepared once; one-off ones run directly. Npgsql fixes
-        // parameter types at prepare time, which a column that is NULL in one row and a number in
-        // the next breaks, so PostgreSQL and MySQL always run statements directly.
+        // Only SQLite prepares repeated statements. Npgsql fixes parameter types at prepare time,
+        // which breaks when a column is NULL in one row and a number in the next.
         var uses = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var st in stmts)
         {

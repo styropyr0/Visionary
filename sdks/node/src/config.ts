@@ -48,8 +48,8 @@ export interface Options {
   errorCodeField?: string;
   errorKeyField?: string;
   /** Fills in handle and role for a user id, on the writer, once per distinct
-   * user per batch, and on PostgreSQL and MySQL from up to four batches at
-   * once. Keep it cheap (a cache). */
+   * user per batch, possibly from several batches at once. Keep it cheap
+   * (a cache). */
   lookupUser?: (id: string) => LookupResult | Promise<LookupResult>;
   /** Rows per write on PostgreSQL, MySQL and SQLite (default 500, at most
    * 2000). D1 always takes 50. */
@@ -84,11 +84,11 @@ export interface Options {
   logs?: boolean;
   /** Lowest level kept until Settings → Logs has been read (VISIONARY_LOG_LEVEL, default info). */
   logLevel?: string;
-  /** Write custom metrics (counter, gauge, histogram) to the metrics table. Default true (VISIONARY_METRICS). */
+  /** Write custom metrics to the metrics table (VISIONARY_METRICS, default true). */
   metrics?: boolean;
   /** Seconds between metrics rows of a series (VISIONARY_METRICS_INTERVAL, default 15). */
   metricsInterval?: number;
-  /** Label sets kept per metric name (VISIONARY_METRICS_MAX_SERIES, default 1000); new ones past it are dropped and counted. */
+  /** Label sets kept per metric name (VISIONARY_METRICS_MAX_SERIES, default 1000); later ones are dropped. */
   metricsMaxSeries?: number;
 }
 

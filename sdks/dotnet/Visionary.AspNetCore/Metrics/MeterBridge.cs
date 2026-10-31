@@ -7,10 +7,8 @@ using System.Linq;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// Records System.Diagnostics.Metrics instruments of the meters named in VISIONARY_METRICS_METERS
-/// as custom metrics: counters as counters, up-down counters and gauges as gauges, histograms as
-/// histograms, with the measurement's tags as labels. Observable counters are left out, since
-/// they report running totals.
+/// Records instruments of the meters in VISIONARY_METRICS_METERS as custom metrics, tags as labels.
+/// Up-down counters become gauges; observable counters are skipped since they report running totals.
 /// </summary>
 internal sealed class MeterBridge : IDisposable
 {

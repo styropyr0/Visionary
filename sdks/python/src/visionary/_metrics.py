@@ -1,16 +1,15 @@
-"""Custom metrics: counters, gauges and histograms the application defines.
+"""Counters, gauges and histograms the application defines.
 
-Values add up in memory and the started agent writes one ``metrics`` row per
-series every interval (15 s by default). Recording never waits for the
-database::
+Values add up in memory and the agent writes one ``metrics`` row per series
+every interval (15 s by default). Recording never waits for the database::
 
     visionary.counter("orders_placed", region="eu").add(1)
     visionary.gauge("queue_depth", queue="emails").set(n)
     visionary.histogram("checkout_ms").observe(took_ms)
 
-Each distinct label set is one series; past ``VISIONARY_METRICS_MAX_SERIES``
-(1000) series per metric name new ones are dropped and counted, so a label
-holding user ids cannot fill the database.
+Each label set is one series. Past ``VISIONARY_METRICS_MAX_SERIES`` (1000)
+series per name, new ones are dropped, so a label holding user ids can't fill
+the database.
 """
 
 from __future__ import annotations
@@ -35,8 +34,7 @@ MAX_LABEL_VALUE = 200
 DEFAULT_MAX_SERIES = 1000
 QUEUE_SIZE = 20000
 
-# Histogram bucket upper bounds unless describe_metric sets others
-# (OpenTelemetry's defaults, which suit milliseconds).
+# OpenTelemetry's default bucket bounds, which suit milliseconds.
 DEFAULT_BUCKETS = (0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0, 250.0, 500.0, 750.0, 1000.0, 2500.0, 5000.0, 7500.0,
                    10000.0)
 
@@ -119,8 +117,7 @@ class Gauge:
 
 
 class Histogram:
-    """One histogram series; rows hold each interval's count, sum, min, max
-    and bucket counts."""
+    """One histogram series; rows hold count, sum, min, max and buckets per interval."""
 
     __slots__ = ("_s",)
 
@@ -132,7 +129,7 @@ class Histogram:
         s = self._s
         if s is None or v is None:
             return
-        i = bisect_left(s.bounds, v)  # first bound >= v
+        i = bisect_left(s.bounds, v)
         with s.lock:
             s.counts[i] += 1
             if s.count == 0 or v < s.min:
@@ -173,8 +170,7 @@ class Registry:
             return s
 
     def collect(self, at: float) -> Tuple[List["MetricRow"], Dict[str, int]]:
-        """Each series' interval: counters and histograms that moved, and every
-        gauge that was ever set. Dropped series counts come back by name."""
+        """Rows for series that moved and gauges ever set, plus dropped counts by name."""
         with self.lock:
             all_series = list(self.series.values())
             dropped, self.dropped = self.dropped, {}
@@ -232,9 +228,9 @@ def histogram(name: str, labels: Optional[Mapping[str, Any]] = None, /, **kw: An
 
 
 def describe_metric(name: str, unit: Optional[str] = None, buckets: Optional[Sequence[float]] = None) -> None:
-    """Set a metric's unit ("ms", "bytes") and histogram bucket upper bounds.
-    Call it before the metric's first use; series created earlier keep their
-    buckets."""
+    """Set a metric's unit ("ms", "bytes") and histogram buckets.
+
+    Call it before first use; series created earlier keep their buckets."""
     name = clean_name(name)
     if not name:
         return
@@ -265,9 +261,8 @@ def clean_name(name: Any) -> str:
 
 
 def series_id(name: str, labels: Mapping[str, str]) -> Tuple[str, str]:
-    """The canonical labels text of a series and its id (SPEC "Labels and
-    series"): a JSON object with keys in byte order, and the first 16 hex
-    digits of SHA-256 over name, a newline and that text."""
+    """The labels as JSON with keys in byte order, and the series id: the first
+    16 hex digits of SHA-256 over name, a newline and that JSON."""
     clean: Dict[str, str] = {}
     for k, v in labels.items():
         k = _cut(k.strip(), MAX_LABEL_KEY)
@@ -280,7 +275,7 @@ def series_id(name: str, labels: Mapping[str, str]) -> Tuple[str, str]:
 
 
 def _json_str(s: str) -> str:
-    # Only what JSON requires, so every SDK writes the same bytes.
+    """Escape only what JSON requires, so every SDK writes the same bytes."""
     out = ['"']
     for c in s:
         if c == '"' or c == "\\":
@@ -309,9 +304,8 @@ def encode_buckets(bounds: Sequence[float], counts: Sequence[int]) -> str:
 
 
 class MetricsWriter(RequestWriter):
-    """A background thread of its own for metrics rows, with a queue of
-    20000. The table is created at the first write, so services without
-    custom metrics never get it."""
+    """Metrics rows on their own thread and queue. The table is created on the
+    first write, so services without custom metrics never get it."""
 
     _THREAD = "visionary-metrics"
     _WHAT = "metric"

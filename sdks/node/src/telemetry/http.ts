@@ -13,8 +13,8 @@ import { currentSpan, traceparent } from "./trace.js";
  * and the http/https modules (axios, got, node-fetch, SDKs) by wrapping
  * request/get. A span ends when the response headers arrive, like Go's
  * RoundTripper; status is "error" on a transport error or a 5xx. Each
- * request carries a W3C traceparent naming its span, so a service that reads
- * it (any Visionary or OpenTelemetry SDK) continues the trace.
+ * request carries a traceparent naming its span, so the service it reaches
+ * can continue the trace.
  */
 let installed = false;
 
@@ -66,7 +66,6 @@ function subscribeUndici(): void {
     const sc = outgoing(s);
     if (sc && typeof req.addHeader === "function") {
       try {
-        // A traceparent the application set itself is left alone.
         if (!undiciHas(req.headers, "traceparent")) {
           req.addHeader("traceparent", traceparent(sc));
           if (sc.state && !undiciHas(req.headers, "tracestate")) req.addHeader("tracestate", sc.state);
@@ -109,8 +108,7 @@ function wrapModule(mod: typeof http | typeof https): void {
     }
     return req;
   };
-  // Node's own get, on the wrapped request: the trace header has to be set
-  // before end() renders the headers.
+  // get must use the wrapped request so traceparent is set before end().
   const get = function (this: unknown, ...args: any[]) {
     const req = request.apply(this, args);
     req.end();

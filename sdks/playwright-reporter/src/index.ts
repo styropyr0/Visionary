@@ -13,7 +13,7 @@ export interface VisionaryReporterOptions {
   server?: string;
   /** An API key with the CI scope. Default: VISIONARY_KEY. */
   key?: string;
-  /** How often runs arrive, as seconds or "10m", "1h", "1d"; a check without a run for longer is stale. Sets new checks only. */
+  /** How often runs arrive, in seconds or "10m", "1h", "1d"; a check with no run for longer goes stale. Applies to new checks only. */
   expectedInterval?: string | number;
   /** Shown with each run. Default: VISIONARY_RELEASE. */
   release?: string;
@@ -244,7 +244,6 @@ export function flattenSteps(steps: PWStep[]): RunPayload["steps"] {
         if (depth) step.depth = depth;
         out.push(step);
       }
-      // Fixtures set up the browser and page; their actions only matter when they fail.
       if (s.steps?.length && (s.category !== "fixture" || s.error)) walk(s.steps, shown && s.category === "test.step" ? depth + 1 : depth);
     }
   };

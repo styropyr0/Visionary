@@ -1,8 +1,7 @@
 """W3C trace context (https://www.w3.org/TR/trace-context/).
 
-A request continues the trace in its ``traceparent`` header or starts one;
-the request and every call it makes get their own span id; outbound requests
-carry the trace on, so the service they reach joins it.
+A request continues the trace in its ``traceparent`` header or starts one,
+and outgoing requests carry it on so the services they reach join it.
 """
 
 from __future__ import annotations
@@ -24,8 +23,7 @@ class SpanContext:
     def __init__(self, trace_id: str, span_id: str, flags: str = "01", state: str = "") -> None:
         self.trace_id = trace_id
         self.span_id = span_id
-        # flags is the trace-flags byte in hex ("01" sampled); state the
-        # caller's tracestate, passed on unchanged.
+        # flags is the trace-flags byte in hex; state is the caller's tracestate, passed on as is.
         self.flags = flags or "01"
         self.state = state
 
@@ -137,5 +135,5 @@ def has_header(headers: Any, name: str) -> bool:
             if key.lower() == name:
                 return True
     except Exception:
-        return True  # unreadable: leave the request alone
+        return True
     return False

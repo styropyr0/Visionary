@@ -3,18 +3,15 @@ import type { Value } from "./store/sql.js";
 import { formatTs } from "./util.js";
 
 /**
- * Custom metrics: counters, gauges and histograms the application defines.
- * Values add up in memory and the started agent writes one metrics row per
- * series every interval (15 s by default). Recording never waits for the
- * database.
+ * Custom counters, gauges and histograms. Values add up in memory and the
+ * agent writes one row per series every interval (15 s by default).
  *
  *     visionary.counter("orders_placed", { region: "eu" }).add(1);
  *     visionary.gauge("queue_depth", { queue: "emails" }).set(n);
  *     visionary.histogram("checkout_ms").observe(took);
  *
- * Each distinct label set is one series; past the cap (1000 series per metric
- * name) new ones are dropped and counted, so a label holding user ids cannot
- * fill the database.
+ * Each label set is one series. Past 1000 series per metric name new ones are
+ * dropped and counted, so a label holding user ids can't fill the database.
  */
 
 const MAX_NAME = 200;
@@ -182,9 +179,8 @@ export function describeMetric(name: string, opts: MetricOptions): void {
 }
 
 /**
- * Takes each series' interval as metrics rows (without service and
- * instance): counters and histograms that moved, and every gauge ever set.
- * Dropped series counts come back by metric name.
+ * Takes each series' interval as rows (without service and instance):
+ * counters and histograms that moved, and every gauge ever set.
  */
 export function collectMetrics(at: number): { rows: Value[][]; dropped: Map<string, number> } {
   const out: { id: string; row: Value[] }[] = [];

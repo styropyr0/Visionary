@@ -57,7 +57,6 @@ public sealed class WriterTests : IDisposable
             Assert.Equal(s.Rows, s.Sql.Split("), (").Length);
             Assert.StartsWith("INSERT INTO ", s.Sql);
         }
-        // Rows keep their order and values across statements.
         Assert.Equal(per, stmts[1].Args[0]);
         Assert.Null(stmts[0].Args[1]);
     }

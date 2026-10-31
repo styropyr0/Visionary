@@ -111,7 +111,6 @@ export class Agent {
       );
     }
     if (cfg.metrics) {
-      // One row per series per interval; room for many series at once.
       this.metricWriter = new Writer(cfg, this.store, () => this.ready("metrics"), this.logger, { queueSize: 20_000 });
     }
     const tables: [Table, number][] = [];
@@ -128,7 +127,7 @@ export class Agent {
     return !!this.writer || !!this.recorder || !!this.logWriter || !!this.metricWriter;
   }
 
-  /** How far behind the database the writers for requests, logs and metrics are, summed; for load tests and health checks. */
+  /** Rows queued, written and dropped across the request, log and metrics writers. */
   writerStats(): WriterStats {
     const out: WriterStats = { queued: 0, written: 0, dropped: 0 };
     for (const w of [this.writer, this.logWriter, this.metricWriter]) {
@@ -191,13 +190,10 @@ export class Agent {
       setActiveLogs(this.logs);
     }
     if (this.metricWriter) {
-      // The table is created at the first write, so services without custom
-      // metrics never get it.
       this.metricWriter.start();
       this.metricTimer = setInterval(() => this.flushMetrics(), cfg.metricsInterval * 1000);
       this.metricTimer.unref();
     }
-    // Outbound calls carry the trace on even when spans are off.
     if (cfg.instrumentHttp) instrumentHttp();
     if (this.store && cfg.explain.length > 0) {
       this.explainer = new ExplainWorker(cfg.explain, this.store, this.instance, this.logger);
@@ -293,7 +289,6 @@ export class Agent {
     }
   }
 
-  /** Queues each series' interval. */
   private flushMetrics(): void {
     if (!this.metricWriter) return;
     const { rows, dropped } = collectMetrics(Date.now());

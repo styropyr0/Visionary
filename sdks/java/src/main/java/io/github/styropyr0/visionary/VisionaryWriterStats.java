@@ -4,9 +4,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A snapshot of the running background writers for request rows, logs and
- * metrics, summed, from {@link Visionary#writerStats()}: how far behind the
- * database they are, for load tests and health checks.
+ * How far behind the database the background writers are, summed across
+ * requests, logs and metrics.
  *
  * @param queued  rows waiting for the database
  * @param written rows written since start

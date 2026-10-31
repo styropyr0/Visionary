@@ -230,7 +230,6 @@ module Visionary
       end
       def describe(name, unit:, buckets:) = registry.describe(name, unit, buckets)
 
-      # Labels from a Hash and keywords together.
       def labels(hash, kw)
         return kw if hash.nil?
         return hash if kw.empty?
@@ -351,8 +350,7 @@ module Visionary
         end
         return if rows.empty?
 
-        # The table is created once something is recorded, so services
-        # without custom metrics never get it.
+        # Services without custom metrics never get the table.
         @writer.use_table!
         stamp = Visionary.timestamp(at)
         rows.each do |r|

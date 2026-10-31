@@ -359,7 +359,6 @@ test("requests write their lines to app_logs", { skip: !nodeSqlite?.DatabaseSync
       ["outside", "info", null],
     ],
   );
-  // The request continues the caller's trace and its lines name its server span.
   const ok = requests.find((r) => r.path === "/ok")!;
   assert.equal(ok.trace_id, trace);
   assert.equal(ok.parent_span_id, "00f067aa0ba902b7");
@@ -368,7 +367,6 @@ test("requests write their lines to app_logs", { skip: !nodeSqlite?.DatabaseSync
   assert.equal(rows[0]!.span_id, ok.span_id);
   assert.equal(rows[0]!.source, "node");
   assert.equal(rows[0]!.service, "shop");
-  // Without traceparent the request starts its own trace.
   const fail = requests.find((r) => r.path === "/fail")!;
   assert.match(fail.trace_id ?? "", /^[0-9a-f]{32}$/);
   assert.notEqual(fail.trace_id, trace);

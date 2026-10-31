@@ -18,14 +18,10 @@ import javax.sql.DataSource;
 /**
  * PostgreSQL, MySQL/MariaDB or SQLite over JDBC with typed parameters.
  *
- * <p>With its own URL the store keeps a few idle connections for the background
- * threads (one, used under a lock, for SQLite) and drops a connection after an
- * error, so a database restart heals by itself. With the application's
- * DataSource it borrows a pooled connection per operation.
- *
- * <p>Rows go in as multi-row INSERTs built here rather than through the
- * drivers' batch rewriting, which an application's DataSource may not enable
- * and SQLite's driver lacks.
+ * <p>With its own URL it keeps a few idle connections and drops one after an
+ * error, so it recovers from a database restart. With the application's
+ * DataSource it borrows a pooled connection per operation. Rows go in as
+ * multi-row INSERTs built here, since SQLite's driver has no batch rewriting.
  */
 final class JdbcStore implements Store {
 
@@ -325,7 +321,6 @@ final class JdbcStore implements Store {
                     return c;
                 }
             } catch (SQLException ignored) {
-                // try the next one
             }
         }
     }
@@ -344,7 +339,6 @@ final class JdbcStore implements Store {
         try {
             c.close();
         } catch (SQLException ignored) {
-            // already broken
         }
     }
 

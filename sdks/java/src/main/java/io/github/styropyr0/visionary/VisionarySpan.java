@@ -54,7 +54,6 @@ public final class VisionarySpan implements AutoCloseable {
             this.parentSpanId = null;
             return;
         }
-        // A call outside any trace starts one, so the service it reaches can still be followed.
         TraceContext parent = TraceContext.current();
         String spanId = TraceContext.newSpanId();
         this.context = parent != null ? parent.child(spanId)

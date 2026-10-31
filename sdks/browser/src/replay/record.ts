@@ -22,8 +22,10 @@ export interface SNode {
   a?: Record<string, string>;
   c?: SNode[];
   x?: string;
-  s?: 1; // SVG
-  b?: [number, number]; // blocked: drawn as an empty box of this size
+  /** Set on SVG elements. */
+  s?: 1;
+  /** Blocked: drawn as an empty box of this size. */
+  b?: [number, number];
 }
 
 export interface RecordOptions {

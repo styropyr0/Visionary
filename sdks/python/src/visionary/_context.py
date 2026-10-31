@@ -28,8 +28,6 @@ class Annotations:
         self.trace = trace  # _spans.Trace, or None when spans are off
         self.request = request
         self.trace_id = trace_id
-        # The request's server span, and the caller's span from traceparent
-        # ("" when the request started the trace).
         self.span: Optional[_tracecontext.SpanContext] = None
         self.parent_span_id = ""
         # An exception escaped or was captured; held log lines are then kept.
@@ -85,8 +83,7 @@ _current: ContextVar[Optional[Annotations]] = ContextVar("visionary_request", de
 
 def begin(trace: Any = None, request: Optional[RequestInfo] = None, traceparent: Optional[str] = None,
           tracestate: Optional[str] = None) -> tuple:
-    """Start a request: it continues the caller's trace or starts one, and its
-    server span is the current span until ``end``."""
+    """Start a request, continuing the caller's trace or starting a new one."""
     span, parent = _tracecontext.request_span(traceparent, tracestate)
     ann = Annotations(trace, request, span.trace_id)
     ann.span, ann.parent_span_id = span, parent

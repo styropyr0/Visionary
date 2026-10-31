@@ -101,9 +101,8 @@ export function enterRequest<T>(req: unknown, fn: () => T): T {
 /**
  * Starts tracking a request: throughput counters always, and when the path is
  * logged, a RequestState plus copies of the bodies (up to the cap) taken as
- * they stream. The row is queued when the response finishes. Every request
- * continues or starts a trace, logged or not. Request events run inside the
- * span and state (see enterRequest), so code after body parsing still sees
+ * they stream. The row is queued when the response finishes. Request events
+ * run inside the span and state, so code after body parsing still sees
  * setUser and the trace.
  *
  * `url` is the full original URL (Express rewrites req.url in sub-routers).

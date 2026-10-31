@@ -13,7 +13,6 @@ using Xunit;
 
 namespace Styropyr0.Visionary.Tests;
 
-/// <summary>Custom metrics (SPEC.md "Custom metrics"): canonical series, aggregation, the cap and the rows.</summary>
 [Collection(BackgroundTests.AgentCollection)]
 public sealed class MetricsTests : IDisposable
 {
@@ -46,7 +45,7 @@ public sealed class MetricsTests : IDisposable
     {
         var text = MetricRegistry.LabelsJson(L(("region", "eu")));
         Assert.Equal("{\"region\":\"eu\"}", text);
-        // Fixed in SPEC.md so every SDK can check itself against it.
+        // Every SDK must produce this id.
         Assert.Equal("da4f5c6244c4f3e4", MetricRegistry.SeriesId("orders_placed", text));
 
         Assert.Equal("{\"a\\\"b\":\"x\\u000ay\",\"region\":\"eu\"}", MetricRegistry.LabelsJson(L(("region", "eu"), ("a\"b", "x\ny"), ("", "dropped"))));
@@ -93,12 +92,11 @@ public sealed class MetricsTests : IDisposable
         var now = DateTime.UtcNow;
         var (rows, dropped) = reg.Collect(now);
         Assert.Empty(dropped);
-        Assert.Equal(4, rows.Count); // the idle counter is skipped
+        Assert.Equal(4, rows.Count);
         var counter = Assert.Single(rows, r => r.Kind == "counter");
         Assert.Equal(3, counter.Value);
         Assert.Equal("{\"region\":\"eu\"}", counter.Labels);
         Assert.Null(counter.Count);
-        // Same name and labels as a gauge is a separate series.
         Assert.Equal(4, Assert.Single(rows, r => r.Kind == "gauge" && r.Name == "orders").Value);
         var hist = Assert.Single(rows, r => r.Kind == "histogram");
         Assert.Equal("ms", hist.Unit);
@@ -110,7 +108,6 @@ public sealed class MetricsTests : IDisposable
         Assert.Equal("{\"bounds\":[10,100],\"counts\":[2,1,1]}", hist.Buckets);
         Assert.All(rows, r => Assert.Equal(now, r.At));
 
-        // Next interval: the gauge repeats, the rest had nothing new.
         var (again, _) = reg.Collect(now);
         Assert.Equal(new[] { "gauge", "gauge" }, again.Select(r => r.Kind));
         new VisionaryHistogram(reg.Get("took", MetricSeries.Histogram, null)).Observe(-3);
@@ -160,7 +157,6 @@ public sealed class MetricsTests : IDisposable
         var writer = new MetricsWriter(agent) { Registry = reg };
         _owned.Add(writer);
 
-        // Nothing recorded: no table.
         _ = reg.Get("w_idle", MetricSeries.Counter, null);
         await writer.FlushAsync(DateTime.UtcNow, CancellationToken.None);
         Assert.Empty(Query("SELECT name FROM sqlite_master WHERE name = 'metrics'"));

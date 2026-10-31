@@ -23,7 +23,6 @@ test("series id and canonical labels", () => {
   assert.equal(text, '{"a":"1","b":"q\\"\\\\\\u000a<&é","c":""}');
   const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`k${String(i).padStart(2, "0")}`, "v"]));
   assert.equal(Object.keys(JSON.parse(metricSeries("x", many)[0])).length, 20);
-  // Cut on a character boundary.
   const long = metricSeries("x", { k: "é".repeat(150) })[0];
   assert.equal(JSON.parse(long).k, "é".repeat(100));
 });
@@ -54,7 +53,6 @@ test("counters, gauges and histograms collect one row per series per interval", 
   assert.deepEqual(byName.took!.slice(6), [131.5, 4, 526, 5, 500, '{"bounds":[10,100],"counts":[2,1,1]}']);
   assert.equal(byName.orders!.length + 2, METRIC_COLUMNS.length);
 
-  // Next interval: counters and histograms reset, gauges repeat.
   const next = collectMetrics(Date.UTC(2026, 0, 1, 0, 0, 15)).rows;
   assert.deepEqual(next.map((r) => r[1]), ["queue"]);
 });
