@@ -275,7 +275,7 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
                       />
                     </th>
                   )}
-                  <th style={{ width: 120 }}>State</th>
+                  <th style={{ width: "1%" }}>State</th>
                   <th>Rule</th>
                   <th style={{ width: 90 }}>Severity</th>
                   <th className="num" style={{ width: 110 }}>

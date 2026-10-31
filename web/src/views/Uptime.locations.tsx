@@ -90,7 +90,7 @@ export function LocationsTab() {
               <thead>
                 <tr>
                   <th>Location</th>
-                  <th style={{ width: 130 }}>State</th>
+                  <th style={{ width: "1%" }}>State</th>
                   <th style={{ width: 130 }}>Last seen</th>
                   <th style={{ width: 110 }}>Version</th>
                   <th style={{ width: 150 }}>Browser checks</th>
