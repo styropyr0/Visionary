@@ -53,6 +53,7 @@ import { ErrorNotice, linkify } from "../components/ErrorNotice";
 import { useToast } from "../components/Toast";
 import { SevTag, StatusBadge, openIncident } from "./Incidents.parts";
 import { splitList } from "./Incidents.declare";
+import { useConfirm } from "../components/Confirm";
 
 const errMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -61,6 +62,7 @@ type Tab = "timeline" | "postmortem";
 export function IncidentDetail({ id }: { id: number }) {
   const { tick } = useApp();
   const toast = useToast();
+  const ask = useConfirm();
   const [version, setVersion] = useState(0);
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab") === "postmortem" ? "postmortem" : "timeline"));
   const [editing, setEditing] = useState(false);
@@ -87,7 +89,7 @@ export function IncidentDetail({ id }: { id: number }) {
   };
 
   const remove = async () => {
-    if (!inc || !window.confirm(`Delete “${inc.title}” with its timeline and postmortem? This can't be undone.`)) return;
+    if (!inc || !(await ask({ title: "Delete this incident?", message: `"${inc.title}" is deleted with its timeline and postmortem. This can't be undone.`, confirm: "Delete incident", danger: true }))) return;
     try {
       await incidentsApi.remove(inc.id);
       toast("ok", "Incident deleted.");
@@ -565,6 +567,7 @@ const EMPTY_PM: Postmortem = { summary: "", impact: "", root_cause: "", timeline
 
 function PostmortemTab({ detail, onChange }: { detail: Detail; onChange: () => void }) {
   const toast = useToast();
+  const ask = useConfirm();
   const inc = detail.incident;
   const [pm, setPm] = useState<Postmortem>(detail.postmortem ?? EMPTY_PM);
   const [dirty, setDirty] = useState(false);
@@ -582,7 +585,7 @@ function PostmortemTab({ detail, onChange }: { detail: Detail; onChange: () => v
   }, [detail, dirty]);
 
   const draft = async () => {
-    if (detail.postmortem && !window.confirm("Replace the postmortem with a new draft? Action items are kept.")) return;
+    if (detail.postmortem && !(await ask({ title: "Replace the postmortem?", message: "A new draft replaces what's written now. Action items are kept.", confirm: "Draft again" }))) return;
     setBusy("draft");
     try {
       const r = await incidentsApi.draft(inc.id);

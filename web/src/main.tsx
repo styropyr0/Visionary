@@ -6,6 +6,7 @@ import "./analyst.css";
 import { App } from "./App";
 import { AppProvider } from "./lib/state";
 import { ToastProvider } from "./components/Toast";
+import { ConfirmProvider } from "./components/Confirm";
 import { captureTitles, TitleTips } from "./components/InfoTip";
 import { prefs } from "./lib/prefs";
 import { setTimeDisplay } from "./lib/time";
@@ -19,8 +20,10 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppProvider>
       <ToastProvider>
-        <App />
-        <TitleTips />
+        <ConfirmProvider>
+          <App />
+          <TitleTips />
+        </ConfirmProvider>
       </ToastProvider>
     </AppProvider>
   </StrictMode>,

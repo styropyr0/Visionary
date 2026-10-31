@@ -7,6 +7,7 @@ import { alertsApi, labelPairs, WEEKDAYS, type AlertsMeta, type RuleView, type S
 import { formatDateTime } from "../../lib/time";
 import { titleCase } from "../../lib/format";
 import { ErrorNotice } from "../ErrorNotice";
+import { useConfirm } from "../Confirm";
 
 const STATE_LABEL: Record<Silence["state"], string> = { active: "Active now", scheduled: "Scheduled", ended: "Ended", disabled: "Off" };
 
@@ -53,6 +54,7 @@ function describeMatchers(s: Silence, rules: RuleView[]): string {
 
 export function SilencesTab({ meta, rules, refreshKey }: { meta: AlertsMeta; rules: RuleView[]; refreshKey: number }) {
   const toast = useToast();
+  const ask = useConfirm();
   const [version, setVersion] = useState(0);
   const [editing, setEditing] = useState<Silence | "new" | null>(null);
   const silences = useQuery(`silences#${refreshKey}.${version}`, (signal) => alertsApi.silences(signal));
@@ -71,7 +73,7 @@ export function SilencesTab({ meta, rules, refreshKey }: { meta: AlertsMeta; rul
     }
   };
   const remove = async (s: Silence) => {
-    if (!window.confirm(`Delete the silence "${s.name}"?`)) return;
+    if (!(await ask({ title: "Delete this silence?", message: `"${s.name}" stops holding back notifications at once.`, confirm: "Delete silence", danger: true }))) return;
     try {
       await alertsApi.deleteSilence(s.id);
       changed();

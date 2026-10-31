@@ -14,6 +14,7 @@ import { formatDuration } from "../lib/uptime";
 import { heartbeatURL, newHeartbeatURL, type DetailRun, type HeartbeatView } from "../lib/uptimeKinds";
 import { heartbeatSchedule, msText } from "./Uptime.kinds";
 import { StateBadge } from "./Uptime.parts";
+import { useConfirm } from "../components/Confirm";
 
 const asResult = (columns: string[], rows: unknown[][]): Result => ({ columns, rows, truncated: false, rows_read: rows.length, duration_ms: 0, sql: "", bucket: 0, from: "", to: "" });
 
@@ -272,13 +273,14 @@ export function CertPanels({ check, runs, loading, error }: { check: UptimeCheck
 
 export function HeartbeatPanels({ check, view, loading, error, canEdit, onChanged }: { check: UptimeCheck; view?: HeartbeatView; loading: boolean; error?: Error | null; canEdit: boolean; onChanged: () => void }) {
   const toast = useToast();
+  const ask = useConfirm();
   const [busy, setBusy] = useState(false);
   const url = view?.path ? heartbeatURL(view.path) : "";
   const copy = async (text: string) => {
     if (await copyText(text)) toast("ok", "Copied.");
   };
   const regenerate = async () => {
-    if (!window.confirm("Make a new URL? The current one stops working at once, so update every job that calls it.")) return;
+    if (!(await ask({ title: "Make a new URL?", message: "The current URL stops working at once, so update every job that calls it.", confirm: "Make new URL", danger: true }))) return;
     setBusy(true);
     try {
       await newHeartbeatURL(check.id);
