@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Bell,
+  Check,
   CircleDot,
   Download,
   ExternalLink,
@@ -589,7 +590,7 @@ function PostmortemTab({ detail, onChange }: { detail: Detail; onChange: () => v
       setActions(r.actions);
       setDirty(false);
       setNote(r.note);
-      toast("ok", r.postmortem.drafted === "ai" ? "Drafted by the AI analyst; check it before sharing." : "Drafted from the timeline.");
+      toast("ok", r.postmortem.drafted === "ai" ? "Draft saved. The AI analyst wrote it, so check it before sharing" : "Draft saved from the timeline");
       onChange();
     } catch (e) {
       toast("err", errMessage(e));
@@ -632,8 +633,17 @@ function PostmortemTab({ detail, onChange }: { detail: Detail; onChange: () => v
                 </button>
               )}
               {edit && (
-                <button type="button" className="btn primary sm" disabled={busy !== "" || !dirty} onClick={() => void save()}>
-                  {busy === "save" ? "Saving…" : "Save"}
+                <button type="button" className="btn primary sm" disabled={busy !== "" || !dirty} onClick={() => void save()} title={dirty ? undefined : "No unsaved changes"}>
+                  {busy === "save" ? (
+                    "Saving…"
+                  ) : dirty || !detail.postmortem ? (
+                    "Save"
+                  ) : (
+                    <>
+                      <Check size={13} />
+                      Saved
+                    </>
+                  )}
                 </button>
               )}
             </div>
