@@ -60,7 +60,7 @@ export function StepsEditor({ steps, onChange }: { steps: BrowserStep[]; onChang
                   value={s.action}
                   align="left"
                   options={options}
-                  onChange={(v) => onChange(steps.map((x, j) => (j === i ? { action: v as StepAction, label: x.label, ...(v === "assert_count" ? { op: "eq", count: 1 } : v === "wait" ? { ms: 1000 } : {}) } : x)))}
+                  onChange={(v) => onChange(steps.map((x, j) => (j === i ? { action: v as StepAction, label: x.label, max_ms: x.max_ms, ...(v === "assert_count" ? { op: "eq", count: 1 } : v === "wait" ? { ms: 1000 } : {}) } : x)))}
                 />
                 <span style={{ flex: 1 }} />
                 <button type="button" className="icon-btn" aria-label="Move up" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
@@ -123,7 +123,21 @@ export function StepsEditor({ steps, onChange }: { steps: BrowserStep[]; onChang
                 {a.fields.includes("ms") && (
                   <input className="input" type="number" min={1} max={30000} value={s.ms ?? 1000} aria-label="Milliseconds" onChange={(e) => set(i, { ms: Number(e.target.value) || 0 })} />
                 )}
-                <input className="input up-step-label" value={s.label ?? ""} placeholder="Name in results (optional)" aria-label="Step name" maxLength={120} onChange={(e) => set(i, { label: e.target.value })} />
+                <div className="up-row">
+                  <input className="input up-step-label" style={{ flex: 1 }} value={s.label ?? ""} placeholder="Name in results (optional)" aria-label="Step name" maxLength={120} onChange={(e) => set(i, { label: e.target.value })} />
+                  <input
+                    className="input up-step-label"
+                    style={{ width: 150 }}
+                    type="number"
+                    min={0}
+                    max={120000}
+                    value={s.max_ms || ""}
+                    placeholder="Time limit (ms)"
+                    title="Fail the step when it takes longer than this"
+                    aria-label="Time limit in milliseconds"
+                    onChange={(e) => set(i, { max_ms: Number(e.target.value) || undefined })}
+                  />
+                </div>
                 {a.hint && <small>{a.hint}</small>}
               </div>
             </li>

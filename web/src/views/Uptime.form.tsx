@@ -6,7 +6,7 @@ import { useToast } from "../components/Toast";
 import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
-import { TraceSettings } from "./Uptime.settings";
+import { LimitSettings, TraceSettings } from "./Uptime.settings";
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -78,7 +78,22 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     }
     const body = browser
       ? { ...form, headers: {}, steps, secrets: sec }
-      : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined, trace_origins: undefined, no_trace: undefined };
+      : {
+          ...form,
+          headers: h,
+          steps: undefined,
+          secrets: undefined,
+          final_screenshot: undefined,
+          trace_origins: undefined,
+          no_trace: undefined,
+          max_lcp_ms: undefined,
+          max_cls: undefined,
+          max_ttfb_ms: undefined,
+          max_duration_ms: undefined,
+          warn_lcp_ms: undefined,
+          warn_cls: undefined,
+          warn_ttfb_ms: undefined,
+        };
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
@@ -182,19 +197,14 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
             <span>Timeout (seconds)</span>
             <input className="input" type="number" min={1} max={browser ? 120 : 60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
           </label>
-          <label className="field" style={{ flex: 1 }}>
-            <span>Degraded above (ms)</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              max={browser ? 120000 : 60000}
-              value={form.degraded_ms || ""}
-              placeholder="Off"
-              onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)}
-            />
-          </label>
+          {!browser && (
+            <label className="field" style={{ flex: 1 }}>
+              <span>Degraded above (ms)</span>
+              <input className="input" type="number" min={0} max={60000} value={form.degraded_ms || ""} placeholder="Off" onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)} />
+            </label>
+          )}
         </div>
+        {browser && <LimitSettings form={form} set={set} />}
 
         {!browser && (
           <div className="field">

@@ -346,6 +346,15 @@ table.data.up-table td {
   padding-left: 28px;
 }
 .up-step-fields .up-step-label { font-size: 12px; }
+.up-warn { color: var(--warning-text); }
+.up-limits {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12.5px;
+}
+.up-limits-row { display: contents; }
 .up-browser-ok { align-items: flex-start; }
 .up-browser-ok svg { color: var(--text-3); margin-top: calc((1.45em - 16px) / 2); }
 .up-browser-ok span { line-height: 1.45; }

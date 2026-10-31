@@ -36,26 +36,33 @@ var (
 )
 
 type checkModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	Kind            types.String `tfsdk:"kind"`
-	URL             types.String `tfsdk:"url"`
-	Method          types.String `tfsdk:"method"`
-	ExpectStatus    types.String `tfsdk:"expect_status"`
-	BodyContains    types.String `tfsdk:"body_contains"`
-	Headers         types.Map    `tfsdk:"headers"`
-	IntervalS       types.Int64  `tfsdk:"interval_s"`
-	TimeoutMs       types.Int64  `tfsdk:"timeout_ms"`
-	DegradedMs      types.Int64  `tfsdk:"degraded_ms"`
-	FollowRedirects types.Bool   `tfsdk:"follow_redirects"`
-	Enabled         types.Bool   `tfsdk:"enabled"`
-	OnStatusPage    types.Bool   `tfsdk:"on_status_page"`
-	StatusShowURL   types.Bool   `tfsdk:"status_show_url"`
-	Steps           []stepModel  `tfsdk:"steps"`
-	Secrets         types.Map    `tfsdk:"secrets"`
-	FinalScreenshot types.Bool   `tfsdk:"final_screenshot"`
-	TraceOrigins    types.List   `tfsdk:"trace_origins"`
-	TraceHeaders    types.Bool   `tfsdk:"trace_headers"`
+	ID              types.String  `tfsdk:"id"`
+	Name            types.String  `tfsdk:"name"`
+	Kind            types.String  `tfsdk:"kind"`
+	URL             types.String  `tfsdk:"url"`
+	Method          types.String  `tfsdk:"method"`
+	ExpectStatus    types.String  `tfsdk:"expect_status"`
+	BodyContains    types.String  `tfsdk:"body_contains"`
+	Headers         types.Map     `tfsdk:"headers"`
+	IntervalS       types.Int64   `tfsdk:"interval_s"`
+	TimeoutMs       types.Int64   `tfsdk:"timeout_ms"`
+	DegradedMs      types.Int64   `tfsdk:"degraded_ms"`
+	FollowRedirects types.Bool    `tfsdk:"follow_redirects"`
+	Enabled         types.Bool    `tfsdk:"enabled"`
+	OnStatusPage    types.Bool    `tfsdk:"on_status_page"`
+	StatusShowURL   types.Bool    `tfsdk:"status_show_url"`
+	Steps           []stepModel   `tfsdk:"steps"`
+	Secrets         types.Map     `tfsdk:"secrets"`
+	FinalScreenshot types.Bool    `tfsdk:"final_screenshot"`
+	TraceOrigins    types.List    `tfsdk:"trace_origins"`
+	TraceHeaders    types.Bool    `tfsdk:"trace_headers"`
+	MaxLCPMs        types.Int64   `tfsdk:"max_lcp_ms"`
+	MaxCLS          types.Float64 `tfsdk:"max_cls"`
+	MaxTTFBMs       types.Int64   `tfsdk:"max_ttfb_ms"`
+	MaxDurationMs   types.Int64   `tfsdk:"max_duration_ms"`
+	WarnLCPMs       types.Int64   `tfsdk:"warn_lcp_ms"`
+	WarnCLS         types.Float64 `tfsdk:"warn_cls"`
+	WarnTTFBMs      types.Int64   `tfsdk:"warn_ttfb_ms"`
 }
 
 type stepModel struct {
@@ -67,6 +74,7 @@ type stepModel struct {
 	Op       types.String `tfsdk:"op"`
 	Ms       types.Int64  `tfsdk:"ms"`
 	Label    types.String `tfsdk:"label"`
+	MaxMs    types.Int64  `tfsdk:"max_ms"`
 }
 
 type apiCheck struct {
@@ -90,6 +98,13 @@ type apiCheck struct {
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	TraceOrigins    []string          `json:"trace_origins,omitempty"`
 	NoTrace         bool              `json:"no_trace,omitempty"`
+	MaxLCPMs        int64             `json:"max_lcp_ms,omitempty"`
+	MaxCLS          float64           `json:"max_cls,omitempty"`
+	MaxTTFBMs       int64             `json:"max_ttfb_ms,omitempty"`
+	MaxDurationMs   int64             `json:"max_duration_ms,omitempty"`
+	WarnLCPMs       int64             `json:"warn_lcp_ms,omitempty"`
+	WarnCLS         float64           `json:"warn_cls,omitempty"`
+	WarnTTFBMs      int64             `json:"warn_ttfb_ms,omitempty"`
 }
 
 type apiStepB struct {
@@ -101,6 +116,7 @@ type apiStepB struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int64  `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
+	MaxMs    int64  `json:"max_ms,omitempty"`
 }
 
 func (r *uptimeCheckResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -117,6 +133,10 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 		"op":       optStr("Comparison for assert_count: eq, gte or lte."),
 		"ms":       schema.Int64Attribute{Description: "Milliseconds (wait).", Optional: true},
 		"label":    optStr("Name shown in results."),
+		"max_ms":   schema.Int64Attribute{Description: "Fail the step when it takes longer than this.", Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}},
+	}
+	limit := func(what string) schema.Int64Attribute {
+		return schema.Int64Attribute{Description: what, Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}}
 	}
 	resp.Schema = schema.Schema{
 		Description: "An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. " +
@@ -168,6 +188,13 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).",
 				Optional:    true, Computed: true, Default: booldefault.StaticBool(true),
 			},
+			"max_lcp_ms":      limit("A browser run whose Largest Contentful Paint is slower than this fails."),
+			"max_cls":         schema.Float64Attribute{Description: "A browser run whose Cumulative Layout Shift is above this fails.", Optional: true},
+			"max_ttfb_ms":     limit("A browser run whose time to first byte is slower than this fails."),
+			"max_duration_ms": limit("A browser run that takes longer than this in all fails."),
+			"warn_lcp_ms":     limit("A browser run whose LCP is slower than this counts as degraded."),
+			"warn_cls":        schema.Float64Attribute{Description: "A browser run whose CLS is above this counts as degraded.", Optional: true},
+			"warn_ttfb_ms":    limit("A browser run whose TTFB is slower than this counts as degraded."),
 			"trace_origins": schema.ListAttribute{
 				Description: "Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.",
 				Optional:    true, ElementType: types.StringType, Validators: []validator.List{listvalidator.SizeAtMost(10)},
@@ -200,7 +227,7 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		if !set("url") {
 			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
 		}
-		for _, n := range []string{"steps", "secrets", "trace_origins"} {
+		for _, n := range []string{"steps", "secrets", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms"} {
 			if set(n) {
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
 			}
@@ -222,13 +249,16 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		FollowRedirects: m.FollowRedirects.ValueBool(), Enabled: m.Enabled.ValueBool(), OnStatusPage: m.OnStatusPage.ValueBool(),
 		StatusShowURL: m.StatusShowURL.ValueBool(), Secrets: mapOf(ctx, m.Secrets, diags), FinalScreenshot: m.FinalScreenshot.ValueBool(),
 		TraceOrigins: stringsOf(ctx, m.TraceOrigins, diags), NoTrace: !m.TraceHeaders.IsNull() && !m.TraceHeaders.IsUnknown() && !m.TraceHeaders.ValueBool(),
+		MaxLCPMs: m.MaxLCPMs.ValueInt64(), MaxCLS: m.MaxCLS.ValueFloat64(), MaxTTFBMs: m.MaxTTFBMs.ValueInt64(), MaxDurationMs: m.MaxDurationMs.ValueInt64(),
+		WarnLCPMs: m.WarnLCPMs.ValueInt64(), WarnCLS: m.WarnCLS.ValueFloat64(), WarnTTFBMs: m.WarnTTFBMs.ValueInt64(),
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
 	}
 	for _, s := range m.Steps {
 		in.Steps = append(in.Steps, apiStepB{Action: s.Action.ValueString(), Selector: s.Selector.ValueString(), Text: s.Text.ValueString(),
-			Value: s.Value.ValueString(), Count: s.Count.ValueInt64(), Op: s.Op.ValueString(), Ms: s.Ms.ValueInt64(), Label: s.Label.ValueString()})
+			Value: s.Value.ValueString(), Count: s.Count.ValueInt64(), Op: s.Op.ValueString(), Ms: s.Ms.ValueInt64(), Label: s.Label.ValueString(),
+			MaxMs: s.MaxMs.ValueInt64()})
 	}
 	return in
 }
@@ -261,6 +291,8 @@ func (m *checkModel) fill(c apiCheck) {
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
 	m.TraceOrigins, m.TraceHeaders = optStringList(c.TraceOrigins, m.TraceOrigins), types.BoolValue(!c.NoTrace)
+	m.MaxLCPMs, m.MaxCLS, m.MaxTTFBMs, m.MaxDurationMs = optInt(c.MaxLCPMs, m.MaxLCPMs), optFloat(c.MaxCLS, m.MaxCLS), optInt(c.MaxTTFBMs, m.MaxTTFBMs), optInt(c.MaxDurationMs, m.MaxDurationMs)
+	m.WarnLCPMs, m.WarnCLS, m.WarnTTFBMs = optInt(c.WarnLCPMs, m.WarnLCPMs), optFloat(c.WarnCLS, m.WarnCLS), optInt(c.WarnTTFBMs, m.WarnTTFBMs)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return
@@ -268,13 +300,13 @@ func (m *checkModel) fill(c apiCheck) {
 	steps := make([]stepModel, len(c.Steps))
 	for i, s := range c.Steps {
 		ref := stepModel{Selector: types.StringNull(), Text: types.StringNull(), Value: types.StringNull(), Count: types.Int64Null(),
-			Op: types.StringNull(), Ms: types.Int64Null(), Label: types.StringNull()}
+			Op: types.StringNull(), Ms: types.Int64Null(), Label: types.StringNull(), MaxMs: types.Int64Null()}
 		if i < len(m.Steps) {
 			ref = m.Steps[i]
 		}
 		steps[i] = stepModel{Action: types.StringValue(s.Action), Selector: optString(s.Selector, ref.Selector), Text: optString(s.Text, ref.Text),
 			Value: optString(s.Value, ref.Value), Count: optInt(s.Count, ref.Count), Op: optString(s.Op, ref.Op), Ms: optInt(s.Ms, ref.Ms),
-			Label: optString(s.Label, ref.Label)}
+			Label: optString(s.Label, ref.Label), MaxMs: optInt(s.MaxMs, ref.MaxMs)}
 	}
 	m.Steps = steps
 }

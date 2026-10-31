@@ -30,6 +30,14 @@ export interface UptimeCheck {
   /** Origins that get the run's traceparent; empty means the first page's. */
   trace_origins?: string[];
   no_trace?: boolean;
+  /** Performance limits of browser runs; 0 or absent is none. Over max_* fails, over warn_* is degraded. */
+  max_lcp_ms?: number;
+  max_cls?: number;
+  max_ttfb_ms?: number;
+  max_duration_ms?: number;
+  warn_lcp_ms?: number;
+  warn_cls?: number;
+  warn_ttfb_ms?: number;
 }
 
 export type StepAction =
@@ -57,6 +65,8 @@ export interface BrowserStep {
   op?: "eq" | "gte" | "lte";
   ms?: number;
   label?: string;
+  /** Fails the step when it takes longer. */
+  max_ms?: number;
 }
 
 export const MASK = "********";
@@ -187,6 +197,9 @@ export interface BrowserRunSummary {
   screenshot: boolean;
   final_screenshot: boolean;
   steps: number;
+  degraded: boolean;
+  /** Which "warn above" values a degraded run went over. */
+  warning: string;
 }
 
 export interface StepStat {
@@ -218,6 +231,8 @@ export interface BrowserRunDetail {
   /** The run's trace id, and whether a backend recorded anything under it. */
   trace_id: string;
   trace_found: boolean;
+  degraded: boolean;
+  warning: string;
 }
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });

@@ -34,6 +34,8 @@ type BrowserStep struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int    `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
+	// MaxMs fails the step when it takes longer.
+	MaxMs int `json:"max_ms,omitempty"`
 }
 
 // BrowserOptions are a browser check's settings beyond its steps, stored as
@@ -42,6 +44,7 @@ type BrowserOptions struct {
 	// TraceOrigins get the run's traceparent; empty means the first page's.
 	TraceOrigins []string `json:"trace_origins,omitempty"`
 	NoTrace      bool     `json:"no_trace,omitempty"`
+	BrowserLimits
 }
 
 const (
@@ -64,7 +67,7 @@ var uptimeAddedColumns = map[string][]sdk.Column{
 	"uptime_checks":          {{Name: "kind", Kind: "text"}},
 	"uptime_results":         {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
 	"uptime_browser_checks":  {{Name: "options", Kind: "bigtext"}},
-	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}},
+	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}, {Name: "warning", Kind: "text"}},
 }
 
 func (s *Server) uptimeBrowserSchema() []string {
@@ -214,6 +217,9 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	if c.DegradedMs < 0 || c.DegradedMs > browserMaxTimeoutMs {
 		return errors.New("slow threshold must be between 0 and 120000 ms")
 	}
+	if err := c.BrowserLimits.validate(c.DegradedMs); err != nil {
+		return err
+	}
 	if !c.OnStatusPage {
 		c.StatusShowURL = false
 	}
@@ -226,6 +232,9 @@ func (b *BrowserStep) validate() error {
 	}
 	if len(b.Selector) > 500 || len(b.Text) > 500 || len(b.Label) > 120 || len(b.Value) > 5000 {
 		return errors.New("a field is too long")
+	}
+	if b.MaxMs < 0 || b.MaxMs > browserMaxTimeoutMs {
+		return fmt.Errorf("the step's time limit must be between 0 and %d ms", browserMaxTimeoutMs)
 	}
 	need := func(field, v string) error {
 		if strings.TrimSpace(v) == "" {
@@ -354,6 +363,9 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	if b.TraceID != "" {
 		cols, vals = append(cols, "trace_id"), append(vals, b.TraceID)
 	}
+	if b.Warning != "" {
+		cols, vals = append(cols, "warning"), append(vals, b.Warning)
+	}
 	if b.Screenshot != nil {
 		cols, vals = append(cols, "screenshot"), append(vals, base64.StdEncoding.EncodeToString(b.Screenshot))
 	}
@@ -471,7 +483,7 @@ func (s *Server) handleBrowserRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.id, b.created_at, b.ok, b.failed_step, b.steps, u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.retried,
-  CASE WHEN b.screenshot IS NULL THEN 0 ELSE 1 END, CASE WHEN b.final_screenshot IS NULL THEN 0 ELSE 1 END
+  CASE WHEN b.screenshot IS NULL THEN 0 ELSE 1 END, CASE WHEN b.final_screenshot IS NULL THEN 0 ELSE 1 END, u.degraded, b.warning
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.check_id = ? AND b.created_at >= ? AND b.created_at < ?
 ORDER BY b.created_at DESC LIMIT 500`, id, tr.From.UTC().Format(tsLayout), tr.To.UTC().Format(tsLayout))
@@ -519,6 +531,7 @@ ORDER BY b.created_at DESC LIMIT 500`, id, tr.From.UTC().Format(tsLayout), tr.To
 			"id": toInt(row[0]), "created_at": toString(row[1]), "ok": toInt(row[2]) == 1, "failed_step": toInt(row[3]), "failed_label": failedLabel,
 			"duration_ms": row[5], "error": toString(row[6]), "lcp_ms": row[7], "cls": row[8], "ttfb_ms": row[9], "retried": toInt(row[10]) == 1,
 			"screenshot": toInt(row[11]) == 1, "final_screenshot": toInt(row[12]) == 1, "steps": len(steps),
+			"degraded": toInt(row[13]) == 1, "warning": toString(row[14]),
 		})
 	}
 	for _, ss := range stats {
@@ -547,7 +560,7 @@ func (s *Server) handleBrowserRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.created_at, b.ok, b.failed_step, b.steps, b.console, b.network, b.screenshot, b.final_screenshot,
-  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id
+  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id, u.degraded, b.warning
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	if err != nil {
@@ -577,5 +590,6 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 		"screenshot": img(row[6]), "final_screenshot": img(row[7]),
 		"duration_ms": row[8], "error": toString(row[9]), "lcp_ms": row[10], "cls": row[11], "ttfb_ms": row[12], "status": toInt(row[13]), "retried": toInt(row[14]) == 1,
 		"trace_id": toString(row[15]), "trace_found": s.traceHasRows(r.Context(), toString(row[15])),
+		"degraded": toInt(row[16]) == 1, "warning": toString(row[17]),
 	})
 }

@@ -71,6 +71,10 @@ variable "probe_password" {
 - `headers` (Map of String, Sensitive) Request headers.
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
 - `kind` (String) http (default) or browser.
+- `max_cls` (Number) A browser run whose Cumulative Layout Shift is above this fails.
+- `max_duration_ms` (Number) A browser run that takes longer than this in all fails.
+- `max_lcp_ms` (Number) A browser run whose Largest Contentful Paint is slower than this fails.
+- `max_ttfb_ms` (Number) A browser run whose time to first byte is slower than this fails.
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
@@ -80,6 +84,9 @@ variable "probe_password" {
 - `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).
 - `trace_origins` (List of String) Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.
 - `url` (String) Address probed (http checks). For browser checks it is the first step's URL.
+- `warn_cls` (Number) A browser run whose CLS is above this counts as degraded.
+- `warn_lcp_ms` (Number) A browser run whose LCP is slower than this counts as degraded.
+- `warn_ttfb_ms` (Number) A browser run whose TTFB is slower than this counts as degraded.
 
 ### Read-Only
 
@@ -96,6 +103,7 @@ Optional:
 
 - `count` (Number) Expected count (assert_count).
 - `label` (String) Name shown in results.
+- `max_ms` (Number) Fail the step when it takes longer than this.
 - `ms` (Number) Milliseconds (wait).
 - `op` (String) Comparison for assert_count: eq, gte or lte.
 - `selector` (String) CSS selector.

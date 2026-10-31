@@ -17,7 +17,8 @@ const cls = (v: unknown) => (toNumber(v) === null ? <span className="dim">—</s
 
 const asResult = (columns: string[], rows: unknown[][]): Result => ({ columns, rows, truncated: false, rows_read: rows.length, duration_ms: 0, sql: "", bucket: 0, from: "", to: "" });
 
-const RUN_KEYS = ["created_at", "ok", "duration_ms", "lcp_ms", "cls", "ttfb_ms", "failed_label", "error", "screenshot", "id"] as const;
+const RUN_KEYS = ["created_at", "ok", "duration_ms", "lcp_ms", "cls", "ttfb_ms", "failed_label", "error", "screenshot", "id", "degraded", "warning"] as const;
+const runState = (ok: unknown, degraded: unknown) => (ok ? (degraded ? "degraded" : "up") : "down");
 
 /** Runs of a browser check, newest first; a row opens the run. */
 export function BrowserRunsPanel({ checkId, runs, loading, error }: { checkId: number; runs?: BrowserRunSummary[]; loading: boolean; error?: Error | null }) {
@@ -25,13 +26,13 @@ export function BrowserRunsPanel({ checkId, runs, loading, error }: { checkId: n
   const result = runs && asResult([...RUN_KEYS], runs.map((r) => RUN_KEYS.map((k) => r[k])));
   const cols: Column[] = [
     { key: "created_at", label: "Time", width: 190, render: (v) => <span className="mono">{formatLogTime(String(v))}</span> },
-    { key: "ok", label: "Result", width: 110, render: (v) => <StateBadge state={v ? "up" : "down"} /> },
+    { key: "ok", label: "Result", width: 110, render: (v, row) => <StateBadge state={runState(v, row[RUN_KEYS.indexOf("degraded")])} /> },
     { key: "duration_ms", label: "Total", align: "right", render: ms },
     { key: "lcp_ms", label: "LCP", align: "right", render: ms },
     { key: "cls", label: "CLS", align: "right", render: cls },
     { key: "ttfb_ms", label: "TTFB", align: "right", render: ms },
     { key: "failed_label", label: "Failed step", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
-    { key: "error", label: "Error", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
+    { key: "error", label: "Error", render: (v, row) => (v ? <span className="up-err">{String(v)}</span> : row[RUN_KEYS.indexOf("warning")] ? <span className="up-warn">{String(row[RUN_KEYS.indexOf("warning")])}</span> : <span className="dim">—</span>) },
     { key: "screenshot", label: "", align: "right", width: 40, render: (v) => (v ? <Camera size={14} aria-label="Has a screenshot" className="dim" /> : null) },
   ];
   return (
@@ -122,7 +123,7 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
           <dl className="kv">
             <dt>Result</dt>
             <dd>
-              <StateBadge state={r.ok ? "up" : "down"} />
+              <StateBadge state={runState(r.ok, r.degraded)} />
               {r.retried && <span className="dim"> · after a retry</span>}
             </dd>
             <dt>Total</dt>
@@ -161,6 +162,15 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
               <div className="up-coverage-text">
                 <strong>Failed</strong>
                 <span>{r.error}</span>
+              </div>
+            </div>
+          )}
+          {r.ok && r.warning && (
+            <div className="notice up-coverage" role="status">
+              <AlertTriangle size={16} aria-hidden />
+              <div className="up-coverage-text">
+                <strong>Degraded</strong>
+                <span>{r.warning}</span>
               </div>
             </div>
           )}

@@ -55,6 +55,7 @@ type browserRun struct {
 	Screenshot []byte       `json:"-"`
 	Final      []byte       `json:"-"`
 	TraceID    string       `json:"trace_id,omitempty"`
+	Warning    string       `json:"warning,omitempty"`
 }
 
 // vitalsScript records LCP and CLS on every page the run opens.
@@ -142,7 +143,15 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	defer func() {
 		res.CreatedAt = start.UTC().Format(tsLayout)
 		res.DurationMs = float64(time.Since(start).Microseconds()) / 1000
-		res.Degraded = res.OK && c.DegradedMs > 0 && res.DurationMs > float64(c.DegradedMs)
+		if res.OK {
+			if why := c.overLimit(res); why != "" {
+				res.OK, res.Error = false, why
+			}
+		}
+		if res.OK {
+			run.Warning = c.warnings(res)
+			res.Degraded = run.Warning != ""
+		}
 	}()
 	mask := masker(c.Secrets)
 	st := &runState{urls: map[network.RequestID]string{}, mask: mask}
@@ -208,6 +217,9 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		sr.DurationMs = float64(time.Since(t0).Microseconds()) / 1000
 		if status > 0 {
 			res.Status = int(status)
+		}
+		if err == nil && step.MaxMs > 0 && sr.DurationMs > float64(step.MaxMs) {
+			err = fmt.Errorf("took %s, over its %s limit", msText(sr.DurationMs), msText(float64(step.MaxMs)))
 		}
 		if err != nil {
 			if runCtx.Err() != nil && !errors.Is(err, errBlockedAddress) {
