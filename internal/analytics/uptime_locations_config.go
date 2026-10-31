@@ -9,8 +9,7 @@ type configLocation struct {
 	Name string `json:"name"`
 }
 
-// locations creates the locations a file names that do not exist yet,
-// without keys: each needs one made in the Locations tab before it runs.
+// Created without keys, each needs one made in the Locations tab before it runs
 func (ci *configImport) locations(doc configDoc) error {
 	for _, in := range doc.UptimeLocations {
 		name := strings.ToLower(strings.TrimSpace(in.Name))

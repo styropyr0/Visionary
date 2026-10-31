@@ -276,8 +276,7 @@ func kindAttributes() map[string]schema.Attribute {
 	}
 }
 
-// kindProblems says what a check of kind cannot have, or lacks, by
-// attribute; set reports which attributes the configuration sets.
+// set reports which attributes the configuration sets
 func kindProblems(kind string, set func(string) bool) map[string]string {
 	out := map[string]string{}
 	block := map[string]string{"api": "api", "tcp": "tcp", "dns": "dns", "ping": "ping", "ssl": "ssl", "heartbeat": "heartbeat"}[kind]
@@ -385,8 +384,6 @@ func (m *checkModel) kindInput(ctx context.Context, in *apiCheck, diags *diag.Di
 	}
 }
 
-// readHeartbeatPath fills heartbeat_path, which the check itself never
-// shows.
 func (r *uptimeCheckResource) readHeartbeatPath(ctx context.Context, m *checkModel, diags *diag.Diagnostics) {
 	if m.Kind.ValueString() != "heartbeat" {
 		m.HeartbeatPath = types.StringNull()
@@ -402,7 +399,6 @@ func (r *uptimeCheckResource) readHeartbeatPath(ctx context.Context, m *checkMod
 	m.HeartbeatPath = types.StringValue(out.Path)
 }
 
-// sameFold keeps the written form of a name the server lower-cases.
 func sameFold(v string, ref types.String) types.String {
 	if !ref.IsNull() && !ref.IsUnknown() && strings.EqualFold(strings.TrimSuffix(ref.ValueString(), "."), v) {
 		return ref

@@ -19,14 +19,8 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Heartbeat checks are pushed to: a job calls the check's secret URL
-// (/api/heartbeat/<token>) when it runs. The check is down when no ping comes
-// within the period plus grace, or a job reports failure or never finishes.
-// The ping endpoint needs no sign-in, is rate limited, and 404s unknown tokens.
-
-// HeartbeatConfig is the settings of a heartbeat check: PeriodS, or Cron in
-// Timezone, says when pings are expected. Token is never stored with the
-// rest, nor shown in the check; editors read it on its own.
+// Token is never stored with the rest, nor shown in the check,
+// and editors read it on its own
 type HeartbeatConfig struct {
 	PeriodS  int    `json:"period_s,omitempty"`
 	Cron     string `json:"cron,omitempty"`
@@ -216,8 +210,7 @@ var heartbeatLimits struct {
 	tokens map[string]*rate.Limiter
 }
 
-// heartbeatAllowed limits pings to 200 a second in all and 1 a second (in
-// bursts of 10) per token, known or not.
+// 200 pings a second in all and 1 a second (in bursts of 10) per token, known or not
 func heartbeatAllowed(token string) bool {
 	heartbeatLimits.Lock()
 	defer heartbeatLimits.Unlock()
@@ -319,8 +312,8 @@ func (s *Server) handleHeartbeatPing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	// A failure is recorded at once, and so is the first success after one;
-	// otherwise the runner's next look records the state.
+	// A failure is recorded at once, and so is the first success after one.
+	// Otherwise the runner's next look records the state
 	if c.Enabled && kind != "start" {
 		last, err := s.db.Query(ctx, `SELECT ok FROM uptime_results WHERE check_id = ? ORDER BY created_at DESC LIMIT 1`, id)
 		wasUp := err == nil && len(last.Rows) > 0 && toInt(last.Rows[0][0]) == 1
@@ -393,8 +386,6 @@ WHERE check_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DE
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleHeartbeatToken gives a heartbeat check a new URL; the old one stops
-// working at once.
 func (s *Server) handleHeartbeatToken(w http.ResponseWriter, r *http.Request) {
 	if !s.can(r, "edit") {
 		writeError(w, http.StatusForbidden, "you do not have permission to change checks")

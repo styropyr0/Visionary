@@ -5,13 +5,7 @@ import (
 	"errors"
 )
 
-// PromQL over Visionary's data: the parser (promql_parse.go), the evaluator
-// (promql_eval.go), where selectors read (promql_source.go), the Prometheus
-// HTTP API (promql_api.go) and the promql alert (promql_alerts.go). Routes
-// hang off metricsRoutes.
-
-// analystPromQL runs the analyst's expression over the dashboard range; a
-// mistake in it comes back as a query error the model can fix.
+// A mistake in the expression comes back as a query error the model can fix
 func (s *Server) analystPromQL(ctx context.Context, query string, tr timeRange) (*Result, error) {
 	res, err := s.promResult(ctx, query, tr)
 	var pe *promError

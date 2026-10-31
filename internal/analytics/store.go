@@ -128,7 +128,7 @@ func (s *Server) addColumns(ctx context.Context, table string, added []sdk.Colum
 			have = append(have, toString(row[0]))
 		}
 	}
-	// "bigtext" holds JSON and images: TEXT, or MEDIUMTEXT on MySQL.
+	// "bigtext" holds JSON and images: TEXT, or MEDIUMTEXT on MySQL
 	var plain []sdk.Column
 	var stmts []string
 	for _, c := range added {

@@ -1,8 +1,4 @@
-// Package uptimecore runs uptime checks: HTTP probes, scripted browser
-// checks and the schedule that feeds them. The Visionary server runs checks
-// with it from its own location, and the host agent runs it as a location
-// runner (VISIONARY_AGENT_LOCATION), so a check behaves the same wherever it
-// runs. Storing results is up to the caller.
+// Package uptimecore runs uptime checks for the server and for location runners alike
 package uptimecore
 
 import (
@@ -17,7 +13,7 @@ const TimeLayout = "2006-01-02T15:04:05.000Z"
 
 const Mask = "********"
 
-// SecretNameRe matches header and query names whose values are secret.
+// SecretNameRe matches header and query names whose values are secret
 var SecretNameRe = regexp.MustCompile(`(?i)(auth|token|secret|key|cookie|session|password|signature|credential)`)
 
 type Check struct {
@@ -47,16 +43,15 @@ type Check struct {
 const MaxBrowserTimeoutMs = 120000
 
 type BrowserOptions struct {
-	// TraceOrigins get the run's traceparent; empty means the first page's.
+	// TraceOrigins get the run's traceparent, empty means the first page's
 	TraceOrigins []string `json:"trace_origins,omitempty"`
 	NoTrace      bool     `json:"no_trace,omitempty"`
 	BrowserLimits
 	// Device is desktop (the default), laptop, tablet, phone or custom, whose
-	// size is ViewportW × ViewportH.
-	Device    string `json:"device,omitempty"`
-	ViewportW int    `json:"viewport_w,omitempty"`
-	ViewportH int    `json:"viewport_h,omitempty"`
-	// StepScreenshots keeps a small screenshot after every step.
+	// size is ViewportW × ViewportH
+	Device          string        `json:"device,omitempty"`
+	ViewportW       int           `json:"viewport_w,omitempty"`
+	ViewportH       int           `json:"viewport_h,omitempty"`
 	StepScreenshots bool          `json:"step_screenshots,omitempty"`
 	Files           []BrowserFile `json:"files,omitempty"`
 }
@@ -77,9 +72,9 @@ type Result struct {
 	LCPMs         *float64 `json:"lcp_ms,omitempty"`
 	CLS           *float64 `json:"cls,omitempty"`
 	// Detail is what a run of an api, tcp, dns, ping or ssl check found
-	// beyond this row (kinds.go).
+	// beyond this row (kinds.go)
 	Detail any `json:"detail,omitempty"`
-	// Skip says why nothing ran or there is nothing to record yet.
+	// Skip says why nothing ran or there is nothing to record yet
 	Skip string `json:"-"`
 
 	blocked bool
@@ -96,17 +91,17 @@ type BrowserStep struct {
 	Op       string `json:"op,omitempty"`
 	Ms       int    `json:"ms,omitempty"`
 	Label    string `json:"label,omitempty"`
-	// MaxMs fails the step when it takes longer.
+	// MaxMs fails the step when it takes longer
 	MaxMs int `json:"max_ms,omitempty"`
 	// Name is the variable of extract, the cookie of set_cookie, the key of
-	// set_storage and the file of upload.
+	// set_storage and the file of upload
 	Name string `json:"name,omitempty"`
-	// Attr is what extract reads: text (default), value or an attribute.
+	// Attr is what extract reads: text (default), value or an attribute
 	Attr   string `json:"attr,omitempty"`
 	Regex  string `json:"regex,omitempty"`
 	Target string `json:"target,omitempty"`
 	// Scope is the cookie's URL or domain, local or session storage, or the
-	// origin a permission is granted to.
+	// origin a permission is granted to
 	Scope      string  `json:"scope,omitempty"`
 	Permission string  `json:"permission,omitempty"`
 	Lat        float64 `json:"lat,omitempty"`
@@ -175,8 +170,7 @@ func (b BrowserStep) describe() string {
 	return b.Action
 }
 
-// RedactURL drops credentials and secret-looking query values, for anything
-// people other than the check's author can read.
+// RedactURL drops credentials and secret-looking query values
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -199,8 +193,6 @@ func RedactURL(raw string) string {
 	return u.String()
 }
 
-// clip trims s and cuts it to at most n bytes on a rune boundary, dropping
-// invalid UTF-8 and control characters other than newlines and tabs.
 func clip(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

@@ -13,8 +13,8 @@ import (
 //     a device, the last place with its time), so a new one stands out.
 //   - security_suppressions: "don't flag this again" rules made from false
 //     positives, by kind and IP or account, optionally until a date.
-//   - security_rules: the team's detection rules; spec is the rule as JSON,
-//     kind names its signals and never changes.
+//   - security_rules: the team's detection rules (spec is the rule as JSON,
+//     kind names its signals and never changes)
 func (s *Server) securitySchema() []string {
 	id, key, ts := "INTEGER PRIMARY KEY AUTOINCREMENT", "TEXT", "TEXT"
 	tail, index := "", "CREATE INDEX IF NOT EXISTS"

@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-// Rules run every 30 seconds, each when due (every()). Queries are bounded by
-// created_at and a LIMIT and return only groups past the bar, so a run reads
-// little even on D1. new_value rules keep what each group had in security_known
-// (kind rule:<id>). A group's signal is one finding per rule and group per
-// dedupe() period.
-
 const (
 	rulesTick        = 30 * time.Second
 	ruleGroupsLimit  = 100
@@ -49,8 +43,6 @@ func (s *Server) ruleRuns() *ruleRunState {
 	return v.(*ruleRunState)
 }
 
-// forgetRule drops what a rule learned, after it is deleted or changed what
-// it groups or watches.
 func (s *Server) forgetRule(ctx context.Context, id int64) {
 	rs := s.ruleRuns()
 	rs.mu.Lock()
@@ -189,9 +181,6 @@ func (s *Server) evalRule(ctx context.Context, r *detectionRule, run *ruleRun, c
 	return nil, nil
 }
 
-// countQuery groups the rule's matches over [from, to): the group values,
-// then n, n_new (since cursor), the measure (n or the distinct count) and
-// the first and last time.
 func (s *Server) countQuery(r *detectionRule, filter map[string]string, from, to, cursor time.Time, having int, limit int) (string, []any, error) {
 	src := s.q.ruleSources()[r.Source]
 	where, fargs, err := s.filterSQL(r.Source, filter, timeRange{From: from, To: to})
@@ -291,8 +280,7 @@ func (run *ruleRun) baselineOf(key string) (float64, bool) {
 	return median(append([]float64(nil), h...)), true
 }
 
-// record keeps each group's count, 0 for groups that did not come back.
-// Flagged groups are left out so an attack does not become its own normal.
+// Flagged groups are left out so an attack doesn't become its own normal
 func (run *ruleRun) record(samples map[string]float64, flagged map[string]bool) {
 	for k := range samples {
 		if _, ok := run.baseline[k]; !ok && !flagged[k] && len(run.baseline) < 2000 {
@@ -327,8 +315,6 @@ type valuePair struct {
 	first, last string
 }
 
-// newValueRows reads each group's values of the watched field over [from,
-// to). A country is looked up from the address, in Go.
 func (s *Server) newValueRows(ctx context.Context, r *detectionRule, from, to time.Time, limit int) ([]valuePair, error) {
 	src := s.q.ruleSources()[r.Source]
 	where, fargs, err := s.filterSQL(r.Source, r.Filter, timeRange{From: from, To: to})
@@ -400,9 +386,8 @@ func (s *Server) evalNewValues(ctx context.Context, r *detectionRule, run *ruleR
 			return nil, err
 		}
 		if len(res.Rows) == 0 {
-			// First run learns each group's values over the learning period;
-			// with no history at all, this run's values are learned too instead
-			// of all flagged. With none yet, the next run tries again.
+			// First run learns each group's values over the learning period. With no history at all,
+			// this run's values are learned too instead of all flagged, and with none yet the next run tries again
 			past, err := s.newValueRows(ctx, r, cursor.Add(-r.learn()), cursor, ruleLearnLimit)
 			if err != nil {
 				return nil, err
@@ -459,7 +444,6 @@ func (s *Server) knowValue(ctx context.Context, kind, account, value, at string)
 	return nil
 }
 
-// knownValues reports which of pairs a rule has seen, keyed group \x00 value.
 func (s *Server) knownValues(ctx context.Context, kind string, pairs []valuePair) (map[string]bool, error) {
 	out := map[string]bool{}
 	seen := map[string]bool{}
@@ -496,8 +480,6 @@ type stepTime struct {
 	n  int64
 }
 
-// evalSequence finds groups whose second step since cursor came after at
-// least Threshold first steps within the window before it.
 func (s *Server) evalSequence(ctx context.Context, r *detectionRule, cursor, to time.Time) ([]ruleSignal, error) {
 	w := r.window()
 	from := cursor.Add(-w)
@@ -608,9 +590,6 @@ ORDER BY created_at LIMIT `+strconv.Itoa(limit), args...)
 	return out, nil
 }
 
-// ruleEvents are a group's matching rows over [from, to), newest first, as
-// a result for samples and the signal's timeline. A sequence adds its
-// second step, marked in the step column.
 func (s *Server) ruleEvents(ctx context.Context, r *detectionRule, values map[string]string, from, to time.Time, limit int) (*Result, error) {
 	src := s.q.ruleSources()[r.Source]
 	steps := []map[string]string{r.Filter}
@@ -867,9 +846,6 @@ func (s *Server) signalNotice(r *detectionRule, fresh []finding, ids []int64) no
 	return n
 }
 
-// findingRule adds a signal's rule and its group's matched events from a
-// window before the signal to the end of its dedupe period: the timeline the
-// drawer shows.
 func (s *Server) findingRule(ctx context.Context, out, f map[string]any, at time.Time) error {
 	out["match"] = "rule"
 	res, err := s.db.Query(ctx, `SELECT id, name, kind, enabled, spec, created_at, created_by, updated_at FROM security_rules WHERE kind = ?`, f["kind"])

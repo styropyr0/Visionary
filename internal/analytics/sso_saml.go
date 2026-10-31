@@ -24,9 +24,8 @@ import (
 	"github.com/crewjam/saml"
 )
 
-// SAML 2.0 with Visionary as the service provider. The request ID is derived
-// from a sealed RelayState, so any server sharing the database can check
-// InResponseTo without keeping state.
+// The request ID is derived from a sealed RelayState, so any server sharing
+// the database can check InResponseTo without keeping state
 
 const (
 	samlCookie   = "visionary_saml"
@@ -40,8 +39,6 @@ type samlClient struct {
 	fetched time.Time
 }
 
-// samlFor builds the service provider, reading the identity provider's
-// metadata URL again once a day.
 func (s *Server) samlFor(ctx context.Context, st *ssoSetup, p *ssoProvider) (*samlClient, error) {
 	state := s.sso()
 	state.mu.Lock()
@@ -126,8 +123,6 @@ func fetchMetadata(ctx context.Context, u string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, samlMaxBytes))
 }
 
-// parseIDPMetadata takes an EntityDescriptor, or the first identity provider
-// in an EntitiesDescriptor.
 func parseIDPMetadata(raw []byte) (*saml.EntityDescriptor, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return nil, errors.New("is empty")
@@ -147,7 +142,6 @@ func parseIDPMetadata(raw []byte) (*saml.EntityDescriptor, error) {
 	return nil, errors.New("isn't SAML metadata for an identity provider (no IDPSSODescriptor)")
 }
 
-// newSPKeyPair makes an RSA key and a self-signed certificate for ten years.
 func newSPKeyPair() (string, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -168,8 +162,6 @@ func newSPKeyPair() (string, error) {
 	return string(out), nil
 }
 
-// parseSPKeyPair reads a PEM private key (PKCS#1 or PKCS#8, RSA) and the
-// certificate that goes with it.
 func parseSPKeyPair(bundle string) (crypto.Signer, *x509.Certificate, error) {
 	if bundle == "" {
 		return nil, nil, errors.New("the SAML key isn't set up yet; save the provider again")
@@ -215,7 +207,6 @@ func spCertPEM(bundle string) string {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
 }
 
-// ensureSPKeyPair creates the key the first time a SAML provider is saved.
 func (s *Server) ensureSPKeyPair(ctx context.Context) error {
 	m, err := s.readSettings(ctx)
 	if err != nil {
@@ -231,7 +222,6 @@ func (s *Server) ensureSPKeyPair(ctx context.Context) error {
 	return dbErr(s.db.Exec(ctx, s.q.insertSettingIfAbsent(), settingSAMLSP, bundle, nowTS()))
 }
 
-// samlRelayState seals when the sign-in expires and whether it is a test.
 func (s *Server) samlRelayState(test bool) string {
 	plain := make([]byte, 17)
 	binary.BigEndian.PutUint64(plain, uint64(time.Now().Add(ssoFlowTTL).Unix()))
@@ -311,7 +301,7 @@ func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 	relay := r.PostForm.Get("RelayState")
 	plain, ok := s.ssoUnseal(samlRelay, relay)
 	if !ok || len(plain) != 17 || time.Now().Unix() > int64(binary.BigEndian.Uint64(plain)) {
-		// Sign-in started at the identity provider has no RelayState of ours.
+		// Sign-in started at the identity provider has no RelayState of ours
 		ssoFail(w, r, "That sign-in has expired or didn't start here. Start it from Visionary's sign-in page.")
 		return
 	}
@@ -366,9 +356,7 @@ func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 	s.ssoComplete(w, r, p, samlIdentity(p, assertion), test)
 }
 
-// firstUse reports whether a response to this request hasn't been taken
-// before on this server; s.firstUse asks the other replicas. Any response is
-// refused 90 seconds after it was issued.
+// s.firstUse asks the other replicas. Any response is refused 90 seconds after it was issued
 func (st *ssoState) firstUse(requestID string) bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -386,7 +374,7 @@ func (st *ssoState) firstUse(requestID string) bool {
 }
 
 // Where providers usually put the email, name and groups when no attribute
-// is named in Settings.
+// is named in Settings
 var (
 	samlEmailNames = []string{"email", "mail", "emailaddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "urn:oid:0.9.2342.19200300.100.1.3"}
 	samlNameNames  = []string{"name", "displayname", "http://schemas.microsoft.com/identity/claims/displayname", "urn:oid:2.16.840.1.113730.3.1.241"}

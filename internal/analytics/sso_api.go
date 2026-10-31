@@ -42,9 +42,7 @@ func (s *Server) handleSSOStart(w http.ResponseWriter, r *http.Request) {
 	s.ssoBegin(w, r, st, p, false)
 }
 
-// handleSSOTest runs a provider's sign-in without signing anyone in, and
-// shows what the provider sent and what Visionary would do with it. It works
-// on providers that are still off, and while sign-in is off.
+// Works on providers that are still off, and while sign-in is off
 func (s *Server) handleSSOTest(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
@@ -67,13 +65,11 @@ func (s *Server) ssoBegin(w http.ResponseWriter, r *http.Request, st *ssoSetup, 
 }
 
 type ssoView struct {
-	Config  ssoConfig `json:"config"`
-	Error   string    `json:"error,omitempty"`
-	SPCert  string    `json:"sp_cert,omitempty"`
-	SCIMURL string    `json:"scim_url,omitempty"`
-	// SignInType is the way in from Settings → Sign-in, so the page can say
-	// whether single sign-on is the only one.
-	SignInType string `json:"sign_in_type"`
+	Config     ssoConfig `json:"config"`
+	Error      string    `json:"error,omitempty"`
+	SPCert     string    `json:"sp_cert,omitempty"`
+	SCIMURL    string    `json:"scim_url,omitempty"`
+	SignInType string    `json:"sign_in_type"`
 }
 
 func (s *Server) handleSSOSettings(w http.ResponseWriter, r *http.Request) {
@@ -99,20 +95,17 @@ func (s *Server) handleSSOSettings(w http.ResponseWriter, r *http.Request) {
 
 var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
 
-// handlePutSSO checks and saves the providers. Turned-on providers are
-// reached first (discovery, metadata), so a setup that can't work isn't
-// saved.
+// Turned-on providers are reached first, so a setup that can't work isn't saved
 func (s *Server) handlePutSSO(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
 	}
 	var body struct {
 		ssoConfig
-		// Secrets sets client secrets by provider id; null removes one and
-		// a provider left out keeps its own.
-		Secrets map[string]*string `json:"secrets"`
-		// SPKeyPair replaces the SAML key: a PEM private key and certificate.
-		SPKeyPair string `json:"sp_key_pair"`
+		// Secrets sets client secrets by provider id. null removes one and
+		// a provider left out keeps its own
+		Secrets   map[string]*string `json:"secrets"`
+		SPKeyPair string             `json:"sp_key_pair"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

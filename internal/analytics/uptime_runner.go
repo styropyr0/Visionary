@@ -9,9 +9,6 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// The runner runs the server's own checks with internal/uptimecore, shared with
-// the host agent's location runner. Here: loading checks and storing results.
-
 // uptimeRunners holds each server's runner, so handlers can reach it without
 // a field on Server.
 var uptimeRunners sync.Map // *Server -> *uptimeRunner
@@ -49,8 +46,6 @@ func runnerFor(s *Server) *uptimeRunner {
 	return newUptimeRunner(s, s.uptimeSettings())
 }
 
-// wakeUptime makes the runner reload checks now instead of within 30s,
-// on whichever replica runs it.
 func wakeUptime(s *Server) {
 	s.announce("uptime")
 	wakeUptimeHere(s)
@@ -114,7 +109,7 @@ func (u *uptimeRunner) executeBrowser(ctx context.Context, c UptimeCheck) {
 	res, run, err := u.runBrowser(ctx, c)
 	if err != nil || ctx.Err() != nil {
 		// No browser (or it would not start): nothing ran, so nothing is
-		// recorded and no incident opens.
+		// recorded and no incident opens
 		return
 	}
 	if err := u.record(ctx, c, res); err != nil {
@@ -128,8 +123,7 @@ func (u *uptimeRunner) executeBrowser(ctx context.Context, c UptimeCheck) {
 	}
 }
 
-// probeWithRetry runs a check of any kind but browser, retrying once on
-// failure. Heartbeats are looked at here, not probed.
+// Heartbeats are looked at here, not probed
 func (u *uptimeRunner) probeWithRetry(ctx context.Context, c UptimeCheck) uptimeResult {
 	if c.Kind == "heartbeat" {
 		return u.s.heartbeatResult(ctx, c, time.Now())
@@ -137,8 +131,7 @@ func (u *uptimeRunner) probeWithRetry(ctx context.Context, c UptimeCheck) uptime
 	return uptimecore.ProbeWithRetry(ctx, c.core(), u.allowPrivate)
 }
 
-// runBrowser plays a browser check, retrying once on failure. An error means
-// it could not run at all.
+// An error means it couldn't run at all
 func (u *uptimeRunner) runBrowser(ctx context.Context, c UptimeCheck) (uptimeResult, browserRun, error) {
 	return u.browser.Run(ctx, c.core(), u.allowPrivate())
 }
@@ -154,8 +147,7 @@ func (u *uptimeRunner) record(ctx context.Context, c UptimeCheck, r uptimeResult
 	return u.s.recordResult(ctx, c, r, serverLocation)
 }
 
-// recordResult stores a run from location. ok is the check's verdict across
-// its locations; when it is down, error names the failing locations.
+// ok is the verdict across locations, and when it's down error names the failing ones
 func (s *Server) recordResult(ctx context.Context, c UptimeCheck, r uptimeResult, location string) error {
 	ok, errMsg := r.OK, r.Error
 	if len(c.Locations) > 1 {

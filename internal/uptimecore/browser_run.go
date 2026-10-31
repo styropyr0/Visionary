@@ -20,10 +20,6 @@ import (
 	"github.com/chromedp/chromedp/kb"
 )
 
-// A browser run plays a check's steps in a fresh tab and records how each
-// went, what the page logged and which requests failed, the page's Web
-// Vitals, and a screenshot when a step fails.
-
 const (
 	browserAssertWait  = 5 * time.Second
 	browserPollEvery   = 100 * time.Millisecond
@@ -38,7 +34,7 @@ type StepResult struct {
 	Status     string  `json:"status"`
 	DurationMs float64 `json:"duration_ms"`
 	Error      string  `json:"error,omitempty"`
-	// Detail is what the step found, such as an extracted value.
+	// Detail is what the step found, such as an extracted value
 	Detail string `json:"detail,omitempty"`
 }
 
@@ -49,7 +45,6 @@ type NetFailure struct {
 	Type   string `json:"type,omitempty"`
 }
 
-// BrowserRun is the detail of one run, beside its uptime_results row.
 type BrowserRun struct {
 	Steps      []StepResult `json:"steps"`
 	FailedStep int          `json:"failed_step"`
@@ -63,7 +58,6 @@ type BrowserRun struct {
 	StepShots  [][]byte     `json:"-"`
 }
 
-// vitalsScript records LCP and CLS on every page the run opens.
 const vitalsScript = `(() => {
   const v = { lcp: null, cls: 0 };
   Object.defineProperty(window, "__visionaryVitals", { value: v, enumerable: false });
@@ -148,8 +142,6 @@ func masker(secrets map[string]string) func(string) string {
 	}
 }
 
-// runBrowserCheck plays c in browser b. guard, when set, is the proxy every
-// request goes through.
 func runBrowserCheck(ctx context.Context, b context.Context, c Check, guard *guardProxy) (res Result, run BrowserRun) {
 	start := time.Now()
 	run.FailedStep = -1
@@ -207,7 +199,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c Check, guard *gua
 		return nil
 	}
 	// The tab's first action opens it and ties it to tab, not to the run's
-	// timeout, so a timed-out run can still be photographed.
+	// timeout, so a timed-out run can still be photographed
 	if err := chromedp.Do(tab); err != nil {
 		res.Error = "the browser did not open a tab: " + clip(err.Error(), 200)
 		return res, run
@@ -401,14 +393,10 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 	}()
 }
 
-// screenshot takes a JPEG of the viewport at CSS size (a device with a
-// pixel ratio above 1 is scaled down).
 func screenshot(ctx context.Context, scale float64) []byte {
 	return shoot(ctx, 1/scale, browserMaxShot, []int64{70, 50, 30})
 }
 
-// shoot captures the viewport scaled by shrink, lowering the quality until
-// it fits limit; nil when it never does.
 func shoot(ctx context.Context, shrink float64, limit int, qualities []int64) []byte {
 	p := page.CaptureScreenshotParams{Format: page.CaptureScreenshotFormatJpeg}
 	if shrink != 1 {
@@ -435,8 +423,6 @@ func jsString(s string) string {
 	return string(b)
 }
 
-// waitJS evaluates expr until it returns a truthy value, across page loads,
-// for at most wait (or until ctx ends). It returns the last value.
 func waitJS[T any](ctx context.Context, st *runState, expr string, wait time.Duration, ok func(T) bool) (T, error) {
 	var last T
 	var lastErr error
@@ -466,15 +452,11 @@ func waitJS[T any](ctx context.Context, st *runState, expr string, wait time.Dur
 
 var errStepTimeout = errors.New("timed out")
 
-// isTransientEval is an evaluation that failed because the page was between
-// documents.
 func isTransientEval(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "context") || strings.Contains(msg, "navigat") || strings.Contains(msg, "Execution") || strings.Contains(msg, "-32000")
 }
 
-// findJS locates the element a step means and scrolls it into view; it
-// returns the center of the element, or null.
 func findJS(s BrowserStep) string {
 	finder := `document.querySelector(` + jsString(s.Selector) + `)`
 	if s.Selector == "" {
@@ -483,7 +465,7 @@ func findJS(s BrowserStep) string {
   const seen = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
   const text = (e) => ((e.innerText || e.value || e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.getAttribute("title") || e.getAttribute("alt") || "") + "").trim().replace(/\s+/g, " ").toLowerCase();
   const pick = (sel) => { const all = [...document.querySelectorAll(sel)].filter(seen); return all.find((e) => text(e) === want) || all.find((e) => text(e).includes(want)); };
-  // Controls first, so a button wins over a heading with the same words.
+  // Controls first, so a button wins over a heading with the same words
   return pick("button, a, [role=button], [role=link], [role=tab], [role=menuitem], input[type=submit], input[type=button], summary, label") ||
     pick("input, textarea, select, [role=textbox], [role=combobox], img") ||
     pick("option, li, span, div, p, td, h1, h2, h3, h4") || null;
@@ -511,8 +493,6 @@ var stepKeys = map[string]string{
 	"home": kb.Home, "end": kb.End, "pagedown": kb.PageDown, "pageup": kb.PageUp,
 }
 
-// playStep runs one step. It returns the HTTP status of a page it opened,
-// and what the step found.
 func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st *runState, guard *guardProxy) (int64, string, error) {
 	s = st.resolve(s, secrets)
 	switch s.Action {
@@ -728,7 +708,6 @@ func opWord(op string) string {
 	return "exactly"
 }
 
-// navError keeps Chrome's net:: code, which says what went wrong.
 func navError(err error) string {
 	msg := err.Error()
 	if i := strings.Index(msg, "net::"); i >= 0 {

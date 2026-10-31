@@ -1,12 +1,4 @@
-// Command visionary-checks runs Visionary uptime checks from CI: it starts a
-// run of the checks with a tag (or ids), waits for it, prints a summary and
-// exits non-zero when a check failed. It can also write JUnit XML, so CI test
-// reports list each check.
-//
-//	visionary-checks run --tag smoke --url-override https://pr-12.example.com --junit checks.xml
-//
-// The server and key come from --server and --key, or VISIONARY_URL and
-// VISIONARY_KEY. Use a key with the CI scope (Settings → API keys).
+// Command visionary-checks runs Visionary uptime checks from CI and exits non-zero when one fails
 package main
 
 import (
@@ -25,7 +17,7 @@ import (
 	"time"
 )
 
-// version is set at build time: -ldflags "-X main.version=v1.2.3".
+// version is set at build time: -ldflags "-X main.version=v1.2.3"
 var version = "dev"
 
 const (
@@ -70,7 +62,6 @@ Run "visionary-checks run -h" for the flags.
 `)
 }
 
-// listFlag collects a repeatable, comma separated flag.
 type listFlag []string
 
 func (l *listFlag) String() string { return strings.Join(*l, ",") }
@@ -183,8 +174,7 @@ func runChecks(args []string, stdout, stderr io.Writer) int {
 	return exitPassed
 }
 
-// waitSeconds is how long one long poll may wait: the server holds a request
-// for at most 170 seconds.
+// The server holds a long poll for at most 170 seconds
 func waitSeconds(deadline time.Time) int {
 	return max(1, min(170, int(time.Until(deadline).Seconds())))
 }

@@ -10,11 +10,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Several replicas can run on one database. Work that must happen once runs
-// under a lease in visionary_leases: a holder renews it every 10 seconds and
-// it expires 30 seconds after the last renewal by the database's clock, so a
-// dead replica's work moves within 40 seconds and a clean shutdown hands it
-// over at once. Leases spread across replicas.
+// Work that must run once runs under a lease in visionary_leases, renewed every 10s
+// and expiring 30s after the last renewal by the database's clock
 
 const (
 	leaseTTL   = 30 * time.Second
@@ -22,9 +19,8 @@ const (
 )
 
 type leaseJob struct {
-	name string
-	run  func(context.Context)
-	// cancel is set while run is running; stopping once it has been asked to end.
+	name     string
+	run      func(context.Context)
 	cancel   context.CancelFunc
 	stopping bool
 	shed     bool
@@ -48,8 +44,6 @@ func (s *Server) leases() *leaseState {
 	return v.(*leaseState)
 }
 
-// leased runs fn on whichever replica holds the lease name, from the first
-// lease round in Start. fn must return when its context ends.
 func (s *Server) leased(name string, fn func(context.Context)) {
 	ls := s.leases()
 	ls.mu.Lock()
@@ -58,7 +52,7 @@ func (s *Server) leased(name string, fn func(context.Context)) {
 }
 
 // dbNowMs is the database's clock in epoch milliseconds, so replicas whose
-// clocks disagree still agree on when a lease ends.
+// clocks disagree still agree on when a lease ends
 func (q sqlDialect) dbNowMs() string {
 	switch q.d {
 	case sdk.Postgres:
@@ -145,8 +139,6 @@ func (s *Server) readLeases(ctx context.Context) (map[string]leaseRow, error) {
 	return out, nil
 }
 
-// tryLease takes name if nobody holds it. Whether it worked shows in the
-// next read: the update is atomic, so of replicas trying together one wins.
 func (s *Server) tryLease(ctx context.Context, name string, exists bool) error {
 	now := s.q.dbNowMs()
 	if !exists {
@@ -154,7 +146,7 @@ func (s *Server) tryLease(ctx context.Context, name string, exists bool) error {
 			return err
 		}
 	}
-	// holder is set last: MySQL evaluates SET left to right with new values.
+	// holder is set last: MySQL evaluates SET left to right with new values
 	return s.db.Exec(ctx, `UPDATE visionary_leases SET acquired_ms = `+now+`, expires_ms = `+now+` + `+ms(leaseTTL)+`, holder = ?
 WHERE name = ? AND (holder = '' OR expires_ms < `+now+`)`, s.replicaID(), name)
 }
@@ -163,8 +155,6 @@ func (s *Server) renewLeases(ctx context.Context) error {
 	return s.db.Exec(ctx, `UPDATE visionary_leases SET expires_ms = `+s.q.dbNowMs()+` + `+ms(leaseTTL)+` WHERE holder = ?`, s.replicaID())
 }
 
-// releaseLease hands name over; expires_ms keeps when, so the replica giving
-// it up can leave it to others for a while.
 func (s *Server) releaseLease(ctx context.Context, name string) error {
 	return s.db.Exec(ctx, `UPDATE visionary_leases SET expires_ms = `+s.q.dbNowMs()+`, holder = '' WHERE name = ? AND holder = ?`, name, s.replicaID())
 }
@@ -339,7 +329,7 @@ func (s *Server) leasesStop() {
 }
 
 // Wait blocks until the background work has stopped and its leases are
-// released after Start's context ended, or until ctx ends.
+// released after Start's context ended, or until ctx ends
 func (s *Server) Wait(ctx context.Context) {
 	ls := s.leases()
 	ls.mu.Lock()

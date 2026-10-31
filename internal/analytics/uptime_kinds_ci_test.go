@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// CI runs: an API check follows the URL override; a TCP check keeps its own
-// host and is still recorded; a heartbeat is skipped with a reason.
 func TestKindsFromCI(t *testing.T) {
 	s, _ := kindRunner(t)
 	ctx := context.Background()

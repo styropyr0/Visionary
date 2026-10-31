@@ -9,14 +9,8 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Session replay: the browser SDK posts page recordings (a DOM snapshot, then
-// mutations and input, masked on the device) as gzipped chunks to POST
-// /api/ingest/replay. replay_chunks stores each as base64 text and
-// replay_sessions indexes them by session. Off until Settings → Server → Ingest
-// turns it on.
-
 type replayState struct {
-	// bytes is the stored total, counted by the sweep and added to on ingest.
+	// bytes is the stored total, counted by the sweep and added to on ingest
 	bytes atomic.Int64
 }
 

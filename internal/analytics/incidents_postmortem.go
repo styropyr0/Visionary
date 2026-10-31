@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// The postmortem is written once an incident is over: a draft from the
-// timeline and the traffic of the affected services, by the model when the
-// AI analyst is on and from the data alone when it is off, then edited by
-// people. Action items are their own rows so each can have an owner and be
-// ticked off.
-
 const (
 	maxPostmortemField = 20000
 	postmortemBudget   = 90 * time.Second
@@ -26,7 +20,7 @@ type postmortem struct {
 	RootCause string `json:"root_cause"`
 	Timeline  string `json:"timeline"`
 	Lessons   string `json:"lessons"`
-	// Drafted is "ai" or "data" for a draft nobody has edited since.
+	// Drafted is "ai" or "data" for a draft nobody has edited since
 	Drafted   string `json:"drafted,omitempty"`
 	UpdatedBy string `json:"updated_by,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`

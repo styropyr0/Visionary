@@ -8,11 +8,6 @@ import (
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 )
 
-// OTLP metrics that fill no system_metrics column become custom metrics:
-// monotonic sums are counters, other sums and gauges are gauges, and
-// histograms (exponential ones as explicit buckets) are histograms.
-// Summaries are skipped.
-
 func (s *Server) otlpCustomMetric(out *otlpRows, res *otlpResource, m *metricspb.Metric) int64 {
 	mi := s.metricIngest()
 	base := metricPoint{service: res.service, instance: res.instance, name: m.GetName(), unit: m.GetUnit()}

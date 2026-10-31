@@ -5,12 +5,6 @@ import (
 	"regexp"
 )
 
-// Custom metrics: counters, gauges and histograms the services define, in the
-// metrics table. The SDKs write it directly; OTLP metrics with no
-// system_metrics column and Prometheus remote_write land there too. One row
-// is one series' interval: counters hold the increase, gauges the last
-// value, histograms count, sum, min, max and bucket counts.
-
 func init() {
 	allowedTables["METRICS"] = true
 	chartRefs = append(chartRefs, regexp.MustCompile(`^metrics/(series|promql)$`))

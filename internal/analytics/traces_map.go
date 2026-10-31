@@ -7,8 +7,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// mapNode is a service, or a database, host, cache or queue the services
-// call that reports nothing itself.
 type mapNode struct {
 	ID       string   `json:"id"`
 	Kind     string   `json:"kind"`
@@ -29,8 +27,6 @@ type mapEdge struct {
 	P95       *float64 `json:"p95"`
 }
 
-// p95Of is the 95th percentile of duration_ms per group, by rank (no
-// dialect has to support percentile functions).
 func p95Of(partition string) string {
 	return `ROW_NUMBER() OVER (PARTITION BY ` + partition + ` ORDER BY duration_ms) AS rn,
     COUNT(*) OVER (PARTITION BY ` + partition + `) AS n`
@@ -38,10 +34,8 @@ func p95Of(partition string) string {
 
 const p95Pick = `MIN(CASE WHEN rn >= 0.95 * n THEN duration_ms END)`
 
-// handleServiceMap answers the services as nodes and the calls between them
-// as edges: a request whose parent span is in another service is one call
-// from that service to it; database, HTTP, cache and queue calls that no
-// traced request answered go to the dependency they name.
+// A request whose parent span is in another service is one call from that service.
+// Database, HTTP, cache and queue calls no traced request answered go to the dependency they name
 func (s *Server) handleServiceMap(w http.ResponseWriter, r *http.Request) {
 	tr, ok := s.rangeOf(w, r)
 	if !ok {
@@ -61,9 +55,9 @@ FROM r GROUP BY service`, tr)
 		return
 	})
 	g.Go(func() (err error) {
-		// The caller's span measures what the caller waited for; a request
+		// The caller's span measures what the caller waited for. A request
 		// whose parent is the caller's own request (OpenTelemetry without
-		// client spans) has only the callee's time.
+		// client spans) has only the callee's time
 		internal, err = s.telemetryQuery(ctx, `
 WITH e AS (
   SELECT COALESCE(p.service, '') AS src, COALESCE(c.service, '') AS dst, p.duration_ms,

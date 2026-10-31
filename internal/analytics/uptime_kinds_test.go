@@ -39,7 +39,6 @@ func normalized(t *testing.T, c UptimeCheck) UptimeCheck {
 	return c
 }
 
-// apiSite signs in with a password and answers /me for the token it gave.
 func apiSite() *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +224,6 @@ func TestTCPCheck(t *testing.T) {
 	}
 }
 
-// fakeDNS answers A, TXT and MX for example.test and NXDOMAIN otherwise.
 func fakeDNS(t *testing.T) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -331,7 +329,6 @@ func TestPingCheck(t *testing.T) {
 	}
 }
 
-// shortCert is a self-signed certificate for 127.0.0.1 that expires in days.
 func shortCert(t *testing.T, days int) tls.Certificate {
 	t.Helper()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

@@ -29,8 +29,6 @@ func TestNormalizeOrigin(t *testing.T) {
 	}
 }
 
-// browserRunner is a runner that may open loopback pages, or a skip when
-// there is no browser.
 func browserRunner(t *testing.T) (*Server, *uptimeRunner) {
 	t.Helper()
 	if testing.Short() {
@@ -66,7 +64,7 @@ func playCheck(t *testing.T, u *uptimeRunner, c UptimeCheck, fail bool) (uptimeR
 }
 
 // The run's traceparent reaches the first page's origin and the origins the
-// check allows, and no other.
+// check allows, and no other
 func TestBrowserTraceHeader(t *testing.T) {
 	_, u := browserRunner(t)
 	var mu sync.Mutex

@@ -20,9 +20,7 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Playwright checks are reported, never run here: visionary-playwright-reporter
-// posts each test from the customer's CI or host. A check is keyed by project
-// and title path, and is stale when its interval passes without a run.
+// Playwright checks are reported by visionary-playwright-reporter, never run here
 
 const (
 	pwMaxBody       = 3 << 20
@@ -101,8 +99,7 @@ func (s *Server) uptimePlaywrightRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/checks/{id}/playwright/{run}/trace", s.authed(s.handlePlaywrightTrace))
 }
 
-// normalizePlaywright validates a playwright check. Interval is how often a
-// run is expected; a check without one for longer is stale.
+// A check without a run for longer than Interval is stale
 func (c *UptimeCheck) normalizePlaywright() error {
 	c.Method, c.ExpectStatus, c.BodyContains, c.Headers, c.FollowRedirects = "GET", "200-299", "", map[string]string{}, true
 	c.Steps, c.Secrets, c.FinalScreenshot, c.TimeoutMs, c.BrowserOptions = nil, nil, false, 0, BrowserOptions{}
@@ -353,7 +350,6 @@ func (s *Server) recordPlaywright(r *http.Request, checks *[]UptimeCheck, run pw
 	return o
 }
 
-// pwName is a new check's name: the title without its file, and the project.
 func pwName(run pwRun) string {
 	parts := strings.Split(run.Title, " › ")
 	if len(parts) > 1 {
@@ -366,8 +362,6 @@ func pwName(run pwRun) string {
 	return ciClip(name, 118)
 }
 
-// pwTags are Playwright's tags (@smoke) as check tags, dropping any that
-// don't fit.
 func pwTags(in []string) []string {
 	var out []string
 	for _, t := range in {
@@ -431,8 +425,6 @@ func (s *Server) recordPlaywrightDetail(ctx context.Context, c UptimeCheck, res 
 	return s.db.Exec(ctx, "INSERT INTO uptime_playwright_results ("+strings.Join(cols, ", ")+") VALUES (?"+strings.Repeat(", ?", len(cols)-1)+")", vals...)
 }
 
-// watchPlaywright records a failure, once per interval, for each playwright
-// check that went a full interval without a run.
 func (s *Server) watchPlaywright(ctx context.Context) {
 	tick := time.NewTicker(pwStaleTick)
 	defer tick.Stop()

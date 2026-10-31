@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	// A chunk as sent; base64 makes it about 680 KB, under D1's row limit.
+	// A chunk as sent, about 680 KB once base64 encoded, under D1's row limit
 	maxReplayBody = 512 << 10
-	// A chunk once unzipped, so a small body can't inflate without bound.
+	// A chunk once unzipped, so a small body can't inflate without bound
 	maxReplayJSON = 16 << 20
 )
 
@@ -34,9 +34,6 @@ type replayChunk struct {
 	gz                                  []byte
 }
 
-// handleReplayIngest takes one chunk of a recording. Answers: 204 stored,
-// 400 bad chunk, 401 bad key, 403 replays off or origin not allowed, 413 too
-// large, 429 too many requests, 507 the storage cap is reached.
 func (s *Server) handleReplayIngest(w http.ResponseWriter, r *http.Request) {
 	st := s.rum()
 	if origin := r.Header.Get("Origin"); origin != "" {
@@ -93,8 +90,6 @@ func (s *Server) handleReplayIngest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// parseReplayChunk checks the chunk is a JSON array of events, unzipping it
-// when the SDK compressed it and zipping it when it could not.
 func parseReplayChunk(q map[string][]string, body []byte, now time.Time) (replayChunk, error) {
 	get := func(k string) string {
 		if v := q[k]; len(v) > 0 {
@@ -167,7 +162,6 @@ func parseReplayChunk(q map[string][]string, body []byte, now time.Time) (replay
 	return c, nil
 }
 
-// clampTime keeps a client's clock within a day of the server's.
 func clampTime(t, now time.Time) time.Time {
 	if lo := now.Add(-clientClockSkew); t.Before(lo) {
 		return lo
@@ -194,8 +188,8 @@ func (s *Server) storeReplayChunk(ctx context.Context, c replayChunk) error {
 	if err := s.db.Exec(ctx, insert, c.sessionID, c.seq, start, end, c.events, size, payload); err != nil {
 		return dbErr(err)
 	}
-	// created_at follows the last chunk, so retention and deletes go by the
-	// session's last activity; archived goes back to 0 so it is archived again.
+	// created_at follows the last chunk, so retention and deletes go by the session's last activity,
+	// and archived goes back to 0 so it is archived again
 	upsert := `INSERT INTO replay_sessions (session_id, started_at, created_at, app, user_id, url, reason, chunks, bytes, archived) VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, 1, ?, 0)`
 	if s.q.d == sdk.MySQL {
 		upsert += ` ON DUPLICATE KEY UPDATE started_at = LEAST(started_at, VALUES(started_at)), created_at = GREATEST(created_at, VALUES(created_at)),

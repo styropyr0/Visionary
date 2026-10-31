@@ -18,10 +18,6 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Location mode (VISIONARY_AGENT_LOCATION): the agent runs the uptime checks
-// the server assigns to that location with internal/uptimecore and posts the
-// results in batches. Browser checks need a Chrome or Chromium on this machine.
-
 const (
 	locationBatchEvery = 5 * time.Second
 	locationBatchMax   = 100
@@ -78,8 +74,6 @@ func runLocation(ctx context.Context, cfg config, logger *slog.Logger) error {
 	return nil
 }
 
-// allowPrivate follows VISIONARY_AGENT_ALLOW_PRIVATE when it is set, and
-// the server's setting when not.
 func (l *locationRunner) allowPrivate() bool {
 	if l.cfg.allowPrivate != "" {
 		return l.cfg.allowPrivate == "true"
@@ -208,9 +202,8 @@ func (l *locationRunner) send(ctx context.Context) {
 	}
 }
 
-// flush sends what is queued in batches. A batch the server refuses for
-// good (409: another runner holds the location; other 4xx) is dropped;
-// otherwise it waits for the next round.
+// A batch the server refuses for good (409 or another 4xx) is dropped,
+// anything else waits for the next round
 func (l *locationRunner) flush(ctx context.Context) {
 	for {
 		l.mu.Lock()

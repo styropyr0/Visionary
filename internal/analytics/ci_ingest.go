@@ -16,7 +16,7 @@ import (
 
 // Runs and jobs arrive many times as they move from queued to completed, and
 // not always in order: each delivery merges into the stored row, and a
-// completed run or job never goes back to running.
+// completed run or job never goes back to running
 
 const (
 	ciMaxRunsPerPost = 100
@@ -46,15 +46,11 @@ type ciRun struct {
 	Service                         string
 	Queued, Started, Finished       time.Time
 	Jobs                            []ciJob
-	// jobOnly marks a delivery about a job: the run row is left alone.
-	jobOnly bool
+	jobOnly                         bool
 }
 
 func (r *ciRun) key() string { return ciRunKey(r.Provider, r.Repo, r.RunID, r.Attempt) }
 
-// ciStatus maps the statuses of GitHub, GitLab, CircleCI, Buildkite and
-// Jenkins onto queued, in_progress and completed, with a conclusion for the
-// last.
 func ciStatus(status, conclusion string) (string, string) {
 	status = strings.ToLower(strings.TrimSpace(status))
 	conclusion = ciConclusion(conclusion)
@@ -129,9 +125,8 @@ func (s *Server) saveRun(ctx context.Context, run *ciRun) error {
 	return s.ciRunQueue(ctx, run.key())
 }
 
-// ciRunQueue sets a run's queue time to the wait until its first job
-// started, when its jobs are known: GitHub starts a run the moment it is
-// created, and its jobs then wait for runners.
+// GitHub starts a run the moment it's created and its jobs then wait for runners,
+// so the queue time is the wait until the first job started
 func (s *Server) ciRunQueue(ctx context.Context, key string) error {
 	res, err := s.db.Query(ctx, `SELECT p.id, p.created_at, MIN(j.started_at) FROM ci_pipelines p JOIN ci_jobs j ON j.run_key = p.run_key
 WHERE p.run_key = ? AND j.started_at IS NOT NULL GROUP BY p.id, p.created_at`, key)
@@ -289,9 +284,6 @@ func fallbackTime(t, def time.Time) time.Time {
 	return t
 }
 
-// GitHub Actions webhook: workflow_run and workflow_job events, signed with
-// the secret in Settings → Server → CI.
-
 type ghActor struct {
 	Login string `json:"login"`
 }
@@ -376,8 +368,6 @@ func ghSignatureValid(secret string, body []byte, header string) bool {
 	return hmac.Equal(mac.Sum(nil), want)
 }
 
-// ghService is the service a repository's runs belong to: ?service= on the
-// webhook URL, else the repository's name.
 func ghService(r *http.Request, repo ghRepo) string {
 	if v := strings.TrimSpace(r.URL.Query().Get("service")); v != "" && len(v) <= 200 {
 		return v
@@ -413,7 +403,7 @@ func parseGitHubEvent(event string, body []byte, service func(ghRepo) string) (*
 		run.Status, run.Conclusion = ciStatus(wr.Status, strOf(wr.Conclusion))
 		if run.Attempt > 1 || run.Queued.IsZero() {
 			// A re-run keeps the first attempt's created_at: it was queued
-			// when it started.
+			// when it started
 			run.Queued = fallbackTime(run.Started, run.Queued)
 		}
 		if run.Status == "completed" {
@@ -437,7 +427,7 @@ func parseGitHubEvent(event string, body []byte, service func(ghRepo) string) (*
 			Queued: ciTime(wj.CreatedAt), Started: ciTime(wj.StartedAt)}
 		job.Status, job.Conclusion = ciStatus(wj.Status, strOf(wj.Conclusion))
 		if job.Status == "queued" {
-			// GitHub fills started_at with the queue time until a runner picks the job up.
+			// GitHub fills started_at with the queue time until a runner picks the job up
 			job.Started = time.Time{}
 		}
 		if job.Status == "completed" {

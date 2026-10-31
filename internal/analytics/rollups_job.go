@@ -74,8 +74,6 @@ type rollupRuntime struct {
 	routesAt time.Time
 	sweptAt  time.Time
 
-	// perHour is the requests of the last hour, from the minute rollups;
-	// see busy.
 	perHour   atomic.Int64
 	measureAt time.Time
 }
@@ -214,8 +212,7 @@ func (rt *rollupRuntime) tick(ctx context.Context) {
 	}
 }
 
-// measureLoad counts the last hour's requests every few minutes. D1 skips
-// it: the reads cost more there than the routing saves.
+// D1 skips this since the reads cost more there than the routing saves
 func (rt *rollupRuntime) measureLoad(ctx context.Context, now time.Time) {
 	if rt.d1 || now.Sub(rt.measureAt) < 5*time.Minute {
 		return
@@ -228,9 +225,7 @@ func (rt *rollupRuntime) measureLoad(ctx context.Context, now time.Time) {
 	}
 }
 
-// busy reports whether a requests panel over tr would scan so many raw rows
-// that the rollups should answer it, whatever the range's length. Their
-// percentiles are estimates, so quiet services keep exact ones.
+// Rollup percentiles are estimates, so quiet services keep exact ones
 func (rt *rollupRuntime) busy(p *rollupPanel, tr timeRange) bool {
 	if p.needs&needRequests == 0 {
 		return false

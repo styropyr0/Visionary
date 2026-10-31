@@ -12,10 +12,7 @@ import (
 	"time"
 )
 
-// incidentEntry is one line of an incident's timeline. Entries people and
-// actions wrote are stored; Auto entries are read from the data at request
-// time: linked alerts firing and resolving, linked checks failing and
-// recovering, and deploys of the affected services.
+// Auto entries aren't stored, they're read from the data at request time
 type incidentEntry struct {
 	ID     int64          `json:"id,omitempty"`
 	At     string         `json:"at"`
@@ -27,7 +24,7 @@ type incidentEntry struct {
 }
 
 // Auto entries look a little before the start and after the end, where the
-// cause and the recovery usually are.
+// cause and the recovery usually are
 const (
 	incidentLeadIn  = 30 * time.Minute
 	incidentLeadOut = 15 * time.Minute
@@ -124,7 +121,6 @@ FROM alert_deliveries WHERE id IN (`+placeholders(len(args))+`)`, args...)
 	return out, nil
 }
 
-// autoEntries never fail the timeline: a source that can't be read is left out.
 func (s *Server) autoEntries(ctx context.Context, in *declaredIncident, links []incidentLink, from, to time.Time) []incidentEntry {
 	var out []incidentEntry
 	lo, hi := from.UTC().Format(tsLayout), to.UTC().Format(tsLayout)
@@ -203,7 +199,6 @@ WHERE rule_id IN (`+placeholders(len(ruleIDs))+`) AND created_at >= ? AND create
 	return head(out, maxAutoEntries)
 }
 
-// splitRef reads "12" or "12|series" into the id and the rest.
 func splitRef(ref string) (int64, string) {
 	a, b, _ := strings.Cut(ref, "|")
 	id, err := strconv.ParseInt(a, 10, 64)
@@ -371,9 +366,6 @@ func incidentNotice(in *declaredIncident, by, body string) notice {
 	return n
 }
 
-// postIncidentUpdate records an update on the timeline and sends it to the
-// channels through the alert outbox, so failed sends are retried and their
-// outcome shows on the entry. It returns the channels it went to.
 func (s *Server) postIncidentUpdate(ctx context.Context, in *declaredIncident, by, body string, channels []int64, public bool) ([]string, error) {
 	n := incidentNotice(in, by, body)
 	q, err := s.enqueue(ctx, 0, nil, channels, n)
@@ -404,8 +396,6 @@ func (s *Server) postIncidentUpdate(ctx context.Context, in *declaredIncident, b
 	return names, nil
 }
 
-// statusNotice is a declared incident on the public status page, with the
-// updates posted to it. Nothing else of the incident is shown there.
 type statusNotice struct {
 	Title       string         `json:"title"`
 	Status      string         `json:"status"`
@@ -421,8 +411,6 @@ type statusUpdate struct {
 	Body   string `json:"body"`
 }
 
-// statusNotices are the incidents shown on the status page: open, or
-// resolved in the past 7 days.
 func (s *Server) statusNotices(ctx context.Context) []statusNotice {
 	out := []statusNotice{}
 	since := time.Now().UTC().AddDate(0, 0, -7).Format(tsLayout)
@@ -451,8 +439,6 @@ func (s *Server) statusNotices(ctx context.Context) []statusNotice {
 	return out
 }
 
-// applyNotices lets an open incident speak for the page when the checks
-// alone look fine.
 func applyNotices(p *statusPage) {
 	for _, n := range p.Notices {
 		if n.ResolvedAt != "" {

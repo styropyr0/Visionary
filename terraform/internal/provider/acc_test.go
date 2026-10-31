@@ -19,9 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// Acceptance tests run against a real Visionary built from this repository,
-// on a free port with a fresh SQLite database. They need TF_ACC=1 and the
-// terraform CLI.
+// Acceptance tests need TF_ACC=1 and the terraform CLI
 
 var accFactories = map[string]func() (tfprotov6.ProviderServer, error){
 	"visionary": providerserver.NewProtocol6WithError(New("test")()),

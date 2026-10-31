@@ -62,7 +62,7 @@ var AddedSystemColumns = []Column{
 // order after the original columns: the service and release (version) that
 // served the request, how many database and outbound HTTP calls it made and
 // how long they took in total, the account a sign-in tried (LoginAttempt),
-// and the request's place in a distributed trace (it is the server span).
+// and the request's place in a distributed trace (it is the server span)
 var AddedRequestColumns = []Column{
 	{"service", "text"},
 	{"version", "text"},
@@ -76,19 +76,14 @@ var AddedRequestColumns = []Column{
 	{"parent_span_id", "text"},
 }
 
-// AddedSpanColumns are spans columns beyond the original set, in insert
-// order after the original columns: the W3C trace the call belongs to, its
-// own span id and the span it was made in.
+// AddedSpanColumns are spans columns beyond the original set, in insert order
 var AddedSpanColumns = []Column{
 	{"trace_id", "text"},
 	{"span_id", "text"},
 	{"parent_span_id", "text"},
 }
 
-// TraceIndex creates the index on table's trace_id. It runs after the added
-// columns, since older tables only have trace_id from then on. MySQL has no
-// IF NOT EXISTS here; an existing index there is error 1061, which callers
-// ignore.
+// MySQL has no IF NOT EXISTS here, so an existing index is error 1061, which callers ignore
 func (d Dialect) TraceIndex(table string) string {
 	ine := "IF NOT EXISTS "
 	if d == MySQL {

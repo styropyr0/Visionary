@@ -72,7 +72,6 @@ type spanRecord struct {
 	// a query): it is a span row but its time is already in the totals.
 	nested bool
 
-	// traceID, spanID and parentID place the call in its trace.
 	traceID, spanID, parentID string
 }
 
@@ -163,8 +162,7 @@ type activeSpan struct {
 	agent *Agent
 	trace *trace
 	rec   spanRecord
-	// parent is the span it was started in (its trace id when it started
-	// a trace), carrying the trace flags and tracestate on.
+	// parent is the span it was started in (its trace id when it started a trace)
 	parent spanContext
 	ended  atomic.Bool
 }

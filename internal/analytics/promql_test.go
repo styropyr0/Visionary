@@ -35,13 +35,13 @@ func (m memSource) load(_ context.Context, vs *vectorSel, w promWindow) ([]*rawS
 	return out, nil
 }
 
-// t0 is a multiple of 300 s, so every test resolution lines up with it.
+// t0 is a multiple of 300 s, so every test resolution lines up with it
 const t0 = int64(1699999800) * 1000
 
 func sec(n int64) int64 { return t0 + n*1000 }
 
 // promFixture: two request counters (+1 and +2 every 15 s), three room
-// gauges, and a latency histogram whose buckets grow 5, 9 and 10 every 15 s.
+// gauges, and a latency histogram whose buckets grow 5, 9 and 10 every 15 s
 func promFixture() memSource {
 	var src memSource
 	series := func(counter bool, l promLabels, v func(i int) float64) {

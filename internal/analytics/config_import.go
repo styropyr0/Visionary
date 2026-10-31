@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// Importing a configuration document. A dry run reports what would change
-// without writing; applying makes the changes. Nothing is ever deleted.
-
 type configChange struct {
 	Type    string   `json:"type"`
 	Name    string   `json:"name"`
@@ -28,7 +25,7 @@ type configImport struct {
 	st      *configState
 	changes []configChange
 	// Names of what exists, or was created by this import. A dry run maps
-	// what it would create to 0.
+	// what it would create to 0
 	chanID, ruleID, checkID, panelID map[string]int64
 	// rules made by this import that depend on rules made after them
 	laterDeps map[int64][]string
@@ -126,9 +123,8 @@ func (ci *configImport) warn(msg string) {
 	}
 }
 
-// resolve maps names to ids. Names that do not exist are dropped with a
-// warning; names a dry run would create keep their place in names but get
-// no id.
+// Names that don't exist are dropped with a warning. Names a dry run would create
+// keep their place but get no id
 func resolve(names []string, ids map[string]int64, what string) (out []int64, kept []string, missing []string) {
 	out, kept = []int64{}, []string{}
 	for _, n := range names {
@@ -146,9 +142,6 @@ func resolve(names []string, ids map[string]int64, what string) (out []int64, ke
 	return out, kept, missing
 }
 
-// diffFields names the fields that differ between two forms of the same
-// thing, one level into nested objects (spec.window). Empty and missing
-// values count as equal.
 func diffFields(a, b any) []string {
 	var ma, mb map[string]any
 	_ = json.Unmarshal([]byte(mustJSON(a)), &ma)

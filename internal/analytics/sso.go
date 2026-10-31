@@ -17,15 +17,11 @@ import (
 	"time"
 )
 
-// Single sign-on through OpenID Connect or SAML 2.0, with SCIM for accounts.
-// Providers live in visionary_settings, so a change applies within 30 seconds
-// on every server. People who sign in get a passwordless visionary_users row.
-
 const (
 	settingSSO        = "auth.sso"
 	settingSSOSecrets = "auth.sso_secrets"
-	// settingSAMLSP holds the SAML key and certificate as PEM in one value,
-	// so two servers creating them at once can't end up with halves of each.
+	// The key and certificate share one value so two servers creating them at once
+	// can't end up with halves of each
 	settingSAMLSP = "auth.saml_sp"
 
 	ssoPrefix   = "sso:"
@@ -35,8 +31,7 @@ const (
 )
 
 type ssoConfig struct {
-	// PublicURL is where people reach Visionary; redirect and ACS URLs are
-	// built from it, so they match what is registered at the provider.
+	// Redirect and ACS URLs are built from PublicURL, so they match what's registered at the provider
 	PublicURL string        `json:"public_url"`
 	Providers []ssoProvider `json:"providers"`
 	SCIM      scimConfig    `json:"scim"`
@@ -57,8 +52,6 @@ type ssoProvider struct {
 	EmailAttr   string `json:"email_attr,omitempty"`
 	NameAttr    string `json:"name_attr,omitempty"`
 
-	// GroupsClaim is the ID token claim (OIDC) or attribute (SAML) that
-	// lists the person's groups or roles.
 	GroupsClaim    string   `json:"groups_claim,omitempty"`
 	AllowedDomains []string `json:"allowed_domains,omitempty"`
 	RoleMap        string   `json:"role_map,omitempty"`
@@ -71,19 +64,17 @@ type ssoProvider struct {
 	ACSURL      string `json:"acs_url,omitempty"`
 }
 
-// scimConfig maps SCIM groups to roles. People in no mapped group get the
-// default role, or no access when it is empty.
+// People in no mapped group get the default role, or no access when it's empty
 type scimConfig struct {
 	RoleMap     string `json:"role_map"`
 	DefaultRole string `json:"default_role"`
 }
 
-// ssoSetup is the configuration in force. It is replaced, never changed.
 type ssoSetup struct {
 	cfg     ssoConfig
 	secrets map[string]string
 	spPEM   string
-	// err is a saved setup that can't be read; SSO is off until it is fixed.
+	// err is a saved setup that can't be read, and SSO stays off until it's fixed
 	err error
 	key string
 }
@@ -95,9 +86,9 @@ type ssoState struct {
 	oidc map[string]*oidcClient
 	saml map[string]*samlClient
 	// touched holds when this server changed a user (SCIM, Settings), so
-	// their session is re-checked at once instead of within the minute.
+	// their session is re-checked at once instead of within the minute
 	touched map[string]time.Time
-	// used holds the SAML requests already answered, against replays.
+	// SAML requests already answered, against replays
 	used map[string]time.Time
 }
 
@@ -152,7 +143,6 @@ func (st *ssoSetup) provider(id string) *ssoProvider {
 	return nil
 }
 
-// anyProvider finds a provider whether or not it is on, for a test sign-in.
 func (st *ssoSetup) anyProvider(id string) *ssoProvider {
 	if st.err != nil {
 		return nil
@@ -192,7 +182,6 @@ func (s *Server) ssoButtons() []ssoButton {
 	return out
 }
 
-// urls fills in the addresses the provider must be told about.
 func (p *ssoProvider) urls(publicURL string) {
 	base := strings.TrimRight(publicURL, "/") + "/api/sso/" + p.ID
 	p.RedirectURL, p.EntityID, p.ACSURL = "", "", ""
@@ -205,8 +194,7 @@ func (p *ssoProvider) urls(publicURL string) {
 
 var ssoIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
-// check validates a provider as Settings saves it and fills in defaults. It
-// doesn't reach the provider; build does.
+// check doesn't reach the provider, build does
 func (p *ssoProvider) check() error {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" {
@@ -284,8 +272,7 @@ func onlyAny(m *roleMapping) bool {
 	return true
 }
 
-// checkProviderURL accepts https, and http only on this machine, for trying
-// a provider out locally.
+// http is allowed only on this machine, for trying a provider out locally
 func checkProviderURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -303,7 +290,6 @@ func checkProviderURL(raw string) error {
 	return errors.New("must start with https://")
 }
 
-// ssoSeal encrypts v with the session key, bound to purpose.
 func (s *Server) ssoSeal(purpose string, plain []byte) string {
 	aead := *s.auth.aead.Load()
 	nonce := make([]byte, aead.NonceSize())
@@ -322,9 +308,8 @@ func (s *Server) ssoUnseal(purpose, value string) ([]byte, bool) {
 	return plain, err == nil
 }
 
-// setFlowCookie keeps what a sign-in started with until the provider sends
-// the person back. crossPost is for SAML, which comes back as a cross-site
-// POST: only SameSite=None cookies come with it, and those need HTTPS.
+// SAML comes back as a cross-site POST, which only carries SameSite=None cookies,
+// and those need HTTPS
 func (s *Server) setFlowCookie(w http.ResponseWriter, r *http.Request, name, value string, crossPost bool) {
 	c := &http.Cookie{
 		Name: name, Value: value, Path: "/api/sso/", MaxAge: int(ssoFlowTTL.Seconds()),
@@ -340,7 +325,6 @@ func (s *Server) clearFlowCookie(w http.ResponseWriter, r *http.Request, name st
 	http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/api/sso/", MaxAge: -1, HttpOnly: true, Secure: s.auth.secure(r), SameSite: http.SameSiteLaxMode})
 }
 
-// ssoFlowTTL is how long someone has at the provider to sign in.
 const ssoFlowTTL = 10 * time.Minute
 
 func ssoFail(w http.ResponseWriter, r *http.Request, msg string) {

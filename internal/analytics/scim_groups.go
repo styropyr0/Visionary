@@ -10,10 +10,7 @@ import (
 	"strings"
 )
 
-// SCIM Groups. A person's role is the highest role any of their groups maps
-// to under Settings → Sign-in → SCIM, or the default role. Without a mapping
-// or default there, SCIM only adds and removes people and roles come from the
-// identity provider's sign-in.
+// A person's role is the highest role any of their groups maps to, or the default role
 
 type scimGroup struct {
 	ID, DisplayName, ExternalID string
@@ -153,7 +150,6 @@ type scimMember struct {
 	Value string `json:"value"`
 }
 
-// memberIDs reads members, keeping only people SCIM knows.
 func memberIDs(raw json.RawMessage, names map[string]string) ([]string, error) {
 	var list []scimMember
 	if len(raw) > 0 && string(raw) != "null" {
@@ -382,8 +378,6 @@ func (s *Server) handleSCIMPatchGroup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// scimChangeGroup applies change to a group, saves it and sets the roles of
-// everyone who joined or left.
 func (s *Server) scimChangeGroup(w http.ResponseWriter, r *http.Request, change func(*scimGroup, map[string]string) error) {
 	groups, names, ok := s.scimGroupContext(w, r)
 	if !ok {

@@ -14,22 +14,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Configuration as one YAML or JSON document that another install imports.
-// Everything is matched by name, since ids differ between installs, and
-// secrets stay behind.
-
 const configVersion = 1
 
 type configDoc struct {
-	Kind         string          `json:"kind"`
-	Version      int             `json:"version"`
-	ExportedAt   string          `json:"exported_at,omitempty"`
-	Channels     []configChannel `json:"channels"`
-	Rules        []configRule    `json:"rules"`
-	Silences     []silenceInput  `json:"silences"`
-	UptimeChecks []configCheck   `json:"uptime_checks"`
-	// UptimeLocations are the runner locations checks name; keys stay
-	// behind and are made in the Locations tab.
+	Kind            string            `json:"kind"`
+	Version         int               `json:"version"`
+	ExportedAt      string            `json:"exported_at,omitempty"`
+	Channels        []configChannel   `json:"channels"`
+	Rules           []configRule      `json:"rules"`
+	Silences        []silenceInput    `json:"silences"`
+	UptimeChecks    []configCheck     `json:"uptime_checks"`
 	UptimeLocations []configLocation  `json:"uptime_locations,omitempty"`
 	SavedPanels     []configPanel     `json:"saved_panels"`
 	Dashboards      []configDashboard `json:"dashboards"`
@@ -37,8 +31,7 @@ type configDoc struct {
 	Pages           *configPages      `json:"pages,omitempty"`
 }
 
-// configChannel leaves the URL and secret out of exports; a file may carry
-// them to create a channel that needs them.
+// Exports leave the URL and secret out, but an imported file may carry them
 type configChannel struct {
 	Name          string   `json:"name"`
 	Kind          string   `json:"kind"`
@@ -54,8 +47,6 @@ type configChannel struct {
 	DigestHour    int      `json:"digest_hour"`
 }
 
-// configRule names its channels, the rules it depends on and the uptime
-// check it watches (Check) instead of using their ids.
 type configRule struct {
 	Name       string         `json:"name"`
 	Kind       string         `json:"kind"`
@@ -97,14 +88,12 @@ type configCheck struct {
 	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 	BrowserOptions
 	Alert *configCheckAlert `json:"alert,omitempty"`
-	// Locations default to the server alone, and the rule to majority.
+	// Locations default to the server alone, and the rule to majority
 	Locations           []string `json:"locations,omitempty"`
 	LocationRule        string   `json:"location_rule,omitempty"`
 	StatusShowLocations bool     `json:"status_show_locations,omitempty"`
 }
 
-// configCheckAlert is a check's own alert (mode custom or off); checks
-// alerted by the rule for every check have none.
 type configCheckAlert struct {
 	Mode     string   `json:"mode"`
 	Channels []string `json:"channels"`
@@ -276,8 +265,8 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 		FinalScreenshot: m.FinalScreenshot, API: m.API, TCP: m.TCP, DNS: m.DNS, Ping: m.Ping, SSL: m.SSL, Heartbeat: m.Heartbeat,
 		Tags: m.Tags, Playwright: m.Playwright, BrowserOptions: m.BrowserOptions}
 	if settingsKinds[m.Kind] {
-		// The address comes from the kind's settings; a heartbeat's URL
-		// (its token) stays behind and a new one is made on import.
+		// The address comes from the kind's settings. A heartbeat's URL (its token)
+		// stays behind and a new one is made on import
 		out.URL, out.Method, out.ExpectStatus = "", "", ""
 		if m.Kind != "api" {
 			out.FollowRedirects = nil
@@ -326,8 +315,6 @@ func (st *configState) dashboardConfig(d dashboard) configDashboard {
 	return out
 }
 
-// isOwnCheckRule reports the rule a check's alert settings make; it travels
-// with the check instead.
 func isOwnCheckRule(r alertRule) bool { return isOwnUptimeRule(r, "") }
 
 func (st *configState) document() configDoc {
@@ -392,8 +379,6 @@ func (s *Server) handleConfigExport(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(out)
 }
 
-// toYAML writes v as YAML with its fields in struct order, which reads
-// better in a review than yaml's sorted map keys.
 func toYAML(v any) ([]byte, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -458,8 +443,6 @@ func yamlNode(dec *json.Decoder) (*yaml.Node, error) {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
 }
 
-// parseConfigDoc reads a document in YAML or JSON (JSON is YAML too), and
-// refuses unknown fields so a typo is not silently ignored.
 func parseConfigDoc(text string) (configDoc, error) {
 	var doc configDoc
 	var generic any

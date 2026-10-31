@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// Every 10 minutes: count replay storage, delete the oldest sessions over the
-// cap, drop orphaned chunks, and copy sessions idle for an hour to the log
-// archive's bucket when one is set.
-
 const (
 	replayEvery       = 10 * time.Minute
 	replayArchiveIdle = time.Hour
@@ -47,7 +43,7 @@ func (s *Server) replayPass(ctx context.Context, now time.Time) error {
 		}
 	}
 	s.replay().bytes.Store(total)
-	// Chunks are written just before their session row, so leave new ones be.
+	// Chunks are written just before their session row, so leave new ones be
 	if err := s.db.Exec(ctx, `DELETE FROM replay_chunks WHERE created_at < ? AND session_id NOT IN (SELECT session_id FROM replay_sessions)`,
 		now.Add(-time.Hour).Format(tsLayout)); err != nil {
 		return dbErr(err)
@@ -106,9 +102,6 @@ func (s *Server) deleteReplays(ctx context.Context, ids []any) error {
 
 const replayArchivePage = 8
 
-// archiveReplays writes each idle session as one gzipped NDJSON object,
-// <prefix>/replays/2026/10/30/<session>.ndjson.gz, a line per chunk with its
-// payload as stored. A session that records again is written again.
 func (s *Server) archiveReplays(ctx context.Context, c archiveConf, now time.Time) (int, error) {
 	res, err := s.db.Query(ctx, `SELECT session_id, started_at FROM replay_sessions WHERE archived = 0 AND created_at < ? ORDER BY created_at LIMIT `+strconv.Itoa(replayArchiveRun),
 		now.Add(-replayArchiveIdle).Format(tsLayout))
@@ -123,7 +116,7 @@ func (s *Server) archiveReplays(ctx context.Context, c archiveConf, now time.Tim
 		zw := gzip.NewWriter(&buf)
 		enc := json.NewEncoder(zw)
 		// Chunks are up to half a megabyte and D1 caps a response, so read a
-		// page at a time.
+		// page at a time
 		for after := int64(-1); ; {
 			chunks, err := s.db.Query(ctx, `SELECT seq, created_at, ended_at, events, payload FROM replay_chunks WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT `+strconv.Itoa(replayArchivePage), id, after)
 			if err != nil {

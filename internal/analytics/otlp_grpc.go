@@ -19,12 +19,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// OTLP/gRPC on its own port (Settings → Server → Ingest), for
-// OTEL_EXPORTER_OTLP_PROTOCOL=grpc. A raw codec hands request bytes to the same
-// ingest as OTLP/HTTP, so no generated types are needed.
-
-// otlpRawCodec passes messages through as bytes: requests are decoded by the
-// signal, responses are already encoded.
 type otlpRawCodec struct{}
 
 func (otlpRawCodec) Name() string { return "proto" }
@@ -104,8 +98,7 @@ func (s *Server) otlpGRPCExport(sig otlpSignal) grpc.MethodHandler {
 	}
 }
 
-// otlpRetryStatus carries RetryInfo: OTLP exporters retry RESOURCE_EXHAUSTED
-// only when it is there.
+// OTLP exporters retry RESOURCE_EXHAUSTED only when RetryInfo is there
 func otlpRetryStatus(code codes.Code, msg string, after time.Duration) error {
 	st := status.New(code, msg)
 	if d, err := st.WithDetails(&errdetails.RetryInfo{RetryDelay: durationpb.New(after)}); err == nil {
@@ -114,7 +107,6 @@ func otlpRetryStatus(code codes.Code, msg string, after time.Duration) error {
 	return st.Err()
 }
 
-// otlpGRPCAddr reads the listen address; a bare port listens on every interface.
 func (s *Server) otlpGRPCAddr() string {
 	addr := strings.TrimSpace(s.conf("otlp_grpc_addr"))
 	if !strings.Contains(addr, ":") {
@@ -152,8 +144,7 @@ func (s *Server) otlpGRPCStart(ctx context.Context) {
 	}()
 }
 
-// otlpListen retries for a few seconds: after a restart on Windows the old
-// process may still hold the port.
+// After a restart on Windows the old process may still hold the port for a few seconds
 func otlpListen(ctx context.Context, addr string) (net.Listener, error) {
 	var lc net.ListenConfig
 	deadline := time.Now().Add(10 * time.Second)

@@ -23,8 +23,6 @@ func incidentID(r *http.Request, name string) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// incidentFromPath loads the incident named in the path, answering 400 or
-// 404 itself when it can't.
 func (s *Server) incidentFromPath(w http.ResponseWriter, r *http.Request) (*declaredIncident, bool) {
 	id, ok := incidentID(r, "id")
 	if !ok {
@@ -73,7 +71,6 @@ func cleanServices(list []string) ([]string, string) {
 	return out, ""
 }
 
-// parseStart reads an RFC 3339 start time, which can't be in the future.
 func parseStart(v string) (string, bool) {
 	t, err := time.Parse(time.RFC3339Nano, v)
 	if err != nil {
@@ -515,9 +512,7 @@ func (s *Server) handleDeleteIncident(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// setIncidentStatus moves an incident and stamps the first time it reached
-// each stage. A status change also counts as acknowledging it; reopening a
-// resolved incident clears its resolution.
+// A status change also counts as acknowledging, and reopening clears the resolution
 func (s *Server) setIncidentStatus(ctx context.Context, in *declaredIncident, status, by, note string) error {
 	now := nowTS()
 	sets, args := []string{"status = ?"}, []any{status}
@@ -599,8 +594,6 @@ func (s *Server) writeIncident(w http.ResponseWriter, r *http.Request, id int64)
 	writeJSON(w, http.StatusOK, out)
 }
 
-// assignRole gives user a role; a new commander replaces the old one and
-// acknowledges the incident if nobody had.
 func (s *Server) assignRole(ctx context.Context, id int64, role, user, by string) error {
 	now := nowTS()
 	if role == "commander" {
@@ -924,8 +917,6 @@ func (s *Server) handleIncidentUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"incident": cur, "channels": sent})
 }
 
-// handleIncidentPeople lists who can be given a role: local accounts and
-// whoever signed in over the last 90 days, by name.
 func (s *Server) handleIncidentPeople(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "edit") {
 		return

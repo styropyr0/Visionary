@@ -11,9 +11,6 @@ import (
 	"strings"
 )
 
-// A Chrome DevTools Recorder export (JSON) becomes the steps of a browser
-// check. Steps with no equivalent are listed, not dropped silently.
-
 type recorderDoc struct {
 	Title string         `json:"title"`
 	Steps []recorderStep `json:"steps"`
@@ -54,14 +51,10 @@ var (
 	selectTagRe = regexp.MustCompile(`(^|[\s>"])select([#.\[:\s"]|$)`)
 )
 
-// stableCSS is a CSS selector by id, test id or name, which outlasts
-// changes to the page better than an accessible name.
+// Selectors by id, test id or name outlast page changes better than an accessible name
 var stableCSS = regexp.MustCompile(`^[a-z]*(#[A-Za-z][\w-]*|\[(data-test(id)?|data-testid|data-cy|name|id)=[^\]]+\])$`)
 
-// pickSelector chooses how a step finds its element: text holds an
-// accessible name or visible text, css a CSS selector. A stable CSS
-// selector comes first, then the accessible name, the text and any CSS.
-// needCSS is for steps that only take a CSS selector.
+// A stable CSS selector comes first, then the accessible name, the text and any CSS
 func pickSelector(raw json.RawMessage, needCSS bool) (css, text string) {
 	var groups [][]string
 	if err := json.Unmarshal(raw, &groups); err != nil {
@@ -75,7 +68,7 @@ func pickSelector(raw json.RawMessage, needCSS bool) (css, text string) {
 	}
 	var aria, txt, plain, pierce string
 	for _, g := range groups {
-		// A chain crosses shadow roots, which a check cannot follow.
+		// A chain crosses shadow roots, which a check cannot follow
 		if len(g) != 1 {
 			continue
 		}

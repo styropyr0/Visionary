@@ -10,9 +10,6 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Tags (smoke, checkout, deploy) group checks for filtering and for CI runs.
-// They live in uptime_check_tags, one row per tag.
-
 const uptimeMaxTags = 20
 
 var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:-]{0,39}$`)
@@ -38,7 +35,6 @@ func (s *Server) uptimeTagsSchema() []string {
 CREATE INDEX ` + ine + `idx_uptime_check_tags_tag ON uptime_check_tags (tag)`}
 }
 
-// normalizeTags lowercases, checks and sorts tags, dropping repeats.
 func normalizeTags(in []string) ([]string, error) {
 	out := []string{}
 	for _, t := range in {

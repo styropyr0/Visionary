@@ -16,11 +16,8 @@ import (
 	"unicode/utf8"
 )
 
-// Custom metrics: counters, gauges and histograms the application defines.
-// Values add up in memory and are written as one row per series every interval
-// (15 s by default); recording never waits for the database. Past MaxSeries
-// (1000) series per metric name new ones are dropped and counted, so a label
-// holding user ids cannot fill the database.
+// Recording never waits for the database. Past MaxSeries series per name new ones
+// are dropped and counted, so a label holding user ids can't fill the database
 
 const (
 	maxMetricName    = 200
@@ -30,19 +27,18 @@ const (
 	defaultMaxSeries = 1000
 )
 
-// DefaultBuckets are the histogram bucket upper bounds unless DescribeMetric
-// sets others (OpenTelemetry's defaults, which suit milliseconds).
+// DefaultBuckets are OpenTelemetry's default bounds, which suit milliseconds
 var DefaultBuckets = []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}
 
 // MetricOptions describe a metric name: its unit ("ms", "bytes", "requests")
-// and, for histograms, the bucket upper bounds in increasing order.
+// and, for histograms, the bucket upper bounds in increasing order
 type MetricOptions struct {
 	Unit    string
 	Buckets []float64
 }
 
 // DescribeMetric sets a metric's unit and histogram buckets. Call it before
-// the metric's first use; series created earlier keep their buckets.
+// the metric's first use, since series created earlier keep their buckets
 func DescribeMetric(name string, o MetricOptions) {
 	name = cleanMetricName(name)
 	if name == "" {
@@ -58,34 +54,31 @@ func DescribeMetric(name string, o MetricOptions) {
 	reg.mu.Unlock()
 }
 
-// CounterSeries is one counter series. Its zero value and nil are no-ops.
+// CounterSeries is one counter series. Its zero value and nil are no-ops
 type CounterSeries struct{ s *metricSeries }
 
-// GaugeSeries is one gauge series. Its zero value and nil are no-ops.
+// GaugeSeries is one gauge series. Its zero value and nil are no-ops
 type GaugeSeries struct{ s *metricSeries }
 
-// HistogramSeries is one histogram series. Its zero value and nil are no-ops.
+// HistogramSeries is one histogram series. Its zero value and nil are no-ops
 type HistogramSeries struct{ s *metricSeries }
 
-// Counter returns the counter name with labels as key/value pairs. Rows hold
-// the increase over each interval.
+// Counter rows hold the increase over each interval
 func Counter(name string, labels ...string) *CounterSeries {
 	return &CounterSeries{reg.get(name, kindCounter, labels)}
 }
 
-// Gauge returns the gauge name with labels as key/value pairs. Rows hold the
-// last value set, every interval once it has been set.
+// Gauge rows hold the last value set, every interval once it has been set
 func Gauge(name string, labels ...string) *GaugeSeries {
 	return &GaugeSeries{reg.get(name, kindGauge, labels)}
 }
 
-// Histogram returns the histogram name with labels as key/value pairs. Rows
-// hold each interval's count, sum, min, max and bucket counts.
+// Histogram rows hold each interval's count, sum, min, max and bucket counts
 func Histogram(name string, labels ...string) *HistogramSeries {
 	return &HistogramSeries{reg.get(name, kindHistogram, labels)}
 }
 
-// Add adds n (ignored unless positive and finite).
+// Add adds n (ignored unless positive and finite)
 func (c *CounterSeries) Add(n float64) {
 	if c == nil || c.s == nil || !(n > 0) || math.IsInf(n, 0) {
 		return
@@ -96,10 +89,9 @@ func (c *CounterSeries) Add(n float64) {
 	c.s.mu.Unlock()
 }
 
-// Inc adds 1.
 func (c *CounterSeries) Inc() { c.Add(1) }
 
-// Set sets the gauge (ignored when v is NaN or infinite).
+// Set sets the gauge (ignored when v is NaN or infinite)
 func (g *GaugeSeries) Set(v float64) {
 	if g == nil || g.s == nil || math.IsNaN(v) || math.IsInf(v, 0) {
 		return
@@ -109,7 +101,7 @@ func (g *GaugeSeries) Set(v float64) {
 	g.s.mu.Unlock()
 }
 
-// Add moves the gauge by delta, from 0 when it was never set.
+// Add moves the gauge by delta, from 0 when it was never set
 func (g *GaugeSeries) Add(delta float64) {
 	if g == nil || g.s == nil || math.IsNaN(delta) || math.IsInf(delta, 0) {
 		return
@@ -120,7 +112,7 @@ func (g *GaugeSeries) Add(delta float64) {
 	g.s.mu.Unlock()
 }
 
-// Observe records one value (ignored when NaN or infinite).
+// Observe records one value (ignored when NaN or infinite)
 func (h *HistogramSeries) Observe(v float64) {
 	if h == nil || h.s == nil || math.IsNaN(v) || math.IsInf(v, 0) {
 		return
@@ -219,8 +211,6 @@ type metricRecord struct {
 	histogram        bool
 }
 
-// collect takes each series' interval: counters and histograms that moved,
-// and every gauge that was ever set. Dropped series counts come back by name.
 func (r *registry) collect(now time.Time) ([]*metricRecord, map[string]int64) {
 	r.mu.Lock()
 	all := make([]*metricSeries, 0, len(r.series))
@@ -289,7 +279,6 @@ func (w *writer) metricParams(r *metricRecord) []any {
 	return row
 }
 
-// metricsRecorder writes the registry every interval through its own writer.
 type metricsRecorder struct {
 	cfg      MetricsConfig
 	db       store
@@ -367,7 +356,7 @@ func (m *metricsRecorder) close(ctx context.Context) {
 // the SDK contract defines them: labels as a JSON object with keys in byte
 // order, and the first 16 hex digits of SHA-256 over name, a newline and that
 // text. Empty keys are dropped, keys and values are cut to 100 and 200 bytes,
-// and only the first 20 keys are kept.
+// and only the first 20 keys are kept
 func MetricSeries(name string, labels map[string]string) (text, id string) {
 	keys := make([]string, 0, len(labels))
 	clean := make(map[string]string, len(labels))
@@ -402,7 +391,7 @@ func MetricSeries(name string, labels map[string]string) (text, id string) {
 }
 
 // writeJSONString escapes only what JSON requires (quote, backslash and
-// control characters), so every SDK produces the same bytes.
+// control characters), so every SDK produces the same bytes
 func writeJSONString(b *strings.Builder, s string) {
 	b.WriteByte('"')
 	for i := 0; i < len(s); i++ {
@@ -437,7 +426,6 @@ func cleanMetricName(name string) string {
 	return cutUTF8(strings.TrimSpace(name), maxMetricName)
 }
 
-// pairs reads key/value pairs; a key without a value gets "".
 func pairs(kv []string) map[string]string {
 	if len(kv) == 0 {
 		return nil
@@ -453,7 +441,6 @@ func pairs(kv []string) map[string]string {
 	return m
 }
 
-// seriesKey identifies a series in the registry without building its JSON.
 func seriesKey(name, kind string, labels map[string]string) string {
 	keys := make([]string, 0, len(labels))
 	for k := range labels {

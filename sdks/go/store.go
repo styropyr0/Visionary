@@ -12,8 +12,6 @@ import (
 	"github.com/styropyr0/visionary/sdks/go/d1"
 )
 
-// stmt is one write with typed args (nil for NULL). rows counts the rows a
-// multi-row INSERT carries.
 type stmt struct {
 	sql  string
 	args []any
@@ -144,8 +142,7 @@ func (s sqlStore) execScript(ctx context.Context, script string) error {
 	return nil
 }
 
-// batch writes all statements in one transaction. Statements that repeat are
-// prepared once; one-off ones (multi-row INSERTs) run directly.
+// Statements that repeat are prepared once, one-off multi-row INSERTs run directly
 func (s sqlStore) batch(ctx context.Context, stmts []stmt) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -259,7 +256,7 @@ func OpenURL(raw string) (*sql.DB, Dialect, error) {
 			dsn = "/" + dsn // absolute path on Unix
 		}
 		// The Visionary server shares the file, so wait for its lock instead of
-		// failing.
+		// failing
 		if !strings.Contains(dsn, "_pragma=") {
 			sep := "?"
 			if strings.Contains(dsn, "?") {

@@ -8,10 +8,8 @@ import (
 	"time"
 )
 
-// cronSpec is a standard five-field cron expression (minute, hour, day of
-// month, month, day of week) with lists, ranges, steps, names and the
-// @hourly-style shortcuts. As in cron, when both day fields are restricted a
-// day matching either one runs.
+// A standard five-field cron expression. As in cron, when both day fields
+// are restricted a day matching either one runs
 type cronSpec struct {
 	min, hour, dom, month, dow uint64
 	domAny, dowAny             bool
@@ -128,8 +126,7 @@ func (c *cronSpec) dayMatches(t time.Time) bool {
 	return dom || dow
 }
 
-// next is the first time after t that the expression fires, in t's
-// location; zero if there is none within five years.
+// Zero if it doesn't fire within five years
 func (c *cronSpec) next(t time.Time) time.Time {
 	t = t.Truncate(time.Minute).Add(time.Minute)
 	limit := t.AddDate(5, 0, 0)

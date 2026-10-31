@@ -14,9 +14,6 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// A location runner runs a TCP check with uptimecore as the agent does; its
-// result and details are stored under the location. Heartbeats stay on the
-// server whatever locations they are given.
 func TestKindsAtLocation(t *testing.T) {
 	s, _ := kindRunner(t)
 	ctx := context.Background()

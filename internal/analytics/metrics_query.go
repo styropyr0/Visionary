@@ -13,13 +13,7 @@ import (
 	"time"
 )
 
-// Charting a custom metric: the series of a name are matched against the
-// label filters in Go, then read per bucket and series in SQL and combined
-// into groups here, so every dialect runs the same plain SQL and percentiles
-// can merge histogram buckets.
-
-// metricQuery is what to chart. Group is a label key, or ":service" or
-// ":instance" for those columns.
+// Group is a label key, or ":service" or ":instance" for those columns
 type metricQuery struct {
 	Name    string            `json:"name"`
 	Agg     string            `json:"agg,omitempty"`
@@ -47,7 +41,7 @@ type metricInfo struct {
 	Truncated bool   `json:"-"`
 }
 
-// maxInlineSeries keeps a statement listing series ids well under D1's 100 KB.
+// maxInlineSeries keeps a statement listing series ids well under D1's 100 KB
 const maxInlineSeries = 2000
 
 func defaultAgg(kind string) string {
@@ -179,7 +173,7 @@ func (s *Server) runMetricQuery(ctx context.Context, mq metricQuery, from, to ti
 				ids = append(ids, "'"+id+"'")
 			}
 		}
-		// Series ids are checked hex, so they are written inline: D1 binds 100 params at most.
+		// Series ids are checked hex, so they are written inline: D1 binds 100 params at most
 		where += " AND series IN (" + strings.Join(ids, ", ") + ")"
 	}
 	t := "0"
@@ -367,8 +361,6 @@ func addBuckets(c *metricCell, raw string) {
 	c.n++
 }
 
-// bucketQuantile estimates quantile q from per-bucket counts keyed by upper
-// bound, interpolating linearly inside the bucket, as Prometheus does.
 func bucketQuantile(buckets map[float64]float64, q float64) (float64, bool) {
 	bounds := make([]float64, 0, len(buckets))
 	total := 0.0

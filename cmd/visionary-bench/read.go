@@ -99,7 +99,6 @@ func timeGet(ctx context.Context, client *http.Client, u, token string) (float64
 	return ms, nil
 }
 
-// parseRange reads 15m, 1h, 24h or 7d.
 func parseRange(s string) (time.Duration, error) {
 	if days, ok := strings.CutSuffix(s, "d"); ok {
 		var n int

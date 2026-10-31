@@ -15,10 +15,6 @@ import (
 	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
-// Check kinds beyond http and browser: API (uptime_api.go), TCP, DNS and SSL
-// (uptime_net.go), ping (uptime_ping.go) and heartbeat (uptime_heartbeat.go).
-// Settings live in uptime_check_settings, per-run findings in uptime_run_details.
-
 var settingsKinds = map[string]bool{"api": true, "tcp": true, "dns": true, "ping": true, "ssl": true, "heartbeat": true}
 
 const (
@@ -28,7 +24,7 @@ const (
 )
 
 // The kinds' settings are uptimecore's, which runs them for the server and
-// for location runners alike.
+// for location runners alike
 type (
 	APIConfig    = uptimecore.APIConfig
 	APIRequest   = uptimecore.APIRequest
@@ -92,8 +88,7 @@ func (s *Server) uptimeKindsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/heartbeat/{token}/{action}", s.handleHeartbeatPing)
 }
 
-// normalizeKind validates a check of one of the kinds above. prev is the
-// stored check on update, whose masked secrets and heartbeat token survive.
+// prev is the stored check on update, whose masked secrets and heartbeat token survive
 func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 	c.ExpectStatus, c.BodyContains, c.Headers, c.Steps, c.FinalScreenshot = "200-299", "", map[string]string{}, nil, false
 	c.Method, c.BrowserOptions = "GET", BrowserOptions{}
@@ -172,8 +167,8 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 			old = prev.Heartbeat
 		}
 		err = c.Heartbeat.normalize(old)
-		// The server looks for missed pings every minute; nothing is probed,
-		// so locations do not apply.
+		// The server looks for missed pings every minute and nothing is probed,
+		// so locations don't apply
 		c.URL, c.IntervalS, c.TimeoutMs, c.DegradedMs = "", 60, 1000, 0
 		c.Locations, c.StatusShowLocations = []string{serverLocation}, false
 	}
@@ -208,8 +203,6 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 	return nil
 }
 
-// normalizeSecrets checks secret names and puts back values sent as the
-// mask, from prev.
 func normalizeSecrets(secrets map[string]string, prev map[string]string) (map[string]string, error) {
 	if len(secrets) > browserMaxSecrets {
 		return nil, fmt.Errorf("at most %d secrets", browserMaxSecrets)
@@ -347,9 +340,6 @@ func (s *Server) deleteKindData(ctx context.Context, id int64) {
 	}
 }
 
-// maskKind hides what the API must not show of the kinds above: secret
-// header values of API requests and the heartbeat token, which is fetched
-// on its own by editors.
 func (c *UptimeCheck) maskKind() {
 	if c.API != nil {
 		api := *c.API
@@ -381,8 +371,6 @@ func maskHeaders(h map[string]string) map[string]string {
 	return out
 }
 
-// onlyTemplates is true for a value that holds no literal secret, such as
-// "Bearer {{secret.TOKEN}}".
 func onlyTemplates(v string) bool {
 	rest := uptimecore.TemplateRefRe.ReplaceAllString(v, "")
 	rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), "Bearer"))

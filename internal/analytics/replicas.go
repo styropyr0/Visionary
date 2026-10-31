@@ -13,10 +13,7 @@ import (
 	"time"
 )
 
-// Each replica writes a heartbeat to visionary_replicas each lease round,
-// listed in Settings → Server. Edits other replicas cache (alert rules,
-// silences, API keys, uptime checks, settings, sign-outs) bump a row in
-// visionary_changes, so the others drop their copy within a round.
+// Edits other replicas cache bump a row in visionary_changes, so the others drop their copy within a round
 
 type replicaState struct {
 	id      string
@@ -48,8 +45,6 @@ func (s *Server) replica() *replicaState {
 
 func (s *Server) replicaID() string { return s.replica().id }
 
-// heartbeat records this replica and returns the database's clock and how
-// many replicas are alive.
 func (s *Server) heartbeat(ctx context.Context) (nowMs int64, live int, err error) {
 	rs := s.replica()
 	now := s.q.dbNowMs()
@@ -81,8 +76,6 @@ func (s *Server) heartbeat(ctx context.Context) (nowMs int64, live int, err erro
 
 var errNoRows = errors.New("the heartbeat read no rows")
 
-// announce tells the other replicas that kind changed here. Alone, there is
-// nobody to tell.
 func (s *Server) announce(kind string) {
 	ls := s.leases()
 	ls.mu.Lock()
@@ -149,8 +142,6 @@ func (s *Server) followChanges(ctx context.Context) {
 	}
 }
 
-// shareSignOut makes a logout end the session on every replica, not only
-// the one that answered it.
 func (s *Server) shareSignOut(sess *session) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -177,8 +168,6 @@ func (s *Server) pullSignOuts(ctx context.Context) {
 	}
 }
 
-// claimOnce reports whether key was not claimed before by any replica. A
-// claim is kept for ttl.
 func (s *Server) claimOnce(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
@@ -194,8 +183,7 @@ func (s *Server) claimOnce(ctx context.Context, key string, ttl time.Duration) (
 	return len(res.Rows) == 1 && toString(res.Rows[0][0]) == token, nil
 }
 
-// firstUse is claimOnce for checks this replica has already passed: when the
-// database can't answer, its own answer stands.
+// When the database can't answer, this replica's own answer stands
 func (s *Server) firstUse(ctx context.Context, key string, ttl time.Duration) bool {
 	ok, err := s.claimOnce(ctx, key, ttl)
 	if err != nil {
@@ -210,8 +198,6 @@ func (s *Server) replicasRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/settings/replicas", s.authed(s.handleReplicas))
 }
 
-// handleReadyz is the readiness probe: ready once the tables exist and the
-// database answers. /api/healthz only says the process is up.
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if s.schemaPending.Load() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "starting", "reason": "the tables are not all created yet"})

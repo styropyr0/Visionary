@@ -23,9 +23,8 @@ type statusPage struct {
 	Label     string           `json:"label"`
 	Checks    []statusCheck    `json:"checks"`
 	Incidents []statusIncident `json:"incidents"`
-	// Notices are the declared incidents published here (incidents_timeline.go).
-	Notices   []statusNotice `json:"notices"`
-	UpdatedAt string         `json:"updated_at"`
+	Notices   []statusNotice   `json:"notices"`
+	UpdatedAt string           `json:"updated_at"`
 }
 
 type statusCheck struct {
@@ -34,8 +33,7 @@ type statusCheck struct {
 	State    string      `json:"state"` // operational, degraded, outage, paused, unknown
 	Uptime90 *float64    `json:"uptime_90d"`
 	Days     []statusDay `json:"days"`
-	// Locations break the state down by where the check runs from, for
-	// checks that opt in; location names can be internal.
+	// Location names can be internal, so only checks that opt in show them
 	Locations []statusLocation `json:"locations,omitempty"`
 }
 

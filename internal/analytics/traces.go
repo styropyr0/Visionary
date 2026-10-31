@@ -7,12 +7,7 @@ import (
 	"strings"
 )
 
-// Distributed traces: requests (api_logs) and calls (spans) that share a W3C
-// trace_id across services. One trace on a timeline is in traces_api.go, the
-// service map in traces_map.go.
-
-// tracesSchema indexes trace_id. The columns themselves are added to older
-// tables in ensureSchema, before the feature schemas run.
+// The columns themselves are added to older tables in ensureSchema, before the feature schemas run
 func (s *Server) tracesSchema() []string {
 	return []string{s.q.d.TraceIndex("api_logs"), s.q.d.TraceIndex("spans")}
 }
@@ -36,12 +31,11 @@ func (s *Server) tracesPrompt() string {
 
 var traceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
-// inMarks is "?, ?, ..." for n values.
 func inMarks(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
 }
 
-// chunks splits ids so each statement stays within D1's 100 bound params.
+// Keeps each statement within D1's 100 bound params
 func chunks(ids []string, n int) [][]string {
 	var out [][]string
 	for len(ids) > n {

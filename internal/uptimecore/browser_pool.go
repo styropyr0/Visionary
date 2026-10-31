@@ -22,9 +22,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Browser checks share one headless Chrome (or Chromium, Edge) process, started
-// on the first run and closed after a while idle. Each run gets a fresh incognito
-// context. With no browser found, checks wait instead of failing.
+// All browser checks share one headless Chrome, and each run gets a fresh incognito context
 
 const (
 	browserIdleClose   = 10 * time.Minute
@@ -45,9 +43,7 @@ type BrowserStatus struct {
 	Workers   int    `json:"workers"`
 }
 
-// FindBrowser looks in the setting, then VISIONARY_CHROME, then the usual
-// install locations and PATH. A path that is set but missing is an error
-// rather than a fallback, so a typo does not go unnoticed.
+// A path that is set but missing is an error rather than a fallback, so a typo doesn't go unnoticed
 func FindBrowser(setting string) (path, source string, err error) {
 	for _, c := range []struct{ v, src string }{{setting, "setting"}, {os.Getenv("VISIONARY_CHROME"), "env"}} {
 		v := strings.TrimSpace(c.v)
@@ -97,8 +93,7 @@ func browserLocations() []string {
 	}
 }
 
-// inContainer is true in Docker and Podman, where Chrome's sandbox usually
-// cannot start.
+// Chrome's sandbox usually can't start in Docker and Podman
 func inContainer() bool {
 	for _, f := range []string{"/.dockerenv", "/run/.containerenv"} {
 		if _, err := os.Stat(f); err == nil {
@@ -125,9 +120,7 @@ type BrowserPool struct {
 	idle      *time.Timer
 }
 
-// NewBrowserPool runs at most workers runs at once. setting is the
-// configured browser path, read on every use; help says how to get a browser
-// where this runs.
+// setting is the configured browser path, read on every use
 func NewBrowserPool(workers int, setting func() string, help string, logger *slog.Logger) *BrowserPool {
 	return &BrowserPool{sem: make(chan struct{}, max(1, workers)), setting: setting, help: help, logger: logger}
 }
@@ -151,8 +144,6 @@ func (p *BrowserPool) Status() BrowserStatus {
 	return st
 }
 
-// Available is whether a run could start now: a browser exists and did not
-// just fail to launch.
 func (p *BrowserPool) Available() bool {
 	path, _, err := FindBrowser(p.setting())
 	if err != nil {
@@ -163,8 +154,6 @@ func (p *BrowserPool) Available() bool {
 	return p.launchErr == nil || p.path != path || time.Since(p.launchAt) >= browserRetryLaunch
 }
 
-// acquire waits for a free slot and returns the browser context to open a
-// tab in; release must follow.
 func (p *BrowserPool) acquire(ctx context.Context) (context.Context, error) {
 	select {
 	case p.sem <- struct{}{}:
@@ -227,10 +216,10 @@ func (p *BrowserPool) ensureLocked() (context.Context, error) {
 		chromedp.Flag("mute-audio", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-default-browser-check", true),
-		// Cross-site iframes stay in the page's process, so frame steps reach them.
+		// Cross-site iframes stay in the page's process, so frame steps reach them
 		chromedp.Flag("disable-features", "Translate,BlinkGenPropertyTrees,site-per-process,IsolateOrigins"),
 		chromedp.Flag("disable-site-isolation-trials", true),
-		// Keeps WebRTC from reaching around the address guard's proxy.
+		// Keeps WebRTC from reaching around the address guard's proxy
 		chromedp.Flag("force-webrtc-ip-handling-policy", "disable_non_proxied_udp"),
 	)
 	if runtime.GOOS == "linux" && (os.Geteuid() == 0 || inContainer()) {
@@ -239,7 +228,7 @@ func (p *BrowserPool) ensureLocked() (context.Context, error) {
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
 	bctx, cancelBrowser := chromedp.NewContext(alloc)
 	// The first Do binds the browser's life to the context it is given, so it
-	// gets bctx itself and a timer instead of a timeout context.
+	// gets bctx itself and a timer instead of a timeout context
 	started := make(chan error, 1)
 	go func() { started <- chromedp.Do(bctx) }()
 	select {
@@ -276,8 +265,6 @@ func (p *BrowserPool) closeLocked() {
 	p.cancel, p.browser = nil, nil
 }
 
-// kill ends the browser process at once, for a run that stopped answering.
-// Runs in other tabs fail and are recorded as such.
 func (p *BrowserPool) kill() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -298,22 +285,18 @@ func (p *BrowserPool) Close() {
 	p.closeLocked()
 }
 
-// newTab opens an incognito context in the browser, behind the guard proxy
-// when there is one.
 func newTab(b context.Context, proxy string) (context.Context, context.CancelFunc) {
 	return chromedp.NewContext(b, chromedp.WithNewBrowserContext(func(p *target.CreateBrowserContextParams) {
 		if proxy != "" {
 			p.ProxyServer = proxy
-			// Chrome skips the proxy for loopback unless told not to.
+			// Chrome skips the proxy for loopback unless told not to
 			p.ProxyBypassList = "<-loopback>"
 		}
 	}))
 }
 
-// guardProxy is a small HTTP proxy on loopback that the browser sends all
-// its traffic through, so the address guard sees every connection after DNS
-// resolution, as it does for HTTP checks. One proxy serves one run, which
-// lets it tell the run what it refused.
+// All browser traffic goes through this loopback proxy so the address guard
+// sees every connection after DNS resolution, as it does for HTTP checks
 type guardProxy struct {
 	ln  net.Listener
 	srv *http.Server

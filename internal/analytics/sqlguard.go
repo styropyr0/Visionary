@@ -61,7 +61,7 @@ const (
 type token struct {
 	kind tokKind
 	text string
-	// pos and end are byte offsets in the statement.
+	// pos and end are byte offsets in the statement
 	pos, end int
 }
 
@@ -168,9 +168,7 @@ func checkTables(toks []token) error {
 	return nil
 }
 
-// tableRefs returns the index of every identifier standing where a table
-// does: after FROM or JOIN, and after each comma of a FROM list, subqueries
-// included. Workspaces filter exactly these, so the guard and the filter agree.
+// Workspaces filter exactly these, so the guard and the filter agree
 func tableRefs(toks []token) ([]int, error) {
 	var refs []int
 	// parens records, per open paren, whether it is an EXTRACT-style call;
@@ -235,9 +233,8 @@ func isIdent(t token) bool { return t.kind == tokWord || t.kind == tokName }
 
 func tokenize(sql string) ([]token, error) { return scanTokens(sql, false) }
 
-// scanTokens splits sql into tokens. lenient is for statements the server
-// built: comments are skipped, and backslashes, semicolons and dollar signs
-// pass where the strict scan refuses them.
+// lenient is for statements the server built, where comments are skipped and
+// backslashes, semicolons and dollar signs pass
 func scanTokens(sql string, lenient bool) ([]token, error) {
 	var toks []token
 	if !lenient && strings.Contains(sql, "\\") {

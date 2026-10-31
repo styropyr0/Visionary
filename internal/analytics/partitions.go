@@ -16,25 +16,21 @@ import (
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
-// Opt-in daily range partitioning on PostgreSQL (Settings → Data), by
-// created_at. Retention drops whole days and range queries read only their
-// days. Empty tables convert when it is turned on; a table with rows converts
-// only when an admin asks, by copying into a twin and swapping under a lock.
+// Opt-in daily range partitioning on PostgreSQL (Settings → Data), by created_at
 
 var partitionTables = []string{"api_logs", "spans", "app_logs", "metrics", "client_events"}
 
 const (
 	settingPartitioning = "server.partitioning"
-	// partitionsAhead days are created in advance, so writes never wait on DDL.
+	// partitionsAhead days are created in advance, so writes never wait on DDL
 	partitionsAhead = 7
 	copyChunk       = 50000
-	// copySettle bounds the wait for transactions open when the newest id
-	// was read; any still open by then is stuck, not writing.
+	// copySettle bounds the wait for transactions open when the newest id was read,
+	// since one still open by then is stuck, not writing
 	copySettle = 2 * time.Minute
 )
 
-// partitioningOn reports Settings → Data's choice; VISIONARY_PARTITIONING=daily
-// sets it before anything is saved, for installs set up as code.
+// VISIONARY_PARTITIONING=daily sets it before anything is saved, for installs set up as code
 func (l *liveSettings) partitioningOn() bool {
 	v := l.Partitioning
 	if v == "" {
@@ -122,8 +118,6 @@ func (s *Server) maintainPartitions(ctx context.Context) {
 	}
 }
 
-// relKind is "p" for a partitioned table, "r" for a plain one, "" when it
-// does not exist.
 func (s *Server) relKind(ctx context.Context, table string) (string, error) {
 	res, err := s.db.Query(ctx, `SELECT CAST(relkind AS TEXT) FROM pg_class WHERE oid = to_regclass(CAST(? AS TEXT))`, table)
 	if err != nil || len(res.Rows) == 0 {
@@ -163,9 +157,7 @@ WHERE i.inhparent = to_regclass(CAST(? AS TEXT)) ORDER BY c.relname`, parent)
 	return out, nil
 }
 
-// ensurePartitions creates parent's default partition and one per day from
-// first to last. Partitions are named after table, which differs from parent
-// only while a conversion builds its twin.
+// Partitions are named after table, which differs from parent only while a conversion builds its twin
 func (s *Server) ensurePartitions(ctx context.Context, parent, table string, first, last time.Time) error {
 	have, err := s.partitionsOf(ctx, parent)
 	if err != nil {
@@ -186,8 +178,7 @@ func (s *Server) ensurePartitions(ctx context.Context, parent, table string, fir
 	return nil
 }
 
-// createPartition adds one day. Rows of that day already in the default
-// partition (clock skew, late events) move into it first.
+// Rows of that day already in the default partition (clock skew, late events) move into it first
 func (s *Server) createPartition(ctx context.Context, parent, table string, day time.Time) error {
 	name := partitionName(table, day)
 	bounds := fmt.Sprintf("FROM ('%s') TO ('%s')", day.Format("2006-01-02"), day.AddDate(0, 0, 1).Format("2006-01-02"))
@@ -202,9 +193,6 @@ DELETE FROM `+table+`_pdefault WHERE `+in+`;
 ALTER TABLE `+parent+` ATTACH PARTITION `+name+` FOR VALUES `+bounds)
 }
 
-// dropOldPartitions drops the days of table that are past retention. The
-// chunked delete that follows clears the rest, such as the default
-// partition and app_logs' shorter retention for lower levels.
 func (s *Server) dropOldPartitions(ctx context.Context, table string, days int) {
 	if kind, err := s.relKind(ctx, table); err != nil || kind != "p" {
 		return
@@ -225,8 +213,6 @@ func (s *Server) dropOldPartitions(ctx context.Context, table string, days int) 
 	}
 }
 
-// partitionRetention is how long table keeps rows: the longest retention of
-// the kinds stored in it, 0 when any keeps them forever.
 func (s *Server) partitionRetention(table string) int {
 	days := 0
 	for _, k := range retentionKinds {
@@ -242,9 +228,7 @@ func (s *Server) partitionRetention(table string) int {
 	return days
 }
 
-// convertTable turns a plain table into a partitioned one with the same
-// columns, indexes, rows and id sequence. Writes continue during the copy and
-// pause only for the swap.
+// Writes continue during the copy and pause only for the swap
 func (s *Server) convertTable(ctx context.Context, t string) error {
 	jobs := s.partitionJobs()
 	jobs.mu.Lock()
@@ -309,7 +293,7 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 	}
 
 	// Rows are copied up to the newest id seen once every transaction open
-	// at that moment has ended, so none with a smaller id can still appear.
+	// at that moment has ended, so none with a smaller id can still appear
 	var last int64
 	catchUp := func() error {
 		for {
@@ -360,8 +344,8 @@ WHERE schemaname = current_schema() AND tablename = ? AND indexname <> ?`, t, t+
 	for _, r := range idx.Rows {
 		name, def := toString(r[0]), toString(r[1])
 		if strings.HasPrefix(def, "CREATE UNIQUE") {
-			// A unique index must include the partition key; none of these
-			// tables has one besides the id.
+			// A unique index must include the partition key, and none of these
+			// tables has one besides the id
 			continue
 		}
 		def = strings.Replace(def, " "+name+" ON ", " "+name+"_part ON ", 1)
@@ -452,7 +436,7 @@ func (s *Server) handlePartitions(w http.ResponseWriter, r *http.Request) {
 		}
 		pt.Exists, pt.Partitioned = kind != "", kind == "p"
 		if pt.Exists {
-			// Partitioned parents hold nothing themselves; sum their partitions.
+			// Partitioned parents hold nothing themselves, so sum their partitions
 			res, err := s.db.Query(r.Context(), `SELECT COUNT(*), COALESCE(SUM(GREATEST(c.reltuples, 0)), 0), COALESCE(SUM(pg_total_relation_size(c.oid)), 0)
 FROM pg_class c WHERE (c.oid = to_regclass(CAST(? AS TEXT)) AND c.relkind <> 'p')
    OR c.oid IN (SELECT inhrelid FROM pg_inherits WHERE inhparent = to_regclass(CAST(? AS TEXT)))`, t, t)

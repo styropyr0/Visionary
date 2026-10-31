@@ -215,7 +215,7 @@ func (s *Server) securityStart(ctx context.Context) {
 	sec := s.security()
 	go s.auditRoleMapping(ctx)
 	go s.intelLoop(ctx)
-	// The team's own rules run even with the built-in detectors off.
+	// The team's own rules run even with the built-in detectors off
 	s.leased("security-rules", s.rulesLoop)
 	if !sec.st.enabled {
 		s.logger.Info("security detectors disabled in Settings → Server; the Security page still shows host events and the audit log")

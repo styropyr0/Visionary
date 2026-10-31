@@ -87,8 +87,6 @@ func syncLimit(l *rate.Limiter, perSecond int) {
 	}
 }
 
-// otlpStart runs the background flush, and the gRPC listener when it is on,
-// until ctx ends. Ingestion also starts the flush on the first export.
 func (s *Server) otlpStart(ctx context.Context) {
 	s.otlp().start(ctx)
 	s.otlpGRPCStart(ctx)
