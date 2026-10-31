@@ -51,7 +51,16 @@ module Visionary
       %w[sdk text], %w[runtime text],
       %w[container_cpu_cores real], %w[container_cpu_limit real],
       %w[container_cpu_throttled_percent real], %w[container_mem_used_mb real],
-      %w[container_mem_limit_mb real], %w[container_oom_kills int]
+      %w[container_mem_limit_mb real], %w[container_oom_kills int],
+      %w[psi_cpu_some_avg10 real], %w[psi_cpu_some_avg60 real],
+      %w[psi_mem_some_avg10 real], %w[psi_mem_some_avg60 real], %w[psi_mem_full_avg10 real],
+      %w[psi_io_some_avg10 real], %w[psi_io_some_avg60 real], %w[psi_io_full_avg10 real],
+      %w[minor_faults_ps real], %w[major_faults_ps real], %w[swap_in_ps real], %w[swap_out_ps real],
+      %w[pages_scanned_ps real], %w[pages_stolen_ps real], %w[host_oom_kills int],
+      %w[mem_dirty_mb real], %w[mem_writeback_mb real], %w[mem_slab_mb real],
+      %w[mem_shmem_mb real], %w[mem_committed_mb real], %w[mem_commit_limit_mb real],
+      %w[container_minor_faults_ps real], %w[container_major_faults_ps real],
+      %w[container_mem_high_events int], %w[container_mem_max_events int]
     ].freeze
 
     SPAN_COLUMNS = %w[
@@ -163,8 +172,7 @@ module Visionary
 
     # D1 takes string params only, so there each placeholder becomes
     # NULLIF(?, '') and nulls travel as empty strings.
-    def insert_sql(table, string_params)
-      cols = TABLES.fetch(table)
+    def insert_sql(table, string_params, cols = TABLES.fetch(table))
       mark = string_params ? "NULLIF(?, '')" : "?"
       "INSERT INTO #{table} (#{cols.join(', ')}) VALUES (#{([mark] * cols.size).join(', ')})"
     end

@@ -25,9 +25,13 @@ module Visionary
 
       attr_reader :cpu_dir, :mem_dir
 
+      def v2? = @v2
+
+      def in_container? = @in_ctr
+
       def initialize(root, text, env)
         @root = root
-        @in_ctr = in_container?(text, env)
+        @in_ctr = container?(text, env)
         @v2 = false
         @cpu_dir = @cpu_acct = @mem_dir = nil
         text.strip.each_line do |line|
@@ -55,6 +59,7 @@ module Visionary
       # The baseline the first sample's deltas start from.
       def prime
         @usage, @periods, @throttled, @ooms = counters
+        @mem = read_mem
         @last = mono
         @primed = true
       end
@@ -74,6 +79,7 @@ module Visionary
             v["container_cpu_throttled_percent"] = 0.0
           end
           v["container_oom_kills"] = ooms - @ooms if ooms && @ooms && ooms >= @ooms
+          sample_mem(v, secs)
         end
         @usage, @periods, @throttled, @ooms = usage, periods, throttled, ooms
         @last = now
@@ -100,9 +106,38 @@ module Visionary
         File.directory?(dir) ? dir : File.join(@root, mount)
       end
 
+      # Fault counters from memory.stat and limit hits from memory.events (v2)
+      def read_mem
+        return {} unless @mem_dir
+        m = {}
+        m[:faults] = HostStats.parse_cgroup_mem_stat(Sources.read(File.join(@mem_dir, "memory.stat")))
+        m[:events] = HostStats.parse_cgroup_mem_events(Sources.read(File.join(@mem_dir, "memory.events"))) if @v2
+        m
+      end
+
+      def sample_mem(v, secs)
+        now = read_mem
+        prev = @mem || {}
+        @mem = now
+        if now[:faults] && prev[:faults]
+          f, maj = now[:faults]
+          pf, pmaj = prev[:faults]
+          if f >= maj && pf >= pmaj && maj >= pmaj && f - maj >= pf - pmaj
+            v["container_minor_faults_ps"] = (((f - maj) - (pf - pmaj)) / secs).round(1)
+            v["container_major_faults_ps"] = ((maj - pmaj) / secs).round(1)
+          end
+        end
+        return unless now[:events] && prev[:events]
+        h, x = now[:events]
+        ph, px = prev[:events]
+        return unless h >= ph && x >= px
+        v["container_mem_high_events"] = h - ph
+        v["container_mem_max_events"] = x - px
+      end
+
       # Tells a container from a process on the host by the runtimes' marker
       # files, the platforms' variables and the cgroup path.
-      def in_container?(text, env)
+      def container?(text, env)
         File.exist?(path(".dockerenv")) || File.exist?(path("run/.containerenv")) ||
           CONTAINER_ENV.any? { |k| !env[k].to_s.empty? } || MARKERS.any? { |k| text.include?(k) }
       end

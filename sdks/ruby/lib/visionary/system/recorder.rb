@@ -28,6 +28,8 @@ module Visionary
     # background thread and writes them four at a time.
     class Recorder
       SAMPLES_PER_WRITE = 4
+      # D1 binds at most 100 params a statement
+      D1_MAX_PARAMS = 100
       MB = 1024.0 * 1024
 
       def initialize(cfg, instance, store, schemas, http, logger)
@@ -91,6 +93,7 @@ module Visionary
         v["sdk"] = "ruby"
         v["runtime"] = Telemetry.runtime
         @cgroup&.sample(v)
+        @stats.sample(v, secs)
         Schema::TABLES["system_metrics"].map { |c| v[c] }
       end
 
@@ -122,6 +125,8 @@ module Visionary
         @prev = read_counters(stat, Sources::LINUX ? Sources.tcp : {})
         @cgroup = Cgroup.detect # nil off Linux
         @cgroup&.prime
+        @stats = HostStats.new(container: @cgroup&.in_container? || false, cgroup_dir: @cgroup&.v2? ? @cgroup.cpu_dir : nil)
+        @stats.prime
       end
 
       def run
@@ -159,13 +164,25 @@ module Visionary
         return if @buf.empty?
         @schemas.ensure(:system)
         begin
-          @store.batch(@buf.map { |row| [@sql, Store.fit(@store.dialect, "system_metrics", row)] })
+          @store.batch(@buf.flat_map { |row| row_stmts(Store.fit(@store.dialect, "system_metrics", row)) })
           @buf.clear
         rescue StandardError => e
           @logger.warn("visionary: system metrics write failed (#{@buf.size} rows kept): #{e.message}")
           keep = [1, (3600 / @interval).to_i].max
           @buf.shift(@buf.size - keep) if @buf.size > keep
         end
+      end
+
+      # On D1 the columns past the first 100 follow in an UPDATE of the row
+      # just inserted, in the same batch
+      def row_stmts(row)
+        return [[@sql, row]] unless @store.string_params? && row.size > D1_MAX_PARAMS
+        @d1_insert ||= begin
+          cols = Schema::TABLES["system_metrics"]
+          @d1_update = "UPDATE system_metrics SET #{cols[D1_MAX_PARAMS..].map { |c| "#{c} = NULLIF(?, '')" }.join(', ')} WHERE id = last_insert_rowid()"
+          Schema.insert_sql("system_metrics", true, cols[0, D1_MAX_PARAMS])
+        end
+        [[@d1_insert, row[0, D1_MAX_PARAMS]], [@d1_update, row[D1_MAX_PARAMS..]]]
       end
 
       def host(v, stat, secs)

@@ -652,7 +652,12 @@ ActiveRecord pool, or from `c.db_stats`. On macOS and Windows most host
 columns are NULL. In a container (or a cgroup with a CPU or memory limit) the
 `container_*` columns come from the process's own cgroup, v2 or v1: CPU used,
 limit and throttling, memory used (without inactive page cache) and limit,
-OOM kills.
+OOM kills, page faults and `memory.events` high/max hits (v2). Also on Linux:
+pressure stall (`psi_*`) from `/proc/pressure`, or from the cgroup v2
+`*.pressure` files in a container (NULL with cgroup v1 there), page fault,
+swap and reclaim rates from `/proc/vmstat`, and dirty, writeback, slab,
+shmem and committed memory from `/proc/meminfo`. On D1 a row is written as
+an INSERT of the first 100 columns plus an UPDATE with the rest.
 
 ### How profiling works
 
