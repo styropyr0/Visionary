@@ -61,6 +61,14 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   Kubernetes, Cloud Run, ECS, Azure Container Apps) is listed on its own, no
   agent needed: its SDK reports the container's CPU and memory against its
   limits, throttling and OOM kills.
+- **Metrics:** counters, gauges and histograms your code records, plus
+  OpenTelemetry metrics and Prometheus remote_write, charted by label, on
+  dashboards and in alerts. A PromQL subset runs over them and the built-in
+  series, and the Prometheus HTTP API lets Grafana use Visionary as a
+  Prometheus data source.
+- **Traces:** W3C trace context carried through every SDK, the browser SDK
+  and OpenTelemetry (HTTP, or gRPC on its own port), so a request is followed
+  across services on one timeline, with trace search and a service map.
 - **Errors:** exceptions and panics grouped into issues, with stacks, the
   versions they appear in, new and regressed issues, and links to the request.
 - **Logs:** every line your services log, from the SDKs, OpenTelemetry,
@@ -73,7 +81,9 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   that slip through are reported in Security. Old hours go to an S3 bucket.
 - **Requests** with a waterfall of every query and outbound call.
 - **Frontend:** Web Vitals, page loads, client-side API latency next to
-  server-side latency, JS and mobile crashes, sessions, devices and countries.
+  server-side latency, JS and mobile crashes, sessions, devices and countries,
+  and session replay (opt-in and sampled, inputs masked) linked to each
+  session's traced API calls.
 - **Uptime:** HTTP checks with timing phases, incidents, certificate expiry,
   and an optional public status page; browser checks that play scripted
   steps (sign in, click through, check what is shown) in a headless Chrome,
@@ -91,16 +101,31 @@ browser and mobile apps ──(ingest API)───┼──▶ database ◀─�
   caused it. Acknowledge, escalate, silence for maintenance or quiet hours,
   and hold back alerts that depend on one already firing. A weekly digest is
   optional.
+- **Incidents:** declare one from an alert or by hand, with severity,
+  commander and responders, a timeline that gathers the alerts, deploys,
+  checks and notes, status updates to channels and the status page, and a
+  postmortem drafted from it.
+- **Security:** detectors for brute force, scanners, account takeover and
+  host logins, plus your own detection rules (threshold, new value, sequence,
+  anomaly) over requests, logs and events, with MITRE ATT&CK tags and signals
+  to triage.
 - **Explore:** ask a question, get an answer with charts. **Dashboards**
   arrange any panel on a grid, with variables, share links and a TV mode.
 - **Team:** viewer, editor and admin roles, from a login per person kept by
-  Visionary, a team password, or your own API's sign-in; API keys and an
-  audit log. Admins choose which pages the sidebar shows (Settings → Pages)
+  Visionary, a team password, your own API's sign-in, or single sign-on
+  (OIDC, SAML) with SCIM provisioning; API keys and an audit log.
+  Workspaces limit people and keys to a set of services. Admins choose which pages the sidebar shows (Settings → Pages)
   and whether services take CPU profiles (Settings → Profiling).
 - **Set up in the dashboard:** besides the database connection, everything
   (sign-in, the AI analyst, email, ingest keys, limits, detectors) is in
   Settings and applies without a redeploy. A page with nothing connected yet
-  shows how to connect it.
+  shows how to connect it. Alert rules, channels, silences, uptime checks,
+  dashboards and keys can also be kept as code: export and import them in
+  Settings → Configuration, or manage them with the Terraform provider in
+  `terraform/`.
+- **Scale and availability:** several server replicas can share one database,
+  with background jobs on whichever holds a lease; on PostgreSQL the big
+  tables can be partitioned by day.
 - **Help on every page:** the Help button explains what the page shows, how
   to read it and the code or settings that fill it, per language.
 
