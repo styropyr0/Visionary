@@ -219,7 +219,7 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := statusTemplate.Execute(&buf, p); err != nil {
+	if err := statusTemplate.Execute(&buf, statusView{statusPage: p, Font: s.statusFontPath()}); err != nil {
 		s.logger.Error("status page render failed", "err", err)
 		http.Error(w, "status is temporarily unavailable", http.StatusInternalServerError)
 		return

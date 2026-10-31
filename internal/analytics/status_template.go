@@ -3,14 +3,43 @@ package analytics
 import (
 	"fmt"
 	"html/template"
+	"io/fs"
+	"sync"
 	"time"
 )
 
 // The status page is server-rendered HTML with inline styles (the CSP allows
-// them) and a theme that follows the visitor's system setting. It reloads
-// itself every minute. Times are written in UTC inside <time> elements;
-// /status.js, a same-origin script the CSP allows, rewrites them into the
-// visitor's own time zone, and without script they stay readable in UTC.
+// them), drawn with the dashboard's own tokens and Inter, and a theme that
+// follows the visitor's system setting. It reloads itself every minute. Times
+// are written in UTC inside <time> elements; /status.js, a same-origin script
+// the CSP allows, rewrites them into the visitor's own time zone, and without
+// script they stay readable in UTC.
+
+// statusView is what the template sees: the cached page plus where the
+// dashboard's font lives in this build.
+type statusView struct {
+	*statusPage
+	Font string
+}
+
+var statusFont struct {
+	once sync.Once
+	path string
+}
+
+// statusFontPath finds the dashboard's Latin Inter file in the embedded build;
+// its name carries a content hash that changes between builds.
+func (s *Server) statusFontPath() string {
+	statusFont.once.Do(func() {
+		if s.static == nil {
+			return
+		}
+		if m, _ := fs.Glob(s.static, "assets/inter-latin-wght-normal-*.woff2"); len(m) > 0 {
+			statusFont.path = "/" + m[0]
+		}
+	})
+	return statusFont.path
+}
 
 var statusFuncs = template.FuncMap{
 	"pct": func(p *float64) string {
@@ -55,7 +84,7 @@ var statusFuncs = template.FuncMap{
 		case "degraded":
 			return "Degraded"
 		case "outage":
-			return "Outage"
+			return "Down"
 		case "paused":
 			return "Not monitored"
 		}
@@ -90,6 +119,31 @@ var statusFuncs = template.FuncMap{
 		}
 		return out
 	},
+	// avgUptime is the mean 90-day uptime of the checks that have one.
+	"avgUptime": func(checks []statusCheck) *float64 {
+		var sum float64
+		n := 0
+		for _, c := range checks {
+			if c.Uptime90 != nil {
+				sum += *c.Uptime90
+				n++
+			}
+		}
+		if n == 0 {
+			return nil
+		}
+		v := sum / float64(n)
+		return &v
+	},
+	"countState": func(checks []statusCheck, state string) int {
+		n := 0
+		for _, c := range checks {
+			if c.State == state {
+				n++
+			}
+		}
+		return n
+	},
 }
 
 var statusTemplate = template.Must(template.New("status").Funcs(statusFuncs).Parse(`<!doctype html>
@@ -99,164 +153,201 @@ var statusTemplate = template.Must(template.New("status").Funcs(statusFuncs).Par
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="/status.js" defer></script>
 <title>{{.Title}}</title>
 <style>
-:root {
+{{with .Font}}@font-face { font-family: "Inter Variable"; font-style: normal; font-display: swap; font-weight: 100 900; src: url("{{.}}") format("woff2-variations"); }
+{{end}}:root {
   color-scheme: dark;
-  --bg: #0e0e0d; --surface-1: #181817; --surface-3: #2b2b29;
-  --border: rgba(255,255,255,0.08); --text-1: #f0efec; --text-2: #c3c2b7; --text-3: #898781;
-  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --muted: #3a3a37;
-  --good-text: #4fcf4f; --warning-text: #fab219; --critical-text: #f07c7c;
-  --good-wash: rgba(12,163,12,0.12); --warning-wash: rgba(250,178,25,0.12); --critical-wash: rgba(208,59,59,0.14); --muted-wash: rgba(255,255,255,0.04);
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 6px; --radius-lg: 10px;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+  --bg: #111110; --surface-1: #1a1a19; --surface-2: #222221; --surface-3: #2b2b29;
+  --border: rgba(255, 255, 255, 0.08); --border-strong: rgba(255, 255, 255, 0.15);
+  --text-1: #f0efec; --text-2: #c3c2b7; --text-3: #898781; --accent: #3987e5;
+  --hover-wash: rgba(255, 255, 255, 0.04); --button-wash: rgba(255, 255, 255, 0.07);
+  --good-text: #3fbf3f; --critical-text: #f07c7c; --warning-text: #fab219;
+  --good-wash: rgba(12, 163, 12, 0.1); --warning-wash: rgba(250, 178, 25, 0.1); --critical-wash: rgba(208, 59, 59, 0.12);
 }
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --bg: #f4f4f2; --surface-1: #ffffff; --surface-3: #e7e6e1;
-    --border: rgba(11,11,11,0.09); --text-1: #0b0b0b; --text-2: #4f4e4b; --text-3: #74726c; --muted: #d6d5cf;
-    --good-text: #046b04; --warning-text: #8a5a00; --critical-text: #b42c2c;
-    --good-wash: rgba(12,163,12,0.09); --warning-wash: rgba(250,178,25,0.14); --critical-wash: rgba(208,59,59,0.09); --muted-wash: rgba(11,11,11,0.03);
+    --bg: #f3f3f1; --surface-1: #fcfcfb; --surface-2: #f3f3f0; --surface-3: #e9e8e3;
+    --border: rgba(11, 11, 11, 0.1); --border-strong: rgba(11, 11, 11, 0.18);
+    --text-1: #0b0b0b; --text-2: #52514e; --text-3: #75736d; --accent: #2a78d6;
+    --hover-wash: rgba(11, 11, 11, 0.035); --button-wash: rgba(11, 11, 11, 0.055);
+    --good-text: #006300; --critical-text: #b42c2c; --warning-text: #8a5a00;
+    --good-wash: rgba(12, 163, 12, 0.08); --warning-wash: rgba(250, 178, 25, 0.12); --critical-wash: rgba(208, 59, 59, 0.08);
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text-1); font: 14px/1.5 "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
-main { max-width: 820px; margin: 0 auto; padding: 48px 16px 40px; }
-header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-header.top h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
-header.top .updated { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
-h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 36px 0 12px; font-size: 15px; font-weight: 600; }
-h2 small { color: var(--text-3); font-size: 12.5px; font-weight: 400; }
-.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--text-1); font-family: var(--font-sans); font-size: 13px; line-height: 1.45; -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
+svg { flex: none; }
 
-/* The overall state: one tinted card in the colour of the worst state. */
-.hero { display: flex; align-items: flex-start; gap: 16px; padding: 22px; border-radius: 14px; border: 1px solid var(--border); background: var(--muted-wash); }
-.hero.operational { background: var(--good-wash); }
-.hero.degraded { background: var(--warning-wash); }
-.hero.partial_outage, .hero.major_outage { background: var(--critical-wash); }
-.hero .icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #fff; flex: none; background: var(--muted); }
-.hero .icon svg { width: 20px; height: 20px; }
-.hero.operational .icon { background: var(--good); }
-.hero.degraded .icon { background: var(--warning); color: #111; }
-.hero.partial_outage .icon, .hero.major_outage .icon { background: var(--critical); }
-.hero .label { font-size: 19px; font-weight: 650; line-height: 1.3; margin-top: 1px; }
-.hero .sub { margin-top: 4px; color: var(--text-2); font-size: 13.5px; }
+.topbar { position: sticky; top: 0; z-index: 2; height: 52px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); }
+.topbar .in { display: flex; align-items: center; gap: 12px; max-width: 1040px; height: 100%; margin: 0 auto; padding: 0 16px; }
+.crumbs { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
+.crumbs .sep, .crumbs .sec { color: var(--text-3); }
+.crumbs b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius); background: var(--button-wash); color: var(--text-2); font-size: 12.5px; white-space: nowrap; }
+.pill svg { width: 14px; height: 14px; color: var(--text-3); }
 
-.notice { padding: 18px 20px; border-top: 1px solid var(--border); }
-.notice:first-child { border-top: 0; }
-.notice .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.notice .title { font-weight: 600; font-size: 15px; }
-.notice .since { width: 100%; color: var(--text-3); font-size: 12.5px; }
-.updates { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
-.updates li { display: grid; grid-template-columns: 12px 1fr; gap: 10px; }
-.updates .mark { width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--text-3); }
-.updates li:first-child .mark { background: var(--text-1); }
-.updates .st { font-weight: 600; }
-.updates .when { display: block; color: var(--text-3); font-size: 12.5px; }
+.content { max-width: 1040px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+.panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1); min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px 0; }
+.panel-title { margin: 0; font-size: 13px; font-weight: 600; }
+.panel-head .aside { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.panel-body { padding: 4px 14px 14px; }
 
-.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.banner { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1); }
+.banner.operational { background: var(--good-wash); }
+.banner.degraded { background: var(--warning-wash); }
+.banner.partial_outage, .banner.major_outage { background: var(--critical-wash); }
+.banner svg { width: 20px; height: 20px; margin-top: 1px; color: var(--text-3); }
+.banner.operational svg { color: var(--good-text); }
+.banner.degraded svg { color: var(--warning-text); }
+.banner.partial_outage svg, .banner.major_outage svg { color: var(--critical-text); }
+.banner .label { font-size: 15px; font-weight: 600; }
+.banner .sub { margin-top: 2px; color: var(--text-2); }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 10px; min-height: 100px; }
+.stat-label { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.stat-unit { margin-left: 3px; font-size: 14px; font-weight: 500; color: var(--text-3); }
+.stat-foot { margin-top: auto; font-size: 12px; color: var(--text-3); }
+.stat-value.good { color: var(--good-text); } .stat-value.warn { color: var(--warning-text); } .stat-value.bad { color: var(--critical-text); }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { height: 32px; padding: 0 10px; border-bottom: 1px solid var(--border-strong); color: var(--text-3); font-size: 11.5px; font-weight: 500; text-align: left; white-space: nowrap; }
+td { height: 40px; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--hover-wash); }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.svc { font-weight: 500; }
+.url { color: var(--text-3); font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; font-size: 11.5px; overflow-wrap: anywhere; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; }
+.state svg { width: 14px; height: 14px; }
+.state.operational { color: var(--good-text); } .state.degraded { color: var(--warning-text); } .state.outage { color: var(--critical-text); } .state.paused, .state.unknown { color: var(--text-3); }
+.bars-cell { width: 46%; min-width: 200px; }
+.bars { display: flex; gap: 2px; height: 22px; }
+.bars span { flex: 1; min-width: 1px; border-radius: 1.5px; background: var(--surface-3); }
+.bars span:hover { opacity: 0.7; }
+.bars .ok { background: var(--good); } .bars .minor { background: var(--warning); } .bars .major { background: var(--critical); }
+.axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-3); }
+.axis .d30 { display: none; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 10px 0; color: var(--text-3); font-size: 12px; }
+.legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--surface-3); }
+.legend .ok { background: var(--good); } .legend .minor { background: var(--warning); } .legend .major { background: var(--critical); }
+
+.tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .tag.live { background: var(--critical-wash); color: var(--critical-text); }
 .tag.watch { background: var(--warning-wash); color: var(--warning-text); }
 .tag.done { background: var(--surface-3); color: var(--text-2); }
+.notice + .notice { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.notice .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.notice .title { font-size: 13.5px; font-weight: 600; }
+.notice .since { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.updates { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.updates li { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+.updates .when { color: var(--text-3); font-size: 12px; }
+.updates b { font-weight: 600; }
+.empty { padding: 18px 10px; color: var(--text-3); }
 
-.check { padding: 18px 20px 16px; border-top: 1px solid var(--border); }
-.check:first-child { border-top: 0; }
-.check .head { display: flex; align-items: center; gap: 12px; }
-.check .name { font-weight: 600; }
-.check .url { color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }
-.check .right { margin-left: auto; display: flex; align-items: center; gap: 14px; white-space: nowrap; }
-.check .uptime { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
-.state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 550; }
-.state .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-.state.operational { color: var(--good-text); } .state.operational .dot { background: var(--good); }
-.state.degraded { color: var(--warning-text); } .state.degraded .dot { background: var(--warning); }
-.state.outage { color: var(--critical-text); } .state.outage .dot { background: var(--critical); }
-.state.paused, .state.unknown { color: var(--text-3); }
-.bars { display: flex; gap: 2px; height: 34px; margin: 14px 0 8px; }
-.bars span { flex: 1; min-width: 2px; border-radius: 3px; background: var(--muted); }
-.bars span:hover { opacity: 0.75; }
-.bars .ok { background: var(--good); }
-.bars .minor { background: var(--warning); }
-.bars .major { background: var(--critical); }
-.scale { display: flex; justify-content: space-between; color: var(--text-3); font-size: 12px; }
-.scale .from30 { display: none; }
+footer { max-width: 1040px; margin: 8px auto 0; padding: 14px 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--text-3); font-size: 12px; }
+footer .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); text-decoration: none; }
+footer .brand img { width: 18px; height: 18px; }
+footer a { color: var(--text-2); }
 
-.past { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 14px 20px; border-top: 1px solid var(--border); }
-.past:first-child { border-top: 0; }
-.past .what { font-weight: 550; }
-.past .when { color: var(--text-3); font-size: 12.5px; grid-column: 1; }
-.past .dur { color: var(--text-2); font-size: 13px; grid-row: 1; grid-column: 2; font-variant-numeric: tabular-nums; }
-.empty { padding: 18px 20px; color: var(--text-3); }
-
-footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-footer a { color: var(--text-2); text-decoration: none; }
-footer a:hover { text-decoration: underline; }
-
-@media (max-width: 600px) {
-  main { padding-top: 28px; }
-  header.top { flex-direction: column; align-items: flex-start; gap: 4px; }
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bars span:nth-child(-n+60) { display: none; }
-  .scale .from90 { display: none; }
-  .scale .from30 { display: inline; }
-  .check .right { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .axis .d90 { display: none; } .axis .d30 { display: inline; }
+  .hide-sm { display: none; }
+  .bars-cell { min-width: 110px; }
+  .updates li { grid-template-columns: 1fr; gap: 0; }
+  .notice .since { margin-left: 0; width: 100%; }
 }
 </style>
 </head>
 <body>
-<main>
-<header class="top">
-  <h1>{{.Title}}</h1>
-  <span class="updated">Updated {{when .UpdatedAt}}</span>
-</header>
+<header class="topbar"><div class="in">
+  <nav class="crumbs" aria-label="Page"><b>{{.Title}}</b></nav>
+  <span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>Updated {{when .UpdatedAt}}</span>
+</div></header>
 
-<section class="hero {{.State}}" aria-live="polite">
-  <span class="icon" aria-hidden="true">{{if eq .State "operational"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>{{else if eq .State "unknown"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 8h8"/></svg>{{else}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 4v5"/><path d="M8 12v.01"/></svg>{{end}}</span>
+<main class="content">
+<section class="banner {{.State}}" aria-live="polite">
+  {{if eq .State "operational"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>{{else if eq .State "unknown"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>{{end}}
   <div>
     <div class="label">{{.Label}}</div>
-    <div class="sub">{{if .Checks}}{{len .Checks}} service{{if gt (len .Checks) 1}}s{{end}} monitored. {{end}}{{with ongoing .Incidents}}{{len .}} not responding right now.{{else}}{{if eq $.State "unknown"}}Nothing has been published here yet.{{else}}Checked around the clock.{{end}}{{end}}</div>
+    <div class="sub">{{with ongoing .Incidents}}{{len .}} service{{if gt (len .) 1}}s{{end}} not responding right now.{{else}}{{if eq $.State "unknown"}}Nothing has been published on this page yet.{{else}}Every service is checked around the clock.{{end}}{{end}}</div>
   </div>
 </section>
 
-{{with .Notices}}
-<h2>Incidents</h2>
-<section class="card">
-{{range .}}  <article class="notice">
-    <div class="head"><span class="tag {{if .ResolvedAt}}done{{else if eq .Status "monitoring"}}watch{{else}}live{{end}}">{{.StatusLabel}}</span><span class="title">{{.Title}}</span><span class="since">Started {{when .StartedAt}}{{if .ResolvedAt}} · resolved {{when .ResolvedAt}}{{end}}</span></div>
-{{with .Updates}}    <ol class="updates">
-{{range .}}      <li><span class="mark" aria-hidden="true"></span><span><span class="st">{{.Status}}</span>{{if .Body}} · {{.Body}}{{end}}<span class="when">{{when .At}}</span></span></li>
-{{end}}    </ol>
-{{end}}  </article>
-{{end}}</section>
-{{end}}
+{{if .Checks}}<section class="tiles">
+  <div class="panel stat"><span class="stat-label">Services</span><span class="stat-value">{{len .Checks}}</span><span class="stat-foot">on this page</span></div>
+  <div class="panel stat"><span class="stat-label">Operational</span>{{$up := countState .Checks "operational"}}<span class="stat-value {{if eq $up (len .Checks)}}good{{else}}bad{{end}}">{{$up}}<span class="stat-unit">/ {{len .Checks}}</span></span><span class="stat-foot">{{countState .Checks "outage"}} down · {{countState .Checks "degraded"}} degraded</span></div>
+  <div class="panel stat"><span class="stat-label">Uptime</span><span class="stat-value">{{pct (avgUptime .Checks)}}</span><span class="stat-foot">average over 90 days</span></div>
+  <div class="panel stat"><span class="stat-label">Incidents</span><span class="stat-value">{{len .Incidents}}</span><span class="stat-foot">in the last 7 days</span></div>
+</section>{{end}}
 
-{{with ongoing .Incidents}}
-<h2>Not responding now</h2>
-<section class="card">
-{{range .}}  <div class="past"><span class="what">{{.Check}}</span><span class="dur"><span class="tag live">{{dur .DurationS}} so far</span></span><span class="when">Since {{when .StartedAt}}</span></div>
-{{end}}</section>
-{{end}}
+{{with .Notices}}<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">Incidents</h2></div>
+  <div class="panel-body">
+{{range .}}    <article class="notice">
+      <div class="head"><span class="tag {{if .ResolvedAt}}done{{else if eq .Status "monitoring"}}watch{{else}}live{{end}}">{{.StatusLabel}}</span><span class="title">{{.Title}}</span><span class="since">Started {{when .StartedAt}}{{if .ResolvedAt}} · resolved {{when .ResolvedAt}}{{end}}</span></div>
+{{with .Updates}}      <ol class="updates">
+{{range .}}        <li><span class="when">{{when .At}}</span><span><b>{{.Status}}</b>{{if .Body}} · {{.Body}}{{end}}</span></li>
+{{end}}      </ol>
+{{end}}    </article>
+{{end}}  </div>
+</section>{{end}}
 
-<h2>Services <small>Last 90 days</small></h2>
-<section class="card">
-{{range .Checks}}  <div class="check">
-    <div class="head">
-      <div><div class="name">{{.Name}}</div>{{if .URL}}<div class="url">{{.URL}}</div>{{end}}</div>
-      <div class="right"><span class="uptime">{{pct .Uptime90}} uptime</span><span class="state {{.State}}"><span class="dot"></span>{{stateLabel .State}}</span></div>
-    </div>
-    <div class="bars" role="img" aria-label="Daily uptime for the last 90 days">{{range .Days}}<span class="{{.Level}}" title="{{day .Day}}: {{if .Uptime}}{{pct .Uptime}} up, {{end}}{{levelLabel .Level}}"></span>{{end}}</div>
-    <div class="scale"><span class="from90">90 days ago</span><span class="from30">30 days ago</span><span>Today</span></div>
-  </div>
-{{else}}  <div class="empty">No services are listed on this page yet.</div>
-{{end}}</section>
+<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">Services</h2><span class="aside">Last 90 days</span></div>
+  <div class="panel-body">
+{{if .Checks}}    <table>
+      <thead><tr><th>State</th><th>Service</th><th class="bars-cell">Daily uptime</th><th class="num hide-sm">Uptime</th></tr></thead>
+      <tbody>
+{{range .Checks}}        <tr>
+          <td><span class="state {{.State}}">{{if eq .State "operational"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>{{else if eq .State "degraded"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>{{else if eq .State "outage"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>{{end}}{{stateLabel .State}}</span></td>
+          <td><div class="svc">{{.Name}}</div>{{if .URL}}<div class="url">{{.URL}}</div>{{end}}</td>
+          <td class="bars-cell"><div class="bars" role="img" aria-label="Daily uptime for the last 90 days">{{range .Days}}<span class="{{.Level}}" title="{{day .Day}}: {{if .Uptime}}{{pct .Uptime}} up, {{end}}{{levelLabel .Level}}"></span>{{end}}</div><div class="axis"><span class="d90">90 days ago</span><span class="d30">30 days ago</span><span>Today</span></div></td>
+          <td class="num hide-sm">{{pct .Uptime90}}</td>
+        </tr>
+{{end}}      </tbody>
+    </table>
+    <div class="legend"><span><i class="ok"></i>No downtime</span><span><i class="minor"></i>Some downtime</span><span><i class="major"></i>Under 99% up</span><span><i></i>No data</span></div>
+{{else}}    <div class="empty">No services are listed on this page yet.</div>
+{{end}}  </div>
+</section>
 
-<h2>Past incidents <small>Last 7 days</small></h2>
-<section class="card">
-{{range resolved .Incidents}}  <div class="past"><span class="what">{{.Check}} was unavailable</span><span class="dur">{{dur .DurationS}}</span><span class="when">{{when .StartedAt}} to {{whenp .EndedAt}}</span></div>
-{{else}}  <div class="empty">No incidents in the last 7 days.</div>
-{{end}}</section>
-
-<footer><span>Times are shown in your time zone. This page refreshes every minute.</span><span><a href="/status.json">JSON feed</a> · Monitored by Visionary</span></footer>
+<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">Downtime</h2><span class="aside">Last 7 days</span></div>
+  <div class="panel-body">
+{{if .Incidents}}    <table>
+      <thead><tr><th>Service</th><th>Started</th><th class="hide-sm">Ended</th><th class="num">Duration</th></tr></thead>
+      <tbody>
+{{range .Incidents}}        <tr>
+          <td><span class="svc">{{.Check}}</span> {{if .Ongoing}}<span class="tag live">Ongoing</span>{{end}}</td>
+          <td>{{when .StartedAt}}</td>
+          <td class="hide-sm">{{if .Ongoing}}<span class="url">still down</span>{{else}}{{whenp .EndedAt}}{{end}}</td>
+          <td class="num">{{dur .DurationS}}{{if .Ongoing}} so far{{end}}</td>
+        </tr>
+{{end}}      </tbody>
+    </table>
+{{else}}    <div class="empty">No downtime in the last 7 days.</div>
+{{end}}  </div>
+</section>
 </main>
+
+<footer>
+  <span>Times are in your time zone. This page refreshes every minute · <a href="/status.json">JSON</a></span>
+  <span class="brand"><img src="/favicon.svg" alt="" width="18" height="18">Monitored by Visionary</span>
+</footer>
 </body>
 </html>
 `))
