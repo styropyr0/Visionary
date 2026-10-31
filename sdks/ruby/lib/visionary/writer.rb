@@ -11,10 +11,27 @@ module Visionary
     keyword_init: true
   )
 
-  # The single background thread that batches api_logs, spans, errors and
-  # releases rows, and CPU profiles. Queue items are [:request, Entry],
-  # [:span, row], [:error, row], [:release, row] or [:profile, row].
+  # Rows queued, and rows written or dropped since start (see
+  # Visionary.writer_stats).
+  WriterStats = Struct.new(:queued, :written, :dropped, keyword_init: true) do
+    def +(other)
+      WriterStats.new(queued: queued + other.queued, written: written + other.written,
+                      dropped: dropped + other.dropped)
+    end
+  end
+
+  # The background thread that batches api_logs, spans, errors and releases
+  # rows, and CPU profiles. Queue items are [:request, Entry], [:span, row],
+  # [:error, row], [:release, row] or [:profile, row].
   class Writer
+    # D1 takes 50 statements a call, one row each. SQL backends get each
+    # table's rows as multi-row INSERTs, under every backend's parameter limit
+    # (SQLite's is 32766).
+    D1_BATCH = 50
+    SQL_BATCH = 500
+    MAX_SQL_BATCH = 2000
+    MAX_PARAMS = 30_000
+
     INSERTS = {
       request: "api_logs", span: "spans", error: "errors", release: "releases", profile: "profiles", log: "app_logs",
       metric: "metrics"
@@ -26,7 +43,11 @@ module Visionary
       @schemas = schemas
       @logger = logger
       @redactor = Redactor.new(cfg.redact_headers, cfg.redact_fields, cfg.redact_request_fields)
-      @batch_size = cfg.batch_size.between?(1, 50) ? cfg.batch_size : 50
+      @batch_size = if store.string_params?
+                      cfg.batch_size.between?(1, D1_BATCH) ? cfg.batch_size : D1_BATCH
+                    else
+                      cfg.batch_size.between?(1, MAX_SQL_BATCH) ? cfg.batch_size : SQL_BATCH
+                    end
       @flush_interval = cfg.flush_interval.to_f.positive? ? cfg.flush_interval.to_f : 3.0
       @queue_size = cfg.queue_size.positive? ? cfg.queue_size : 5000
       @sql = INSERTS.transform_values { |t| Schema.insert_sql(t, store.string_params?) }
@@ -53,6 +74,12 @@ module Visionary
       @queue.push(item)
     end
 
+    def stats
+      @stats.synchronize do
+        WriterStats.new(queued: @queue.size, written: @written, dropped: @lost + @queue.dropped_total)
+      end
+    end
+
     # Stops the thread after it has drained the queue, waiting at most
     # timeout seconds. False if it was still busy then.
     def close(timeout)
@@ -73,11 +100,14 @@ module Visionary
     def reset
       @queue = BoundedQueue.new(@queue_size)
       @thread = nil
+      @stats = Mutex.new
+      @written = @lost = 0
     end
 
     def run
       Telemetry.internal!
       @groups.each { |g| @schemas.ensure(g) }
+      work = start_flushers
       next_flush = mono + @flush_interval
       batch = []
       loop do
@@ -86,7 +116,11 @@ module Visionary
         batch.concat(items)
         closed = @queue.closed? && @queue.size.zero?
         if batch.size >= @batch_size || mono >= next_flush || closed
-          write(batch) unless batch.empty?
+          if work
+            work.push(batch) unless batch.empty?
+          elsif !batch.empty?
+            write(batch)
+          end
           batch = []
           report_drops
           next_flush = mono + @flush_interval
@@ -95,6 +129,30 @@ module Visionary
       end
     rescue StandardError => e
       @logger.error("visionary: writer stopped: #{e.class}: #{e.message}")
+    ensure
+      if work
+        work.close
+        @flushers.each(&:join)
+      end
+    end
+
+    # PostgreSQL and MySQL take a few batches at once, each on its own
+    # connection; while all are busy the queue absorbs the load. SQLite, D1
+    # and an ActiveRecord pool take one at a time, on this thread.
+    def start_flushers
+      n = @store.respond_to?(:parallel) ? @store.parallel : 1
+      return nil if n <= 1
+
+      work = SizedQueue.new(1)
+      @flushers = Array.new(n) do
+        Thread.new do
+          Telemetry.internal!
+          while (b = work.pop)
+            write(b)
+          end
+        end
+      end
+      work
     end
 
     def report_drops
@@ -111,11 +169,13 @@ module Visionary
     end
 
     def commit(batch)
-      stmts = begin
+      begin
         users = lookup_users(batch)
-        batch.flat_map { |kind, item| statements(kind, item, users) }
+        rows = batch.flat_map { |kind, item| statements(kind, item, users) }
+        stmts = inserts(rows)
       rescue StandardError => e
         @logger.error("visionary: building rows failed; #{batch.size} entries dropped: #{e.class}: #{e.message}")
+        count(:@lost, batch.size)
         return
       end
       err = nil
@@ -123,28 +183,48 @@ module Visionary
         @groups.each { |g| @schemas.ensure(g) }
         begin
           @store.batch(stmts)
+          count(:@written, rows.size)
           return
         rescue StandardError => e
           err = e
         end
         sleep(attempt + 1) if attempt < 2
       end
-      @logger.error("visionary: batch write failed; #{batch.size} entries dropped: #{err.message}")
+      @logger.error("visionary: batch write failed; #{rows.size} rows dropped: #{err.message}")
+      count(:@lost, rows.size)
+    end
+
+    def count(var, n)
+      @stats.synchronize { instance_variable_set(var, instance_variable_get(var) + n) }
+    end
+
+    # [kind, values] rows as statements: one INSERT per row for D1, else one
+    # multi-row INSERT per table, split at MAX_PARAMS.
+    def inserts(rows)
+      return rows.map { |kind, values| [@sql.fetch(kind), values] } if @store.string_params?
+
+      rows.group_by(&:first).flat_map do |kind, group|
+        table = INSERTS.fetch(kind)
+        per = [MAX_PARAMS / Schema::TABLES.fetch(table).size, 1].max
+        group.each_slice(per).map do |slice|
+          [Schema.insert_rows_sql(table, slice.size), slice.flat_map(&:last)]
+        end
+      end
     end
 
     def statements(kind, item, users)
       if kind == :request
-        out = [stmt(:request, request_row(item, users))]
-        item.span_rows&.each { |r| out << stmt(:span, r) }
-        item.error_rows&.each { |r| out << stmt(:error, r) }
+        out = [fit(:request, request_row(item, users))]
+        item.span_rows&.each { |r| out << fit(:span, r) }
+        item.error_rows&.each { |r| out << fit(:error, r) }
         out
       else
-        [stmt(kind, item)]
+        [fit(kind, item)]
       end
     end
 
-    def stmt(kind, row)
-      [@sql.fetch(kind), Store.fit(@store.dialect, INSERTS.fetch(kind), row)]
+    def fit(kind, row)
+      [kind, Store.fit(@store.dialect, INSERTS.fetch(kind), row)]
     end
 
     # Resolves each distinct user missing a handle or role once per batch.

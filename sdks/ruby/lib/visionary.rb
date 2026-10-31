@@ -108,6 +108,12 @@ module Visionary
     # The agent's span and error recorder, or nil when collection is off.
     def telemetry = @agent&.telemetry
 
+    # How far behind the database the writers are, for load tests and health
+    # checks: rows queued, and rows written and dropped since start.
+    def writer_stats
+      @agent ? @agent.writer_stats : WriterStats.new(queued: 0, written: 0, dropped: 0)
+    end
+
     # Flushes and stops collection, waiting at most timeout seconds.
     def close(timeout = 10)
       @agent&.close(timeout)

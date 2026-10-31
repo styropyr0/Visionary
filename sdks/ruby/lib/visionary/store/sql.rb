@@ -6,18 +6,21 @@ module Visionary
   module Store
     class ConfigError < StandardError; end
 
-    # A connection the SDK opens itself from VISIONARY_DATABASE_URL, through
-    # the pg, mysql2 or sqlite3 gem (whichever the app has installed). One
-    # connection, used by one background thread at a time, reopened after an
-    # error.
+    # Connections the SDK opens itself from VISIONARY_DATABASE_URL, through
+    # the pg, mysql2 or sqlite3 gem (whichever the app has installed). Each is
+    # used by one background thread at a time and reopened after an error. Up
+    # to four on PostgreSQL and MySQL, so batches can be written in parallel;
+    # one on SQLite, which takes one writer at a time.
     class SQL
-      attr_reader :dialect
+      PARALLEL = 4
+
+      attr_reader :dialect, :parallel
 
       def initialize(dialect, &connect)
         @dialect = dialect
         @connect = connect
-        @mutex = Mutex.new
-        @conn = nil
+        @parallel = %w[postgres mysql].include?(dialect) ? PARALLEL : 1
+        reset_pool
       end
 
       def string_params? = false
@@ -44,12 +47,15 @@ module Visionary
         run { |c| c.rows(sql) }
       end
 
-      # One transaction for the whole batch.
+      # One transaction for the whole batch. Statements that repeat are
+      # prepared once; one-off ones (multi-row INSERTs) run directly.
       def batch(stmts)
+        uses = Hash.new(0)
+        stmts.each { |sql, _| uses[sql] += 1 }
         run do |c|
           c.execute("BEGIN", [])
           begin
-            stmts.each { |sql, args| c.execute(sql, args) }
+            stmts.each { |sql, args| uses[sql] > 1 ? c.execute(sql, args) : c.execute_once(sql, args) }
             c.execute("COMMIT", [])
           rescue StandardError
             begin
@@ -66,37 +72,86 @@ module Visionary
         run { |c| c.execute(sql, args) }
       end
 
-      # The parent's connection (a socket) must not be used or closed from
-      # the child: it is kept referenced (so no finalizer closes it) and a new
-      # one is opened lazily.
+      # The parent's connections (sockets) must not be used or closed from
+      # the child: they are kept referenced (so no finalizer closes them) and
+      # new ones are opened lazily.
       def after_fork
-        @mutex = Mutex.new
-        (@inherited ||= []) << @conn if @conn
-        @conn = nil
+        (@inherited ||= []).concat(@all)
+        reset_pool
       end
 
       def close
-        @mutex.synchronize { discard }
+        idle = @mutex.synchronize do
+          @all -= @idle
+          @idle.dup.tap { @idle.clear }
+        end
+        idle.each { |c| shut(c) }
       end
 
       private
 
+      def reset_pool
+        @mutex = Mutex.new
+        @free = ConditionVariable.new
+        @idle = []
+        @all = []
+        @opening = 0
+      end
+
       def run
-        @mutex.synchronize do
-          @conn ||= @connect.call
-          yield @conn
+        conn = checkout
+        begin
+          yield conn
         rescue StandardError
-          discard if @conn&.broken?
+          if conn.broken?
+            drop(conn)
+            conn = nil
+          end
           raise
+        ensure
+          checkin(conn) if conn
         end
       end
 
-      def discard
-        @conn&.close
+      def checkout
+        @mutex.synchronize do
+          loop do
+            return @idle.pop unless @idle.empty?
+            break if @all.size + @opening < @parallel
+            @free.wait(@mutex)
+          end
+          @opening += 1
+        end
+        begin
+          conn = @connect.call
+        ensure
+          @mutex.synchronize do
+            @opening -= 1
+            conn ? @all << conn : @free.signal
+          end
+        end
+        conn
+      end
+
+      def checkin(conn)
+        @mutex.synchronize do
+          @idle << conn
+          @free.signal
+        end
+      end
+
+      def drop(conn)
+        @mutex.synchronize do
+          @all.delete(conn)
+          @free.signal
+        end
+        shut(conn)
+      end
+
+      def shut(conn)
+        conn.close
       rescue StandardError
         nil
-      ensure
-        @conn = nil
       end
     end
 
@@ -110,6 +165,7 @@ module Visionary
     def self.rebind(sql)
       return sql unless sql.include?("?")
       n = 0
+      return sql.gsub("?") { "$#{n += 1}" } unless sql.include?("'") || sql.include?('"')
       quote = nil
       out = +""
       sql.each_char do |ch|
@@ -175,6 +231,8 @@ module Visionary
         res&.clear
       end
 
+      alias execute_once execute
+
       def column(sql)
         res = @conn.exec(sql)
         res.column_values(0).map(&:to_s)
@@ -239,6 +297,17 @@ module Visionary
         stmt.affected_rows
       end
 
+      # Not cached: the server caps prepared statements per connection.
+      def execute_once(sql, args)
+        return execute(sql, args) if args.empty?
+
+        stmt = @client.prepare(sql)
+        stmt.execute(*args)
+        stmt.affected_rows
+      ensure
+        stmt&.close
+      end
+
       def column(sql)
         @client.query(sql, as: :array).map { |r| r[0].to_s }
       end
@@ -266,13 +335,22 @@ module Visionary
     class Sqlite3Conn
       def initialize(path)
         @db = SQLite3::Database.new(path)
+        # The writers and the Visionary server share the file: wait for its
+        # lock instead of failing at once.
         @db.busy_timeout = 5000
+        begin
+          @db.execute("PRAGMA journal_mode=WAL")
+        rescue StandardError
+          nil
+        end
       end
 
       def execute(sql, args)
         @db.execute(sql, args)
         @db.changes
       end
+
+      alias execute_once execute
 
       def column(sql)
         @db.execute(sql).map { |r| r[0].to_s }

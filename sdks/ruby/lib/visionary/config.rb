@@ -47,7 +47,7 @@ module Visionary
       @capture_bodies = true
       @max_body_bytes = 8192
       @queue_size = 5000
-      @batch_size = 50
+      @batch_size = 0 # 0: 500 rows on SQL backends, 50 on D1
       @flush_interval = 3.0
       @log_retention_days = 0 # 0: off, the Visionary server applies Settings → Retention
       @redact_headers = []

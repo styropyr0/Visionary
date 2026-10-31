@@ -189,7 +189,7 @@ module Visionary
       end
 
       def statements(_kind, rec, _users)
-        [stmt(:log, @pipeline.row(rec))]
+        [fit(:log, @pipeline.row(rec))]
       end
     end
   end

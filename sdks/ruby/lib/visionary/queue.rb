@@ -9,6 +9,7 @@ module Visionary
       @max = max
       @items = []
       @dropped = 0
+      @dropped_total = 0
       @closed = false
       @mutex = Mutex.new
       @cond = ConditionVariable.new
@@ -18,6 +19,7 @@ module Visionary
       @mutex.synchronize do
         if @items.size >= @max
           @dropped += 1
+          @dropped_total += 1
           return false
         end
         @items << item
@@ -40,6 +42,9 @@ module Visionary
     end
 
     def size = @mutex.synchronize { @items.size }
+
+    # Every item dropped since the queue was made.
+    def dropped_total = @mutex.synchronize { @dropped_total }
 
     def take_dropped
       @mutex.synchronize { @dropped.tap { @dropped = 0 } }

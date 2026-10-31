@@ -495,7 +495,7 @@ class LogsTest < Minitest::Test
     assert_operator long[cols.index("message")].bytesize, :<=, L::MAX_MESSAGE
   end
 
-  def test_log_writer_polls_and_builds_statements
+  def test_log_writer_polls_and_builds_rows
     pipe = pipeline
     store = FakeStore.new([["logs.level", "error"]])
     def store.string_params? = false
@@ -503,7 +503,8 @@ class LogsTest < Minitest::Test
     w = L::LogWriter.new(Visionary::Config.new, store, nil, QuietLogger.new, pipe)
     w.send(:tick)
     assert_equal L::ERROR, pipe.settings.level
-    sql, args = w.send(:statements, :log, L::Record.new(Time.now, L::INFO, nil, "x"), {}).first
+    rows = w.send(:statements, :log, L::Record.new(Time.now, L::INFO, nil, "x"), {})
+    sql, args = w.send(:inserts, rows).first
     assert sql.start_with?("INSERT INTO app_logs ("), sql
     assert_equal 21, args.size
   end
