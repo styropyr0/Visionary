@@ -94,6 +94,46 @@ secrets and applies Settings → Logs. Where each source got to is kept in
 neither repeats nor loses lines; a source seen for the first time starts at
 its end.
 
+## Uptime locations
+
+Started with `VISIONARY_AGENT_LOCATION`, the agent stops reporting the host and
+becomes an uptime location: it runs the checks Visionary assigns to that
+location, from this machine, with the same code the server runs its own
+checks with. Use it to see a check from another region, or from inside a
+private network.
+
+1. In Visionary, open **Uptime → Locations**, add a location (say
+   `frankfurt-vps`) and copy its key. It is shown once; **New key** replaces it.
+2. Run the agent with that key and name:
+
+   ```sh
+   VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=<location key> \
+   VISIONARY_AGENT_LOCATION=frankfurt-vps visionary-agent
+   ```
+
+   Or in Docker, from this repository: `deploy/location/compose.yaml`, or
+   `docker build --target location` (`--target location-browser` adds
+   Chromium).
+3. Pick the location in a check's form, next to or instead of **server**.
+
+Every 15 s the agent polls `/api/agent/v1/location/poll` for the location's
+checks, runs them on their schedule, and posts results to
+`/api/agent/v1/location/results` in batches every 5 s. HTTP checks always
+run; browser checks run when a Chrome or Chromium is found on the machine
+(`VISIONARY_CHROME` points at one), which the poll reports, and the form
+greys out browser checks for locations without one. Only one runner per
+location runs checks: a second one started with the same key stands by
+until the first stops. Checks may not reach private or loopback addresses
+unless `VISIONARY_AGENT_ALLOW_PRIVATE=true` (or the server allows it for its
+own checks).
+
+| Variable | Default | |
+|---|---|---|
+| `VISIONARY_AGENT_LOCATION` | none | The location's name; turns location mode on. |
+| `VISIONARY_AGENT_ALLOW_PRIVATE` | `false` | Let checks reach private, loopback and link-local addresses. |
+| `VISIONARY_AGENT_BROWSER_WORKERS` | `1` | Browser checks run at once. |
+| `VISIONARY_CHROME` | auto | The browser for browser checks. |
+
 ## Build
 
 ```sh

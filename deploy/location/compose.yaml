@@ -1,0 +1,26 @@
+# An uptime location: runs the checks Visionary assigns to one location from
+# this machine (a VPS in another region, a box inside a private network).
+#
+# In Visionary, open Uptime → Locations, add a location and copy its key, then:
+#
+#   VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=vis_... \
+#   VISIONARY_AGENT_LOCATION=frankfurt-vps docker compose up -d --build
+#
+# Browser checks need Chromium in the image:
+#
+#   LOCATION_TARGET=location-browser docker compose up -d --build
+name: visionary-location
+
+services:
+  location:
+    build:
+      context: ../..
+      target: ${LOCATION_TARGET:-location}
+    image: visionary-location:local
+    environment:
+      VISIONARY_URL: ${VISIONARY_URL:?set the Visionary server URL}
+      VISIONARY_KEY: ${VISIONARY_KEY:?set the location key}
+      VISIONARY_AGENT_LOCATION: ${VISIONARY_AGENT_LOCATION:?set the location name}
+      # Set to true to let checks reach private addresses on this network.
+      VISIONARY_AGENT_ALLOW_PRIVATE: ${VISIONARY_AGENT_ALLOW_PRIVATE:-false}
+    restart: unless-stopped
