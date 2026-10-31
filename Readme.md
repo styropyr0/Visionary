@@ -394,6 +394,15 @@ It also ships logs from journald, containers and files when you set
 of reports and retries. Variables are listed under
 [Environment reference](#host-agent-1).
 
+**Uptime locations.** Started with `VISIONARY_AGENT_LOCATION` and a location
+key, the agent runs uptime checks from its machine instead of reporting it,
+so a check can run from several places at once (Uptime → Locations): down in
+Frankfurt but fine in Mumbai shows as such. A check is down when any, a
+majority or all of its locations fail; a location that stops reporting is
+marked stale and left out, and the *Uptime location offline* alert tells
+admins once. It runs anywhere, in Docker too (`deploy/location/compose.yaml`).
+See [the agent's README](cmd/visionary-agent/README.md#uptime-locations).
+
 ## Browser checks
 
 A browser check plays scripted steps in a headless Chrome, Chromium or Edge on
@@ -519,6 +528,7 @@ Settings → Server → Sessions.
 | server | OpenTelemetry, Prometheus remote_write, log shippers, the host agent, CI |
 | client | Browser and mobile apps; public, so pair it with allowed web origins |
 | scim | Your identity provider |
+| location | One uptime location's runner; made in Uptime → Locations |
 
 **Settings** live in the database, so every replica shares them. Tabs:
 Preferences, Members & roles, Workspaces, Sign-in, Server, API keys,
@@ -699,3 +709,5 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_AGENT_AUTH_LOG` | auto | A log file, `journald` or `off`. |
 | `VISIONARY_AGENT_SECURITY` | `true` | `false` turns off all security findings. |
 | `VISIONARY_AGENT_SSH_KEYS`, `VISIONARY_AGENT_FILE_INTEGRITY`, `VISIONARY_AGENT_PROCESS_CHECKS`, `VISIONARY_AGENT_CONTAINER_RISKS` | `true` | Turn off one kind of security check. |
+| `VISIONARY_AGENT_LOCATION` | none | Run as an uptime location (with that location's key) instead of reporting the host. |
+| `VISIONARY_AGENT_ALLOW_PRIVATE` | the server's setting | Location mode: `true` or `false`, may checks reach private addresses. |

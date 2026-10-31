@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -32,8 +32,8 @@ const (
 	browserMaxEntryLen = 500
 )
 
-// stepResult is how one step went.
-type stepResult struct {
+// StepResult is how one step went.
+type StepResult struct {
 	Action     string  `json:"action"`
 	Label      string  `json:"label"`
 	Status     string  `json:"status"` // passed, failed, skipped
@@ -43,24 +43,24 @@ type stepResult struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-type netFailure struct {
+type NetFailure struct {
 	URL    string `json:"url"`
 	Status int64  `json:"status,omitempty"`
 	Error  string `json:"error,omitempty"`
 	Type   string `json:"type,omitempty"`
 }
 
-// browserRun is the detail of one run, beside its uptime_results row.
-type browserRun struct {
-	Steps      []stepResult `json:"steps"`
+// BrowserRun is the detail of one run, beside its uptime_results row.
+type BrowserRun struct {
+	Steps      []StepResult `json:"steps"`
 	FailedStep int          `json:"failed_step"` // -1 when every step passed
 	Console    []string     `json:"console"`
-	Network    []netFailure `json:"network"`
+	Network    []NetFailure `json:"network"`
 	Screenshot []byte       `json:"-"`
 	Final      []byte       `json:"-"`
 	TraceID    string       `json:"trace_id,omitempty"`
 	Warning    string       `json:"warning,omitempty"`
-	Requests   []netRequest `json:"requests"`
+	Requests   []NetRequest `json:"requests"`
 	StepShots  [][]byte     `json:"-"`
 }
 
@@ -82,14 +82,14 @@ type vitals struct {
 type runState struct {
 	mu      sync.Mutex
 	console []string
-	network []netFailure
+	network []NetFailure
 	urls    map[network.RequestID]string
 	navs    int
 	mask    func(string) string
 	touch   bool
 	// the request timeline
-	reqs      map[network.RequestID]*netRequest
-	order     []*netRequest
+	reqs      map[network.RequestID]*NetRequest
+	order     []*NetRequest
 	wallBase  float64
 	shotBytes int
 	// variables, the frame chain the steps work in and upload files
@@ -110,11 +110,11 @@ func (st *runState) addConsole(s string) {
 	}
 }
 
-func (st *runState) addNetwork(f netFailure) {
+func (st *runState) addNetwork(f NetFailure) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if len(st.network) < browserMaxEntries {
-		f.URL = clip(st.mask(redactURL(f.URL)), browserMaxEntryLen)
+		f.URL = clip(st.mask(RedactURL(f.URL)), browserMaxEntryLen)
 		f.Error = clip(st.mask(f.Error), browserMaxEntryLen)
 		st.network = append(st.network, f)
 	}
@@ -144,9 +144,9 @@ func masker(secrets map[string]string) func(string) string {
 	}
 	return func(s string) string {
 		for _, v := range vals {
-			s = strings.ReplaceAll(s, v, uptimeMask)
+			s = strings.ReplaceAll(s, v, Mask)
 			if e := url.QueryEscape(v); e != v {
-				s = strings.ReplaceAll(s, e, uptimeMask)
+				s = strings.ReplaceAll(s, e, Mask)
 			}
 		}
 		return s
@@ -155,11 +155,11 @@ func masker(secrets map[string]string) func(string) string {
 
 // runBrowserCheck plays c in browser b. guard, when set, is the proxy every
 // request goes through.
-func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guard *guardProxy) (res uptimeResult, run browserRun) {
+func runBrowserCheck(ctx context.Context, b context.Context, c Check, guard *guardProxy) (res Result, run BrowserRun) {
 	start := time.Now()
 	run.FailedStep = -1
 	defer func() {
-		res.CreatedAt = start.UTC().Format(tsLayout)
+		res.CreatedAt = start.UTC().Format(TimeLayout)
 		res.DurationMs = float64(time.Since(start).Microseconds()) / 1000
 		if res.OK {
 			if why := c.overLimit(res); why != "" {
@@ -173,7 +173,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	}()
 	mask := masker(c.Secrets)
 	dev := c.device()
-	st := &runState{urls: map[network.RequestID]string{}, reqs: map[network.RequestID]*netRequest{}, mask: mask, touch: dev.Mobile,
+	st := &runState{urls: map[network.RequestID]string{}, reqs: map[network.RequestID]*NetRequest{}, mask: mask, touch: dev.Mobile,
 		vars: map[string]string{}, files: map[string]BrowserFile{}}
 	for _, f := range c.Files {
 		st.files[f.Name] = f
@@ -237,7 +237,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		run.StepShots = make([][]byte, len(c.Steps))
 	}
 	for i, step := range c.Steps {
-		sr := stepResult{Action: step.Action, Label: step.describe(), Status: "passed"}
+		sr := StepResult{Action: step.Action, Label: step.describe(), Status: "passed"}
 		if failure != nil {
 			sr.Status = "skipped"
 			run.Steps = append(run.Steps, sr)
@@ -254,7 +254,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 			err = fmt.Errorf("took %s, over its %s limit", msText(sr.DurationMs), msText(float64(step.MaxMs)))
 		}
 		if err != nil {
-			if runCtx.Err() != nil && !errors.Is(err, errBlockedAddress) {
+			if runCtx.Err() != nil && !errors.Is(err, ErrBlockedAddress) {
 				err = fmt.Errorf("timed out after %s", time.Duration(c.TimeoutMs)*time.Millisecond)
 			}
 			sr.Status, sr.Error = "failed", clip(mask(err.Error()), 300)
@@ -295,12 +295,12 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		run.Console = []string{}
 	}
 	if run.Network == nil {
-		run.Network = []netFailure{}
+		run.Network = []NetFailure{}
 	}
 
 	if failure != nil {
 		res.Error = clip(fmt.Sprintf("step %d (%s): %s", run.FailedStep+1, c.Steps[run.FailedStep].describe(), run.Steps[run.FailedStep].Error), 300)
-		res.blocked = errors.Is(failure, errBlockedAddress)
+		res.blocked = errors.Is(failure, ErrBlockedAddress)
 		return res, run
 	}
 	res.OK = true
@@ -377,7 +377,7 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 			st.mu.Lock()
 			u := st.urls[ev.RequestID]
 			st.mu.Unlock()
-			st.addNetwork(netFailure{URL: u, Error: reason, Type: string(ev.Type)})
+			st.addNetwork(NetFailure{URL: u, Error: reason, Type: string(ev.Type)})
 		}
 	}()
 	go func() {
@@ -388,7 +388,7 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 			}
 			st.netResponse(&ev)
 			if ev.Response != nil && ev.Response.Status >= 400 {
-				st.addNetwork(netFailure{URL: ev.Response.URL, Status: ev.Response.Status, Type: string(ev.Type)})
+				st.addNetwork(NetFailure{URL: ev.Response.URL, Status: ev.Response.Status, Type: string(ev.Type)})
 			}
 		}
 	}()
@@ -569,7 +569,7 @@ func playBasic(ctx context.Context, s BrowserStep, secrets map[string]string, st
 			if err != nil {
 				return 0, errors.New("invalid URL")
 			}
-			if err := precheckURL(u); err != nil {
+			if err := PrecheckURL(u); err != nil {
 				return 0, err
 			}
 		}
@@ -577,7 +577,7 @@ func playBasic(ctx context.Context, s BrowserStep, secrets map[string]string, st
 		if err != nil {
 			if guard != nil {
 				if b := guard.refused(); len(b) > 0 {
-					return 0, fmt.Errorf("%w%s", errBlockedAddress, strings.TrimPrefix(b[0], errBlockedAddress.Error()))
+					return 0, fmt.Errorf("%w%s", ErrBlockedAddress, strings.TrimPrefix(b[0], ErrBlockedAddress.Error()))
 				}
 			}
 			return 0, fmt.Errorf("the page did not load: %s", navError(err))
@@ -663,7 +663,7 @@ func playBasic(ctx context.Context, s BrowserStep, secrets map[string]string, st
 	case "assert_url":
 		href, err := waitJS[string](ctx, nil, `location.href`, min(browserAssertWait, remaining(ctx)), func(h string) bool { return strings.Contains(h, s.Value) })
 		if errors.Is(err, errStepTimeout) {
-			return 0, fmt.Errorf("the URL %s does not contain %q", redactURL(href), s.Value)
+			return 0, fmt.Errorf("the URL %s does not contain %q", RedactURL(href), s.Value)
 		}
 		return 0, err
 	case "assert_count":

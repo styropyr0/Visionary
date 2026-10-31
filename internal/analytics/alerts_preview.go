@@ -173,6 +173,10 @@ FROM uptime_results WHERE `+where+` GROUP BY `+t+`, check_name ORDER BY t`, args
 		out.Result = newResult(res, s.maxRows(), "", tr)
 		out.Note = "Failed checks per hour. The rule counts consecutive failures, newest first."
 
+	case sp.Metric == "uptime_location_offline":
+		out.Unit, out.Threshold = "minutes", ptr(sp.Threshold)
+		out.Note = "Each location's minutes since its runner last reported are below; this rule has no history to chart."
+
 	case sp.Metric == "uptime_cert_days":
 		out.Unit, out.Threshold = "days", ptr(sp.Threshold)
 		out.Note = "Each check's days until its certificate expires are below; certificates change too rarely to chart."

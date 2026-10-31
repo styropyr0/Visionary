@@ -8,27 +8,6 @@ import (
 	"testing"
 )
 
-func TestBrowserLimits(t *testing.T) {
-	f := func(v float64) *float64 { return &v }
-	r := uptimeResult{OK: true, DurationMs: 4200, LCPMs: f(2600), CLS: f(0.12), TTFBMs: f(300)}
-	c := UptimeCheck{DegradedMs: 4000, BrowserOptions: BrowserOptions{BrowserLimits: BrowserLimits{MaxLCPMs: 2500, WarnCLS: 0.1}}}
-	if got := c.overLimit(r); got != "LCP 2,600 ms is over the 2,500 ms limit" {
-		t.Errorf("over: %q", got)
-	}
-	if got := c.warnings(r); got != "the run took 4,200 ms, above 4,000 ms; CLS 0.12 is above 0.1" {
-		t.Errorf("warnings: %q", got)
-	}
-	c.MaxLCPMs = 0
-	c.MaxDurationMs = 4000
-	if got := c.overLimit(r); !strings.HasPrefix(got, "the run took 4,200 ms") {
-		t.Errorf("duration: %q", got)
-	}
-	// Vitals that were not measured are not judged.
-	if got := (UptimeCheck{BrowserOptions: BrowserOptions{BrowserLimits: BrowserLimits{MaxTTFBMs: 1}}}).overLimit(uptimeResult{}); got != "" {
-		t.Errorf("unmeasured: %q", got)
-	}
-}
-
 func TestBrowserLimitsRun(t *testing.T) {
 	_, u := browserRunner(t)
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

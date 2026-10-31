@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -69,6 +70,9 @@ type checkModel struct {
 	ViewportH       types.Int64   `tfsdk:"viewport_h"`
 	StepScreenshots types.Bool    `tfsdk:"step_screenshots"`
 	Files           []fileModel   `tfsdk:"files"`
+	Locations       types.List    `tfsdk:"locations"`
+	LocationRule    types.String  `tfsdk:"location_rule"`
+	StatusShowLocs  types.Bool    `tfsdk:"status_show_locations"`
 }
 
 type fileModel struct {
@@ -136,6 +140,9 @@ type apiCheck struct {
 	ViewportH       int64             `json:"viewport_h,omitempty"`
 	StepScreenshots bool              `json:"step_screenshots,omitempty"`
 	Files           []apiFile         `json:"files,omitempty"`
+	Locations       []string          `json:"locations"`
+	LocationRule    string            `json:"location_rule"`
+	StatusShowLocs  bool              `json:"status_show_locations"`
 }
 
 type apiStepB struct {
@@ -265,6 +272,17 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.",
 				Optional:    true, ElementType: types.StringType, Validators: []validator.List{listvalidator.SizeAtMost(10)},
 			},
+			"locations": schema.ListAttribute{
+				Description: `Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).`,
+				Optional:    true, Computed: true, ElementType: types.StringType,
+				Default:    listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{types.StringValue("server")})),
+				Validators: []validator.List{listvalidator.SizeBetween(1, 10)},
+			},
+			"location_rule": schema.StringAttribute{
+				Description: "With several locations, the check is down when any, a majority (default) or all of them fail.", Optional: true, Computed: true,
+				Default: stringdefault.StaticString("majority"), Validators: []validator.String{stringvalidator.OneOf("any", "majority", "all")},
+			},
+			"status_show_locations": schema.BoolAttribute{Description: "Break the check down by location on the status page (location names become public).", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
 		},
 	}
 }
@@ -314,6 +332,7 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		IntervalS: m.IntervalS.ValueInt64(), TimeoutMs: m.TimeoutMs.ValueInt64(), DegradedMs: m.DegradedMs.ValueInt64(),
 		FollowRedirects: m.FollowRedirects.ValueBool(), Enabled: m.Enabled.ValueBool(), OnStatusPage: m.OnStatusPage.ValueBool(),
 		StatusShowURL: m.StatusShowURL.ValueBool(), Secrets: mapOf(ctx, m.Secrets, diags), FinalScreenshot: m.FinalScreenshot.ValueBool(),
+		Locations: stringsOf(ctx, m.Locations, diags), LocationRule: m.LocationRule.ValueString(), StatusShowLocs: m.StatusShowLocs.ValueBool(),
 		TraceOrigins: stringsOf(ctx, m.TraceOrigins, diags), NoTrace: !m.TraceHeaders.IsNull() && !m.TraceHeaders.IsUnknown() && !m.TraceHeaders.ValueBool(),
 		MaxLCPMs: m.MaxLCPMs.ValueInt64(), MaxCLS: m.MaxCLS.ValueFloat64(), MaxTTFBMs: m.MaxTTFBMs.ValueInt64(), MaxDurationMs: m.MaxDurationMs.ValueInt64(),
 		WarnLCPMs: m.WarnLCPMs.ValueInt64(), WarnCLS: m.WarnCLS.ValueFloat64(), WarnTTFBMs: m.WarnTTFBMs.ValueInt64(),
@@ -407,6 +426,14 @@ func (m *checkModel) fill(c apiCheck) {
 		}
 		m.Files = files
 	}
+	if len(c.Locations) == 0 {
+		c.Locations = []string{"server"}
+	}
+	m.Locations = optStringList(c.Locations, m.Locations)
+	if c.LocationRule == "" {
+		c.LocationRule = "majority"
+	}
+	m.LocationRule, m.StatusShowLocs = types.StringValue(c.LocationRule), types.BoolValue(c.StatusShowLocs)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

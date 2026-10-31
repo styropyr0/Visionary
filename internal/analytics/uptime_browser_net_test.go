@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 func TestBrowserRequestsAndStepShots(t *testing.T) {
@@ -36,7 +38,7 @@ func TestBrowserRequestsAndStepShots(t *testing.T) {
 		Steps:          []BrowserStep{{Action: "goto", Value: site.URL + "/"}, {Action: "wait_text", Text: "Shop"}, {Action: "wait", Ms: 200}},
 		BrowserOptions: BrowserOptions{StepScreenshots: true}}
 	res, run := playCheck(t, u, c, false)
-	if len(run.StepShots) != 3 || run.StepShots[0] == nil || len(run.StepShots[2]) > browserStepShot {
+	if len(run.StepShots) != 3 || run.StepShots[0] == nil || len(run.StepShots[2]) > uptimecore.MaxStepShot {
 		t.Fatalf("step shots: %d", len(run.StepShots))
 	}
 	byPath := map[string]netRequest{}

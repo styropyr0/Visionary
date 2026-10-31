@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 // checkWithAlert is a check as the form sends it, with its alert settings
@@ -47,6 +49,11 @@ type UptimeCheck struct {
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	BrowserOptions
+	// Locations the check runs from (uptime_locations.go), the rule that
+	// combines them, and whether the status page breaks it down by them.
+	Locations           []string `json:"locations"`
+	LocationRule        string   `json:"location_rule"`
+	StatusShowLocations bool     `json:"status_show_locations"`
 }
 
 const (
@@ -54,14 +61,13 @@ const (
 	uptimeMaxHeaders  = 20
 	uptimeMinInterval = 30
 	uptimeMaxInterval = 3600
-	uptimeMask        = "********"
+	uptimeMask        = uptimecore.Mask
 )
 
 var (
-	uptimeMethods    = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "OPTIONS": true}
-	headerNameRe     = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_|~-]{1,64}$`)
-	secretHeaderRe   = regexp.MustCompile(`(?i)(auth|token|secret|key|cookie|session|password|signature|credential)`)
-	expectStatusPart = regexp.MustCompile(`^([1-5])xx$|^(\d{3})(?:-(\d{3}))?$`)
+	uptimeMethods  = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "OPTIONS": true}
+	headerNameRe   = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_|~-]{1,64}$`)
+	secretHeaderRe = uptimecore.SecretNameRe
 )
 
 const uptimeCheckCols = `id, name, url, method, expect_status, body_contains, headers, interval_s, timeout_ms, degraded_ms,
@@ -110,6 +116,9 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadBrowserConfigs(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.loadLocationConfigs(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -124,7 +133,9 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 		return UptimeCheck{}, errCheckNotFound
 	}
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
-	err = s.loadBrowserConfigs(ctx, checks)
+	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
+		err = s.loadLocationConfigs(ctx, checks)
+	}
 	return checks[0], err
 }
 
@@ -134,6 +145,9 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
 		return errors.New("name must be 1–120 characters")
+	}
+	if err := c.normalizeLocations(); err != nil {
+		return err
 	}
 	switch c.Kind {
 	case "", "http":
@@ -162,7 +176,7 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	if c.ExpectStatus == "" {
 		c.ExpectStatus = "200-299"
 	}
-	if _, err := parseExpectStatus(c.ExpectStatus); err != nil {
+	if _, err := uptimecore.ParseExpectStatus(c.ExpectStatus); err != nil {
 		return err
 	}
 	if len(c.BodyContains) > 512 {
@@ -254,46 +268,6 @@ func (c UptimeCheck) masked() UptimeCheck {
 	return c
 }
 
-// statusRange is an inclusive range of accepted HTTP statuses.
-type statusRange struct{ lo, hi int }
-
-// parseExpectStatus reads "200-299", "2xx", "200,204,301" or a mix.
-func parseExpectStatus(spec string) ([]statusRange, error) {
-	var out []statusRange
-	for _, part := range strings.Split(spec, ",") {
-		m := expectStatusPart.FindStringSubmatch(strings.ToLower(part))
-		if m == nil {
-			return nil, fmt.Errorf("expected status %q: use a code (200), a range (200-299) or a class (2xx), comma separated", part)
-		}
-		var r statusRange
-		switch {
-		case m[1] != "":
-			d, _ := strconv.Atoi(m[1])
-			r = statusRange{d * 100, d*100 + 99}
-		default:
-			r.lo, _ = strconv.Atoi(m[2])
-			r.hi = r.lo
-			if m[3] != "" {
-				r.hi, _ = strconv.Atoi(m[3])
-			}
-		}
-		if r.lo < 100 || r.hi > 599 || r.hi < r.lo {
-			return nil, fmt.Errorf("expected status %q is out of range", part)
-		}
-		out = append(out, r)
-	}
-	return out, nil
-}
-
-func statusAccepted(rs []statusRange, code int) bool {
-	for _, r := range rs {
-		if code >= r.lo && code <= r.hi {
-			return true
-		}
-	}
-	return false
-}
-
 func boolInt(b bool) int {
 	if b {
 		return 1
@@ -323,7 +297,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
 	if err != nil {
 		return err
 	}
-	return s.saveBrowserConfig(ctx, *c)
+	if err := s.saveBrowserConfig(ctx, *c); err != nil {
+		return err
+	}
+	return s.saveLocationConfig(ctx, *c)
 }
 
 // --- handlers ---
@@ -371,9 +348,14 @@ func (s *Server) handleUptimeList(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	locs, err := s.locationStates(r.Context(), checks)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	out := make([]map[string]any, 0, len(checks))
 	for _, c := range checks {
-		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID], "alert": alerts[c.ID]})
+		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID], "alert": alerts[c.ID], "locations": locs[c.ID]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checks": out, "can_edit": s.can(r, "edit")})
 }
@@ -401,6 +383,10 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 	c.ID = 0
 	if err := c.normalize(nil); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.checkLocations(r.Context(), c); err != nil {
+		s.fail(w, err)
 		return
 	}
 	existing, err := s.listUptimeChecks(r.Context())
@@ -451,6 +437,10 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	c.ID, c.CreatedAt = prev.ID, prev.CreatedAt
 	if err := c.normalize(&prev); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.checkLocations(r.Context(), c); err != nil {
+		s.fail(w, err)
 		return
 	}
 	if err := s.saveUptimeCheck(r.Context(), &c); err != nil {
@@ -522,6 +512,9 @@ func checkChanges(a, b UptimeCheck) []string {
 	add("enabled", a.Enabled != b.Enabled)
 	add("on_status_page", a.OnStatusPage != b.OnStatusPage)
 	add("status_show_url", a.StatusShowURL != b.StatusShowURL)
+	add("locations", strings.Join(a.Locations, ",") != strings.Join(b.Locations, ","))
+	add("location_rule", a.LocationRule != b.LocationRule)
+	add("status_show_locations", a.StatusShowLocations != b.StatusShowLocations)
 	sort.Strings(out)
 	return out
 }
@@ -574,6 +567,9 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
+	if err := s.db.Exec(r.Context(), `DELETE FROM uptime_check_locations WHERE check_id = ?`, c.ID); err != nil {
+		s.logger.Warn("check locations not deleted", "check_id", c.ID, "err", err)
+	}
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)

@@ -15,6 +15,7 @@ import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alert
 import { BrowserNotice } from "./Uptime.steps";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
+import { LocationDots, LocationsTab } from "./Uptime.locations";
 import "./Uptime.css";
 
 /** The selected check lives in the hash (#/uptime?check=3) so detail views can be linked. */
@@ -24,21 +25,35 @@ function readCheckParam(): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+function readTab(): "checks" | "locations" {
+  const q = window.location.hash.split("?")[1] ?? "";
+  return new URLSearchParams(q).get("tab") === "locations" ? "locations" : "checks";
+}
+
 export function openCheck(id: number | null) {
   window.location.hash = id ? `#/uptime?check=${id}` : "#/uptime";
 }
 
 export function Uptime() {
   const [selected, setSelected] = useState(readCheckParam);
+  const [tab, setTab] = useState(readTab);
   useEffect(() => {
-    const onHash = () => setSelected(readCheckParam());
+    const onHash = () => {
+      setSelected(readCheckParam());
+      setTab(readTab());
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  return selected ? <UptimeDetail key={selected} id={selected} /> : <UptimeList />;
+  return selected ? <UptimeDetail key={selected} id={selected} /> : <UptimeList tab={tab} />;
 }
 
-function UptimeList() {
+const TABS = [
+  { key: "checks", label: "Checks" },
+  { key: "locations", label: "Locations" },
+] as const;
+
+function UptimeList({ tab }: { tab: "checks" | "locations" }) {
   const { tick } = useApp();
   const toast = useToast();
   const [version, setVersion] = useState(0);
@@ -95,8 +110,23 @@ function UptimeList() {
         }
       />
       <div className="content">
-        {list.error && !data && <ErrorNotice title="Could not load checks" error={list.error} />}
-        {data && data.checks.length === 0 && (
+        <nav className="tabs" role="tablist" aria-label="Uptime">
+          {TABS.map((t) => (
+            <button
+              type="button"
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              className={tab === t.key ? "on" : ""}
+              onClick={() => (window.location.hash = t.key === "checks" ? "#/uptime" : `#/uptime?tab=${t.key}`)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        {tab === "locations" && <LocationsTab />}
+        {tab === "checks" && list.error && !data && <ErrorNotice title="Could not load checks" error={list.error} />}
+        {tab === "checks" && data && data.checks.length === 0 && (
           <SetupCard
             icon={<Activity size={20} />}
             title="No uptime checks yet"
@@ -120,7 +150,7 @@ function UptimeList() {
             </SetupOption>
           </SetupCard>
         )}
-        {data && data.checks.length > 0 && (
+        {tab === "checks" && data && data.checks.length > 0 && (
           <div className="grid">
             <Tiles data={data} loading={list.loading} />
             <CoverageBanner data={data} onDone={reload} />
@@ -149,7 +179,7 @@ function UptimeList() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.checks.map(({ check: c, state: s, alert }) => (
+                    {data.checks.map(({ check: c, state: s, alert, locations }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
                           <span title={s.no_browser ? "Waiting for a browser on the server" : undefined}>
@@ -163,6 +193,7 @@ function UptimeList() {
                           <span className="mono dim" title={c.url}>
                             {c.kind === "browser" ? `Browser · ${deviceLabel(c)} · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
                           </span>
+                          {locations && locations.length > 0 && <LocationDots locations={locations} />}
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>
                         <td>

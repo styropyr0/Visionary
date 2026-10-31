@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -28,7 +28,8 @@ var browserDevices = map[string]deviceSpec{
 	"phone":   {"Phone", 390, 844, 3, true},
 }
 
-func (o *BrowserOptions) normalizeDevice() error {
+// NormalizeDevice checks the device, desktop when none is given.
+func (o *BrowserOptions) NormalizeDevice() error {
 	if o.Device == "" {
 		o.Device = "desktop"
 	}

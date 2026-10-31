@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"errors"
@@ -23,13 +23,14 @@ type BrowserLimits struct {
 	WarnTTFBMs    int     `json:"warn_ttfb_ms,omitempty"`
 }
 
-func (l BrowserLimits) validate(degradedMs int) error {
+// Validate checks the limits; degradedMs is the warning of the total time.
+func (l BrowserLimits) Validate(degradedMs int) error {
 	for _, v := range []struct {
 		name      string
 		max, warn int
 	}{{"LCP", l.MaxLCPMs, l.WarnLCPMs}, {"TTFB", l.MaxTTFBMs, l.WarnTTFBMs}, {"total time", l.MaxDurationMs, degradedMs}} {
-		if v.max < 0 || v.max > browserMaxTimeoutMs || v.warn < 0 || v.warn > browserMaxTimeoutMs {
-			return fmt.Errorf("%s limits must be between 0 and %d ms", v.name, browserMaxTimeoutMs)
+		if v.max < 0 || v.max > MaxBrowserTimeoutMs || v.warn < 0 || v.warn > MaxBrowserTimeoutMs {
+			return fmt.Errorf("%s limits must be between 0 and %d ms", v.name, MaxBrowserTimeoutMs)
 		}
 		if v.max > 0 && v.warn >= v.max {
 			return fmt.Errorf("the %s warning must be below its limit", v.name)
@@ -57,7 +58,7 @@ func groupInt(n int64) string {
 func clsText(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
 // overLimit names the first hard limit a passing run went over.
-func (c UptimeCheck) overLimit(r uptimeResult) string {
+func (c Check) overLimit(r Result) string {
 	l := c.BrowserLimits
 	switch {
 	case l.MaxDurationMs > 0 && r.DurationMs > float64(l.MaxDurationMs):
@@ -73,7 +74,7 @@ func (c UptimeCheck) overLimit(r uptimeResult) string {
 }
 
 // warnings name every warn value a passing run went over.
-func (c UptimeCheck) warnings(r uptimeResult) string {
+func (c Check) warnings(r Result) string {
 	l := c.BrowserLimits
 	var out []string
 	if c.DegradedMs > 0 && r.DurationMs > float64(c.DegradedMs) {

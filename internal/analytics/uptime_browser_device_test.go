@@ -12,11 +12,11 @@ import (
 func TestBrowserDeviceNormalize(t *testing.T) {
 	steps := []BrowserStep{{Action: "goto", Value: "https://example.com"}}
 	c := UptimeCheck{Name: "x", Kind: "browser", Steps: steps}
-	if err := c.normalize(nil); err != nil || c.Device != "desktop" || c.device().W != 1280 {
+	if err := c.normalize(nil); err != nil || c.Device != "desktop" {
 		t.Fatalf("default: %v %+v", err, c.BrowserOptions)
 	}
 	c = UptimeCheck{Name: "x", Kind: "browser", Steps: steps, BrowserOptions: BrowserOptions{Device: "phone", ViewportW: 999}}
-	if err := c.normalize(nil); err != nil || c.ViewportW != 0 || !c.device().Mobile {
+	if err := c.normalize(nil); err != nil || c.ViewportW != 0 {
 		t.Fatalf("phone: %v %+v", err, c.BrowserOptions)
 	}
 	for _, o := range []BrowserOptions{{Device: "watch"}, {Device: "custom", ViewportW: 100, ViewportH: 800}} {

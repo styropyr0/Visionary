@@ -48,8 +48,12 @@ func TestBrowserMoreStepsNormalize(t *testing.T) {
 		func(c *UptimeCheck) { c.Steps[5].Scope = "cookie" },
 		func(c *UptimeCheck) { c.Steps[6].Lat = 100 },
 		func(c *UptimeCheck) { c.Steps[6].Permission = "camera" },
-		func(c *UptimeCheck) { c.Steps = append(c.Steps, BrowserStep{Action: "set_cookie", Name: "a b", Value: "x"}) },
-		func(c *UptimeCheck) { c.Files = []BrowserFile{{Name: "big", Data: base64.StdEncoding.EncodeToString(make([]byte, browserMaxFile+1))}} },
+		func(c *UptimeCheck) {
+			c.Steps = append(c.Steps, BrowserStep{Action: "set_cookie", Name: "a b", Value: "x"})
+		},
+		func(c *UptimeCheck) {
+			c.Files = []BrowserFile{{Name: "big", Data: base64.StdEncoding.EncodeToString(make([]byte, 256<<10+1))}}
+		},
 		func(c *UptimeCheck) { c.Files = []BrowserFile{{Name: "../x", Data: "eA=="}} },
 	}
 	for i, f := range bad {

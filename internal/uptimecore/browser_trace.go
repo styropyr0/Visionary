@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -29,9 +29,9 @@ func newTraceIDs() (trace, span string) {
 	return hex.EncodeToString(b[:16]), hex.EncodeToString(b[16:])
 }
 
-// normalizeOrigin reads "https://app.example.com" or "https://*.example.com",
+// NormalizeOrigin reads "https://app.example.com" or "https://*.example.com",
 // with or without a trailing slash, into scheme://host[:port].
-func normalizeOrigin(raw string) (string, error) {
+func NormalizeOrigin(raw string) (string, error) {
 	raw = strings.TrimSuffix(strings.TrimSpace(raw), "/")
 	host, wild := raw, false
 	if i := strings.Index(raw, "://*."); i >= 0 {
@@ -57,7 +57,8 @@ func originOf(raw string) string {
 	return u.Scheme + "://" + strings.ToLower(u.Host)
 }
 
-func (o *BrowserOptions) normalizeTrace() error {
+// NormalizeTrace checks and tidies the trace origins.
+func (o *BrowserOptions) NormalizeTrace() error {
 	if len(o.TraceOrigins) > browserMaxTraceOrigins {
 		return fmt.Errorf("at most %d trace origins", browserMaxTraceOrigins)
 	}
@@ -67,7 +68,7 @@ func (o *BrowserOptions) normalizeTrace() error {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		v, err := normalizeOrigin(raw)
+		v, err := NormalizeOrigin(raw)
 		if err != nil {
 			return err
 		}
@@ -84,7 +85,7 @@ func (o *BrowserOptions) normalizeTrace() error {
 }
 
 // tracePatterns are the Fetch patterns of the origins that get the header.
-func (c UptimeCheck) tracePatterns() []*fetch.RequestPattern {
+func (c Check) tracePatterns() []*fetch.RequestPattern {
 	if c.NoTrace {
 		return nil
 	}
@@ -132,18 +133,4 @@ func propagateTrace(ctx, tab context.Context, wg *sync.WaitGroup, traceparent st
 			}()
 		}
 	}()
-}
-
-// traceHasRows reports whether a backend recorded anything under the trace.
-func (s *Server) traceHasRows(ctx context.Context, traceID string) bool {
-	if traceID == "" {
-		return false
-	}
-	for _, t := range []string{"api_logs", "spans"} {
-		rows, err := s.db.Query(ctx, `SELECT 1 FROM `+t+` WHERE trace_id = ? LIMIT 1`, traceID)
-		if err == nil && len(rows.Rows) > 0 {
-			return true
-		}
-	}
-	return false
 }

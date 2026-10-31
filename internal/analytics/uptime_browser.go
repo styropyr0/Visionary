@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/styropyr0/visionary/internal/uptimecore"
 	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
@@ -53,28 +54,10 @@ type BrowserStep struct {
 	Lon        float64 `json:"lon,omitempty"`
 }
 
-// BrowserOptions are a browser check's settings beyond its steps, stored as
-// one JSON column.
-type BrowserOptions struct {
-	// TraceOrigins get the run's traceparent; empty means the first page's.
-	TraceOrigins []string `json:"trace_origins,omitempty"`
-	NoTrace      bool     `json:"no_trace,omitempty"`
-	BrowserLimits
-	// Device is desktop (the default), laptop, tablet, phone or custom, whose
-	// size is ViewportW × ViewportH.
-	Device    string `json:"device,omitempty"`
-	ViewportW int    `json:"viewport_w,omitempty"`
-	ViewportH int    `json:"viewport_h,omitempty"`
-	// StepScreenshots keeps a small screenshot after every step.
-	StepScreenshots bool `json:"step_screenshots,omitempty"`
-	// Files are what upload steps send.
-	Files []BrowserFile `json:"files,omitempty"`
-}
-
 const (
 	browserMaxSteps     = 50
 	browserMaxSecrets   = 20
-	browserMaxTimeoutMs = 120000
+	browserMaxTimeoutMs = uptimecore.MaxBrowserTimeoutMs
 )
 
 var (
@@ -130,67 +113,6 @@ CREATE INDEX ` + ine + `idx_uptime_browser_results_check ON uptime_browser_resul
 CREATE INDEX ` + ine + `idx_uptime_browser_results_created ON uptime_browser_results (created_at)`}
 }
 
-// describe names a step for results and errors.
-func (b BrowserStep) describe() string {
-	if b.Label != "" {
-		return b.Label
-	}
-	what := b.Selector
-	if what == "" && b.Text != "" {
-		what = "“" + b.Text + "”"
-	}
-	switch b.Action {
-	case "goto":
-		return "go to " + redactURL(b.Value)
-	case "click":
-		return "click " + what
-	case "type":
-		return "type into " + b.Selector
-	case "press":
-		return "press " + b.Value
-	case "select":
-		return "select " + strconv.Quote(b.Value) + " in " + b.Selector
-	case "wait_selector":
-		return "wait for " + what
-	case "wait_text":
-		return "wait for text “" + b.Text + "”"
-	case "wait_navigation":
-		return "wait for the next page"
-	case "assert_text":
-		return "text “" + b.Text + "” is shown"
-	case "assert_no_text":
-		return "text “" + b.Text + "” is not shown"
-	case "assert_url":
-		return "URL contains " + strconv.Quote(b.Value)
-	case "assert_count":
-		return fmt.Sprintf("%s %d of %s", opWord(b.Op), b.Count, b.Selector)
-	case "wait":
-		return fmt.Sprintf("wait %d ms", b.Ms)
-	case "script":
-		return "script"
-	case "extract":
-		return "read " + b.Selector + " into " + b.Name
-	case "hover":
-		return "hover " + what
-	case "drag":
-		return "drag " + b.Selector + " to " + b.Target
-	case "upload":
-		return "upload " + b.Name + " to " + b.Selector
-	case "frame":
-		if b.Selector == "" {
-			return "back to the page"
-		}
-		return "into frame " + b.Selector
-	case "set_cookie":
-		return "set cookie " + b.Name
-	case "set_storage":
-		return "set " + b.Scope + "Storage " + b.Name
-	case "grant_permission":
-		return "grant " + b.Permission
-	}
-	return b.Action
-}
-
 // normalizeBrowser validates a browser check; the start URL is its first
 // step's. prev is the stored check on update, whose masked secrets survive.
 func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
@@ -222,7 +144,7 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 		secrets[k] = v
 	}
 	c.Secrets = secrets
-	if err := c.normalizeFiles(prev); err != nil {
+	if err := c.NormalizeFiles(prevFiles(prev)); err != nil {
 		return err
 	}
 	files := map[string]bool{}
@@ -259,10 +181,10 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	if c.Steps[0].Action != "goto" {
 		return errors.New("the first step must go to a URL")
 	}
-	if err := c.normalizeTrace(); err != nil {
+	if err := c.NormalizeTrace(); err != nil {
 		return err
 	}
-	if err := c.normalizeDevice(); err != nil {
+	if err := c.NormalizeDevice(); err != nil {
 		return err
 	}
 	c.URL = c.Steps[0].Value
@@ -284,7 +206,7 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 	if c.DegradedMs < 0 || c.DegradedMs > browserMaxTimeoutMs {
 		return errors.New("slow threshold must be between 0 and 120000 ms")
 	}
-	if err := c.BrowserLimits.validate(c.DegradedMs); err != nil {
+	if err := c.BrowserLimits.Validate(c.DegradedMs); err != nil {
 		return err
 	}
 	if !c.OnStatusPage {
@@ -456,75 +378,12 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	return u.s.db.Exec(ctx, "INSERT INTO uptime_browser_results ("+strings.Join(cols, ", ")+") VALUES (?"+strings.Repeat(", ?", len(cols)-1)+")", vals...)
 }
 
-// runBrowser plays a check once, retrying once on failure like HTTP checks.
-// errNoBrowser (or a launch error) means the check could not run at all.
-func (u *uptimeRunner) runBrowser(ctx context.Context, c UptimeCheck) (uptimeResult, browserRun, error) {
-	res, run, err := u.playOnce(ctx, c)
-	if err != nil || res.OK || res.blocked || ctx.Err() != nil {
-		return res, run, err
-	}
-	select {
-	case <-ctx.Done():
-		return res, run, nil
-	case <-time.After(uptimeRetryDelay):
-	}
-	res2, run2, err := u.playOnce(ctx, c)
-	if err != nil {
-		return res, run, nil
-	}
-	res2.Retried = true
-	return res2, run2, nil
-}
-
-// playOnce runs the check in a pooled browser. A run that outlives its
-// timeout by far has hung the browser, which is then killed so the next run
-// starts a new one.
-func (u *uptimeRunner) playOnce(ctx context.Context, c UptimeCheck) (uptimeResult, browserRun, error) {
-	b, err := u.browser.acquire(ctx)
-	if err != nil {
-		return uptimeResult{}, browserRun{}, err
-	}
-	defer u.browser.release()
-	var guard *guardProxy
-	if !u.allowPrivate() {
-		if guard, err = startGuardProxy(); err != nil {
-			return uptimeResult{}, browserRun{}, err
-		}
-		defer guard.close()
-	}
-	type out struct {
-		res uptimeResult
-		run browserRun
-	}
-	done := make(chan out, 1)
-	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				u.s.logger.Error("browser check panicked", "check_id", c.ID, "panic", fmt.Sprint(p))
-				done <- out{res: uptimeResult{CreatedAt: uptimeNow(), Error: "the browser run crashed"}}
-			}
-		}()
-		r, b := runBrowserCheck(ctx, b, c, guard)
-		done <- out{r, b}
-	}()
-	watchdog := time.Duration(c.TimeoutMs)*time.Millisecond + 45*time.Second
-	select {
-	case o := <-done:
-		return o.res, o.run, nil
-	case <-time.After(watchdog):
-		u.s.logger.Warn("browser check hung; restarting the browser", "check_id", c.ID)
-		u.browser.kill()
-		return uptimeResult{CreatedAt: uptimeNow(), DurationMs: float64(watchdog.Milliseconds()), Error: "the browser stopped responding"},
-			browserRun{FailedStep: -1, Steps: []stepResult{}, Console: []string{}, Network: []netFailure{}}, nil
-	}
-}
-
 // --- handlers ---
 
 // handleBrowserRunNow plays a browser check now and records the run.
 func (s *Server) handleBrowserRunNow(w http.ResponseWriter, r *http.Request, run *uptimeRunner, c UptimeCheck) {
-	if !run.browser.available() {
-		st := run.browser.status()
+	if !run.browser.Available() {
+		st := run.browser.Status()
 		writeError(w, http.StatusConflict, st.Error+". "+st.Help)
 		return
 	}
@@ -548,7 +407,7 @@ func (s *Server) handleBrowserRunNow(w http.ResponseWriter, r *http.Request, run
 }
 
 func (s *Server) handleUptimeBrowser(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, runnerFor(s).browser.status())
+	writeJSON(w, http.StatusOK, runnerFor(s).browser.Status())
 }
 
 // handleBrowserRuns lists a browser check's runs in the range, with how each

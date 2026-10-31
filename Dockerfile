@@ -40,6 +40,39 @@ EXPOSE 8090 4317
 USER nonroot:nonroot
 ENTRYPOINT ["/visionary"]
 
+# An uptime location runner: the host agent in location mode, running checks
+# from wherever it is deployed (deploy/location/compose.yaml):
+#   docker build --target location -t visionary-location .
+# Browser checks need Chromium: --target location-browser.
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.22 AS agent
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY sdks/go/go.mod sdks/go/go.sum sdks/go/
+RUN go mod download
+COPY cmd/ cmd/
+COPY internal/ internal/
+COPY sdks/go/ sdks/go/
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o /out/visionary-agent ./cmd/visionary-agent
+
+FROM debian:12.12-slim AS location-browser
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends chromium fonts-liberation fonts-noto-color-emoji ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --uid 65532 --create-home --home-dir /home/nonroot nonroot
+COPY --from=agent /out/visionary-agent /visionary-agent
+ENV VISIONARY_CHROME=/usr/bin/chromium
+USER nonroot:nonroot
+ENTRYPOINT ["/visionary-agent"]
+
+FROM gcr.io/distroless/static-debian12:nonroot AS location
+COPY --from=agent /out/visionary-agent /visionary-agent
+USER nonroot:nonroot
+ENTRYPOINT ["/visionary-agent"]
+
 # 3. Runtime: no shell, no package manager, non-root. The default target.
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=server /out/visionary /visionary

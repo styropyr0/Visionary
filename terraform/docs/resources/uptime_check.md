@@ -77,9 +77,12 @@ variable "probe_password" {
 - `max_duration_ms` (Number) A browser run that takes longer than this in all fails.
 - `max_lcp_ms` (Number) A browser run whose Largest Contentful Paint is slower than this fails.
 - `max_ttfb_ms` (Number) A browser run whose time to first byte is slower than this fails.
+- `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
+- `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
+- `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `step_screenshots` (Boolean) Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))

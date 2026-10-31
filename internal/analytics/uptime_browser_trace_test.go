@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 func TestNormalizeOrigin(t *testing.T) {
@@ -16,12 +18,12 @@ func TestNormalizeOrigin(t *testing.T) {
 		"http://localhost:8080":    "http://localhost:8080",
 		"https://*.example.com":    "https://*.example.com",
 	} {
-		if got, err := normalizeOrigin(in); err != nil || got != want {
+		if got, err := uptimecore.NormalizeOrigin(in); err != nil || got != want {
 			t.Errorf("%s: %q %v", in, got, err)
 		}
 	}
 	for _, in := range []string{"example.com", "https://example.com/api", "ftp://example.com", "https://u:p@example.com"} {
-		if _, err := normalizeOrigin(in); err == nil {
+		if _, err := uptimecore.NormalizeOrigin(in); err == nil {
 			t.Errorf("%s accepted", in)
 		}
 	}
@@ -34,13 +36,13 @@ func browserRunner(t *testing.T) (*Server, *uptimeRunner) {
 	if testing.Short() {
 		t.Skip("starts a browser")
 	}
-	if _, _, err := findBrowser(""); err != nil {
+	if _, _, err := uptimecore.FindBrowser(""); err != nil {
 		t.Skip("no Chrome or Chromium on this machine")
 	}
 	s := logsTestServer(t, nil)
 	s.live().Config["uptime_allow_private"] = "true"
 	u := newUptimeRunner(s, s.uptimeSettings())
-	t.Cleanup(u.browser.close)
+	t.Cleanup(u.browser.Close)
 	return s, u
 }
 
@@ -54,7 +56,7 @@ func playCheck(t *testing.T, u *uptimeRunner, c UptimeCheck, fail bool) (uptimeR
 	if err := c.normalize(nil); err != nil {
 		t.Fatal(err)
 	}
-	res, run, err := u.playOnce(context.Background(), c)
+	res, run, err := u.browser.PlayOnce(context.Background(), c.core(), u.allowPrivate())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,10 +1,11 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -34,15 +35,10 @@ const (
 	browserViewportH   = 800
 )
 
-var errNoBrowser = errors.New("no Chrome or Chromium found on the server")
+var errNoBrowser = errors.New("no Chrome or Chromium found on this machine")
 
-// browserHelp says how to get a browser, for the dashboard and the API.
-const browserHelp = "Install Chrome or Chromium on the server (apt install chromium, dnf install chromium, apk add chromium, or Google Chrome from google.com/chrome), " +
-	"or point Settings → Server → Other → Browser for browser checks (or VISIONARY_CHROME) at its executable. " +
-	"The default Docker image has no browser; build the browser variant with docker build --target browser."
-
-// browserStatus is what the dashboard shows about the browser.
-type browserStatus struct {
+// BrowserStatus is what the dashboard shows about the browser.
+type BrowserStatus struct {
 	Available bool   `json:"available"`
 	Path      string `json:"path,omitempty"`
 	Source    string `json:"source,omitempty"` // setting, env or found
@@ -52,10 +48,10 @@ type browserStatus struct {
 	Workers   int    `json:"workers"`
 }
 
-// findBrowser looks in the setting, then VISIONARY_CHROME, then the usual
+// FindBrowser looks in the setting, then VISIONARY_CHROME, then the usual
 // install locations and PATH. A path that is set but missing is an error
 // rather than a fallback, so a typo does not go unnoticed.
-func findBrowser(setting string) (path, source string, err error) {
+func FindBrowser(setting string) (path, source string, err error) {
 	for _, c := range []struct{ v, src string }{{setting, "setting"}, {os.Getenv("VISIONARY_CHROME"), "env"}} {
 		v := strings.TrimSpace(c.v)
 		if v == "" {
@@ -115,9 +111,12 @@ func inContainer() bool {
 	return false
 }
 
-type browserPool struct {
-	s   *Server
-	sem chan struct{}
+// BrowserPool shares one browser process among a few concurrent runs.
+type BrowserPool struct {
+	sem     chan struct{}
+	setting func() string
+	help    string
+	logger  *slog.Logger
 
 	mu        sync.Mutex
 	path      string
@@ -130,37 +129,37 @@ type browserPool struct {
 	idle      *time.Timer
 }
 
-func newBrowserPool(s *Server, workers int) *browserPool {
-	return &browserPool{s: s, sem: make(chan struct{}, max(1, workers))}
+// NewBrowserPool runs at most workers runs at once. setting is the
+// configured browser path, read on every use; help says how to get a browser
+// where this runs.
+func NewBrowserPool(workers int, setting func() string, help string, logger *slog.Logger) *BrowserPool {
+	return &BrowserPool{sem: make(chan struct{}, max(1, workers)), setting: setting, help: help, logger: logger}
 }
 
-func (p *browserPool) setting() string {
-	return p.s.conf("uptime_chrome_path")
-}
-
-func (p *browserPool) status() browserStatus {
-	st := browserStatus{Workers: cap(p.sem)}
-	path, src, err := findBrowser(p.setting())
+// Status says whether browser checks can run and why not.
+func (p *BrowserPool) Status() BrowserStatus {
+	st := BrowserStatus{Workers: cap(p.sem)}
+	path, src, err := FindBrowser(p.setting())
 	st.Path, st.Source = path, src
 	if err != nil {
-		st.Error, st.Help = err.Error(), browserHelp
+		st.Error, st.Help = err.Error(), p.help
 		return st
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	st.Version = p.version
 	if p.launchErr != nil && p.path == path {
-		st.Error, st.Help = "the browser did not start: "+p.launchErr.Error(), browserHelp
+		st.Error, st.Help = "the browser did not start: "+p.launchErr.Error(), p.help
 		return st
 	}
 	st.Available = true
 	return st
 }
 
-// available is whether a run could start now: a browser exists and did not
+// Available is whether a run could start now: a browser exists and did not
 // just fail to launch.
-func (p *browserPool) available() bool {
-	path, _, err := findBrowser(p.setting())
+func (p *BrowserPool) Available() bool {
+	path, _, err := FindBrowser(p.setting())
 	if err != nil {
 		return false
 	}
@@ -171,7 +170,7 @@ func (p *browserPool) available() bool {
 
 // acquire waits for a free slot and returns the browser context to open a
 // tab in; release must follow.
-func (p *browserPool) acquire(ctx context.Context) (context.Context, error) {
+func (p *BrowserPool) acquire(ctx context.Context) (context.Context, error) {
 	select {
 	case p.sem <- struct{}{}:
 	case <-ctx.Done():
@@ -191,7 +190,7 @@ func (p *browserPool) acquire(ctx context.Context) (context.Context, error) {
 	return b, nil
 }
 
-func (p *browserPool) release() {
+func (p *BrowserPool) release() {
 	p.mu.Lock()
 	p.active--
 	if p.active == 0 && p.browser != nil {
@@ -207,8 +206,8 @@ func (p *browserPool) release() {
 	<-p.sem
 }
 
-func (p *browserPool) ensureLocked() (context.Context, error) {
-	path, _, err := findBrowser(p.setting())
+func (p *BrowserPool) ensureLocked() (context.Context, error) {
+	path, _, err := FindBrowser(p.setting())
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +262,7 @@ func (p *browserPool) ensureLocked() (context.Context, error) {
 		cancelBrowser()
 		cancelAlloc()
 		p.launchErr = err
-		p.s.logger.Warn("browser for uptime checks did not start", "path", path, "err", err)
+		p.logger.Warn("browser for uptime checks did not start", "path", path, "err", err)
 		return nil, err
 	}
 	p.launchErr = nil
@@ -275,7 +274,7 @@ func (p *browserPool) ensureLocked() (context.Context, error) {
 	return bctx, nil
 }
 
-func (p *browserPool) closeLocked() {
+func (p *BrowserPool) closeLocked() {
 	if p.cancel != nil {
 		p.cancel()
 	}
@@ -284,7 +283,7 @@ func (p *browserPool) closeLocked() {
 
 // kill ends the browser process at once, for a run that stopped answering.
 // Runs in other tabs fail and are recorded as such.
-func (p *browserPool) kill() {
+func (p *BrowserPool) kill() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.browser != nil {
@@ -295,7 +294,8 @@ func (p *browserPool) kill() {
 	p.closeLocked()
 }
 
-func (p *browserPool) close() {
+// Close ends the browser process.
+func (p *BrowserPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.idle != nil {
@@ -350,12 +350,12 @@ func (g *guardProxy) refused() []string {
 }
 
 func (g *guardProxy) dial(ctx context.Context, addr string) (net.Conn, error) {
-	d := &net.Dialer{Timeout: 15 * time.Second, Control: dialGuard}
+	d := &net.Dialer{Timeout: 15 * time.Second, Control: DialGuard}
 	c, err := d.DialContext(ctx, "tcp", addr)
-	if err != nil && errors.Is(err, errBlockedAddress) {
+	if err != nil && errors.Is(err, ErrBlockedAddress) {
 		g.mu.Lock()
 		if len(g.blocked) < 20 {
-			g.blocked = append(g.blocked, probeError(err, 0))
+			g.blocked = append(g.blocked, ProbeError(err, 0))
 		}
 		g.mu.Unlock()
 	}
@@ -379,7 +379,7 @@ func (g *guardProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := tr.RoundTrip(out)
 	if err != nil {
-		http.Error(w, probeError(err, 0), http.StatusBadGateway)
+		http.Error(w, ProbeError(err, 0), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -395,7 +395,7 @@ func (g *guardProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (g *guardProxy) tunnel(w http.ResponseWriter, r *http.Request) {
 	up, err := g.dial(r.Context(), r.Host)
 	if err != nil {
-		http.Error(w, probeError(err, 0), http.StatusBadGateway)
+		http.Error(w, ProbeError(err, 0), http.StatusBadGateway)
 		return
 	}
 	hj, ok := w.(http.Hijacker)
