@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -13,7 +14,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /** Separate from the requests writer so a flood of log lines can't crowd out request rows. */
-final class LogWriter {
+final class LogWriter implements VisionaryWriterStats.Source {
 
     private static final Log log = LogFactory.getLog(LogWriter.class);
 
@@ -27,11 +28,15 @@ final class LogWriter {
     private final Origin origin;
     private final Set<String> secretKeys;
     private final FrameNamer namer;
+    private final int batchSize;
+    private final WriterFlushes flushes;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition wake = lock.newCondition();
     private final ArrayDeque<LogRecord> queue = new ArrayDeque<>();
     private long dropped;
+    private final AtomicLong lost = new AtomicLong();
+    private final AtomicLong written = new AtomicLong();
     private boolean closing;
 
     private final Thread thread;
@@ -43,11 +48,14 @@ final class LogWriter {
         this.origin = origin;
         this.secretKeys = secretKeys;
         this.namer = namer;
+        this.batchSize = store == null ? Store.D1_BATCH_SIZE : store.batchSize();
+        this.flushes = new WriterFlushes(store, "visionary-logs", STACK_SIZE);
         this.thread = new Thread(null, this::run, "visionary-logs", STACK_SIZE);
         this.thread.setDaemon(true);
     }
 
     void start() {
+        VisionaryWriterStats.add(this);
         thread.start();
     }
 
@@ -57,10 +65,11 @@ final class LogWriter {
         try {
             if (closing || queue.size() >= QUEUE_SIZE) {
                 dropped++;
+                lost.incrementAndGet();
                 return;
             }
             queue.add(r);
-            if (queue.size() >= RequestWriter.BATCH_SIZE) {
+            if (queue.size() >= batchSize) {
                 wake.signal();
             }
         } finally {
@@ -77,6 +86,7 @@ final class LogWriter {
             lock.unlock();
         }
         if (!thread.isAlive()) {
+            VisionaryWriterStats.remove(this);
             return;
         }
         try {
@@ -87,6 +97,27 @@ final class LogWriter {
         if (thread.isAlive()) {
             log.warn("visionary: app log flush timed out");
         }
+        VisionaryWriterStats.remove(this);
+    }
+
+    @Override
+    public int queued() {
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public long written() {
+        return written.get();
+    }
+
+    @Override
+    public long dropped() {
+        return lost.get();
     }
 
     private void run() {
@@ -97,15 +128,15 @@ final class LogWriter {
             boolean last;
             lock.lock();
             try {
-                while (!closing && queue.size() < RequestWriter.BATCH_SIZE) {
+                while (!closing && queue.size() < batchSize) {
                     long wait = nextFlush - System.nanoTime();
                     if (wait <= 0) {
                         break;
                     }
                     wake.awaitNanos(wait);
                 }
-                batch = new ArrayList<>(Math.min(queue.size(), RequestWriter.BATCH_SIZE));
-                while (batch.size() < RequestWriter.BATCH_SIZE && !queue.isEmpty()) {
+                batch = new ArrayList<>(Math.min(queue.size(), batchSize));
+                while (batch.size() < batchSize && !queue.isEmpty()) {
                     batch.add(queue.poll());
                 }
                 droppedNow = dropped;
@@ -120,12 +151,13 @@ final class LogWriter {
                 log.warn("visionary: app log queue full; " + droppedNow + " lines dropped");
             }
             if (!batch.isEmpty()) {
-                write(batch);
+                flushes.run(() -> write(batch));
             }
             if (last) {
+                flushes.finish(Duration.ofSeconds(60));
                 return;
             }
-            if (batch.size() < RequestWriter.BATCH_SIZE) {
+            if (batch.size() < batchSize) {
                 nextFlush = System.nanoTime() + RequestWriter.FLUSH_INTERVAL.toNanos();
             }
         }
@@ -138,6 +170,7 @@ final class LogWriter {
                 rows.add(row(r));
             } catch (RuntimeException | StackOverflowError e) {
                 // Better to drop a line we can't scrub than store it unredacted.
+                lost.incrementAndGet();
             }
         }
         if (rows.isEmpty()) {
@@ -146,11 +179,9 @@ final class LogWriter {
         Exception last = null;
         for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
             try {
-                if (!schemaReady) {
-                    store.createSchema(Table.APP_LOGS);
-                    schemaReady = true;
-                }
+                ensureSchema();
                 store.insert(Table.APP_LOGS, rows);
+                written.addAndGet(rows.size());
                 return;
             } catch (Exception e) {
                 last = e;
@@ -159,7 +190,15 @@ final class LogWriter {
                 }
             }
         }
+        lost.addAndGet(rows.size());
         log.error("visionary: app log write failed; " + rows.size() + " lines dropped: " + last);
+    }
+
+    private synchronized void ensureSchema() throws Exception {
+        if (!schemaReady) {
+            store.createSchema(Table.APP_LOGS);
+            schemaReady = true;
+        }
     }
 
     Object[] row(LogRecord r) {

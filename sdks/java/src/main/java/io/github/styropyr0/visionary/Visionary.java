@@ -281,6 +281,11 @@ public final class Visionary {
         Metrics.REGISTRY.describe(name, unit, buckets);
     }
 
+    /** Rows the background writers have queued, written and dropped, for load tests and health checks. */
+    public static VisionaryWriterStats writerStats() {
+        return VisionaryWriterStats.snapshot();
+    }
+
     /** The pool behind {@link #background}, created on first use. */
     private static final class Background {
         static final ExecutorService EXECUTOR = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60, TimeUnit.SECONDS,

@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -17,20 +18,30 @@ import javax.sql.DataSource;
 /**
  * PostgreSQL, MySQL/MariaDB or SQLite over JDBC with typed parameters.
  *
- * <p>With its own URL the store keeps one connection (shared by the background
- * threads under a lock) and reopens it after an error, so a database restart
- * heals by itself. With the application's DataSource it borrows a pooled
- * connection per operation.
+ * <p>With its own URL the store keeps a few idle connections for the background
+ * threads (one, used under a lock, for SQLite) and drops a connection after an
+ * error, so a database restart heals by itself. With the application's
+ * DataSource it borrows a pooled connection per operation.
+ *
+ * <p>Rows go in as multi-row INSERTs built here rather than through the
+ * drivers' batch rewriting, which an application's DataSource may not enable
+ * and SQLite's driver lacks.
  */
 final class JdbcStore implements Store {
 
     private static final int MYSQL_DUPLICATE_KEY_NAME = 1061;
+    /** Below every backend's bound-parameter limit (SQLite's is 32766). */
+    static final int MAX_PARAMS_PER_STATEMENT = 30_000;
+    static final int BATCH_SIZE = 500;
+    static final int PARALLEL_WRITES = 4;
 
     /** Null until the first connection when using the application's DataSource. */
-    private Dialect dialect;
+    private volatile Dialect dialect;
     private final String description;
     private final ConnectionSource source;
-    private Connection cached;
+    private final ArrayDeque<Connection> idle = new ArrayDeque<>();
+    private final Object sqliteTurn = new Object();
+    private boolean closed;
 
     private JdbcStore(Dialect dialect, String description, ConnectionSource source) {
         this.dialect = dialect;
@@ -66,7 +77,7 @@ final class JdbcStore implements Store {
     }
 
     @Override
-    public synchronized void createSchema(Table table) throws SQLException {
+    public void createSchema(Table table) throws SQLException {
         run(conn -> {
             conn.setAutoCommit(true);
             try (Statement st = conn.createStatement()) {
@@ -117,7 +128,7 @@ final class JdbcStore implements Store {
     }
 
     @Override
-    public synchronized void insert(Map<Table, List<Object[]>> rows) throws SQLException {
+    public void insert(Map<Table, List<Object[]>> rows) throws SQLException {
         run(conn -> {
             conn.setAutoCommit(false);
             try {
@@ -137,20 +148,54 @@ final class JdbcStore implements Store {
         });
     }
 
+    /** Writes the rows as INSERTs of as many rows as the parameter limit allows. */
     private void insert(Connection conn, Table table, List<Object[]> rows) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(table.insertSql("?"))) {
-            for (Object[] row : rows) {
-                for (int i = 0; i < row.length; i++) {
-                    bind(ps, i + 1, row[i], table.types.get(i));
+        int per = rowsPerStatement(table);
+        PreparedStatement ps = null;
+        int prepared = 0;
+        try {
+            for (int from = 0; from < rows.size(); from += per) {
+                int n = Math.min(per, rows.size() - from);
+                if (n != prepared) {
+                    if (ps != null) {
+                        ps.close();
+                    }
+                    ps = conn.prepareStatement(table.insertRowsSql(n));
+                    prepared = n;
                 }
-                ps.addBatch();
+                int index = 1;
+                for (Object[] row : rows.subList(from, from + n)) {
+                    for (int i = 0; i < row.length; i++) {
+                        bind(ps, index++, row[i], table.types.get(i));
+                    }
+                }
+                ps.executeUpdate();
             }
-            ps.executeBatch();
+        } finally {
+            if (ps != null) {
+                ps.close();
+            }
         }
     }
 
+    static int rowsPerStatement(Table table) {
+        return Math.max(1, MAX_PARAMS_PER_STATEMENT / table.columns.size());
+    }
+
     @Override
-    public synchronized List<String[]> select(String sql) throws SQLException {
+    public int batchSize() {
+        return BATCH_SIZE;
+    }
+
+    /** PostgreSQL and MySQL insert in parallel; SQLite takes one writer at a time. */
+    @Override
+    public int parallelWrites() {
+        Dialect d = dialect;
+        return d == Dialect.POSTGRES || d == Dialect.MYSQL ? PARALLEL_WRITES : 1;
+    }
+
+    @Override
+    public List<String[]> select(String sql) throws SQLException {
         try {
             return run(conn -> {
                 conn.setAutoCommit(true);
@@ -186,7 +231,7 @@ final class JdbcStore implements Store {
     }
 
     @Override
-    public synchronized long purgeChunk(Table table, String cutoff) throws SQLException {
+    public long purgeChunk(Table table, String cutoff) throws SQLException {
         return run(conn -> {
             conn.setAutoCommit(true);
             try (PreparedStatement ps = conn.prepareStatement(dialect.purgeSql(table.name))) {
@@ -197,8 +242,14 @@ final class JdbcStore implements Store {
     }
 
     @Override
-    public synchronized void close() {
-        closeCached();
+    public void close() {
+        synchronized (idle) {
+            closed = true;
+            for (Connection c : idle) {
+                closeQuietly(c);
+            }
+            idle.clear();
+        }
     }
 
     private void bind(PreparedStatement ps, int index, Object v, Table.Type type) throws SQLException {
@@ -216,20 +267,32 @@ final class JdbcStore implements Store {
     }
 
     private <T> T run(SqlWork<T> work) throws SQLException {
-        Connection conn = source.reuse ? cachedConnection() : source.open();
+        if (source.reuse && dialect == Dialect.SQLITE) {
+            synchronized (sqliteTurn) {
+                return runOn(work);
+            }
+        }
+        return runOn(work);
+    }
+
+    private <T> T runOn(SqlWork<T> work) throws SQLException {
+        Connection conn = source.reuse ? borrow() : source.open();
+        boolean broken = false;
         try {
             if (dialect == null) {
                 dialect = detect(conn.getMetaData().getDatabaseProductName());
             }
             return work.apply(conn);
         } catch (SQLException e) {
-            if (source.reuse) {
-                closeCached();
-            }
+            broken = true;
             throw e;
         } finally {
             if (!source.reuse) {
                 conn.close();
+            } else if (broken) {
+                closeQuietly(conn);
+            } else {
+                giveBack(conn);
             }
         }
     }
@@ -248,28 +311,40 @@ final class JdbcStore implements Store {
         throw new SQLException("visionary supports PostgreSQL, MySQL/MariaDB and SQLite, not " + product);
     }
 
-    private Connection cachedConnection() throws SQLException {
-        if (cached != null) {
+    private Connection borrow() throws SQLException {
+        while (true) {
+            Connection c;
+            synchronized (idle) {
+                c = idle.poll();
+            }
+            if (c == null) {
+                return source.open();
+            }
             try {
-                if (!cached.isClosed()) {
-                    return cached;
+                if (!c.isClosed()) {
+                    return c;
                 }
             } catch (SQLException ignored) {
-                // fall through and reconnect
+                // try the next one
             }
         }
-        cached = source.open();
-        return cached;
     }
 
-    private void closeCached() {
-        if (cached != null) {
-            try {
-                cached.close();
-            } catch (SQLException ignored) {
-                // already broken
+    private void giveBack(Connection c) {
+        synchronized (idle) {
+            if (!closed && idle.size() < PARALLEL_WRITES) {
+                idle.push(c);
+                return;
             }
-            cached = null;
+        }
+        closeQuietly(c);
+    }
+
+    private static void closeQuietly(Connection c) {
+        try {
+            c.close();
+        } catch (SQLException ignored) {
+            // already broken
         }
     }
 

@@ -10,10 +10,23 @@ interface Store {
     void createSchema(Table table) throws Exception;
 
     /**
-     * Inserts the rows of several tables as one unit: one transaction (SQL) or
-     * batch calls of at most 50 statements (D1). Tables are written in map order.
+     * Inserts the rows of several tables as one unit: one transaction of
+     * multi-row INSERTs (SQL) or batch calls of at most 50 statements (D1).
+     * Tables are written in map order. May be called from several threads.
      */
     void insert(Map<Table, List<Object[]>> rows) throws Exception;
+
+    int D1_BATCH_SIZE = 50;
+
+    /** Entries per writer batch: 50 for D1, where every row is its own statement. */
+    default int batchSize() {
+        return D1_BATCH_SIZE;
+    }
+
+    /** How many batches may be written at once, each on its own connection. */
+    default int parallelWrites() {
+        return 1;
+    }
 
     default void insert(Table table, List<Object[]> rows) throws Exception {
         insert(Map.of(table, rows));

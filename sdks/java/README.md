@@ -112,10 +112,12 @@ first match wins:
 - **D1** is reached over its REST API with the JDK `HttpClient`. The API
   token needs D1 edit access. `D1_API_BASE` overrides
   `https://api.cloudflare.com/client/v4`.
-- **Own URL:** the starter keeps one connection for its background threads
-  and reconnects after errors. **App DataSource:** it borrows connections from
-  the application's pool and detects the dialect from the database. Either
-  way each batch is one transaction.
+- **Own URL:** the starter keeps a few connections for its background
+  threads (one for SQLite, opened with a 5 s busy timeout and WAL since the
+  Visionary server shares the file) and reconnects after errors. **App
+  DataSource:** it borrows connections from the application's pool and
+  detects the dialect from the database. Either way each batch is one
+  transaction of multi-row INSERTs.
 
 Old rows are deleted by the Visionary server, following Settings → Data (Retention).
 
@@ -535,9 +537,12 @@ deploy.
   rows of updates and the rows read from result sets.
 - **Writing:** requests, spans and errors go into one in-memory queue of 5000
   entries that never blocks; when it is full, entries are dropped and the
-  count is logged. The writer flushes every 50 entries or 3 seconds, retrying
-  a failed batch twice. System samples are written 4 at a time; while the
-  database is unreachable, up to an hour of them is kept.
+  count is logged. The writer flushes every batch (500 entries; 50 on D1) or
+  3 seconds, retrying a failed batch twice; on PostgreSQL and MySQL up to 4
+  batches are written at once. `Visionary.writerStats()` returns the rows
+  queued, written and dropped, for load tests and health checks. System
+  samples are written 4 at a time; while the database is unreachable, up to
+  an hour of them is kept.
 - **Upgrades:** tables from an earlier version gain the new columns at start
   (`ALTER TABLE ... ADD COLUMN`). The schemas in the jar are copies of
   `sdks/go/schema/<dialect>/`.
