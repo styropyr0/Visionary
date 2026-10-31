@@ -229,7 +229,7 @@ func (s *Server) loadIncidents(ctx context.Context, where string, args []any, li
 		out = append(out, in)
 	}
 	for len(ids) > 0 {
-		chunk := head(ids, 200)
+		chunk := head(ids, maxInArgs)
 		ids = ids[len(chunk):]
 		roles, err := s.db.Query(ctx, `SELECT id, incident_id, role, user_name, assigned_by, assigned_at FROM incident_roles
 WHERE incident_id IN (`+placeholders(len(chunk))+`) ORDER BY id`, chunk...)

@@ -462,6 +462,10 @@ GROUP BY `+acct+` HAVING COUNT(DISTINCT ip) >= ?`, append([]any{cur}, append(spa
 	return out, nil
 }
 
+// maxInArgs keeps an IN list, plus a few other arguments, under D1's 100
+// bound parameters per statement.
+const maxInArgs = 90
+
 // placeholders is n comma-separated question marks.
 func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")

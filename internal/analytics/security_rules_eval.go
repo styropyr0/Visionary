@@ -494,7 +494,7 @@ func (s *Server) knownValues(ctx context.Context, kind string, pairs []valuePair
 		}
 	}
 	for len(accounts) > 0 {
-		batch := head(accounts, 100)
+		batch := head(accounts, maxInArgs)
 		accounts = accounts[len(batch):]
 		args := []any{kind}
 		for _, a := range batch {

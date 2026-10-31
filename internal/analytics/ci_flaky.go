@@ -160,7 +160,7 @@ func (s *Server) ciResults(ctx context.Context, from, to string, hashes []string
 		}
 	} else {
 		for len(hashes) > 0 {
-			chunk := head(hashes, 200)
+			chunk := head(hashes, maxInArgs)
 			hashes = hashes[len(chunk):]
 			args := []any{from, to}
 			for _, h := range chunk {
@@ -178,7 +178,7 @@ func (s *Server) ciResults(ctx context.Context, from, to string, hashes []string
 	}
 	var out []ciResult
 	for len(failing) > 0 && len(out) < 100000 {
-		chunk := head(failing, 200)
+		chunk := head(failing, maxInArgs)
 		failing = failing[len(chunk):]
 		res, err := s.db.Query(ctx, `SELECT test_hash, test, service, repo, branch, commit_sha, status, file, message, created_at FROM ci_tests
 WHERE created_at >= ? AND created_at < ? AND test_hash IN (`+placeholders(len(chunk))+`)
@@ -220,7 +220,7 @@ func (s *Server) noteFlaky(ctx context.Context, tests map[string]string, up ciUp
 		ids = append(ids, f.Hash)
 	}
 	for len(ids) > 0 {
-		chunk := head(ids, 200)
+		chunk := head(ids, maxInArgs)
 		ids = ids[len(chunk):]
 		res, err := s.db.Query(ctx, `SELECT test_hash FROM ci_flaky_tests WHERE test_hash IN (`+placeholders(len(chunk))+`)`, chunk...)
 		if err != nil {
