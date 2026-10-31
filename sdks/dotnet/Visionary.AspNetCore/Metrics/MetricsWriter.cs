@@ -8,10 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// Writes custom metrics every interval: one row per series that has something to say, in
-/// batches (see <see cref="Batches"/>) with two retries, apart from the request writer. The table is created at the
-/// first interval with rows, so services without custom metrics never get it. On shutdown the
-/// last interval is written.
+/// Writes one row per active series each interval, with two retries. The table is only created
+/// once there are rows, and the last interval is written on shutdown.
 /// </summary>
 internal sealed class MetricsWriter : BackgroundService
 {
@@ -59,7 +57,6 @@ internal sealed class MetricsWriter : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // stopping
         }
         using var drain = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await FlushAsync(DateTime.UtcNow, drain.Token).ConfigureAwait(false);
@@ -69,7 +66,6 @@ internal sealed class MetricsWriter : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // stopped with the host
         }
     }
 

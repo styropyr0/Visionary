@@ -272,7 +272,6 @@ class TraceTest < Minitest::Test
     dir = Dir.mktmpdir
     begin
       path = "#{dir}/t.db"
-      # The shipped scripts create the tables without the trace columns.
       cols = Visionary::Schema.statements("sqlite", :telemetry).join.scan(/parent_span_id/)
       assert_empty cols
       store = Visionary::Store.open(Visionary::Config.new.tap { |c| c.database_url = "sqlite://#{path}" })

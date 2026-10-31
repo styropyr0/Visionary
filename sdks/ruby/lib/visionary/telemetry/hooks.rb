@@ -66,9 +66,8 @@ module Visionary
     end
 
     # Outbound HTTP spans from Net::HTTP (and the many clients built on it).
-    # Each request carries a W3C traceparent naming its span, so a service
-    # that reads it continues the trace; the headers are taken off the
-    # caller's request object again afterwards.
+    # Each request carries a traceparent naming its span; the headers come off
+    # the caller's request object afterwards.
     module NetHTTPHook
       def request(req, body = nil, &block)
         # Net::HTTP#request calls itself again once the connection is up;
@@ -77,7 +76,6 @@ module Visionary
 
         rec = Visionary.telemetry
         unless rec&.spans_on
-          # Not recorded, but the trace still goes on to the next service.
           added = TraceContext.inject(req, TraceContext.current)
           begin
             return super

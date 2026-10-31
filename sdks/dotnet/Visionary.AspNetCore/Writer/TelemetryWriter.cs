@@ -9,9 +9,8 @@ using Microsoft.Extensions.Logging;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// The background writer for api_logs, spans, errors and releases: flushes when a batch is full
-/// (see <see cref="Batches"/>) or every 3 seconds, up to 4 batches at once on PostgreSQL and
-/// MySQL, retries a failed batch twice (after 1 s, then 2 s), and drains the queue on shutdown.
+/// Writes api_logs, spans, errors and releases when a batch fills or every 3 seconds, retries a
+/// failed batch twice, and drains the queue on shutdown.
 /// </summary>
 internal sealed class TelemetryWriter : BackgroundService
 {

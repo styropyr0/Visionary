@@ -63,7 +63,6 @@ class Entry:
         self.http_count: Optional[int] = None
         self.http_ms: Optional[float] = None
         self.spans: List[Any] = []
-        # The request's place in its trace: it is the server span.
         self.trace_id = ""
         self.span_id = ""
         self.parent_span_id = ""

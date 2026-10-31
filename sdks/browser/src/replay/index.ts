@@ -21,8 +21,9 @@ export interface ReplayHandle {
 }
 
 const FLUSH_MS = 5000;
-const CHECKOUT_MS = 30_000; // a fresh snapshot this often while only buffering
-const MAX_BODY = 500_000; // under the server's 512 KB
+const CHECKOUT_MS = 30_000;
+/** Under the server's 512 KB limit. */
+const MAX_BODY = 500_000;
 const BEACON_MAX = 60_000;
 const MAX_PAGE_MS = 2 * 3600_000;
 
@@ -101,7 +102,7 @@ export function record(ctx: ReplayContext): ReplayHandle {
       })
       .then(
         (r) => {
-          // Replays turned off, over a limit or a bad key: stop for this page.
+          // 4xx: replays are off, over a limit or the key is wrong.
           if (r.status >= 400 && r.status < 500) stop();
         },
         () => {},
@@ -112,7 +113,6 @@ export function record(ctx: ReplayContext): ReplayHandle {
     const gz = await gzip(json).catch(() => null);
     const size = gz ? gz.byteLength : json.length;
     if (size > MAX_BODY) {
-      // One event over the limit is a page too large to record.
       if (batch.length < 2) return stop();
       const half = batch.length >> 1;
       await upload(batch.slice(0, half));
@@ -129,7 +129,7 @@ export function record(ctx: ReplayContext): ReplayHandle {
     events = [];
     lastFull = 0;
     if (beacon && navigator.sendBeacon) {
-      // The page may be going away, so no time to compress.
+      // The page may be unloading, so there's no time to compress.
       const json = JSON.stringify(batch);
       const q = query(batch, "json");
       q.set("key", ctx.key);
@@ -146,7 +146,6 @@ export function record(ctx: ReplayContext): ReplayHandle {
     if (stopped) return;
     if (Date.now() - started > MAX_PAGE_MS) return stop();
     if (full) return flush(false);
-    // Buffering: keep from the previous snapshot on, so 30 to 60 s.
     events = events.slice(lastFull);
     rec.snapshot();
   };

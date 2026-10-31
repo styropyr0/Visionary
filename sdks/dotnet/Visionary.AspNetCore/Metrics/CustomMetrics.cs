@@ -8,8 +8,8 @@ using System.Threading;
 
 namespace Styropyr0.Visionary;
 
-// Custom metrics (SPEC.md "Custom metrics"): values add up in memory and the metrics writer
-// stores one row per series every interval. Recording never waits for the database.
+// Values add up in memory and the metrics writer stores one row per series each interval,
+// so recording never waits for the database.
 
 internal sealed class MetricSeries
 {
@@ -35,7 +35,6 @@ internal sealed class MetricSeries
     public double Max;
 }
 
-/// <summary>One row of metrics.</summary>
 internal sealed record MetricRecord
 {
     public required DateTime At { get; init; }
@@ -156,8 +155,8 @@ internal sealed class MetricRegistry
     }
 
     /// <summary>
-    /// Takes each series' interval: counters and histograms that moved, and every gauge that was
-    /// ever set. Series dropped over the cap come back counted by name.
+    /// Counters and histograms that moved this interval plus every gauge ever set, and the
+    /// number of series dropped over the cap per name.
     /// </summary>
     public (List<MetricRecord> Rows, Dictionary<string, long> Dropped) Collect(DateTime now)
     {
@@ -223,9 +222,8 @@ internal sealed class MetricRegistry
     };
 
     /// <summary>
-    /// The canonical labels text: a JSON object with keys in UTF-8 byte order, escaped only where
-    /// JSON requires, so every SDK writes the same bytes. Empty keys are dropped, keys and values
-    /// cut to 100 and 200 bytes, and only the first 20 keys kept.
+    /// Labels as JSON with keys in UTF-8 byte order, so every SDK writes the same bytes. Empty keys
+    /// are dropped, keys and values cut to 100 and 200 bytes, and at most 20 keys kept.
     /// </summary>
     public static string LabelsJson(IEnumerable<KeyValuePair<string, string?>>? labels)
     {
@@ -291,7 +289,7 @@ internal sealed class MetricRegistry
         return sb.Append("]}").ToString();
     }
 
-    // Shortest round-trip form, as Go's encoding/json writes it (1e+21, not 1E+21).
+    // Shortest round-trip form with a lowercase e, as Go writes it.
     private static string Number(double d) => d.ToString("R", CultureInfo.InvariantCulture).Replace('E', 'e');
 
     public static string CleanName(string? name) => CutUtf8((name ?? "").Trim(), MaxName);

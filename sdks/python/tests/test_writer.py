@@ -1,6 +1,4 @@
-"""The batched writer (SPEC "Writing rows"): multi-row INSERTs on SQL
-backends, one statement per row on D1, parallel batches on PostgreSQL and
-MySQL, and the writer stats.
+"""Tests for the batched writer (SPEC "Writing rows").
 
 Run from sdks/python:  python -m unittest discover -s tests -v
 """

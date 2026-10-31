@@ -15,10 +15,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * Writes the custom metrics registry every interval on a thread of its own, so
- * many series never crowd out request rows. The table is created at the first
- * interval that has something to write; services without custom metrics never
- * get it. On shutdown the last interval is written before the thread ends.
+ * Writes custom metrics every interval on its own thread, so they never crowd out
+ * request rows. The table is only created once there is something to write.
  */
 final class MetricsWriter implements VisionaryWriterStats.Source {
 

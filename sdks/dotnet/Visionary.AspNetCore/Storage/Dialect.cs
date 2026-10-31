@@ -44,7 +44,7 @@ internal static class Schema
         new("trace_id", "text"), new("span_id", "text"), new("parent_span_id", "text"),
     };
 
-    /// <summary>AddedSpanColumns in sdks/go/migrate.go.</summary>
+    /// <summary>Span columns added after the first schema, for older tables.</summary>
     public static readonly AddedColumn[] AddedSpanColumns =
     {
         new("trace_id", "text"), new("span_id", "text"), new("parent_span_id", "text"),
@@ -168,9 +168,8 @@ internal static class Schema
     }
 
     /// <summary>
-    /// The index on a table's trace_id (TraceIndex in sdks/go/migrate.go). It runs after the added
-    /// columns, since older tables only have trace_id from then on; MySQL has no IF NOT EXISTS
-    /// here and an existing index is ignored like the schema's.
+    /// Runs after the added columns, since older tables only get trace_id then. MySQL has no
+    /// IF NOT EXISTS here, so an existing index error is ignored.
     /// </summary>
     public static string TraceIndex(VisionaryDialect d, string table) =>
         $"CREATE INDEX {(d == VisionaryDialect.MySql ? "" : "IF NOT EXISTS ")}idx_{table}_trace_id ON {table} (trace_id)";

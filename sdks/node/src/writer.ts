@@ -34,10 +34,8 @@ export interface WriterStats {
 }
 
 /**
- * Queues rows without blocking and writes them in batches, every 3 s or once
- * a batch is waiting: 50 rows on D1, 500 on SQL databases as multi-row
- * INSERTs. PostgreSQL and MySQL take up to 4 batches at once. A full queue
- * drops rows and counts them.
+ * Queues rows without blocking and writes them in batches every 3 s, or as
+ * soon as a batch fills. A full queue drops rows and counts them.
  */
 export class Writer {
   private queue: Item[] = [];
@@ -64,7 +62,6 @@ export class Writer {
     this.queueSize = opts.queueSize ?? QUEUE_SIZE;
     const size = cfg.batchSize;
     this.batchSize = store.stringParams ? D1_BATCH : size > 0 && size <= MAX_SQL_BATCH ? size : SQL_BATCH;
-    // SQLite and D1 take one writer at a time.
     this.parallel = store.stringParams || store.dialect === "sqlite" ? 1 : PARALLEL_WRITES;
     this.redact = new Redactor(cfg.redactHeaders, cfg.redactFields, cfg.redactRequestFields);
     const tables = Object.keys(TABLE_COLUMNS) as Table[];

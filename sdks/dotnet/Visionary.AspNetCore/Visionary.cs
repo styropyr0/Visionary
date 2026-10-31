@@ -67,8 +67,7 @@ public static partial class Visionary
 
     /// <summary>
     /// Times an operation the SDK can't see by itself (a cache or queue call, a database without
-    /// diagnostics); dispose the span when it ends. Until then it is the current span: calls made
-    /// inside it, outbound requests included, nest under it in the trace.
+    /// diagnostics); dispose the span when it ends. Calls made inside it nest under it in the trace.
     /// </summary>
     /// <param name="kind">db, http, cache, queue, custom, graphql or background.</param>
     /// <param name="name">Short and low-cardinality, used for grouping, e.g. "GET session".</param>
@@ -94,7 +93,6 @@ public static partial class Visionary
         var token = VisionaryAgent.Current?.Stopping ?? CancellationToken.None;
         return Task.Run(async () =>
         {
-            // The work keeps the request's trace: its calls nest under this span.
             var (span, parent) = TraceContext.Child();
             TraceContext.Current = span;
             var startedAt = DateTime.UtcNow;

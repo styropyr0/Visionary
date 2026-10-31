@@ -8,10 +8,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Runs a writer's batch writes: on the writer's own thread, or, when the store
- * takes several at once (PostgreSQL, MySQL), on up to that many threads while
- * the writer keeps filling the next batch. While all are busy the writer waits
- * and its queue absorbs the load.
+ * Runs a writer's batches, on several threads when the store allows parallel
+ * writes (PostgreSQL, MySQL) so the writer can keep filling the next one.
  */
 final class WriterFlushes {
 

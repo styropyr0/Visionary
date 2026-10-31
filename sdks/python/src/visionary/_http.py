@@ -107,7 +107,6 @@ def _patch_requests() -> None:
         span, token = _begin(getattr(request, "method", ""), str(getattr(request, "url", "")))
         add = _trace_headers(span, getattr(request, "headers", None))
         if add:
-            # A copy, so the caller's prepared request is unchanged.
             request = request.copy()
             request.headers.update(add)
         try:
@@ -197,8 +196,7 @@ def _patch_urllib3() -> None:
 
 
 def _inject_urllib3(pool: Any, span: Optional[_spans.Span], args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
-    """urlopen's arguments with the trace headers added to a copy of its
-    headers (the third positional argument, after body)."""
+    """urlopen's arguments with trace headers added to a copy of its headers."""
     try:
         positional = len(args) >= 2
         headers = args[1] if positional else kwargs.get("headers")

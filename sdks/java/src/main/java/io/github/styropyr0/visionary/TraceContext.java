@@ -4,11 +4,8 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * W3C trace context (https://www.w3.org/TR/trace-context/): the span that calls
- * made on a thread belong to. A request continues the trace in its
- * {@code traceparent} header or starts one; the request and every call it makes
- * get their own span id; outbound requests carry the trace on, so the service
- * they reach joins it. Follows handed-over work like {@link RequestScope}.
+ * W3C trace context (https://www.w3.org/TR/trace-context/) for the current thread.
+ * A request continues the caller's trace or starts one, and outbound calls pass it on.
  */
 final class TraceContext {
 
@@ -149,11 +146,7 @@ final class TraceContext {
         return "0".repeat(16 - s.length()) + s;
     }
 
-    /**
-     * The active OpenTelemetry span, read by reflection so the SDK needs no
-     * OpenTelemetry dependency. An application whose OpenTelemetry agent already
-     * handled {@code traceparent} keeps one trace this way.
-     */
+    /** The active OpenTelemetry span, read by reflection so the SDK needs no OpenTelemetry dependency. */
     private static final class OpenTelemetry {
 
         private static final Method CURRENT_SPAN;

@@ -15,7 +15,6 @@ const PARENT = "00f067aa0ba902b7";
 test("parseTraceparent", () => {
   assert.deepEqual(parseTraceparent(`00-${TRACE}-${PARENT}-01`), { traceId: TRACE, spanId: PARENT, flags: "01", state: "" });
   assert.equal(parseTraceparent(` 00-${TRACE}-${PARENT}-00 `)?.flags, "00");
-  // Later versions may append fields.
   assert.equal(parseTraceparent(`01-${TRACE}-${PARENT}-01-extra`)?.traceId, TRACE);
   for (const bad of [
     "",
@@ -104,7 +103,6 @@ test("spans nest in the request's trace and outbound calls carry it", { skip: !n
     await get(`http://127.0.0.1:${frontPort}/report`, { traceparent: `00-${TRACE}-${PARENT}-01`, tracestate: "vendor=7" });
     await bg;
     await get(`http://127.0.0.1:${frontPort}/own`);
-    // Outside any request a call starts a trace of its own.
     await get(`${backUrl}/outside`);
   } finally {
     await new Promise((r) => front.close(r));
@@ -131,7 +129,6 @@ test("spans nest in the request's trace and outbound calls carry it", { skip: !n
     const call = spanOf("http", path);
     assert.equal(call.trace_id, TRACE, path);
     assert.equal(call.parent_span_id, custom.span_id, path);
-    // The service reached continues the trace under the http span.
     assert.equal(req(path).trace_id, TRACE, path);
     assert.equal(req(path).parent_span_id, call.span_id, path);
     assert.equal(seen[path]!.traceparent, `00-${TRACE}-${call.span_id}-01`);
@@ -144,7 +141,6 @@ test("spans nest in the request's trace and outbound calls carry it", { skip: !n
   assert.equal(bgCall.parent_span_id, bgSpan.span_id);
   assert.equal(req("/bg").parent_span_id, bgCall.span_id);
 
-  // A traceparent the application set itself is left alone.
   assert.equal(seen["/own"]!.traceparent, `00-${TRACE}-${PARENT}-01`);
 
   const outside = req("/outside");
@@ -162,7 +158,6 @@ test("with spans off the trace still goes on, naming the request's span", { skip
     profile: false,
     logs: false,
     metrics: false,
-    // Not logged: the trace is carried on all the same.
     pathPrefix: "/api",
     logger: quiet,
   }).start();

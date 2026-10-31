@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>A span that calls can belong to: its trace, its id, the trace flags and the caller's tracestate.</summary>
+/// <summary>A span that calls can belong to, with the caller's tracestate.</summary>
 internal readonly record struct SpanContext(string TraceId, string SpanId, string Flags = "01", string? State = null)
 {
     /// <summary>The traceparent header naming this span as the parent.</summary>
@@ -19,9 +19,8 @@ internal readonly record struct SpanIds(string TraceId, string SpanId, string? P
 internal readonly record struct RequestTrace(SpanContext Span, string? ParentSpanId);
 
 /// <summary>
-/// W3C trace context (https://www.w3.org/TR/trace-context/). A request continues the trace in
-/// its traceparent header (or the ASP.NET Core activity that already read it) or starts one;
-/// every call gets its own span id; outbound HttpClient requests carry the trace on.
+/// W3C trace context. A request continues the trace in its traceparent header or starts one,
+/// and outbound HttpClient requests pass it on.
 /// </summary>
 internal static class TraceContext
 {
@@ -30,17 +29,14 @@ internal static class TraceContext
 
     private static readonly AsyncLocal<SpanContext?> CurrentSpan = new();
 
-    /// <summary>The innermost span of this async flow: a custom or background span, else the request's. Null outside any trace.</summary>
+    /// <summary>The innermost span of this async flow, or null outside any trace.</summary>
     public static SpanContext? Current
     {
         get => CurrentSpan.Value;
         set => CurrentSpan.Value = value;
     }
 
-    /// <summary>
-    /// Reads a traceparent header. Null for anything malformed, for version ff and for all-zero
-    /// ids, which mean "no parent".
-    /// </summary>
+    /// <summary>Null for anything malformed, version ff, or all-zero ids.</summary>
     public static SpanContext? Parse(string? header)
     {
         var parts = (header ?? "").Trim().Split('-');
@@ -68,9 +64,8 @@ internal static class TraceContext
     }
 
     /// <summary>
-    /// The server span of an incoming request, made current for everything the handler does.
-    /// An ASP.NET Core (or OpenTelemetry) activity has already read the header; its ids are used
-    /// so both agree. Without one the header is the source.
+    /// Makes the request's server span current. Reuses the ids of an ASP.NET Core activity when
+    /// there is one so both agree; otherwise reads the header.
     /// </summary>
     public static RequestTrace BeginRequest(HttpContext ctx)
     {
@@ -99,16 +94,13 @@ internal static class TraceContext
             return null;
         }
         var parent = a.ParentSpanId == default ? null : a.ParentSpanId.ToHexString();
-        // A root activity has no flags of its own; a trace this service starts is sampled.
+        // A root activity has no flags; traces this service starts are sampled.
         var flags = parent is null ? "01" : ((byte)a.ActivityTraceFlags).ToString("x2");
         var state = string.IsNullOrEmpty(a.TraceStateString) ? null : a.TraceStateString;
         return new RequestTrace(new SpanContext(a.TraceId.ToHexString(), a.SpanId.ToHexString(), flags, state), parent);
     }
 
-    /// <summary>
-    /// Ids for a new span under the current one; outside any trace the span starts one, so the
-    /// service it reaches can still be followed.
-    /// </summary>
+    /// <summary>Ids for a new span under the current one, starting a trace if there is none.</summary>
     public static (SpanContext Span, string? ParentSpanId) Child()
     {
         if (Current is { } parent)

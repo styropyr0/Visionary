@@ -106,8 +106,7 @@ class Agent:
         return self._requests is not None and self.config.log_requests
 
     def writer_stats(self) -> WriterStats:
-        """How far behind the database the writers are, for load tests and
-        health checks."""
+        """How far behind the database the writers are."""
         writers = [self._requests, self._logs and self._logs.writer, self._metrics and self._metrics.writer]
         stats = [w.stats() for w in writers if w is not None]
         return WriterStats(*(sum(s[i] for s in stats) for i in range(3)))

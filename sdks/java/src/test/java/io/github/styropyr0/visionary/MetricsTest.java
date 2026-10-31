@@ -97,7 +97,6 @@ class MetricsTest {
         assertEquals("{\"bounds\":[0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000],"
                 + "\"counts\":[0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1]}", hist.buckets());
 
-        // Next interval: the gauge repeats, the counter and histogram that did not move are skipped.
         rows = collect();
         assertEquals(List.of("gauge depth {}"), new ArrayList<>(rows.keySet()));
     }

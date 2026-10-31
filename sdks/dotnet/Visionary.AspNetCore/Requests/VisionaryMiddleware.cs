@@ -46,7 +46,6 @@ internal sealed class VisionaryMiddleware
         tally.Start();
         var started = Stopwatch.GetTimestamp();
         var path = (ctx.Request.PathBase + ctx.Request.Path).Value ?? "/";
-        // Logged or not, the request's span is current so outbound calls carry the trace on.
         var trace = TraceContext.BeginRequest(ctx);
         // Held for every request, logged or not.
         RequestLogs? logs = null;

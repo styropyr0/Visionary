@@ -71,8 +71,7 @@ export class ActiveSpan {
   private readonly state: RequestState | undefined;
   private readonly slot: number;
   private ended = false;
-  /** The span it was started in (a new trace when there was none), carrying
-   * the trace flags and tracestate on. */
+  /** The enclosing span, or the root of a new trace when there was none. */
   private readonly parent: SpanContext;
   private readonly parentSpanId: string;
   readonly spanId = newSpanId();
@@ -80,8 +79,6 @@ export class ActiveSpan {
   constructor(private readonly init: SpanInit) {
     this.state = currentRequest();
     this.slot = this.state && !this.state.done ? this.state.nextSlot++ : -1;
-    // A call outside any trace starts one, so the service it reaches can
-    // still be followed.
     const parent = currentSpan();
     this.parent = parent ?? { traceId: newTraceId(), spanId: "", flags: "01", state: "" };
     this.parentSpanId = parent?.spanId ?? "";

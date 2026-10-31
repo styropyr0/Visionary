@@ -16,7 +16,6 @@ using Xunit;
 
 namespace Styropyr0.Visionary.Tests;
 
-/// <summary>W3C trace context (SPEC.md "Trace context").</summary>
 [Collection(BackgroundTests.AgentCollection)]
 public sealed class TraceTests : IDisposable
 {
@@ -223,9 +222,8 @@ public sealed class TraceTests : IDisposable
     }
 
     /// <summary>
-    /// Two endpoints of one app through Kestrel: /a continues the caller's trace, wraps a call to
-    /// /b in a custom span, and /b continues the same trace with the http span as its parent,
-    /// from the one traceparent header HttpClient sent.
+    /// /a continues the caller's trace and calls /b inside a custom span; /b should land in the
+    /// same trace under the http span.
     /// </summary>
     [Fact]
     public async Task ATraceSpansTwoRequests()
@@ -258,7 +256,7 @@ public sealed class TraceTests : IDisposable
         await app.StartAsync();
         try
         {
-            // Stopping while the writer still creates its tables would leave nothing to read.
+            // Stopping before the tables exist would leave nothing to read.
             for (var i = 0; i < 100 && Rows("SELECT name FROM sqlite_master WHERE name = 'idx_spans_trace_id'").Count == 0; i++)
             {
                 await Task.Delay(50);
@@ -270,7 +268,6 @@ public sealed class TraceTests : IDisposable
             var res = await client.SendAsync(req);
             Assert.Equal("b", await res.Content.ReadAsStringAsync());
 
-            // No activity of this trace to send: the SDK sets the header and HttpClient keeps it.
             TraceContext.Current = new SpanContext(InTrace, InParent);
             Assert.Equal("b", await client.GetStringAsync(addr + "/b"));
             TraceContext.Current = null;
@@ -286,10 +283,10 @@ public sealed class TraceTests : IDisposable
         var a = Assert.Single(requests, r => r[0] == "/a");
         var b = requests.First(r => r[0] == "/b");
         var custom = Assert.Single(spans, s => s[0] == "custom");
-        // The test's own call to /a is an http span too, outside any request.
+        // The test's own call to /a is an http span too.
         var http = Assert.Single(spans, s => s[0] == "http" && s[4] == custom[3]);
 
-        Assert.NotNull(activitySpan); // ASP.NET Core's activity was there and its ids were used
+        Assert.NotNull(activitySpan);
         Assert.Equal(new[] { InTrace, activitySpan, InParent }, a[1..]);
         Assert.Equal(new[] { InTrace, a[2] }, new[] { custom[2], custom[4] });
         Assert.Equal(new[] { InTrace, custom[3] }, new[] { http[2], http[4] });

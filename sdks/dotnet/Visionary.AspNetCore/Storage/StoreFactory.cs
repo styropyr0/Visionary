@@ -163,8 +163,8 @@ internal static class StoreFactory
         }, d, Redacted(raw) + $" ({Name(d)})");
 
     /// <summary>
-    /// The writers and the Visionary server share the file: wait up to 5 s for its lock instead
-    /// of failing at once, and use WAL so readers don't block the writers.
+    /// The server shares the file, so wait up to 5 s for the lock and use WAL so readers don't
+    /// block writers.
     /// </summary>
     private static async ValueTask<DbConnection> OpenSqliteAsync(DbConnection conn, CancellationToken ct)
     {

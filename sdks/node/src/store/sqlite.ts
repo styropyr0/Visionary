@@ -43,8 +43,7 @@ export class SqliteStore implements Store {
       }
       db = new nodeSqlite.DatabaseSync(path) as SyncDatabase;
     }
-    // Other processes (the Visionary server, other instances) share the file:
-    // wait for its lock instead of failing at once.
+    // The server and other instances share the file, so wait for its lock.
     db!.exec("PRAGMA busy_timeout = 5000");
     db!.exec("PRAGMA journal_mode = WAL");
     return new SqliteStore(db!, true);

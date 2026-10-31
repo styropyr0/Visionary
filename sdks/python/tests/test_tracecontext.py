@@ -210,7 +210,6 @@ class AgentTest(unittest.TestCase):
 
 class MigrationTest(unittest.TestCase):
     def test_spans_table_gains_trace_columns(self):
-        # telemetry.sql is the original table; the trace columns are added after it.
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "v.db")
             b = SQLBackend("sqlite", lambda: sqlite3.connect(path))

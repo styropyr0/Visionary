@@ -20,7 +20,6 @@ public final class VisionaryCounter {
         }
     }
 
-    /** Adds 1. */
     public void inc() {
         add(1);
     }

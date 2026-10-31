@@ -16,8 +16,7 @@ from ._storage import PURGE_CHUNK, Backend
 
 _STOP = object()
 
-# Rows per batch: D1 takes 50 statements a call; SQL backends get multi-row
-# INSERTs, and an app may raise the batch to 2000.
+# Rows per batch. D1 takes 50 statements a call; an app may raise the SQL batch to 2000.
 D1_BATCH = 50
 SQL_BATCH = 500
 MAX_SQL_BATCH = 2000
@@ -26,9 +25,9 @@ PARALLEL_FLUSHES = 4
 
 
 class WriterStats(NamedTuple):
-    """The background writers for request rows, logs and metrics, summed:
-    rows waiting for the database, and rows written or dropped (a full queue
-    or a write that failed three times) since start."""
+    """Totals across the writers: rows queued, and rows written or dropped since start.
+
+    A row is dropped when the queue is full or its write fails three times."""
 
     queued: int = 0
     written: int = 0
@@ -105,7 +104,7 @@ class RequestWriter:
     def _init_state(self) -> None:
         self._queue: "queue.Queue[Any]" = queue.Queue(maxsize=self._queue_size)
         self._dropped = 0
-        self._dropped_lock = threading.Lock()  # also guards _written and _lost
+        self._dropped_lock = threading.Lock()
         self._written = 0
         self._lost = 0
         self._stop = threading.Event()

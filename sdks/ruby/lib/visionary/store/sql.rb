@@ -6,11 +6,9 @@ module Visionary
   module Store
     class ConfigError < StandardError; end
 
-    # Connections the SDK opens itself from VISIONARY_DATABASE_URL, through
-    # the pg, mysql2 or sqlite3 gem (whichever the app has installed). Each is
-    # used by one background thread at a time and reopened after an error. Up
-    # to four on PostgreSQL and MySQL, so batches can be written in parallel;
-    # one on SQLite, which takes one writer at a time.
+    # Connections opened from VISIONARY_DATABASE_URL with whichever of pg, mysql2
+    # or sqlite3 the app has. Up to four on PostgreSQL and MySQL so batches write
+    # in parallel; one on SQLite, which takes one writer at a time.
     class SQL
       PARALLEL = 4
 
@@ -72,9 +70,8 @@ module Visionary
         run { |c| c.execute(sql, args) }
       end
 
-      # The parent's connections (sockets) must not be used or closed from
-      # the child: they are kept referenced (so no finalizer closes them) and
-      # new ones are opened lazily.
+      # The parent's sockets stay referenced so no finalizer closes them from
+      # the child; new connections open lazily.
       def after_fork
         (@inherited ||= []).concat(@all)
         reset_pool
@@ -335,8 +332,7 @@ module Visionary
     class Sqlite3Conn
       def initialize(path)
         @db = SQLite3::Database.new(path)
-        # The writers and the Visionary server share the file: wait for its
-        # lock instead of failing at once.
+        # The Visionary server shares the file, so wait up to 5 s for its lock.
         @db.busy_timeout = 5000
         begin
           @db.execute("PRAGMA journal_mode=WAL")

@@ -68,7 +68,7 @@ SPAN_COLUMNS = [
     "created_at", "request_id", "service", "instance", "kind", "name", "target", "detail",
     "offset_ms", "duration_ms", "status", "error", "row_count",
 ]
-# spans columns added later, after the ones above (Go: AddedSpanColumns).
+# spans columns added later, appended after the ones above.
 ADDED_SPAN_COLUMNS = [("trace_id", "text"), ("span_id", "text"), ("parent_span_id", "text")]
 SPAN_COLUMNS = SPAN_COLUMNS + [name for name, _ in ADDED_SPAN_COLUMNS]
 ERROR_COLUMNS = [
@@ -105,7 +105,7 @@ _SCHEMA_FILES = {"requests": "requests.sql", "system": "system.sql", "telemetry"
                  "metrics": "metrics.sql"}
 _MIGRATIONS = {"requests": ("api_logs", ADDED_REQUEST_COLUMNS), "system": ("system_metrics", ADDED_SYSTEM_COLUMNS),
                "telemetry": ("spans", ADDED_SPAN_COLUMNS)}
-# Tables indexed on trace_id once the added columns exist (Go: TraceIndex).
+# Tables indexed on trace_id once the added columns exist.
 _TRACE_INDEX = {"requests": "api_logs", "telemetry": "spans"}
 
 # Bound as-is on D1, like the Go SDK, so an empty log message doesn't become NULL.
@@ -119,10 +119,9 @@ _D1_REQUIRED = {
 
 PURGE_CHUNK = 5000
 
-# A multi-row INSERT binds at most this many parameters (SQLite allows 32766
-# since 3.32, PostgreSQL and MySQL 65535).
+# Parameters per multi-row INSERT; SQLite allows 32766, PostgreSQL and MySQL 65535.
 MAX_PARAMS = 30000
-# PostgreSQL and MySQL connections, one per batch written at once.
+# PostgreSQL and MySQL connections, one per batch in flight.
 POOL_SIZE = 4
 
 # MySQL rejects over-long values in strict mode, which would fail the whole
@@ -182,8 +181,7 @@ def missing_column_statements(dialect: str, table: str, added: Sequence[Tuple[st
 
 
 def trace_index_sql(dialect: str, table: str) -> str:
-    """The index on table's trace_id, created after the added columns, since
-    older tables only have the column from then on."""
+    """The trace_id index, created once the migration has added the column."""
     ine = "" if dialect == "mysql" else "IF NOT EXISTS "
     return "CREATE INDEX %sidx_%s_trace_id ON %s (trace_id)" % (ine, table, table)
 
@@ -217,8 +215,7 @@ def insert_rows_sql(table: str, cols: Tuple[str, ...], n: int, ph: str) -> str:
 
 def insert_statements(table: str, cols: Sequence[str], rows: List[Tuple[Any, ...]], ph: str,
                       max_params: int = MAX_PARAMS) -> List[Tuple[str, List[Any], int]]:
-    """rows as multi-row INSERTs of at most max_params parameters each, as
-    (sql, params, row count)."""
+    """Split rows into INSERTs of at most max_params parameters, as (sql, params, count)."""
     per = max(1, max_params // len(cols))
     out = []
     for i in range(0, len(rows), per):
@@ -361,7 +358,7 @@ class SQLBackend(Backend):
 
     def _reset(self) -> None:
         self._slots = threading.BoundedSemaphore(POOL_SIZE)
-        self._conns_lock = threading.Lock()  # guards _idle and _all, never held during I/O
+        self._conns_lock = threading.Lock()
         self._local = threading.local()
         self._idle: List[Any] = []
         self._all: List[Any] = []
@@ -465,8 +462,7 @@ class SQLBackend(Backend):
             try:
                 for table, rows in work:
                     if self.dialect == "mysql":
-                        # PyMySQL's executemany already sends multi-row INSERTs,
-                        # cut to its packet size, which long bodies could overrun.
+                        # PyMySQL's executemany already batches rows to fit its packet size.
                         cur.executemany(self._sql[table], rows)
                         continue
                     name, cols = TABLES[table]
@@ -478,9 +474,8 @@ class SQLBackend(Backend):
         self._run(write)
 
     def _insert_cursor(self, conn: Any) -> Tuple[Any, str]:
-        """A cursor and its placeholder. psycopg 3.2's RawCursor sends $n
-        placeholders as they are; otherwise psycopg parses every long
-        multi-row INSERT again, which costs more than the write."""
+        """A cursor and its placeholder. psycopg's RawCursor skips re-parsing long
+        multi-row INSERTs, which otherwise costs more than the write."""
         psycopg = sys.modules.get("psycopg")
         raw = getattr(psycopg, "RawCursor", None)
         if raw is not None and isinstance(conn, psycopg.Connection):
@@ -630,8 +625,7 @@ def _sqlite_path(rest: str) -> str:
 def _sqlite_connect(path: str) -> Callable[[], Any]:
     import sqlite3
 
-    # The writers and the Visionary server share the file: wait for its lock
-    # instead of failing at once.
+    # The Visionary server shares the file, so wait for its lock instead of failing.
     def connect() -> Any:
         conn = sqlite3.connect(path, timeout=5)
         conn.execute("PRAGMA journal_mode=WAL")

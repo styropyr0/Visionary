@@ -16,12 +16,9 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Custom metrics: counters, gauges and histograms the application defines.
- * Values add up in memory and the started agent writes one {@code metrics} row
- * per series every interval ({@link MetricsWriter}). Recording never waits for
- * the database. Each distinct label set is one series; past the cap per metric
- * name new ones are dropped and counted, so a label holding user ids cannot fill
- * the database.
+ * Counters, gauges and histograms, summed in memory and written as one row per
+ * series every interval. Label sets past the per-name cap are dropped and counted,
+ * so a label holding user ids can't fill the database.
  */
 final class Metrics {
 
@@ -184,7 +181,7 @@ final class Metrics {
         return out;
     }
 
-    /** Takes each series' interval: counters and histograms that moved, and every gauge ever set. */
+    /** Counters and histograms that moved this interval, plus every gauge ever set. */
     List<Row> collect(Instant now) {
         List<Series> all;
         synchronized (this) {
@@ -266,9 +263,8 @@ final class Metrics {
     }
 
     /**
-     * The canonical labels text of a series and its id, as the SDK contract
-     * defines them: a JSON object with keys in UTF-8 byte order, and the first 16
-     * hex digits of SHA-256 over the name, a newline and that text.
+     * Labels as JSON with keys in UTF-8 byte order, and the series id: the first 16
+     * hex digits of SHA-256 over the name, a newline and that JSON.
      */
     static String[] series(String name, Map<String, String> labels) {
         TreeMap<byte[], String[]> sorted = new TreeMap<>(Arrays::compareUnsigned);
