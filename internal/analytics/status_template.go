@@ -104,117 +104,158 @@ var statusTemplate = template.Must(template.New("status").Funcs(statusFuncs).Par
 <style>
 :root {
   color-scheme: dark;
-  --bg: #111110; --surface-1: #1a1a19; --surface-2: #222221; --surface-3: #2b2b29;
+  --bg: #0e0e0d; --surface-1: #181817; --surface-3: #2b2b29;
   --border: rgba(255,255,255,0.08); --text-1: #f0efec; --text-2: #c3c2b7; --text-3: #898781;
-  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
-  --good-text: #3fbf3f; --warning-text: #fab219; --critical-text: #f07c7c; --accent: #3987e5;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --muted: #3a3a37;
+  --good-text: #4fcf4f; --warning-text: #fab219; --critical-text: #f07c7c;
+  --good-wash: rgba(12,163,12,0.12); --warning-wash: rgba(250,178,25,0.12); --critical-wash: rgba(208,59,59,0.14); --muted-wash: rgba(255,255,255,0.04);
 }
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --bg: #f3f3f1; --surface-1: #fcfcfb; --surface-2: #f3f3f0; --surface-3: #e9e8e3;
-    --border: rgba(11,11,11,0.1); --text-1: #0b0b0b; --text-2: #52514e; --text-3: #75736d;
-    --good-text: #006300; --warning-text: #8a5a00; --critical-text: #b42c2c; --accent: #2a78d6;
+    --bg: #f4f4f2; --surface-1: #ffffff; --surface-3: #e7e6e1;
+    --border: rgba(11,11,11,0.09); --text-1: #0b0b0b; --text-2: #4f4e4b; --text-3: #74726c; --muted: #d6d5cf;
+    --good-text: #046b04; --warning-text: #8a5a00; --critical-text: #b42c2c;
+    --good-wash: rgba(12,163,12,0.09); --warning-wash: rgba(250,178,25,0.14); --critical-wash: rgba(208,59,59,0.09); --muted-wash: rgba(11,11,11,0.03);
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text-1); font: 14px/1.5 "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
-main { max-width: 860px; margin: 0 auto; padding: 40px 16px 32px; }
-h1 { margin: 0 0 20px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
-h2 { margin: 32px 0 10px; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
-.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
-.banner { display: flex; align-items: center; gap: 12px; padding: 16px 18px; font-size: 16px; font-weight: 600; }
-.banner .sub { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--text-3); }
-.icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; flex: none; }
-.icon svg { width: 16px; height: 16px; }
-.operational .icon { background: var(--good); }
-.degraded .icon { background: var(--warning); color: #111; }
-.partial_outage .icon, .major_outage .icon { background: var(--critical); }
-.unknown .icon { background: var(--surface-3); color: var(--text-2); }
-.check { padding: 16px 18px; border-top: 1px solid var(--border); }
+body { margin: 0; background: var(--bg); color: var(--text-1); font: 14px/1.5 "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 820px; margin: 0 auto; padding: 48px 16px 40px; }
+header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+header.top h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+header.top .updated { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 36px 0 12px; font-size: 15px; font-weight: 600; }
+h2 small { color: var(--text-3); font-size: 12.5px; font-weight: 400; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+/* The overall state: one tinted card in the colour of the worst state. */
+.hero { display: flex; align-items: flex-start; gap: 16px; padding: 22px; border-radius: 14px; border: 1px solid var(--border); background: var(--muted-wash); }
+.hero.operational { background: var(--good-wash); }
+.hero.degraded { background: var(--warning-wash); }
+.hero.partial_outage, .hero.major_outage { background: var(--critical-wash); }
+.hero .icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #fff; flex: none; background: var(--muted); }
+.hero .icon svg { width: 20px; height: 20px; }
+.hero.operational .icon { background: var(--good); }
+.hero.degraded .icon { background: var(--warning); color: #111; }
+.hero.partial_outage .icon, .hero.major_outage .icon { background: var(--critical); }
+.hero .label { font-size: 19px; font-weight: 650; line-height: 1.3; margin-top: 1px; }
+.hero .sub { margin-top: 4px; color: var(--text-2); font-size: 13.5px; }
+
+.notice { padding: 18px 20px; border-top: 1px solid var(--border); }
+.notice:first-child { border-top: 0; }
+.notice .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.notice .title { font-weight: 600; font-size: 15px; }
+.notice .since { width: 100%; color: var(--text-3); font-size: 12.5px; }
+.updates { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
+.updates li { display: grid; grid-template-columns: 12px 1fr; gap: 10px; }
+.updates .mark { width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--text-3); }
+.updates li:first-child .mark { background: var(--text-1); }
+.updates .st { font-weight: 600; }
+.updates .when { display: block; color: var(--text-3); font-size: 12.5px; }
+
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tag.live { background: var(--critical-wash); color: var(--critical-text); }
+.tag.watch { background: var(--warning-wash); color: var(--warning-text); }
+.tag.done { background: var(--surface-3); color: var(--text-2); }
+
+.check { padding: 18px 20px 16px; border-top: 1px solid var(--border); }
 .check:first-child { border-top: 0; }
-.row { display: flex; align-items: baseline; gap: 12px; }
-.name { font-weight: 600; }
-.url { color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }
-.state { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; white-space: nowrap; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); }
+.check .head { display: flex; align-items: center; gap: 12px; }
+.check .name { font-weight: 600; }
+.check .url { color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }
+.check .right { margin-left: auto; display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+.check .uptime { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 550; }
+.state .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .state.operational { color: var(--good-text); } .state.operational .dot { background: var(--good); }
 .state.degraded { color: var(--warning-text); } .state.degraded .dot { background: var(--warning); }
 .state.outage { color: var(--critical-text); } .state.outage .dot { background: var(--critical); }
 .state.paused, .state.unknown { color: var(--text-3); }
-.bars { display: flex; gap: 2px; height: 30px; margin: 12px 0 6px; }
-.bars span { flex: 1; min-width: 2px; border-radius: 2px; background: var(--surface-3); }
+.bars { display: flex; gap: 2px; height: 34px; margin: 14px 0 8px; }
+.bars span { flex: 1; min-width: 2px; border-radius: 3px; background: var(--muted); }
+.bars span:hover { opacity: 0.75; }
 .bars .ok { background: var(--good); }
 .bars .minor { background: var(--warning); }
 .bars .major { background: var(--critical); }
-.legend { display: flex; justify-content: space-between; color: var(--text-3); font-size: 12px; }
-.legend b { color: var(--text-2); font-weight: 500; }
-.incident { display: flex; gap: 12px; align-items: baseline; padding: 12px 18px; border-top: 1px solid var(--border); }
-.incident:first-child { border-top: 0; }
-.incident .what { font-weight: 500; }
-.incident .meta { margin-left: auto; color: var(--text-3); font-size: 12.5px; text-align: right; }
-.tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
-.tag.live { background: var(--critical); color: #fff; }
-.tag.done { background: var(--surface-3); color: var(--text-2); }
-.empty { padding: 16px 18px; color: var(--text-3); }
-.notice { padding: 16px 18px; border-top: 1px solid var(--border); }
-.notice:first-child { border-top: 0; }
-.notice .row { flex-wrap: wrap; }
-.tag.watch { background: var(--warning); color: #111; }
-.update { margin-top: 10px; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13.5px; }
-.update .when { color: var(--text-3); font-size: 12.5px; }
-.update b { font-weight: 600; }
-footer { margin-top: 32px; color: var(--text-3); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-@media (max-width: 560px) { .bars span:nth-child(-n+60) { display: none; } .legend .from90 { display: none; } .legend .from30 { display: inline; } }
-.legend .from30 { display: none; }
+.scale { display: flex; justify-content: space-between; color: var(--text-3); font-size: 12px; }
+.scale .from30 { display: none; }
+
+.past { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 14px 20px; border-top: 1px solid var(--border); }
+.past:first-child { border-top: 0; }
+.past .what { font-weight: 550; }
+.past .when { color: var(--text-3); font-size: 12.5px; grid-column: 1; }
+.past .dur { color: var(--text-2); font-size: 13px; grid-row: 1; grid-column: 2; font-variant-numeric: tabular-nums; }
+.empty { padding: 18px 20px; color: var(--text-3); }
+
+footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+footer a { color: var(--text-2); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+@media (max-width: 600px) {
+  main { padding-top: 28px; }
+  header.top { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .bars span:nth-child(-n+60) { display: none; }
+  .scale .from90 { display: none; }
+  .scale .from30 { display: inline; }
+  .check .right { flex-direction: column; align-items: flex-end; gap: 2px; }
+}
 </style>
 </head>
 <body>
 <main>
-<h1>{{.Title}}</h1>
-<section class="card banner {{.State}}" aria-live="polite">
+<header class="top">
+  <h1>{{.Title}}</h1>
+  <span class="updated">Updated {{when .UpdatedAt}}</span>
+</header>
+
+<section class="hero {{.State}}" aria-live="polite">
   <span class="icon" aria-hidden="true">{{if eq .State "operational"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>{{else if eq .State "unknown"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 8h8"/></svg>{{else}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 4v5"/><path d="M8 12v.01"/></svg>{{end}}</span>
-  <span>{{.Label}}</span>
-  <span class="sub">Updated {{when .UpdatedAt}}</span>
+  <div>
+    <div class="label">{{.Label}}</div>
+    <div class="sub">{{if .Checks}}{{len .Checks}} service{{if gt (len .Checks) 1}}s{{end}} monitored. {{end}}{{with ongoing .Incidents}}{{len .}} not responding right now.{{else}}{{if eq $.State "unknown"}}Nothing has been published here yet.{{else}}Checked around the clock.{{end}}{{end}}</div>
+  </div>
 </section>
 
 {{with .Notices}}
 <h2>Incidents</h2>
 <section class="card">
-{{range .}}  <div class="notice">
-    <div class="row"><span class="tag {{if .ResolvedAt}}done{{else if eq .Status "monitoring"}}watch{{else}}live{{end}}">{{.StatusLabel}}</span><span class="name">{{.Title}}</span><span class="meta url">since {{when .StartedAt}}{{if .ResolvedAt}}, resolved {{when .ResolvedAt}}{{end}}</span></div>
-{{range .Updates}}    <div class="update"><span class="when">{{when .At}}</span><span><b>{{.Status}}</b> · {{.Body}}</span></div>
-{{end}}  </div>
+{{range .}}  <article class="notice">
+    <div class="head"><span class="tag {{if .ResolvedAt}}done{{else if eq .Status "monitoring"}}watch{{else}}live{{end}}">{{.StatusLabel}}</span><span class="title">{{.Title}}</span><span class="since">Started {{when .StartedAt}}{{if .ResolvedAt}} · resolved {{when .ResolvedAt}}{{end}}</span></div>
+{{with .Updates}}    <ol class="updates">
+{{range .}}      <li><span class="mark" aria-hidden="true"></span><span><span class="st">{{.Status}}</span>{{if .Body}} · {{.Body}}{{end}}<span class="when">{{when .At}}</span></span></li>
+{{end}}    </ol>
+{{end}}  </article>
 {{end}}</section>
 {{end}}
 
 {{with ongoing .Incidents}}
-<h2>Current incidents</h2>
+<h2>Not responding now</h2>
 <section class="card">
-{{range .}}  <div class="incident"><span class="tag live">Ongoing</span><span class="what">{{.Check}} is not responding</span><span class="meta">since {{when .StartedAt}}<br>{{dur .DurationS}} so far</span></div>
+{{range .}}  <div class="past"><span class="what">{{.Check}}</span><span class="dur"><span class="tag live">{{dur .DurationS}} so far</span></span><span class="when">Since {{when .StartedAt}}</span></div>
 {{end}}</section>
 {{end}}
 
-<h2>Services</h2>
+<h2>Services <small>Last 90 days</small></h2>
 <section class="card">
 {{range .Checks}}  <div class="check">
-    <div class="row">
+    <div class="head">
       <div><div class="name">{{.Name}}</div>{{if .URL}}<div class="url">{{.URL}}</div>{{end}}</div>
-      <span class="state {{.State}}"><span class="dot"></span>{{stateLabel .State}}</span>
+      <div class="right"><span class="uptime">{{pct .Uptime90}} uptime</span><span class="state {{.State}}"><span class="dot"></span>{{stateLabel .State}}</span></div>
     </div>
     <div class="bars" role="img" aria-label="Daily uptime for the last 90 days">{{range .Days}}<span class="{{.Level}}" title="{{day .Day}}: {{if .Uptime}}{{pct .Uptime}} up, {{end}}{{levelLabel .Level}}"></span>{{end}}</div>
-    <div class="legend"><span class="from90">90 days ago</span><span class="from30">30 days ago</span><span><b>{{pct .Uptime90}}</b> uptime</span><span>Today</span></div>
+    <div class="scale"><span class="from90">90 days ago</span><span class="from30">30 days ago</span><span>Today</span></div>
   </div>
-{{else}}  <div class="empty">No services are published on this page yet.</div>
+{{else}}  <div class="empty">No services are listed on this page yet.</div>
 {{end}}</section>
 
-<h2>Past 7 days</h2>
+<h2>Past incidents <small>Last 7 days</small></h2>
 <section class="card">
-{{range resolved .Incidents}}  <div class="incident"><span class="tag done">Resolved</span><span class="what">{{.Check}} was unavailable</span><span class="meta">{{when .StartedAt}} to {{whenp .EndedAt}}<br>{{dur .DurationS}}</span></div>
-{{else}}  <div class="empty">No incidents in the past 7 days.</div>
+{{range resolved .Incidents}}  <div class="past"><span class="what">{{.Check}} was unavailable</span><span class="dur">{{dur .DurationS}}</span><span class="when">{{when .StartedAt}} to {{whenp .EndedAt}}</span></div>
+{{else}}  <div class="empty">No incidents in the last 7 days.</div>
 {{end}}</section>
 
-<footer><span>Times in UTC. This page refreshes every minute.</span><span>Monitored by Visionary</span></footer>
+<footer><span>Times are shown in your time zone. This page refreshes every minute.</span><span><a href="/status.json">JSON feed</a> · Monitored by Visionary</span></footer>
 </main>
 </body>
 </html>
