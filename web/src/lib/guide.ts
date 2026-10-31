@@ -387,7 +387,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Open a check",
-        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests, and **Open trace** for what your backend did during it.",
+        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps (with a screenshot after each when **Screenshot every step** is on), the screenshot of a failure, console errors, its requests as a waterfall with **Download HAR**, and **Open trace** for what your backend did during it.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
       },

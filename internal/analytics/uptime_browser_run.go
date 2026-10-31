@@ -56,6 +56,8 @@ type browserRun struct {
 	Final      []byte       `json:"-"`
 	TraceID    string       `json:"trace_id,omitempty"`
 	Warning    string       `json:"warning,omitempty"`
+	Requests   []netRequest `json:"requests"`
+	StepShots  [][]byte     `json:"-"`
 }
 
 // vitalsScript records LCP and CLS on every page the run opens.
@@ -81,6 +83,11 @@ type runState struct {
 	navs    int
 	mask    func(string) string
 	touch   bool
+	// the request timeline
+	reqs      map[network.RequestID]*netRequest
+	order     []*netRequest
+	wallBase  float64
+	shotBytes int
 	// navigations seen when the previous step began
 	lastDoc int
 }
@@ -156,7 +163,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	}()
 	mask := masker(c.Secrets)
 	dev := c.device()
-	st := &runState{urls: map[network.RequestID]string{}, mask: mask, touch: dev.Mobile}
+	st := &runState{urls: map[network.RequestID]string{}, reqs: map[network.RequestID]*netRequest{}, mask: mask, touch: dev.Mobile}
 	traceID, spanID := newTraceIDs()
 	patterns := c.tracePatterns()
 	if len(patterns) > 0 {
@@ -207,6 +214,9 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	runCtx, cancel := context.WithTimeout(tab, time.Duration(c.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	var failure error
+	if c.StepScreenshots {
+		run.StepShots = make([][]byte, len(c.Steps))
+	}
 	for i, step := range c.Steps {
 		sr := stepResult{Action: step.Action, Label: step.describe(), Status: "passed"}
 		if failure != nil {
@@ -230,6 +240,10 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 			sr.Status, sr.Error = "failed", clip(mask(err.Error()), 300)
 			failure = err
 			run.FailedStep = i
+		} else if c.StepScreenshots {
+			shotCtx, cancelShot := context.WithTimeout(tab, 5*time.Second)
+			run.StepShots[i] = st.stepShot(shotCtx, dev.Scale)
+			cancelShot()
 		}
 		run.Steps = append(run.Steps, sr)
 	}
@@ -253,6 +267,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	}
 	stopListening()
 	wg.Wait()
+	run.Requests = st.requests(start, time.Now())
 	st.mu.Lock()
 	run.Console, run.Network = st.console, st.network
 	st.mu.Unlock()
@@ -286,8 +301,18 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 	sent := chromedp.Events(ctx, network.RequestWillBeSent)
 	failed := chromedp.Events(ctx, network.LoadingFailed)
 	received := chromedp.Events(ctx, network.ResponseReceived)
+	finished := chromedp.Events(ctx, network.LoadingFinished)
 	navigated := chromedp.Events(ctx, page.FrameNavigated)
-	wg.Add(5)
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		for ev, err := range finished {
+			if err != nil {
+				return
+			}
+			st.netFinished(&ev)
+		}
+	}()
 	go func() {
 		defer wg.Done()
 		for m, err := range console {
@@ -312,6 +337,7 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 				}
 				st.mu.Unlock()
 			}
+			st.netSent(&ev)
 		}
 	}()
 	go func() {
@@ -320,16 +346,17 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 			if err != nil {
 				return
 			}
+			reason := ev.ErrorText
+			if ev.BlockedReason != "" {
+				reason += " (" + string(ev.BlockedReason) + ")"
+			}
+			st.netFailed(&ev, reason)
 			if ev.Canceled {
 				continue
 			}
 			st.mu.Lock()
 			u := st.urls[ev.RequestID]
 			st.mu.Unlock()
-			reason := ev.ErrorText
-			if ev.BlockedReason != "" {
-				reason += " (" + string(ev.BlockedReason) + ")"
-			}
 			st.addNetwork(netFailure{URL: u, Error: reason, Type: string(ev.Type)})
 		}
 	}()
@@ -339,6 +366,7 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 			if err != nil {
 				return
 			}
+			st.netResponse(&ev)
 			if ev.Response != nil && ev.Response.Status >= 400 {
 				st.addNetwork(netFailure{URL: ev.Response.URL, Status: ev.Response.Status, Type: string(ev.Type)})
 			}
@@ -359,24 +387,29 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 	}()
 }
 
-// screenshot takes a JPEG of the viewport, lowering the quality until it
-// fits the size cap; nil when it never does. A device with a pixel ratio
-// above 1 is captured at CSS size.
+// screenshot takes a JPEG of the viewport at CSS size (a device with a
+// pixel ratio above 1 is scaled down).
 func screenshot(ctx context.Context, scale float64) []byte {
+	return shoot(ctx, 1/scale, browserMaxShot, []int64{70, 50, 30})
+}
+
+// shoot captures the viewport scaled by shrink, lowering the quality until
+// it fits limit; nil when it never does.
+func shoot(ctx context.Context, shrink float64, limit int, qualities []int64) []byte {
 	p := page.CaptureScreenshotParams{Format: page.CaptureScreenshotFormatJpeg}
-	if scale > 1 {
+	if shrink != 1 {
 		if m, err := chromedp.Call(ctx, page.GetLayoutMetrics, cdp.Empty{}); err == nil && m.CSSVisualViewport != nil {
 			v := m.CSSVisualViewport
-			p.Clip = &page.Viewport{X: v.PageX, Y: v.PageY, Width: v.ClientWidth, Height: v.ClientHeight, Scale: 1 / scale}
+			p.Clip = &page.Viewport{X: v.PageX, Y: v.PageY, Width: v.ClientWidth, Height: v.ClientHeight, Scale: shrink}
 		}
 	}
-	for _, q := range []int64{70, 50, 30} {
+	for _, q := range qualities {
 		p.Quality = &q
 		res, err := chromedp.Call(ctx, page.CaptureScreenshot, p)
 		if err != nil {
 			return nil
 		}
-		if len(res.Data) <= browserMaxShot {
+		if len(res.Data) <= limit {
 			return res.Data
 		}
 	}

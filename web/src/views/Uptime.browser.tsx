@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, CircleDashed, ListChecks, Waypoints, XCircle } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, CircleDashed, Download, ListChecks, Network, Waypoints, XCircle } from "lucide-react";
+import { downloadHar } from "../lib/har";
+import { Waterfall } from "./Uptime.waterfall";
 import { DataTable, type Column } from "../components/DataTable";
 import { Drawer } from "../components/Modal";
 import { Panel } from "../components/Panel";
@@ -21,7 +23,7 @@ const RUN_KEYS = ["created_at", "ok", "duration_ms", "lcp_ms", "cls", "ttfb_ms",
 const runState = (ok: unknown, degraded: unknown) => (ok ? (degraded ? "degraded" : "up") : "down");
 
 /** Runs of a browser check, newest first; a row opens the run. */
-export function BrowserRunsPanel({ checkId, runs, loading, error }: { checkId: number; runs?: BrowserRunSummary[]; loading: boolean; error?: Error | null }) {
+export function BrowserRunsPanel({ checkId, checkName, runs, loading, error }: { checkId: number; checkName: string; runs?: BrowserRunSummary[]; loading: boolean; error?: Error | null }) {
   const [open, setOpen] = useState<number | null>(null);
   const result = runs && asResult([...RUN_KEYS], runs.map((r) => RUN_KEYS.map((k) => r[k])));
   const cols: Column[] = [
@@ -47,7 +49,7 @@ export function BrowserRunsPanel({ checkId, runs, loading, error }: { checkId: n
         bodyHeight={120}
         table={result && (runs!.length === 0 ? <div className="panel-state">No runs in this range.</div> : <DataTable result={result} columns={cols} maxHeight={440} sortable={false} onRowClick={(row) => setOpen(Number(row[RUN_KEYS.indexOf("id")]))} />)}
       />
-      {open !== null && <RunDrawer checkId={checkId} runId={open} onClose={() => setOpen(null)} />}
+      {open !== null && <RunDrawer checkId={checkId} checkName={checkName} runId={open} onClose={() => setOpen(null)} />}
     </>
   );
 }
@@ -111,9 +113,10 @@ export function LastRunTile({ run }: { run?: BrowserRunSummary }) {
 const STEP_ICON = { passed: CheckCircle2, failed: XCircle, skipped: CircleDashed };
 
 /** One run: which step failed and why, what the page looked like, and what it logged. */
-export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId: number; onClose: () => void }) {
+export function RunDrawer({ checkId, checkName, runId, onClose }: { checkId: number; checkName: string; runId: number; onClose: () => void }) {
   const q = useQuery(`up-run-${checkId}-${runId}`, (signal) => getBrowserRun(checkId, runId, signal));
   const r = q.data;
+  const [shot, setShot] = useState<number | null>(null);
   return (
     <Drawer onClose={onClose} title={r ? `Run at ${formatLogTime(r.created_at)}` : "Run"} className="wide">
       {q.error && <ErrorNotice title="Could not load the run" error={q.error} />}
@@ -181,6 +184,7 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
           <ol className="up-run-steps">
             {r.steps.map((s: StepResult, i) => {
               const Icon = STEP_ICON[s.status];
+              const img = r.step_shots?.[i];
               return (
                 <li key={i} className={`up-run-step ${s.status}`}>
                   <Icon size={14} aria-label={s.status} />
@@ -189,7 +193,17 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
                       {i + 1}. {s.label}
                     </span>
                     {s.error && <span className="up-err">{s.error}</span>}
+                    {img && shot === i && (
+                      <a href={img} target="_blank" rel="noreferrer" className="up-shot up-step-shot">
+                        <img src={img} alt={`The page after step ${i + 1}`} />
+                      </a>
+                    )}
                   </div>
+                  {img && (
+                    <button type="button" className={`icon-btn ${shot === i ? "on" : ""}`} aria-label={shot === i ? "Hide the screenshot" : "Show the screenshot"} title={shot === i ? "Hide the screenshot" : "Screenshot after this step"} onClick={() => setShot(shot === i ? null : i)}>
+                      <Camera size={14} />
+                    </button>
+                  )}
                   <span className="num dim">{s.status === "skipped" ? "skipped" : formatMs(s.duration_ms)}</span>
                 </li>
               );
@@ -204,6 +218,23 @@ export function RunDrawer({ checkId, runId, onClose }: { checkId: number; runId:
               <a href={r.screenshot || r.final_screenshot} target="_blank" rel="noreferrer" className="up-shot">
                 <img src={r.screenshot || r.final_screenshot} alt={r.screenshot ? "The page when the step failed" : "The last page of the run"} />
               </a>
+            </>
+          )}
+
+          {r.requests?.length > 0 && (
+            <>
+              <div className="up-run-h">
+                <Network size={14} aria-hidden /> Requests
+                <span className="dim" style={{ fontWeight: 400 }}>
+                  {r.requests.length}
+                </span>
+                <span style={{ flex: 1 }} />
+                <button type="button" className="btn sm" onClick={() => downloadHar(r, checkName)} title="HAR 1.2 of these requests, for a browser's network panel or a HAR viewer">
+                  <Download size={14} />
+                  Download HAR
+                </button>
+              </div>
+              <Waterfall requests={r.requests} />
             </>
           )}
 

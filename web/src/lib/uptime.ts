@@ -42,6 +42,8 @@ export interface UptimeCheck {
   device?: Device;
   viewport_w?: number;
   viewport_h?: number;
+  /** Keep a small screenshot after every step. */
+  step_screenshots?: boolean;
 }
 
 export type Device = "desktop" | "laptop" | "tablet" | "phone" | "custom";
@@ -253,6 +255,23 @@ export interface BrowserRunDetail {
   trace_found: boolean;
   degraded: boolean;
   warning: string;
+  /** Every request of the run, timed from its start; empty for older runs. */
+  requests: NetRequest[];
+  /** data: URLs after each step, aligned with steps; "" where none was kept. */
+  step_shots: string[];
+}
+
+export interface NetRequest {
+  url: string;
+  method: string;
+  status?: number;
+  type?: string;
+  mime?: string;
+  start_ms: number;
+  duration_ms: number;
+  size?: number;
+  failed?: boolean;
+  error?: string;
 }
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });

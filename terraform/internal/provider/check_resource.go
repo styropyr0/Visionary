@@ -66,6 +66,7 @@ type checkModel struct {
 	Device          types.String  `tfsdk:"device"`
 	ViewportW       types.Int64   `tfsdk:"viewport_w"`
 	ViewportH       types.Int64   `tfsdk:"viewport_h"`
+	StepScreenshots types.Bool    `tfsdk:"step_screenshots"`
 }
 
 type stepModel struct {
@@ -111,6 +112,7 @@ type apiCheck struct {
 	Device          string            `json:"device,omitempty"`
 	ViewportW       int64             `json:"viewport_w,omitempty"`
 	ViewportH       int64             `json:"viewport_h,omitempty"`
+	StepScreenshots bool              `json:"step_screenshots,omitempty"`
 }
 
 type apiStepB struct {
@@ -206,8 +208,9 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:    true, Computed: true, Default: stringdefault.StaticString("desktop"),
 				Validators: []validator.String{stringvalidator.OneOf("desktop", "laptop", "tablet", "phone", "custom")},
 			},
-			"viewport_w": schema.Int64Attribute{Description: "Width of a custom device, 320 to 3840.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 3840)}},
-			"viewport_h": schema.Int64Attribute{Description: "Height of a custom device, 320 to 2160.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 2160)}},
+			"step_screenshots": schema.BoolAttribute{Description: "Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
+			"viewport_w":       schema.Int64Attribute{Description: "Width of a custom device, 320 to 3840.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 3840)}},
+			"viewport_h":       schema.Int64Attribute{Description: "Height of a custom device, 320 to 2160.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 2160)}},
 			"trace_origins": schema.ListAttribute{
 				Description: "Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.",
 				Optional:    true, ElementType: types.StringType, Validators: []validator.List{listvalidator.SizeAtMost(10)},
@@ -264,7 +267,7 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		TraceOrigins: stringsOf(ctx, m.TraceOrigins, diags), NoTrace: !m.TraceHeaders.IsNull() && !m.TraceHeaders.IsUnknown() && !m.TraceHeaders.ValueBool(),
 		MaxLCPMs: m.MaxLCPMs.ValueInt64(), MaxCLS: m.MaxCLS.ValueFloat64(), MaxTTFBMs: m.MaxTTFBMs.ValueInt64(), MaxDurationMs: m.MaxDurationMs.ValueInt64(),
 		WarnLCPMs: m.WarnLCPMs.ValueInt64(), WarnCLS: m.WarnCLS.ValueFloat64(), WarnTTFBMs: m.WarnTTFBMs.ValueInt64(),
-		ViewportW: m.ViewportW.ValueInt64(), ViewportH: m.ViewportH.ValueInt64(),
+		ViewportW: m.ViewportW.ValueInt64(), ViewportH: m.ViewportH.ValueInt64(), StepScreenshots: m.StepScreenshots.ValueBool(),
 	}
 	if in.Kind == "browser" {
 		in.Device = m.Device.ValueString()
@@ -318,6 +321,7 @@ func (m *checkModel) fill(c apiCheck) {
 	m.MaxLCPMs, m.MaxCLS, m.MaxTTFBMs, m.MaxDurationMs = optInt(c.MaxLCPMs, m.MaxLCPMs), optFloat(c.MaxCLS, m.MaxCLS), optInt(c.MaxTTFBMs, m.MaxTTFBMs), optInt(c.MaxDurationMs, m.MaxDurationMs)
 	m.WarnLCPMs, m.WarnCLS, m.WarnTTFBMs = optInt(c.WarnLCPMs, m.WarnLCPMs), optFloat(c.WarnCLS, m.WarnCLS), optInt(c.WarnTTFBMs, m.WarnTTFBMs)
 	m.Device, m.ViewportW, m.ViewportH = types.StringValue(fallbackStr(c.Device, "desktop")), optInt(c.ViewportW, m.ViewportW), optInt(c.ViewportH, m.ViewportH)
+	m.StepScreenshots = types.BoolValue(c.StepScreenshots)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

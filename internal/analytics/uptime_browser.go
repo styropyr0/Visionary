@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,6 +51,8 @@ type BrowserOptions struct {
 	Device    string `json:"device,omitempty"`
 	ViewportW int    `json:"viewport_w,omitempty"`
 	ViewportH int    `json:"viewport_h,omitempty"`
+	// StepScreenshots keeps a small screenshot after every step.
+	StepScreenshots bool `json:"step_screenshots,omitempty"`
 }
 
 const (
@@ -72,7 +75,7 @@ var uptimeAddedColumns = map[string][]sdk.Column{
 	"uptime_checks":          {{Name: "kind", Kind: "text"}},
 	"uptime_results":         {{Name: "lcp_ms", Kind: "real"}, {Name: "cls", Kind: "real"}},
 	"uptime_browser_checks":  {{Name: "options", Kind: "bigtext"}},
-	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}, {Name: "warning", Kind: "text"}},
+	"uptime_browser_results": {{Name: "trace_id", Kind: "text"}, {Name: "warning", Kind: "text"}, {Name: "requests", Kind: "bigtext"}, {Name: "step_shots", Kind: "bigtext"}},
 }
 
 func (s *Server) uptimeBrowserSchema() []string {
@@ -374,6 +377,20 @@ func (u *uptimeRunner) recordBrowser(ctx context.Context, c UptimeCheck, r uptim
 	if b.Warning != "" {
 		cols, vals = append(cols, "warning"), append(vals, b.Warning)
 	}
+	if b.Requests != nil {
+		reqs, _ := json.Marshal(b.Requests)
+		cols, vals = append(cols, "requests"), append(vals, string(reqs))
+	}
+	shots := slices.ContainsFunc(b.StepShots, func(s []byte) bool { return s != nil })
+	if shots {
+		enc, _ := json.Marshal(encodeShots(b.StepShots))
+		cols, vals = append(cols, "step_shots"), append(vals, string(enc))
+	}
+	defer func() {
+		if err := u.s.pruneRunDetail(ctx, c.ID); err != nil {
+			u.s.logger.Warn("old browser run detail not dropped", "check_id", c.ID, "err", err)
+		}
+	}()
 	if b.Screenshot != nil {
 		cols, vals = append(cols, "screenshot"), append(vals, base64.StdEncoding.EncodeToString(b.Screenshot))
 	}
@@ -568,7 +585,7 @@ func (s *Server) handleBrowserRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT b.created_at, b.ok, b.failed_step, b.steps, b.console, b.network, b.screenshot, b.final_screenshot,
-  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id, u.degraded, b.warning
+  u.duration_ms, u.error, u.lcp_ms, u.cls, u.ttfb_ms, u.status, u.retried, b.trace_id, u.degraded, b.warning, b.requests, b.step_shots
 FROM uptime_browser_results b LEFT JOIN uptime_results u ON u.check_id = b.check_id AND u.created_at = b.created_at
 WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	if err != nil {
@@ -586,6 +603,15 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 	_ = json.Unmarshal([]byte(toString(row[3])), &steps)
 	_ = json.Unmarshal([]byte(toString(row[4])), &console)
 	_ = json.Unmarshal([]byte(toString(row[5])), &network)
+	var requests []netRequest
+	var stepShots []string
+	_ = json.Unmarshal([]byte(toString(row[18])), &requests)
+	_ = json.Unmarshal([]byte(toString(row[19])), &stepShots)
+	for i, b := range stepShots {
+		if b != "" {
+			stepShots[i] = "data:image/jpeg;base64," + b
+		}
+	}
 	img := func(v any) string {
 		if b := toString(v); b != "" {
 			return "data:image/jpeg;base64," + b
@@ -598,6 +624,6 @@ WHERE b.id = ? AND b.check_id = ?`, rid, id)
 		"screenshot": img(row[6]), "final_screenshot": img(row[7]),
 		"duration_ms": row[8], "error": toString(row[9]), "lcp_ms": row[10], "cls": row[11], "ttfb_ms": row[12], "status": toInt(row[13]), "retried": toInt(row[14]) == 1,
 		"trace_id": toString(row[15]), "trace_found": s.traceHasRows(r.Context(), toString(row[15])),
-		"degraded": toInt(row[16]) == 1, "warning": toString(row[17]),
+		"degraded": toInt(row[16]) == 1, "warning": toString(row[17]), "requests": nonNil(requests), "step_shots": nonNil(stepShots),
 	})
 }

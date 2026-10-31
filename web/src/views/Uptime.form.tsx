@@ -96,6 +96,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           device: undefined,
           viewport_w: undefined,
           viewport_h: undefined,
+          step_screenshots: undefined,
         };
     setBusy(true);
     try {
@@ -247,10 +248,16 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
 
         <fieldset className="up-checks">
           {browser ? (
-            <label>
-              <input type="checkbox" checked={!!form.final_screenshot} onChange={(e) => set("final_screenshot", e.target.checked)} />
-              Keep a screenshot of the last page when it passes too
-            </label>
+            <>
+              <label>
+                <input type="checkbox" checked={!!form.final_screenshot} onChange={(e) => set("final_screenshot", e.target.checked)} />
+                Keep a screenshot of the last page when it passes too
+              </label>
+              <label title="Small screenshots, at most 1 MB a run; the latest 24 runs keep theirs">
+                <input type="checkbox" checked={!!form.step_screenshots} onChange={(e) => set("step_screenshots", e.target.checked)} />
+                Screenshot every step
+              </label>
+            </>
           ) : (
             <label>
               <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />

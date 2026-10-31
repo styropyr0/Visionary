@@ -80,6 +80,7 @@ variable "probe_password" {
 - `on_status_page` (Boolean) Show on the public status page.
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
 - `status_show_url` (Boolean) Show the URL on the status page.
+- `step_screenshots` (Boolean) Keep a small screenshot after every step of a browser run (the latest 24 runs keep theirs).
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
 - `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).

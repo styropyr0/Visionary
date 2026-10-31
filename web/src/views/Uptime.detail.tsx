@@ -286,7 +286,7 @@ export function UptimeDetail({ id }: { id: number }) {
             />
 
             {browser ? (
-              <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
+              <BrowserRunsPanel checkId={id} checkName={c.name} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
             ) : (
               <Panel
                 className="span-12"
