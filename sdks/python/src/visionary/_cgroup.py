@@ -12,6 +12,7 @@ import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from ._hoststats import parse_cgroup_mem_events, parse_cgroup_mem_stat
 from ._node import IS_LINUX
 
 _MB = float(1 << 20)
@@ -35,6 +36,7 @@ class CgroupReader:
         self._periods = 0
         self._throttled = 0
         self._ooms = 0
+        self._mem: Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]] = (None, None)
         self._primed = False
 
     @classmethod
@@ -73,6 +75,7 @@ class CgroupReader:
     def prime(self) -> None:
         """The baseline the first sample's deltas start from."""
         self._usage, self._periods, self._throttled, self._ooms = self._counters()
+        self._mem = self._read_mem()
         self._last, self._primed = time.monotonic(), True
 
     def sample(self, v: Dict[str, Any]) -> None:
@@ -92,6 +95,7 @@ class CgroupReader:
                 v["container_cpu_throttled_percent"] = 0.0
             if ooms >= self._ooms:
                 v["container_oom_kills"] = ooms - self._ooms
+            self._sample_mem(v, secs)
         self._usage, self._periods, self._throttled, self._ooms = usage, periods, throttled, ooms
         self._last, self._primed = now, True
         if cpus > 0:
@@ -102,7 +106,31 @@ class CgroupReader:
         if mem_limit > 0:
             v["container_mem_limit_mb"] = round(mem_limit / _MB, 1)
 
+    def _sample_mem(self, v: Dict[str, Any], secs: float) -> None:
+        """The cgroup's fault rates and memory limit hits"""
+        (faults, events), (pf, pe) = self._read_mem(), self._mem
+        self._mem = (faults, events)
+        if faults is not None and pf is not None:
+            (f, m), (f0, m0) = faults, pf
+            if f >= m and f0 >= m0 and m >= m0 and f - m >= f0 - m0:
+                v["container_minor_faults_ps"] = round(((f - m) - (f0 - m0)) / secs, 1)
+                v["container_major_faults_ps"] = round((m - m0) / secs, 1)
+        if events is not None and pe is not None and events[0] >= pe[0] and events[1] >= pe[1]:
+            v["container_mem_high_events"] = events[0] - pe[0]
+            v["container_mem_max_events"] = events[1] - pe[1]
+
     # --------------------------------------------------------------- readers
+
+    def _read_mem(self) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
+        if not self.mem_dir:
+            return None, None
+        st = _read(_join(self.mem_dir, "memory.stat"))
+        faults = parse_cgroup_mem_stat(st) if st is not None else None
+        events = None
+        if self.v2:
+            ev = _read(_join(self.mem_dir, "memory.events"))
+            events = parse_cgroup_mem_events(ev) if ev is not None else None
+        return faults, events
 
     def _limits(self) -> Tuple[float, int]:
         """The CPU limit in cores and the memory limit in bytes, 0 when unlimited."""

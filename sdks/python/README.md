@@ -395,6 +395,12 @@ On Linux everything is read from `/proc`, with or without psutil. On macOS
 and Windows install the `system` extra, or most host and process columns
 stay empty. iowait, steal, disk busy, TCP and process counts are Linux only.
 
+Also Linux only: pressure stall information (`psi_*`, from the container's
+own cgroup when it runs in one), page fault, swap and reclaim rates from
+`/proc/vmstat`, dirty, slab and committed memory from `/proc/meminfo`, and in
+a container its CPU and memory limits and use, OOM kills, page faults and
+`memory.high`/`memory.max` hits (`container_*`).
+
 To fill the database pool columns, give it your pool's stats (counters are
 cumulative; missing keys are stored empty):
 

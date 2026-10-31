@@ -61,6 +61,15 @@ ADDED_SYSTEM_COLUMNS = [
     ("container_cpu_cores", "real"), ("container_cpu_limit", "real"),
     ("container_cpu_throttled_percent", "real"), ("container_mem_used_mb", "real"),
     ("container_mem_limit_mb", "real"), ("container_oom_kills", "int"),
+    ("psi_cpu_some_avg10", "real"), ("psi_cpu_some_avg60", "real"),
+    ("psi_mem_some_avg10", "real"), ("psi_mem_some_avg60", "real"), ("psi_mem_full_avg10", "real"),
+    ("psi_io_some_avg10", "real"), ("psi_io_some_avg60", "real"), ("psi_io_full_avg10", "real"),
+    ("minor_faults_ps", "real"), ("major_faults_ps", "real"), ("swap_in_ps", "real"), ("swap_out_ps", "real"),
+    ("pages_scanned_ps", "real"), ("pages_stolen_ps", "real"), ("host_oom_kills", "int"),
+    ("mem_dirty_mb", "real"), ("mem_writeback_mb", "real"), ("mem_slab_mb", "real"),
+    ("mem_shmem_mb", "real"), ("mem_committed_mb", "real"), ("mem_commit_limit_mb", "real"),
+    ("container_minor_faults_ps", "real"), ("container_major_faults_ps", "real"),
+    ("container_mem_high_events", "int"), ("container_mem_max_events", "int"),
 ]
 SYSTEM_COLUMNS = SYSTEM_COLUMNS + [name for name, _ in ADDED_SYSTEM_COLUMNS]
 
@@ -119,6 +128,7 @@ PURGE_CHUNK = 5000
 
 # SQLite allows 32766 parameters per statement, PostgreSQL and MySQL 65535
 MAX_PARAMS = 30000
+D1_MAX_PARAMS = 100
 POOL_SIZE = 4
 
 # MySQL rejects over-long values in strict mode, which would fail the whole
@@ -294,8 +304,16 @@ class D1Backend(Backend):
     def __init__(self, client: D1Client) -> None:
         self._client = client
         self._sql: Dict[str, str] = {}
+        self._update: Dict[str, str] = {}
         for table, (name, cols) in TABLES.items():
             required = _D1_REQUIRED.get(table, set())
+            # D1 binds at most 100 params, so the rest of a wider row follows
+            # in an UPDATE of the row just inserted, in the same batch
+            if len(cols) > D1_MAX_PARAMS:
+                rest = cols[D1_MAX_PARAMS:]
+                self._update[table] = "UPDATE %s SET %s WHERE id = last_insert_rowid()" % (
+                    name, ", ".join("%s = NULLIF(?, '')" % c for c in rest))
+                cols = cols[:D1_MAX_PARAMS]
             ph = ["?" if c in required else "NULLIF(?, '')" for c in cols]
             self._sql[table] = "INSERT INTO %s (%s) VALUES (%s)" % (name, ", ".join(cols), ", ".join(ph))
 
@@ -310,7 +328,16 @@ class D1Backend(Backend):
         self._client.query(sql)
 
     def insert_many(self, groups: List[Tuple[str, List[Tuple[Any, ...]]]]) -> None:
-        stmts = [(self._sql[table], [_d1_param(v) for v in row]) for table, rows in groups for row in rows]
+        stmts: List[Tuple[str, List[str]]] = []
+        for table, rows in groups:
+            update = self._update.get(table)
+            for row in rows:
+                params = [_d1_param(v) for v in row]
+                if update is None:
+                    stmts.append((self._sql[table], params))
+                else:
+                    stmts.append((self._sql[table], params[:D1_MAX_PARAMS]))
+                    stmts.append((update, params[D1_MAX_PARAMS:]))
         if stmts:
             self._client.batch(stmts)
 

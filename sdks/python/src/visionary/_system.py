@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import _errors, _spans
 from ._cgroup import CgroupReader
 from ._entry import format_ts
+from ._hoststats import HostStats
 from ._node import NodeCollector
 from ._storage import SYSTEM_COLUMNS, Backend
 from ._writer import Schema
@@ -114,6 +115,9 @@ class Recorder:
                 self._proc = None
         self._node = NodeCollector(self._proc, self._disk_path)
         self._cgroup = _quiet(CgroupReader.find)  # None off Linux
+        cg = self._cgroup
+        self._stats = HostStats(container=cg is not None and cg.in_container,
+                                cgroup_dir=cg.cpu_dir if cg is not None and cg.v2 else "")
 
     def start(self) -> None:
         self._gc.install()
@@ -162,6 +166,7 @@ class Recorder:
         self._node.prime()
         if self._cgroup is not None:
             _quiet(self._cgroup.prime)
+        _quiet(self._stats.prime)
 
     def _run(self) -> None:
         _spans.mark_internal()
@@ -248,6 +253,7 @@ class Recorder:
         self._node.sample(v, secs)
         if self._cgroup is not None:
             _quiet(lambda: self._cgroup.sample(v))
+        _quiet(lambda: self._stats.sample(v, secs))
         return tuple(v.get(c) for c in SYSTEM_COLUMNS)
 
     def _disk(self, v: Dict[str, Any]) -> None:

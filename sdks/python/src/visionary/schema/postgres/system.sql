@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     ctx_switches_ps    DOUBLE PRECISION,
     proc_read_kbps     DOUBLE PRECISION,
     proc_write_kbps    DOUBLE PRECISION,
-    proc_max_fds       BIGINT,
+    proc_max_fds       BIGINT,
     service            TEXT,
     version            TEXT,
     sdk                TEXT,
@@ -76,7 +76,32 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     container_cpu_throttled_percent DOUBLE PRECISION,
     container_mem_used_mb DOUBLE PRECISION,
     container_mem_limit_mb DOUBLE PRECISION,
-    container_oom_kills BIGINT
+    container_oom_kills BIGINT,
+    psi_cpu_some_avg10 DOUBLE PRECISION,
+    psi_cpu_some_avg60 DOUBLE PRECISION,
+    psi_mem_some_avg10 DOUBLE PRECISION,
+    psi_mem_some_avg60 DOUBLE PRECISION,
+    psi_mem_full_avg10 DOUBLE PRECISION,
+    psi_io_some_avg10 DOUBLE PRECISION,
+    psi_io_some_avg60 DOUBLE PRECISION,
+    psi_io_full_avg10 DOUBLE PRECISION,
+    minor_faults_ps DOUBLE PRECISION,
+    major_faults_ps DOUBLE PRECISION,
+    swap_in_ps DOUBLE PRECISION,
+    swap_out_ps DOUBLE PRECISION,
+    pages_scanned_ps DOUBLE PRECISION,
+    pages_stolen_ps DOUBLE PRECISION,
+    host_oom_kills BIGINT,
+    mem_dirty_mb DOUBLE PRECISION,
+    mem_writeback_mb DOUBLE PRECISION,
+    mem_slab_mb DOUBLE PRECISION,
+    mem_shmem_mb DOUBLE PRECISION,
+    mem_committed_mb DOUBLE PRECISION,
+    mem_commit_limit_mb DOUBLE PRECISION,
+    container_minor_faults_ps DOUBLE PRECISION,
+    container_major_faults_ps DOUBLE PRECISION,
+    container_mem_high_events BIGINT,
+    container_mem_max_events BIGINT
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);
