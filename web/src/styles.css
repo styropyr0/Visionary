@@ -679,7 +679,8 @@ pre,
 
 .workspace-switch {
   flex-shrink: 0;
-  padding: 8px 8px 0;
+  /* The nav below scrolls; this gap keeps its items off the selector. */
+  padding: 8px 8px 8px;
 }
 
 .workspace-switch .popover-anchor,
