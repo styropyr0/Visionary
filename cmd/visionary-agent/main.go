@@ -16,7 +16,7 @@
 //
 // It runs on the host itself (deploy/agent/install.sh), or in a container that
 // sees the host through HOST_ROOT, HOST_PROC, HOST_SYS and HOST_ETC (see
-// Dockerfile.agent).
+// Dockerfile.agent)
 package main
 
 import (
