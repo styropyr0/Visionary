@@ -270,6 +270,8 @@ export const GUIDE: GuideSection[] = [
     title: "Metrics",
     route: "metrics",
     intro: "Your own numbers: orders placed, queue depth, checkout time. Record them in code, with OpenTelemetry or from Prometheus, then chart, compare and alert on them.",
+    shot: "metrics",
+    caption: "checkout_ms at p95, grouped by method, over the last 24 hours.",
     steps: [
       {
         title: "Record a metric",
@@ -290,6 +292,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Query with PromQL",
         text: "Switch the top bar to **PromQL** and write a query, e.g. `sum by (route) (rate(visionary_http_requests_total[5m]))`. **Tab** completes metric names, functions, labels and values; **Ctrl+Enter** runs it. An error points at the character it is about. On a long range a chart point covers a whole bucket, so `[5m]` reads the bucket's span rather than its last five minutes. Your own metrics keep their names; Visionary's requests, spans, errors and system readings are `visionary_*` series. **Add to dashboard** keeps the query, a dashboard's **Add panel → PromQL** writes one there, and an alert on **PromQL expression** fires per series it returns.",
+        shot: "metrics-promql",
+        caption: "A PromQL query: orders per second by region.",
       },
       {
         title: "Use Visionary in Grafana",
@@ -352,6 +356,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Watch a session",
         text: "In **Recent sessions**, a play icon marks sessions with a replay. Open one and choose **Replay**: play, pause, change the speed, or click the bar. The marks on it are page loads, API calls, errors and server logs; click one to jump just before it. **Skip inactivity** jumps over idle stretches.",
+        shot: "frontend-replay",
+        caption: "A session's replay, with its page loads, API calls and errors on the scrubber.",
       },
     ],
   },
@@ -372,6 +378,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Script a browser check",
         text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
+        shot: "uptime-browser",
+        caption: "A browser check: each step's result, timings and Web Vitals.",
       },
       {
         title: "Watch the list",
@@ -395,6 +403,8 @@ export const GUIDE: GuideSection[] = [
     title: "CI",
     route: "ci",
     intro: "Your pipelines and tests next to what they shipped: which workflows fail and why, what is slow, which tests are flaky, and how a deploy changed latency and errors.",
+    shot: "ci",
+    caption: "Pipelines by workflow and branch: success rate, duration and queue time.",
     steps: [
       {
         title: "Connect GitHub Actions",
@@ -415,10 +425,14 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Open a run",
         text: "Click a run for its jobs on a timeline, hatched while they waited for a runner; open a job for its steps. Below are its failed tests with their messages (**Flaky** marks known flaky ones), the slowest tests, and under **Deployed as** each release of its commit with requests, p95, 5xx rate and exceptions in the hour before and after.",
+        shot: "ci-run",
+        caption: "One run: its jobs on a timeline and its tests.",
       },
       {
         title: "Find flaky and slow tests",
         text: "**Tests** lists failures by test, the slowest tests and the ones getting slower; **Flaky** ranks flaky tests by score, with their last results and **New** on those first seen in the range. Click a test for its history across branches and commits.",
+        shot: "ci-flaky",
+        caption: "Tests that passed and failed on the same commit, with a flakiness score.",
       },
       {
         title: "Alert on it",
@@ -463,6 +477,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Turn on detection rules",
         text: "**Rules** has a library of ready-made rules, each tagged with its MITRE ATT&CK tactic and technique: brute force and credential stuffing, failed logins then a success, a sign-in from a new country, an admin from a new IP, spikes in 401 and 403, path traversal and SQL injection in paths, mass exports, secrets in logs, SSH failures then a login, sudo by a new user, new SSH keys, new API keys and more. **Turn on** runs one as it is; **Customize** opens it to change first.",
+        shot: "security-rules",
+        caption: "Detection rules and the library of templates, tagged with MITRE ATT&CK.",
       },
       {
         title: "Write your own rule",
@@ -471,6 +487,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Investigate a signal",
         text: "**Signals** lists what the rules found, with the same filters and triage as findings. Open one for the rule, its MITRE tags, the group's values with links to their requests, logs and account timeline, and every matched event around it, each linked to its request's logs and trace. **Suppress** on a value adds it to the rule's suppressions, so that IP or user stops raising it for as long as you choose.",
+        shot: "security-signals",
+        caption: "Signals raised by the rules, newest first.",
       },
       {
         title: "Add places and blocklists",
@@ -601,6 +619,8 @@ export const GUIDE: GuideSection[] = [
     title: "Traces",
     route: "traces",
     intro: "One request followed through every service it called, and the map of which services call which.",
+    shot: "traces",
+    caption: "Traces of the last 24 hours, with the services each one touched.",
     steps: [
       {
         title: "Traces and requests",
@@ -613,6 +633,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Read a trace",
         text: "The timeline puts every request and call of every service on one time axis, each under the span it was made in and coloured by service. Failed rows are outlined. Click a row for its service, target and statement; on a request, **Open the request** shows its full breakdown, body and headers. Errors and log lines that carry the trace are listed with it.",
+        shot: "trace",
+        caption: "One checkout through four services, with the log lines it wrote.",
       },
       {
         title: "Get there from anywhere",
@@ -621,6 +643,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Use the service map",
         text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it; the buttons in the corner zoom, fit the map and put moved boxes back. Click an arrow or a box to search its traces.",
+        shot: "traces-map",
+        caption: "Services, the databases and hosts they call, and the calls between them.",
       },
       {
         title: "Connect more services",
@@ -720,6 +744,8 @@ export const GUIDE: GuideSection[] = [
     title: "Incidents",
     route: "incidents",
     intro: "When something is broken for users, declare an incident: one place for who is on it, what is known, what was said, and afterwards what to change.",
+    shot: "incidents",
+    caption: "Open and resolved incidents with their severity, time to resolve and owner.",
     steps: [
       {
         title: "Declare it",
@@ -736,6 +762,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Keep the timeline",
         text: "Add a **Note** with a link to a chart, request or trace as you go. Linked alerts firing and resolving, linked checks failing and recovering, and deploys of the affected services appear on their own; untick them to see only what people wrote.",
+        shot: "incident",
+        caption: "A resolved SEV1: its status steps, times, responders and timeline.",
       },
       {
         title: "Tell people",
@@ -744,6 +772,8 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Write the postmortem",
         text: "On **Postmortem**, **Draft it** fills the summary, impact and timeline from the data, and with the AI analyst on also the root cause, lessons and action items. Edit it, give each action item an owner and tick it off when done, and **Download Markdown** for your wiki.",
+        shot: "incident-postmortem",
+        caption: "The postmortem drafted from the timeline, with action items.",
       },
     ],
   },
@@ -795,6 +825,8 @@ export const GUIDE: GuideSection[] = [
     title: "Single sign-on and SCIM",
     intro:
       "Let people sign in with the account they already have at Google, Microsoft Entra ID, Okta, Auth0, Keycloak or any OpenID Connect or SAML 2.0 provider, and let the provider add and remove them. It all lives in **Settings → Sign-in → Single sign-on**, applies without a restart, and works next to the other ways in.",
+    shot: "settings-sso",
+    caption: "Settings → Sign-in: the way in, single sign-on providers and SCIM.",
     steps: [
       {
         title: "Keep a way back in",
@@ -840,6 +872,8 @@ export const GUIDE: GuideSection[] = [
     title: "Workspaces",
     intro:
       "Workspaces let each team see only its own services. A workspace names services and members, and the server filters every read for its members: pages, Explore, the analyst, dashboards, alerts, exports and the Prometheus API. Admins always see everything, and with no workspaces everyone does.",
+    shot: "settings-workspaces",
+    caption: "Two workspaces, each a set of services and its members.",
     steps: [
       {
         title: "Create a workspace",
@@ -869,6 +903,8 @@ export const GUIDE: GuideSection[] = [
     title: "Configuration as code",
     intro:
       "Keep alerts, uptime checks and dashboards in git: manage them with Terraform, or move the whole setup between installs as one file from **Settings → Configuration**.",
+    shot: "settings-config",
+    caption: "Export everything as one file, or preview an import before applying it.",
     steps: [
       {
         title: "Create a key for Terraform",
