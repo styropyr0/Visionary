@@ -96,7 +96,7 @@ FROM uptime_results r JOIN (
 	browserMissing := false
 	for _, c := range checks {
 		if c.Kind == "browser" && c.Enabled {
-			browserMissing = !runnerFor(s).browser.available()
+			browserMissing = !runnerFor(s).browser.Available()
 			break
 		}
 	}
@@ -108,7 +108,7 @@ FROM uptime_results r JOIN (
 		if !c.Enabled {
 			st.State = "paused"
 		}
-		if c.Kind == "browser" && c.Enabled && browserMissing {
+		if c.Kind == "browser" && c.Enabled && browserMissing && c.runsAt(serverLocation) {
 			st.State, st.NoBrowser = "paused", true
 		}
 		out[c.ID] = st
@@ -245,9 +245,15 @@ FROM o`, c.ID, now.Add(-24*time.Hour).Format(tsLayout))
 		s.fail(w, err)
 		return
 	}
+	locs, err := s.locationStates(ctx, []UptimeCheck{c})
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"check":      c.masked(),
 		"state":      states[c.ID],
+		"locations":  locs[c.ID],
 		"uptime":     uptime,
 		"checks_run": checksRun,
 		"latency":    latency,
@@ -281,9 +287,22 @@ GROUP BY 1 ORDER BY 1`,
 	"vitals": `SELECT {{t}} AS t, AVG(lcp_ms) AS lcp, AVG(ttfb_ms) AS ttfb, AVG(cls) AS cls
 FROM uptime_results WHERE check_id = {{check}} AND ok = 1 AND created_at >= {{from}} AND created_at < {{to}}
 GROUP BY 1 ORDER BY 1`,
-	"results": `SELECT created_at, ok, status, duration_ms, dns_ms, connect_ms, tls_ms, ttfb_ms, degraded, retried, error
-FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}
+	"results": `SELECT created_at, ok, status, duration_ms, dns_ms, connect_ms, tls_ms, ttfb_ms, degraded, retried, error,
+  COALESCE(location, 'server') AS location, COALESCE(location_ok, ok) AS location_ok
+FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}{{location}}
 ORDER BY created_at DESC LIMIT 500`,
+	// Per location: totals over the range, and series of response time and
+	// failures, from each location's own verdict.
+	"locations": `SELECT COALESCE(location, 'server') AS location, COUNT(*) AS checks, ` + countIf("COALESCE(location_ok, ok) = 0") + ` AS failed,
+  AVG(CASE WHEN COALESCE(location_ok, ok) = 1 THEN duration_ms END) AS avg_ms
+FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}
+GROUP BY COALESCE(location, 'server') ORDER BY 1`,
+	"location_latency": `SELECT {{t}} AS t, COALESCE(location, 'server') AS location, AVG(duration_ms) AS avg_ms
+FROM uptime_results WHERE check_id = {{check}} AND COALESCE(location_ok, ok) = 1 AND created_at >= {{from}} AND created_at < {{to}}
+GROUP BY {{t}}, COALESCE(location, 'server') ORDER BY 1`,
+	"location_availability": `SELECT {{t}} AS t, COALESCE(location, 'server') AS location, COUNT(*) AS checks, ` + countIf("COALESCE(location_ok, ok) = 0") + ` AS failed
+FROM uptime_results WHERE check_id = {{check}} AND created_at >= {{from}} AND created_at < {{to}}
+GROUP BY {{t}}, COALESCE(location, 'server') ORDER BY 1`,
 }
 
 func (s *Server) handleUptimePanel(w http.ResponseWriter, r *http.Request) {
@@ -301,6 +320,17 @@ func (s *Server) handleUptimePanel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Results can be narrowed to one location; names are checked, so they
+	// quote safely.
+	where := ""
+	if l := r.URL.Query().Get("location"); l != "" {
+		if !locationNameRe.MatchString(l) {
+			writeError(w, http.StatusBadRequest, "invalid location")
+			return
+		}
+		where = " AND COALESCE(location, 'server') = '" + l + "'"
+	}
+	tpl = strings.ReplaceAll(tpl, "{{location}}", where)
 	res, err := s.runTemplate(r.Context(), withCheck(tpl, id), tr, true)
 	if err != nil {
 		s.fail(w, err)

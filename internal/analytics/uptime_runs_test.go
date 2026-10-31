@@ -122,4 +122,14 @@ func TestRunsFromCI(t *testing.T) {
 	if after = count(); after != before {
 		t.Fatalf("override run was recorded: %d -> %d", before, after)
 	}
+
+	// A check that runs only from another location runs from the server
+	// too, but its history keeps only its own locations' results.
+	elsewhere := UptimeCheck{ID: 99, Name: "EU only", Kind: "http", URL: site.URL + "/", Method: "GET", ExpectStatus: "200-299", TimeoutMs: 5000, Locations: []string{"eu-west"}}
+	if it := s.runOne(context.Background(), runnerFor(s), elsewhere, ""); it.Status != "passed" {
+		t.Fatalf("elsewhere %s: %+v", elsewhere.URL, it)
+	}
+	if after = count(); after != before {
+		t.Fatalf("a run from the server was recorded for an EU-only check")
+	}
 }

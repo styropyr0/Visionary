@@ -86,10 +86,13 @@ variable "probe_password" {
 - `headers` (Map of String, Sensitive) Request headers.
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.
 - `kind` (String) http (default), browser or playwright.
+- `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
+- `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `playwright` (Attributes) The Playwright test a playwright check follows, as visionary-playwright-reporter reports it. (see [below for nested schema](#nestedatt--playwright))
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
+- `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `tags` (Set of String) Tags that group checks (smoke, checkout); a run from CI picks checks by tag. Lower case letters, digits and _ . : -.

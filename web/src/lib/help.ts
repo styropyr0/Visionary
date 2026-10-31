@@ -342,6 +342,19 @@ agent, err := visionary.New(cfg)`,
       label: "Docker",
     },
   },
+  locations: {
+    id: "locations",
+    title: "Run checks from more places",
+    intro:
+      "A check runs from this server unless you add locations: Uptime → Locations → Add location makes one and shows its key once. Run the host agent with that key and VISIONARY_AGENT_LOCATION on a VPS in another region or inside a private network, then pick the location under Runs from in a check's form. Each location runs the check on its schedule; the check is down when any, a majority (the default) or all of them fail, so a failure in one place shows as such without opening an incident. Incidents name the locations that failed. A location that stops reporting for two minutes is marked stale and left out of the vote, and the Uptime location offline alert (made with the first location) tells admins once. Browser checks run from a location only when Chrome or Chromium is installed there. The status page shows the per-location state only for checks that tick it.",
+    any: {
+      note: "On the location's machine (or with deploy/location/compose.yaml in Docker):",
+      code: `VISIONARY_URL=https://visionary.example.com \
+VISIONARY_KEY=<location key> \
+VISIONARY_AGENT_LOCATION=frankfurt-vps visionary-agent`,
+      label: "Shell",
+    },
+  },
   statuspage: {
     id: "statuspage",
     title: "Publish a status page",
@@ -353,7 +366,7 @@ agent, err := visionary.New(cfg)`,
     id: "cichecks",
     title: "Run checks from CI",
     intro:
-      "After a deploy, run the checks with a tag (smoke, checkout) once, now, and fail the pipeline when one fails. Their schedule is untouched. Create a key with the CI scope in Settings → API keys: it can run checks and report tests, and nothing else. The run records the release and commit, so it shows on the CI page beside that commit's pipeline and under Runs from CI in Uptime. `url-override` runs the same checks against a preview deployment: the origin of their URLs, browser steps included, is swapped, and those results stay with the run instead of counting toward uptime. The override must be on the check's own site (pr-12.example.com for app.example.com) unless an admin lists the host in Settings → Server → Other → Hosts runs from CI may target. The action downloads the `visionary-checks` CLI from the release, prints each check's result and can write JUnit XML for test reports.",
+      "After a deploy, run the checks with a tag (smoke, checkout) once, now, and fail the pipeline when one fails. Their schedule is untouched. A run from CI always runs from this server, whatever locations a check uses; for a check that does not run from the server, the result stays with the run. Create a key with the CI scope in Settings → API keys: it can run checks and report tests, and nothing else. The run records the release and commit, so it shows on the CI page beside that commit's pipeline and under Runs from CI in Uptime. `url-override` runs the same checks against a preview deployment: the origin of their URLs, browser steps included, is swapped, and those results stay with the run instead of counting toward uptime. The override must be on the check's own site (pr-12.example.com for app.example.com) unless an admin lists the host in Settings → Server → Other → Hosts runs from CI may target. The action downloads the `visionary-checks` CLI from the release, prints each check's result and can write JUnit XML for test reports.",
     any: {
       label: "GitHub Actions",
       code: `smoke:
@@ -703,7 +716,7 @@ curl -H "Authorization: Bearer <read key>" \\
     id: "terraform",
     title: "Configuration as code",
     intro:
-      "Keep alert rules, channels, silences, uptime checks (HTTP and browser), dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
+      "Keep alert rules, channels, silences, uptime checks (HTTP and browser), uptime locations, dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
     any: {
       label: "main.tf",
       code: `terraform {
@@ -1000,8 +1013,9 @@ export const HELP: Record<Route, PageHelp> = {
       "A check fails after its retries, so a single slow answer does not open an incident.",
       "A browser check's runs show each step, Web Vitals, console and network errors, and a screenshot of the page when a step failed. It is paused while the server has no browser.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
+      "A check that runs from several locations shows a dot per location in the list, and By location on its page: each location's uptime and response time. Its state combines them by its rule; Not reporting means a location is stale and left out.",
     ],
-    setup: ["checks", "browsercheck", "cichecks", "playwright", "statuspage"],
+    setup: ["checks", "browsercheck", "locations", "cichecks", "playwright", "statuspage"],
   },
   ci: {
     title: "CI",

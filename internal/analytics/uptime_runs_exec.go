@@ -55,14 +55,19 @@ func (s *Server) executeBatch(b runBatch, items []runItem, checks []UptimeCheck,
 	}
 }
 
-// runOne runs one check. Against its own URL the result is recorded like a
-// scheduled one; against an override it is kept in the batch only.
+// runOne runs one check, always from the server location. Against its own
+// URL, on a check that runs from the server, the result is recorded like a
+// scheduled one; otherwise it is kept in the batch only, so a check that
+// runs elsewhere never gets results from a location it doesn't use.
 func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, override string) runItem {
 	if c.Kind == "playwright" {
 		return runItem{Status: "skipped", Error: "Playwright checks report from your test runs; they can't be started here"}
 	}
-	recordIt := override == ""
-	if !recordIt {
+	recordIt := override == "" && c.runsAt(serverLocation)
+	if override == "" && !recordIt && c.Kind != "http" && c.Kind != "browser" {
+		return runItem{Status: "skipped", Error: c.Kind + " checks that don't run from the server can't be run from CI yet"}
+	}
+	if override != "" {
 		var err error
 		if c, err = withOrigin(c, override); err != nil {
 			return runItem{Status: "error", Error: err.Error()}
@@ -81,8 +86,8 @@ func (s *Server) runOne(ctx context.Context, run *uptimeRunner, c UptimeCheck, o
 			}
 		}
 	case "browser":
-		if !run.browser.available() {
-			st := run.browser.status()
+		if !run.browser.Available() {
+			st := run.browser.Status()
 			return runItem{Status: "error", Error: strings.TrimSpace(st.Error + ". " + st.Help)}
 		}
 		cctx, cancel := context.WithTimeout(ctx, 2*time.Duration(c.TimeoutMs)*time.Millisecond+2*time.Minute)

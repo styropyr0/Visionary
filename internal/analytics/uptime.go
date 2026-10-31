@@ -150,6 +150,7 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/checks/{id}/runs/{run}", s.authed(s.handleBrowserRun))
 	mux.Handle("GET /api/uptime/browser", s.authed(s.handleUptimeBrowser))
 	mux.Handle("GET /api/uptime/checks/{id}/{panel}", s.authed(s.handleUptimePanel))
+	s.uptimeLocationRoutes(mux)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /status.json", s.handleStatusJSON)
 	mux.HandleFunc("GET /status.js", s.handleStatusScript)
@@ -170,6 +171,7 @@ func (s *Server) uptimePrompt() string {
 - duration_ms: total time including reading the body. Phases of the last request: dns_ms, connect_ms, tls_ms (NULL for plain HTTP), ttfb_ms (request sent to first response byte).
 - degraded: 1 when ok but slower than the check's latency threshold. retried: 1 when the first attempt failed. cert_expires_at: expiry of the TLS certificate (text, NULL for HTTP).
 - Uptime % is 100.0 * SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) / COUNT(*). An incident is a run of consecutive ok = 0 rows of one check_id ordered by created_at.
+- location: where the run came from: 'server' (the Visionary server; NULL in older rows) or an uptime location's name (a host agent running checks elsewhere). location_ok is that location's own verdict (NULL in older rows: use COALESCE(location_ok, ok)); ok is the check's verdict across its locations at that moment, by its rule (down when any, a majority or all fail). Per-location uptime uses COALESCE(location_ok, ok) grouped by COALESCE(location, 'server').
 - Browser checks (scripted steps in a headless browser) write the same rows: url is the first page, status the HTTP status of the last page opened, duration_ms the whole script, ttfb_ms the last page's time to first byte, error names the step that failed. They also fill lcp_ms (Largest Contentful Paint, ms) and cls (Cumulative Layout Shift, unitless), NULL for HTTP checks; dns_ms, connect_ms, tls_ms and cert_expires_at are NULL for them.`
 }
 

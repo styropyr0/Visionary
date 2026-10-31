@@ -11,7 +11,9 @@ import type { Result, Viz } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
-import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, isServerOnly, locationOrder, RULE_LABEL, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { Select } from "../components/Select";
+import { LocationsPanel } from "./Uptime.locations";
 import { BrowserRunsPanel, LastRunTile, StepStatsPanel } from "./Uptime.browser";
 import { everyLabel, PlaywrightLastTile, PlaywrightRunsPanel } from "./Uptime.playwright";
 import { getPlaywrightRuns } from "../lib/uptimePlaywright";
@@ -41,6 +43,7 @@ export function UptimeDetail({ id }: { id: number }) {
   const [editing, setEditing] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [where, setWhere] = useState("");
   const reload = () => setVersion((v) => v + 1);
   const key = `${id}#${resolved.from.toISOString()}#${resolved.to.toISOString()}#${tick}#${version}`;
 
@@ -51,9 +54,10 @@ export function UptimeDetail({ id }: { id: number }) {
   const c = s?.check;
   const st = s?.state;
   const browser = c?.kind === "browser";
+  const multi = !!c && !isServerOnly(c);
   const playwright = c?.kind === "playwright";
-  const results = useQuery(c && !browser && !playwright ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
   const pwRuns = useQuery(playwright ? `up-pw-${key}` : null, (signal) => getPlaywrightRuns(id, resolved.from, resolved.to, signal));
+  const results = useQuery(c && !browser && !playwright ? `up-res-${key}#${where}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal, where || undefined));
   const runs = useQuery(browser ? `up-runs-${key}` : null, (signal) => getBrowserRuns(id, resolved.from, resolved.to, signal));
   const vitalsRaw = useQuery(browser ? `up-vit-${key}` : null, (signal) => getPanel(id, "vitals", resolved.from, resolved.to, signal));
   const vitals = useMemo<Result | undefined>(
@@ -146,6 +150,7 @@ export function UptimeDetail({ id }: { id: number }) {
                     {!browser && !playwright && c.body_contains && ` and “${c.body_contains}”`}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
+                    {multi && ` · from ${locationOrder(c.locations).join(", ")}${c.locations.length > 1 ? `, down when ${RULE_LABEL[c.location_rule]}` : ""}`}
                   </div>
                   {alert.data && c.enabled && <CheckAlertLine alert={alert.data.alert} canEdit={!!s.can_edit} onFix={() => setFixing(true)} />}
                 </div>
@@ -227,6 +232,8 @@ export function UptimeDetail({ id }: { id: number }) {
               </div>
             </section>
 
+            {multi && <LocationsPanel id={id} names={c.locations} states={s.locations ?? []} from={resolved.from} to={resolved.to} refresh={key} />}
+
             <Panel
               className={playwright ? "span-12" : "span-6"}
               title="Response time"
@@ -295,7 +302,19 @@ export function UptimeDetail({ id }: { id: number }) {
               loading={incidents.loading}
               error={incidents.error}
               bodyHeight={80}
-              table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS, incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
+              table={
+                incidents.data &&
+                (incidents.data.incidents.length === 0 ? (
+                  <div className="panel-state">No incidents in this range.</div>
+                ) : (
+                  <DataTable
+                    result={multi ? withIncidentLocations(incidents.data.result, incidents.data.incidents) : incidents.data.result}
+                    columns={[...INCIDENT_COLS, ...(multi ? [INCIDENT_LOCATIONS] : []), incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]}
+                    maxHeight={320}
+                    sortable={false}
+                  />
+                ))
+              }
             />
 
             {playwright ? (
@@ -306,12 +325,22 @@ export function UptimeDetail({ id }: { id: number }) {
               <Panel
                 className="span-12"
                 title="Recent results"
-                description="The latest 500 checks in this range, newest first."
+                description={multi ? "The latest 500 runs in this range, newest first. Result is the check's state across its locations; From is that location's own." : "The latest 500 checks in this range, newest first."}
                 result={results.data}
                 loading={results.loading}
                 error={results.error}
                 bodyHeight={120}
-                table={results.data && <DataTable result={results.data} columns={RESULT_COLS} maxHeight={440} sortable={false} />}
+                extraActions={
+                  multi ? (
+                    <Select
+                      label="Location"
+                      value={where}
+                      onChange={setWhere}
+                      options={[{ value: "", label: "All locations" }, ...locationOrder(c.locations).map((l) => ({ value: l, label: l }))]}
+                    />
+                  ) : undefined
+                }
+                table={results.data && <DataTable result={results.data} columns={multi ? [...RESULT_COLS.slice(0, 2), ...LOCATION_COLS, ...RESULT_COLS.slice(2)] : RESULT_COLS} maxHeight={440} sortable={false} />}
               />
             )}
           </div>
@@ -388,6 +417,27 @@ const INCIDENT_COLS: Column[] = [
   { key: "failures", label: "Failed checks", align: "right", unit: "count" },
   { key: "status", label: "Status", align: "right", render: (v) => (toNumber(v) ? String(v) : <span className="dim">No response</span>) },
   { key: "error", label: "Reason", render: (v) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>) },
+];
+
+const INCIDENT_LOCATIONS: Column = {
+  key: "locations",
+  label: "Failing in",
+  render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>),
+};
+
+/** The incidents table with the locations each one failed in. */
+function withIncidentLocations(res: Result, list: { locations?: string[] }[]): Result {
+  return { ...res, columns: [...res.columns, "locations"], rows: res.rows.map((r, i) => [...r, (list[i]?.locations ?? []).join(", ")]) };
+}
+
+const LOCATION_COLS: Column[] = [
+  { key: "location", label: "From", render: (v) => <span className="mono">{String(v)}</span> },
+  {
+    key: "location_ok",
+    label: "There",
+    width: 90,
+    render: (v) => (toNumber(v) === 1 ? <span className="up-state up">Passed</span> : <span className="up-state down">Failed</span>),
+  },
 ];
 
 function incidentLogsColumn(startedAt: number): Column {

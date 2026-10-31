@@ -31,7 +31,84 @@ export interface UptimeCheck {
   tags?: string[];
   /** Playwright checks only: the test its reported runs come from. */
   playwright?: { project: string; title: string };
+  /** Where it runs from: "server" and uptime location names. */
+  locations: string[];
+  /** With several locations: down when any, a majority or all fail. */
+  location_rule: LocationRule;
+  /** Break it down by location on the status page. */
+  status_show_locations: boolean;
 }
+
+export type LocationRule = "any" | "majority" | "all";
+
+export const RULE_LABEL: Record<LocationRule, string> = { any: "any location fails", majority: "most locations fail", all: "every location fails" };
+
+export type LocationStateName = "up" | "degraded" | "down" | "stale" | "pending" | "no_browser" | "paused";
+
+/** How one location sees a check now. */
+export interface LocationState {
+  name: string;
+  state: LocationStateName;
+  last_at?: string;
+  last_status: number;
+  last_duration_ms: number;
+  last_error?: string;
+}
+
+export const LOCATION_STATE_LABEL: Record<LocationStateName, string> = {
+  up: "Up",
+  degraded: "Degraded",
+  down: "Down",
+  stale: "Not reporting",
+  pending: "Pending",
+  no_browser: "No browser there",
+  paused: "Paused",
+};
+
+/** A place checks run from: the server itself, or a host agent elsewhere. */
+export interface UptimeLocation {
+  id: number;
+  name: string;
+  builtin: boolean;
+  key_prefix?: string;
+  created_at?: string;
+  last_seen_at?: string;
+  version?: string;
+  host?: string;
+  browser: boolean;
+  browser_version?: string;
+  /** new: never polled. */
+  state: "online" | "offline" | "new";
+  checks: number;
+}
+
+export interface LocationList {
+  locations: UptimeLocation[];
+  can_admin: boolean;
+  poll_s: number;
+  stale_after_s: number;
+}
+
+export const listLocations = (signal?: AbortSignal) => api<LocationList>("/api/uptime/locations", { signal });
+
+export const createLocation = (name: string) => api<{ location: UptimeLocation; secret: string }>("/api/uptime/locations", { method: "POST", json: { name } });
+
+export const newLocationKey = (name: string) => api<{ secret: string; key_prefix: string }>(`/api/uptime/locations/${encodeURIComponent(name)}/key`, { method: "POST", json: {} });
+
+export const deleteLocation = (name: string) => api<void>(`/api/uptime/locations/${encodeURIComponent(name)}`, { method: "DELETE" });
+
+/** Locations in one order everywhere: the server first, then by name. */
+export function locationOrder(names: string[]): string[] {
+  return [...names].sort((a, b) => (a === "server" ? -1 : b === "server" ? 1 : a.localeCompare(b)));
+}
+
+/** A location's color: its slot in the order of every location, so it is the same on every check. */
+export function locationColor(name: string, all: string[], series: string[]): string {
+  const i = Math.max(0, locationOrder(all.includes(name) ? all : [...all, name]).indexOf(name));
+  return series[i % series.length] ?? "var(--accent)";
+}
+
+export const isServerOnly = (c: Pick<UptimeCheck, "locations">) => !c.locations?.length || (c.locations.length === 1 && c.locations[0] === "server");
 
 export type StepAction =
   | "goto"
@@ -110,7 +187,8 @@ export interface CheckAlertInput {
 }
 
 export interface CheckList {
-  checks: { check: UptimeCheck; state: CheckState; alert: CheckAlert }[];
+  /** locations is null for checks that run from the server alone. */
+  checks: { check: UptimeCheck; state: CheckState; alert: CheckAlert; locations?: LocationState[] | null }[];
   can_edit: boolean;
 }
 
@@ -130,6 +208,7 @@ export interface Summary {
   uptime: Record<Window, number | null>;
   checks_run: Record<Window, number>;
   latency: { avg_ms: number | null; p50: number | null; p95: number | null };
+  locations?: LocationState[] | null;
   can_edit: boolean;
 }
 
@@ -141,6 +220,8 @@ export interface Incident {
   status: number;
   error?: string;
   ongoing: boolean;
+  /** Locations that failed during it, for checks that run from more than the server. */
+  locations?: string[];
 }
 
 export interface RunResult {
@@ -229,8 +310,11 @@ export const listChecks = (signal?: AbortSignal) => api<CheckList>("/api/uptime/
 
 export const getSummary = (id: number, signal?: AbortSignal) => api<Summary>(`/api/uptime/checks/${id}/summary`, { signal });
 
-export const getPanel = (id: number, panel: "latency" | "phases" | "results" | "availability" | "vitals", from: Date, to: Date, signal?: AbortSignal) =>
-  api<Result>(`/api/uptime/checks/${id}/${panel}?${rangeQuery(from, to)}`, { signal });
+export type PanelName = "latency" | "phases" | "results" | "availability" | "vitals" | "locations" | "location_latency" | "location_availability";
+
+/** location narrows results to one location. */
+export const getPanel = (id: number, panel: PanelName, from: Date, to: Date, signal?: AbortSignal, location?: string) =>
+  api<Result>(`/api/uptime/checks/${id}/${panel}?${rangeQuery(from, to)}${location ? `&location=${encodeURIComponent(location)}` : ""}`, { signal });
 
 export const getIncidents = (id: number, from: Date, to: Date, signal?: AbortSignal) =>
   api<{ incidents: Incident[]; result: Result }>(`/api/uptime/checks/${id}/incidents?${rangeQuery(from, to)}`, { signal });

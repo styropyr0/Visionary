@@ -15,6 +15,10 @@
 //	VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=... visionary-agent
 //
 // It runs on the host itself (deploy/agent/install.sh), not in a container.
+//
+// With VISIONARY_AGENT_LOCATION it is an uptime location instead: it runs
+// the checks the server assigns to that location (location.go), and may run
+// in a container (docker build --target location).
 package main
 
 import (
@@ -55,6 +59,14 @@ type config struct {
 	// journald, docker, or file globs
 	logs     []string
 	stateDir string
+
+	// Location mode: run this uptime location's checks instead of
+	// reporting the host.
+	location string
+	// allowPrivate is "true" or "false", or empty to follow the server's
+	// setting for its own checks.
+	allowPrivate   string
+	browserWorkers int
 
 	// Security collectors that run when security is on.
 	sshKeys        bool
@@ -102,6 +114,9 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&c.docker, "docker", os.Getenv("VISIONARY_AGENT_DOCKER"), `container engine socket: a path, "off", or empty to find Docker or Podman (VISIONARY_AGENT_DOCKER)`)
 	logs := fs.String("logs", os.Getenv("VISIONARY_AGENT_LOGS"), `comma-separated log sources to send: journald, docker, and file globs such as /var/log/nginx/*.log (VISIONARY_AGENT_LOGS, default none)`)
 	fs.StringVar(&c.stateDir, "state", envStr("VISIONARY_AGENT_STATE", "/var/lib/visionary-agent"), "directory for where log sources got to (VISIONARY_AGENT_STATE)")
+	fs.StringVar(&c.location, "location", os.Getenv("VISIONARY_AGENT_LOCATION"), "run the uptime checks of this location instead of reporting the host; VISIONARY_KEY is then the location's key (VISIONARY_AGENT_LOCATION)")
+	fs.StringVar(&c.allowPrivate, "allow-private", os.Getenv("VISIONARY_AGENT_ALLOW_PRIVATE"), "true or false: may this location's checks reach private and loopback addresses; unset follows the server's setting (VISIONARY_AGENT_ALLOW_PRIVATE)")
+	fs.IntVar(&c.browserWorkers, "browser-workers", envInt("VISIONARY_AGENT_BROWSER_WORKERS", 1), "browser checks run at once in location mode (VISIONARY_AGENT_BROWSER_WORKERS)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -117,7 +132,20 @@ func loadConfig(args []string) (config, error) {
 		return c, errors.New("VISIONARY_URL must be the server's http(s) URL")
 	}
 	if c.key = strings.TrimSpace(c.key); c.key == "" {
-		return c, errors.New("VISIONARY_KEY must be a server ingest key")
+		return c, errors.New("VISIONARY_KEY must be a server ingest key, or a location key with VISIONARY_AGENT_LOCATION")
+	}
+	c.location = strings.ToLower(strings.TrimSpace(c.location))
+	switch c.allowPrivate = strings.ToLower(strings.TrimSpace(c.allowPrivate)); c.allowPrivate {
+	case "", "true", "false":
+	case "1", "yes", "on":
+		c.allowPrivate = "true"
+	case "0", "no", "off":
+		c.allowPrivate = "false"
+	default:
+		return c, errors.New("VISIONARY_AGENT_ALLOW_PRIVATE must be true or false")
+	}
+	if c.browserWorkers < 1 || c.browserWorkers > 8 {
+		return c, errors.New("browser workers must be 1 to 8")
 	}
 	if c.interval < time.Second {
 		return c, errors.New("the sample interval must be at least 1s")
@@ -134,7 +162,10 @@ func loadConfig(args []string) (config, error) {
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if strings.HasPrefix(cfg.url, "http://") {
-		logger.Warn("VISIONARY_URL is plain http; the ingest key travels unencrypted")
+		logger.Warn("VISIONARY_URL is plain http; the key travels unencrypted")
+	}
+	if cfg.location != "" {
+		return runLocation(ctx, cfg, logger)
 	}
 	diskPath := "/"
 	if len(cfg.disks) > 0 {
@@ -244,6 +275,13 @@ func envDuration(key string, def time.Duration) time.Duration {
 	}
 	if n, err := strconv.Atoi(v); err == nil && n > 0 {
 		return time.Duration(n) * time.Second // plain seconds
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil {
+		return n
 	}
 	return def
 }

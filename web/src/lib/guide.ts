@@ -382,12 +382,16 @@ export const GUIDE: GuideSection[] = [
         caption: "A browser check: each step's result, timings and Web Vitals.",
       },
       {
+        title: "Run checks from more places",
+        text: "Open **Locations** and click **Add location**; copy the key it shows once and start the host agent with it and `VISIONARY_AGENT_LOCATION` on a machine elsewhere (a VPS in another region, or inside a private network). Then, in a check's form, tick it under **Runs from** next to **server**, and pick **Down when**: any, most or every location fails. The Locations tab shows each location's last report, version, whether it can run browser checks and how many checks it runs; one that stops reporting is marked stale and left out.",
+      },
+      {
         title: "Watch the list",
-        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it. Give checks **Tags** in their form (`smoke`, `checkout`) to group them; the **Tag** menu above the list shows one group.",
+        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours, and a dot per location for checks that run from several. The row buttons run a check now, pause it or edit it. Give checks **Tags** in their form (`smoke`, `checkout`) to group them; the **Tag** menu above the list shows one group.",
       },
       {
         title: "Open a check",
-        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests.",
+        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A check with several locations adds **By location**, each location's uptime and response time in its own color, a location filter on the results, and which locations each incident failed in. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
       },
@@ -920,7 +924,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Write the configuration",
-        text: "Require the provider `styropyr0/visionary`. **Help → Configuration as code** on the Settings page has a starting `main.tf` with a channel, a rule and a check. Resources: `visionary_alert_rule`, `visionary_alert_channel`, `visionary_alert_silence`, `visionary_uptime_check` (HTTP, or a browser check with steps), `visionary_dashboard` (its panels as JSON, written with `jsonencode([...])`) and `visionary_api_key`. Data sources: `visionary_services` and `visionary_alert_channel`, which finds a channel by name.",
+        text: "Require the provider `styropyr0/visionary`. **Help → Configuration as code** on the Settings page has a starting `main.tf` with a channel, a rule and a check. Resources: `visionary_alert_rule`, `visionary_alert_channel`, `visionary_alert_silence`, `visionary_uptime_check` (HTTP, or a browser check with steps, and its `locations`), `visionary_uptime_location`, `visionary_dashboard` (its panels as JSON, written with `jsonencode([...])`) and `visionary_api_key`. Data sources: `visionary_services` and `visionary_alert_channel`, which finds a channel by name.",
       },
       {
         title: "Plan and apply",

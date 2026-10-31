@@ -69,6 +69,11 @@ func (s *Server) ensureSchema(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
 		}
 	}
+	for table, cols := range uptimeLocationColumns {
+		if err := s.addColumns(ctx, table, cols); err != nil {
+			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))
+		}
+	}
 	for table, cols := range workspaceAddedColumns {
 		if err := s.addColumns(ctx, table, cols); err != nil {
 			errs = append(errs, fmt.Errorf("%s columns: %w", table, err))

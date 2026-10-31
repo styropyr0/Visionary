@@ -23,6 +23,7 @@ interface ImportResult {
 
 const TYPE_LABEL: Record<string, string> = {
   channel: "Notification channels",
+  uptime_location: "Uptime locations",
   uptime_check: "Uptime checks",
   rule: "Alert rules",
   silence: "Silences",
