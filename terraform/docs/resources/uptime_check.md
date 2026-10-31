@@ -71,9 +71,12 @@ variable "probe_password" {
 - `headers` (Map of String, Sensitive) Request headers.
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
 - `kind` (String) http (default) or browser.
+- `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
+- `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
+- `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
