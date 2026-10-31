@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
@@ -16,12 +17,17 @@ internal sealed class SystemSampler : BackgroundService
 {
     private const int SamplesPerWrite = 4;
 
+    /// <summary>D1's limit of bound params per statement</summary>
+    internal const int D1MaxParams = 100;
+
     private readonly VisionaryAgent _agent;
     private readonly string _insert;
+    private readonly bool _d1;
     private readonly List<object?[]> _buffer = new();
     private readonly long _started = Stopwatch.GetTimestamp();
     private HostSampler? _host;
     private CgroupReader? _cgroup; // null off Linux and outside a cgroup
+    private HostStats? _stats;
     private bool _schemaReady;
 
     // Previous readings, touched only on the sampler loop.
@@ -35,7 +41,8 @@ internal sealed class SystemSampler : BackgroundService
     public SystemSampler(VisionaryAgent agent)
     {
         _agent = agent;
-        _insert = Schema.InsertSql("system_metrics", Schema.SystemColumns, agent.Store?.StringParams ?? false);
+        _d1 = agent.Store?.StringParams ?? false;
+        _insert = Schema.InsertSql("system_metrics", Schema.SystemColumns, _d1);
     }
 
     private TimeSpan Interval => _agent.Options.SystemInterval;
@@ -119,7 +126,7 @@ internal sealed class SystemSampler : BackgroundService
         try
         {
             await EnsureSchemaAsync(timeout.Token).ConfigureAwait(false);
-            var stmts = _buffer.ConvertAll(row => new Stmt(_insert, row));
+            var stmts = _buffer.SelectMany(row => RowStmts(_insert, _d1, row)).ToList();
             await _agent.Store!.BatchAsync(stmts, timeout.Token).ConfigureAwait(false);
             _buffer.Clear();
         }
@@ -135,6 +142,25 @@ internal sealed class SystemSampler : BackgroundService
         }
     }
 
+    /// <summary>
+    /// The row's INSERT. D1 binds at most 100 params, so there the columns past the first 100
+    /// follow in an UPDATE of the row just inserted, in the same batch
+    /// </summary>
+    internal static IEnumerable<Stmt> RowStmts(string insert, bool d1, object?[] row)
+    {
+        if (!d1 || row.Length <= D1MaxParams)
+        {
+            return new[] { new Stmt(insert, row) };
+        }
+        return new[] { new Stmt(D1Insert, row[..D1MaxParams]), new Stmt(D1Update, row[D1MaxParams..]) };
+    }
+
+    private static readonly string D1Insert = Schema.InsertSql("system_metrics", Schema.SystemColumns[..Math.Min(D1MaxParams, Schema.SystemColumns.Length)], true);
+
+    private static readonly string D1Update = "UPDATE system_metrics SET "
+        + string.Join(", ", Schema.SystemColumns.Skip(D1MaxParams).Select(c => c + " = NULLIF(?, '')"))
+        + " WHERE id = last_insert_rowid()";
+
     /// <summary>Baseline readings so the first row has real deltas.</summary>
     private void Prime()
     {
@@ -147,6 +173,8 @@ internal sealed class SystemSampler : BackgroundService
         _host!.Prime();
         _cgroup = CgroupReader.Open();
         _cgroup?.Prime();
+        _stats = HostStats.ForThisProcess(_cgroup);
+        _stats.Prime();
     }
 
     private object?[] Sample()
@@ -229,6 +257,14 @@ internal sealed class SystemSampler : BackgroundService
         catch (Exception e)
         {
             _agent.Logger.LogDebug(e, "visionary: container metrics failed");
+        }
+        try
+        {
+            _stats?.Sample(v, secs);
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: pressure and memory stats failed");
         }
 
         var row = new object?[Schema.SystemColumns.Length];

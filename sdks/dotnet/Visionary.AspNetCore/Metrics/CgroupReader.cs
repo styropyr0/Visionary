@@ -36,6 +36,8 @@ internal sealed class CgroupReader
     private ulong _throttled;
     private ulong _ooms;
     private bool _primed;
+    private (ulong Faults, ulong Major)? _faults;
+    private (ulong High, ulong Max)? _events;
 
     private CgroupReader(bool v2, string? cpuDir, string? cpuAcct, string? memDir, bool inContainer)
     {
@@ -45,6 +47,11 @@ internal sealed class CgroupReader
         _memDir = memDir;
         _inContainer = inContainer;
     }
+
+    public bool IsContainer => _inContainer;
+
+    /// <summary>The cgroup v2 directory, where the *.pressure files are; null with v1</summary>
+    public string? V2Dir => _v2 ? _cpuDir : null;
 
     /// <summary>The process's cgroup; null off Linux or when there is none to read.</summary>
     public static CgroupReader? Open() => OperatingSystem.IsLinux() ? Open("/") : null;
@@ -111,6 +118,7 @@ internal sealed class CgroupReader
     public void Prime()
     {
         (_usage, _periods, _throttled, _ooms) = Counters();
+        (_faults, _events) = ReadMem();
         _last = Stopwatch.GetTimestamp();
         _primed = true;
     }
@@ -141,6 +149,7 @@ internal sealed class CgroupReader
             {
                 v["container_oom_kills"] = (long)(ooms - _ooms);
             }
+            SampleMem(v, secs);
         }
         (_usage, _periods, _throttled, _ooms, _last, _primed) = (usage, periods, throttled, ooms, now, true);
         if (cpus > 0)
@@ -154,6 +163,35 @@ internal sealed class CgroupReader
         if (memLimit > 0)
         {
             v["container_mem_limit_mb"] = Math.Round(memLimit / HostSampler.Mb, 1);
+        }
+    }
+
+    private ((ulong Faults, ulong Major)?, (ulong High, ulong Max)?) ReadMem()
+    {
+        if (_memDir is null)
+        {
+            return (null, null);
+        }
+        var faults = HostStats.ParseCgroupMemStat(ReadText(Join(_memDir, "memory.stat")));
+        return (faults, _v2 ? HostStats.ParseCgroupMemEvents(ReadText(Join(_memDir, "memory.events"))) : null);
+    }
+
+    /// <summary>The container fault rates and memory limit hits</summary>
+    private void SampleMem(Dictionary<string, object?> v, double secs)
+    {
+        var (faults, events) = ReadMem();
+        var (pf, pe) = (_faults, _events);
+        (_faults, _events) = (faults, events);
+        if (faults is { } n && pf is { } p && n.Faults >= n.Major && p.Faults >= p.Major && n.Major >= p.Major
+            && n.Faults - n.Major >= p.Faults - p.Major)
+        {
+            v["container_minor_faults_ps"] = Math.Round(((n.Faults - n.Major) - (p.Faults - p.Major)) / secs, 1);
+            v["container_major_faults_ps"] = Math.Round((n.Major - p.Major) / secs, 1);
+        }
+        if (events is { } e && pe is { } pe2 && e.High >= pe2.High && e.Max >= pe2.Max)
+        {
+            v["container_mem_high_events"] = (long)(e.High - pe2.High);
+            v["container_mem_max_events"] = (long)(e.Max - pe2.Max);
         }
     }
 

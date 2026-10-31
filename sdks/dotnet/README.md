@@ -693,7 +693,10 @@ the Go SDK in [`sdks/go`](../go) is the reference implementation.
   switches, process I/O, threads, open handles against the limit, GC heap,
   collections and pause time, thread pool size, and HTTP throughput. Linux
   reads `/proc`; Windows uses Win32 counters; whatever a platform lacks is
-  NULL.
+  NULL. Linux also adds pressure (PSI, the container's own cgroup v2 files in
+  a container), page fault, swap and reclaim rates, dirty, slab, shared and
+  committed memory, and the container's fault rates and `memory.events`
+  high/max hits.
 - `profiles`: with the profiling package, only while profiling is on.
 - `metrics`: custom metrics, one row per series per interval, written by a
   background service of their own (20000 rows per interval at most); the last
