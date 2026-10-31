@@ -206,7 +206,7 @@ function row(color: string, value: string, name: string, block: boolean) {
   return `<div class="tt-row"><span class="tt-key${block ? " block" : ""}" style="background:${color}"></span><span class="tt-val">${escapeHtml(value)}</span><span class="tt-name">${escapeHtml(name)}</span></div>`;
 }
 
-function valueAxis(t: ChartTokens, unit: Unit, suffix?: string) {
+function valueAxis(t: ChartTokens, unit: Unit) {
   return {
     type: "value" as const,
     min: 0,
@@ -215,7 +215,7 @@ function valueAxis(t: ChartTokens, unit: Unit, suffix?: string) {
     minInterval: unit === "count" ? 1 : undefined,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: t.text3, fontSize: 11, formatter: (v: number) => (suffix ? `${formatAxis(v, unit)} ${suffix}` : formatAxis(v, unit)) },
+    axisLabel: { color: t.text3, fontSize: 11, formatter: (v: number) => formatAxis(v, unit) },
     splitLine: { lineStyle: { color: t.grid, width: 1 } },
   };
 }
@@ -265,7 +265,7 @@ function buildTimeseries(res: Result, viz: Viz, t: ChartTokens): BuiltChart | nu
         axisLabel: { color: t.text3, fontSize: 11, hideOverlap: true, formatter: timeLabels },
         splitLine: { show: false },
       },
-      yAxis: valueAxis(t, unit, viz.axisSuffix),
+      yAxis: valueAxis(t, unit),
       series: series.map((s, i) =>
         stacked
           ? {
@@ -368,7 +368,7 @@ function buildBar(res: Result, viz: Viz, t: ChartTokens): BuiltChart | null {
       hideOverlap: !horizontal,
     },
   };
-  const valAxis = { ...valueAxis(t, unit, viz.axisSuffix), splitLine: { lineStyle: { color: t.grid, width: 1 } } };
+  const valAxis = { ...valueAxis(t, unit), splitLine: { lineStyle: { color: t.grid, width: 1 } } };
 
   return {
     option: {

@@ -10,8 +10,6 @@ export interface Viz {
   series?: string;
   stack?: boolean;
   unit?: Unit;
-  /** A word after each value-axis tick, so a bare count says what it counts ("40 calls"). */
-  axisSuffix?: string;
   /** Color bars by HTTP status class instead of a series color. */
   colorBy?: "status";
 }

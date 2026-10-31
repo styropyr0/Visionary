@@ -28,10 +28,11 @@ export interface SpanDetailResponse {
 }
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["p95", "avg_ms"], unit: "ms" };
-const CALLS: Viz = { type: "bar", x: "t", y: ["calls"], unit: "count", axisSuffix: "calls" };
-const CALL_RATE: Viz = { type: "bar", x: "t", y: ["calls_per_minute"], axisSuffix: "calls/min" };
-const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count", axisSuffix: "calls" };
-const CHART_H = 240;
+// Both "Over time" charts share a time axis and height so they line up side by side.
+const CALLS: Viz = { type: "timeseries", x: "t", y: ["calls"], unit: "count" };
+const CALL_RATE: Viz = { type: "timeseries", x: "t", y: ["calls_per_minute"] };
+const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count" };
+const CHART_H = 260;
 
 /**
  * Calls per minute in each bucket, so the scale reads the same whatever the
@@ -106,11 +107,11 @@ export function SpanDetailDrawer({
             <h3 className="rt-title">Over time</h3>
             <div className="sd-charts">
               <div>
-                <div className="sd-chart-label">How long a call took: p95 and average</div>
+                <div className="sd-chart-label">How long a call took (ms): p95 and average</div>
                 <VizView result={d.timeline} viz={TIMELINE} height={CHART_H} title={`${name} latency`} />
               </div>
               <div>
-                <div className="sd-chart-label">{rate ? "Calls per minute" : "Calls"}</div>
+                <div className="sd-chart-label">{rate ? "Calls per minute" : "Calls per bucket"}</div>
                 <VizView result={rate ?? d.timeline} viz={rate ? CALL_RATE : CALLS} height={CHART_H} title={`${name} calls`} />
               </div>
             </div>
@@ -118,7 +119,7 @@ export function SpanDetailDrawer({
 
           <section className="sd-section">
             <h3 className="rt-title">
-              Distribution{" "}
+              Calls by how long they took{" "}
               <InfoTip text="How many calls fell in each latency band. Two humps usually mean two paths: a cache hit and a miss, an indexed and an unindexed lookup, or a warm and a cold connection." size={12} />
             </h3>
             <VizView result={d.bands} viz={BANDS} height={200} title={`${name} latency distribution`} />
