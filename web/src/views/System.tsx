@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useConnected } from "../lib/meta";
 import { Server, Sparkles } from "lucide-react";
 import { Select } from "../components/Select";
@@ -15,7 +15,7 @@ import { Section } from "../components/Section";
 import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
-import { MachineHead, MachineSnapshots, machineFor, useMachines } from "./System.machine";
+import { MachineGPUs, MachineHead, MachineSnapshots, machineFor, useMachine, useMachines } from "./System.machine";
 import { AgentSteps, SetupCard, SetupHelpButton, SetupOption } from "../components/SetupCard";
 
 export interface PanelDef {
@@ -31,6 +31,8 @@ export interface PanelDef {
 }
 
 const LINUX_ONLY = "Not reported by this host. This metric is collected on Linux.";
+const PSI_ONLY = "Linux only, from kernel 4.20 with pressure stall information on. Containers report their own cgroup's pressure on cgroup v2.";
+const SENSORS_ONLY = "Linux only, and only where the kernel exposes CPU sensors. Most virtual machines have none.";
 
 export const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
   {
@@ -74,6 +76,31 @@ export const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
     ],
   },
   {
+    title: "Pressure",
+    text: "The share of time tasks were stalled waiting for CPU, memory or disk, over the last 10 seconds. Some means at least one task waited; full means every task did. Pressure shows contention before utilization reaches 100%: sustained memory or I/O pressure above a few percent is worth a look, full pressure above zero is serious.",
+    panels: [
+      {
+        name: "pressure",
+        title: "Pressure stall (%)",
+        description: "Average of the 10-second pressure per interval. CPU some above 50%, or memory and I/O some above 10%, means work is queuing for that resource.",
+        viz: { type: "timeseries", x: "t", y: ["cpu_some", "memory_some", "memory_full", "io_some", "io_full"], unit: "percent" },
+        span: "span-12",
+        empty: PSI_ONLY,
+      },
+    ],
+  },
+  {
+    title: "Virtual memory",
+    text: "How the kernel juggles memory. Major faults and swap-ins read memory back from disk and stall the process doing it; scanning and reclaiming mean the page cache is being squeezed. Committed above the commit limit is normal with overcommit, but a steady climb means something keeps allocating.",
+    panels: [
+      { name: "page_faults", title: "Page faults (per second)", description: "Minor faults are served from memory; major faults had to read from disk. A steady stream of major faults means the working set does not fit.", viz: { type: "timeseries", x: "t", y: ["minor", "major"], unit: "count" }, span: "span-6", empty: LINUX_ONLY },
+      { name: "swap_activity", title: "Swap in and out (pages per second)", description: "Pages read back from swap and written out to it. Swap in during load is the one that hurts.", viz: { type: "timeseries", x: "t", y: ["swapped_in", "swapped_out"], unit: "count" }, span: "span-6", empty: LINUX_ONLY },
+      { name: "reclaim", title: "Reclaim (pages per second)", description: "Pages the kernel scanned looking for memory to free, the pages it freed, and processes it killed out of memory per interval. Scanning far above reclaiming means it is struggling.", viz: { type: "timeseries", x: "t", y: ["scanned", "reclaimed", "processes_killed"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
+      { name: "dirty_memory", title: "Dirty, writeback, slab and shared", description: "Dirty pages wait to be written to disk, writeback pages are being written now. Slab is kernel caches, shared is tmpfs and shared memory.", viz: { type: "timeseries", x: "t", y: ["dirty", "writeback", "slab", "shared"], unit: "bytes" }, span: "span-4", empty: LINUX_ONLY },
+      { name: "commit", title: "Committed memory", description: "Memory promised to processes against the commit limit (swap plus a share of RAM). Past the limit, allocations fail when overcommit is strict.", viz: { type: "timeseries", x: "t", y: ["committed", "commit_limit"], unit: "bytes" }, span: "span-4", empty: LINUX_ONLY },
+    ],
+  },
+  {
     title: "Disk",
     text: "Throughput and IOPS show how much the disks do; busy time and await show whether they keep up. A disk near 100% busy with rising await is the bottleneck.",
     panels: [
@@ -93,6 +120,25 @@ export const SECTIONS: { title: string; text: string; panels: PanelDef[] }[] = [
       { name: "network_errors", title: "Errors and drops", description: "Interface errors and dropped packets per interval, in and out.", viz: { type: "timeseries", x: "t", y: ["errors", "drops"], unit: "count" }, span: "span-4" },
       { name: "tcp", title: "TCP connections", description: "Connections in the ESTABLISHED state.", viz: { type: "timeseries", x: "t", y: ["established"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
       { name: "tcp_retrans", title: "TCP retransmits", description: "Segments sent again per interval. Spikes mean packet loss somewhere on the path.", viz: { type: "timeseries", x: "t", y: ["retransmits"], unit: "count" }, span: "span-4", empty: LINUX_ONLY },
+    ],
+  },
+  {
+    title: "System limits",
+    text: "Kernel tables that fail quietly when full: file handles, tracked connections and sockets. A full conntrack table drops new connections, and many sockets stuck in CLOSE_WAIT mean an app is not closing them.",
+    panels: [
+      { name: "file_handles", title: "System file handles", description: "Open file handles on the whole machine against fs.file-max. Modern kernels have no limit, then only the open count shows.", viz: { type: "timeseries", x: "t", y: ["open_files", "limit_files"], unit: "count" }, span: "span-6", empty: LINUX_ONLY },
+      { name: "conntrack", title: "Connection tracking", description: "Connections netfilter tracks against nf_conntrack_max. Only reported when the conntrack module is loaded.", viz: { type: "timeseries", x: "t", y: ["tracked", "table_limit"], unit: "count" }, span: "span-6", empty: "Linux only, and only with the nf_conntrack module loaded." },
+      { name: "sockets", title: "Sockets", description: "Sockets in use, TCP connections in TIME_WAIT and CLOSE_WAIT, and orphaned TCP sockets. CLOSE_WAIT is not counted on hosts with more than 20,000 sockets.", viz: { type: "timeseries", x: "t", y: ["sockets", "time_wait", "close_wait", "orphans"], unit: "count" }, span: "span-6", empty: LINUX_ONLY },
+      { name: "udp_errors", title: "UDP errors", description: "UDP datagrams that could not be delivered, and those dropped because a socket buffer was full, per interval. Buffer errors mean an app reads too slowly.", viz: { type: "timeseries", x: "t", y: ["undeliverable", "buffer_full"], unit: "count" }, span: "span-6", empty: LINUX_ONLY },
+    ],
+  },
+  {
+    title: "Thermals",
+    text: "A hot CPU slows itself down to protect itself. Clock speed well below the maximum under load, or throttle events, mean cooling or power limits are costing performance.",
+    panels: [
+      { name: "cpu_temp", title: "CPU temperature (°C)", description: "The hottest CPU package or core sensor: average and peak per interval.", viz: { type: "timeseries", x: "t", y: ["avg_temp", "peak_temp"], unit: "none" }, span: "span-4", empty: SENSORS_ONLY },
+      { name: "cpu_clock", title: "CPU clock (MHz)", description: "Average current clock across CPUs against the highest the CPU can run.", viz: { type: "timeseries", x: "t", y: ["current_clock", "max_clock"], unit: "none" }, span: "span-4", empty: LINUX_ONLY },
+      { name: "cpu_throttling", title: "Thermal throttling", description: "Times the CPU cores slowed down for heat per interval.", viz: { type: "timeseries", x: "t", y: ["throttle_events"], unit: "count" }, span: "span-4", empty: "Linux only, on CPUs that report thermal throttling (Intel)." },
     ],
   },
   {
@@ -139,7 +185,19 @@ const CONTAINER_SECTION: (typeof SECTIONS)[number] = {
     { name: "container_cpu", title: "Container CPU", description: "Cores the container used, its peak, and its CPU limit (no line: no limit).", viz: { type: "timeseries", x: "t", y: ["cores_used", "peak_cores", "cpu_limit"], unit: "none" }, span: "span-6" },
     { name: "container_memory", title: "Container memory", description: "Memory in use (without page cache, as docker stats counts it) against the container's limit. At the limit the kernel kills the process.", viz: { type: "timeseries", x: "t", y: ["used", "memory_limit"], unit: "bytes" }, span: "span-6" },
     { name: "container_throttling", title: "CPU throttling", description: "Share of scheduling periods in which the container hit its CPU limit and had to wait. Steady throttling slows requests down.", viz: { type: "timeseries", x: "t", y: ["throttled"], unit: "percent" }, span: "span-6", empty: "No CPU limit, so nothing is throttled." },
+    { name: "container_faults", title: "Container page faults (per second)", description: "Page faults in the container's cgroup. Major faults read from disk, often because the container is near its memory limit.", viz: { type: "timeseries", x: "t", y: ["minor", "major"], unit: "count" }, span: "span-6" },
+    { name: "container_memory_events", title: "Memory limit hits", description: "Times the container went over its memory.high throttle point and hit memory.max, per interval (cgroup v2).", viz: { type: "timeseries", x: "t", y: ["over_high", "hit_max"], unit: "count" }, span: "span-6", empty: "No memory limit hits reported (cgroup v2 only)." },
     { name: "container_oom", title: "Out-of-memory kills", description: "Processes the kernel killed in the container for exceeding its memory limit.", viz: { type: "bar", x: "t", y: ["oom_kills"], unit: "count" }, span: "span-6", empty: "No out-of-memory kills reported." },
+  ],
+};
+
+/** GPU summary columns, for SDK instances without per-device rows from the agent */
+const GPU_SECTION: (typeof SECTIONS)[number] = {
+  title: "GPUs",
+  text: "The busiest GPU's use and the fullest one's memory, from nvidia-smi or the amdgpu driver. Install the host agent on the machine for one card per GPU and the processes using them.",
+  panels: [
+    { name: "gpu", title: "GPU use (%)", description: "Busiest GPU's utilization and the highest share of GPU memory in use.", viz: { type: "timeseries", x: "t", y: ["gpu_busy", "gpu_memory"], unit: "percent" }, span: "span-8", empty: "No GPU found on this host." },
+    { name: "gpu_temp", title: "GPU temperature (°C)", description: "Hottest GPU per interval.", viz: { type: "timeseries", x: "t", y: ["peak_temp"], unit: "none" }, span: "span-4", empty: "This GPU reports no temperature." },
   ],
 };
 
@@ -165,6 +223,8 @@ export function System() {
   const net = useSystem("network", instance);
   const machines = useMachines();
   const machine = machineFor(instance, machines.data);
+  const machineData = useMachine(machine);
+  const agentGPUs = (machineData.data?.gpus?.rows.length ?? 0) > 0;
 
   const connected = useConnected("system");
   const missing = !connected || (instances.error instanceof ApiError && instances.error.status === 404);
@@ -205,6 +265,9 @@ export function System() {
   const ctrMemLimit = n("ctr_mem_limit");
   const inContainer = ctrMem !== null || n("ctr_cpu_now") !== null;
   const speed = (v: number) => `${formatBytes(v)}/s`;
+  const psiMem = n("psi_mem_now");
+  const cpuTemp = n("cpu_temp_now");
+  const gpuCount = n("gpu_count");
 
   return (
     <>
@@ -374,11 +437,51 @@ export function System() {
               />
             )}
 
+            {psiMem !== null && (
+              <StatTile
+                label="Memory pressure"
+                description="Share of the last 10 seconds some tasks stalled waiting for memory. Above a few percent the machine is short of memory."
+                value={formatPercent(psiMem)}
+                delta={null}
+                deltaLabel=""
+                upIs="bad"
+                loading={stats.loading}
+                footer={n("psi_io_now") !== null ? `I/O pressure ${formatPercent(n("psi_io_now")!)}` : undefined}
+              />
+            )}
+            {cpuTemp !== null && (
+              <StatTile
+                label="CPU temperature"
+                description="The hottest CPU package or core sensor in the latest sample."
+                value={`${cpuTemp.toFixed(0)} °C`}
+                delta={null}
+                deltaLabel=""
+                upIs="bad"
+                loading={stats.loading}
+                footer={cpuTemp >= 90 ? "Hot enough to throttle" : "Hottest CPU sensor"}
+              />
+            )}
+            {gpuCount !== null && (
+              <StatTile
+                label="GPU busy"
+                description="The busiest GPU's utilization in the latest sample."
+                value={dash(n("gpu_util_now"), formatPercent)}
+                delta={null}
+                deltaLabel=""
+                upIs="neutral"
+                loading={stats.loading}
+                footer={`${formatCount(gpuCount)} ${gpuCount === 1 ? "GPU" : "GPUs"}`}
+              />
+            )}
+
             <MachineHead host={machine} machines={machines.data} onPick={setInstance} />
 
             {inContainer && <SectionPanels {...CONTAINER_SECTION} instance={instance} words={words} />}
             {SECTIONS.map((sec) => (
-              <SectionPanels key={sec.title} {...sec} instance={instance} words={words} />
+              <Fragment key={sec.title}>
+                <SectionPanels {...sec} instance={instance} words={words} />
+                {sec.title === "Thermals" && (agentGPUs ? <MachineGPUs host={machine} /> : gpuCount !== null && <SectionPanels {...GPU_SECTION} instance={instance} words={words} />)}
+              </Fragment>
             ))}
 
             <MachineSnapshots host={machine} />

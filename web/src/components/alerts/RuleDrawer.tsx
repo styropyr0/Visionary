@@ -35,7 +35,7 @@ import { KINDS, kindLabel } from "../../lib/security";
 const CONTAINER_KINDS: Record<string, string> = { restarted: "Restarted", oom_killed: "Out-of-memory kill", exited: "Exited", unhealthy: "Health check failing", healthy: "Healthy again" };
 const containerKindLabel = (k: string) => CONTAINER_KINDS[k] ?? titleCase(k);
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
-const UNIT_HINT: Record<string, string> = { rpm: "per min", gb: "GB", mb: "MB", days: "days", minutes: "min" };
+const UNIT_HINT: Record<string, string> = { rpm: "per min", gb: "GB", mb: "MB", days: "days", minutes: "min", celsius: "°C" };
 /** Metrics read once per evaluation rather than over a window. */
 const NO_WINDOW = ["instance_silent", "uptime_cert_days", "promql"];
 

@@ -1,4 +1,5 @@
-import { api, ApiError, type Result } from "../lib/api";
+import { useMemo } from "react";
+import { api, ApiError, rangeQuery, type Result, type Viz } from "../lib/api";
 import { fieldTerm, logsHref } from "../lib/applogs";
 import { formatBytes, formatCount, titleCase, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
@@ -8,6 +9,7 @@ import { DataTable } from "../components/DataTable";
 import { HardDrive, Server } from "lucide-react";
 import { dim, formatUptime, HeadCard, Meter, pct, StatusBadge, type HostStatus } from "../components/Machine";
 import { Panel } from "../components/Panel";
+import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { Section } from "../components/Section";
 import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
@@ -40,6 +42,9 @@ interface MachineData {
   processes: Result;
   mounts: Result;
   units: Result;
+  gpus?: Result;
+  gpu_processes?: Result;
+  sensors?: Result;
 }
 
 /** The agent's machines; an error (an older server) reads as none. */
@@ -202,6 +207,27 @@ export function MachineSnapshots({ host }: { host: string }) {
         }
       />
 
+      {d.sensors && d.sensors.rows.length > 0 && <Section title="Sensors" text="Every temperature and fan the kernel exposes, from the latest agent report. The CPU temperature chart above uses the hottest CPU package or core sensor." />}
+      {d.sensors && d.sensors.rows.length > 0 && (
+        <Panel
+          className="span-12"
+          title="Temperatures and fans"
+          result={d.sensors}
+          loading={q.loading}
+          table={
+            <DataTable
+              result={d.sensors}
+              maxHeight={300}
+              columns={[
+                { key: "name", label: "Sensor" },
+                { key: "kind", label: "Kind", render: (v) => titleCase(String(v ?? "")) },
+                { key: "value", label: "Reading", align: "right", render: (v, row) => (cell(d.sensors!, row, "unit") === "C" ? unit("°C", 1)(v) : unit("rpm")(v)) },
+              ]}
+            />
+          }
+        />
+      )}
+
       <Section title="Processes and services" text="The top processes by CPU and by memory on the whole machine, and the failed or watched systemd services (VISIONARY_AGENT_UNITS), from the latest agent report." />
       <Panel
         className="span-8"
@@ -247,5 +273,102 @@ export function MachineSnapshots({ host }: { host: string }) {
         }
       />
     </>
+  );
+}
+
+/** The value of column name in row, by the result's columns */
+function cell(r: Result, row: unknown[], name: string): unknown {
+  const i = r.columns.indexOf(name);
+  return i >= 0 ? row[i] : null;
+}
+
+const mb = (v: unknown) => (toNumber(v) === null ? dim : formatBytes(toNumber(v)! * 1048576));
+const unit = (suffix: string, digits = 0) => (v: unknown) => (toNumber(v) === null ? dim : `${toNumber(v)!.toFixed(digits)} ${suffix}`);
+
+/** One card per GPU from the agent: use, temperature and power over time, and the processes holding its memory */
+export function MachineGPUs({ host }: { host: string }) {
+  const m = useMachine(host);
+  const { resolved, tick } = useApp();
+  const qs = rangeQuery(resolved.from, resolved.to);
+  const series = useQuery<Result>(host ? `machine-gpus-${host}?${qs}#${tick}` : null, (signal) =>
+    api<Result>(`/api/system/machines/${encodeURIComponent(host)}/gpus?${qs}`, { signal }),
+  );
+  const gpus = m.data?.gpus;
+  if (!host || !gpus || gpus.rows.length === 0) return null;
+  const procs = m.data?.gpu_processes;
+  return (
+    <>
+      <Section title="GPUs" text="Each GPU in the latest agent report. Busy is the share of time the GPU ran work; memory is the share of its memory in use, which is what runs out first for model serving and training. Above about 85 °C most GPUs slow themselves down." />
+      {gpus.rows.map((row) => {
+        const index = toNumber(cell(gpus, row, "gpu_index")) ?? 0;
+        const name = String(cell(gpus, row, "name") ?? "GPU");
+        return <GPUCard key={index} index={index} name={name} snapshot={gpus} row={row} series={series.data} loading={series.loading} />;
+      })}
+      {procs && procs.rows.length > 0 && (
+        <Panel
+          className="span-12"
+          title="Processes using GPU memory"
+          description="From nvidia-smi at the latest report. AMD GPUs do not list processes."
+          result={procs}
+          table={
+            <DataTable
+              result={procs}
+              maxHeight={300}
+              columns={[
+                { key: "gpu_index", label: "GPU", align: "right" },
+                { key: "pid", label: "PID", align: "right" },
+                { key: "name", label: "Process", render: (v) => <span className="mono host-cmd">{String(v ?? "")}</span> },
+                { key: "used_mem_mb", label: "GPU memory", align: "right", render: mb },
+              ]}
+            />
+          }
+        />
+      )}
+    </>
+  );
+}
+
+function GPUCard({ index, name, snapshot, row, series, loading }: { index: number; name: string; snapshot: Result; row: unknown[]; series?: Result; loading: boolean }) {
+  const mine = useMemo(() => {
+    if (!series) return undefined;
+    const gi = series.columns.indexOf("gpu_index");
+    return { ...series, rows: series.rows.filter((r) => toNumber(r[gi]) === index) };
+  }, [series, index]);
+  const used = toNumber(cell(snapshot, row, "mem_used_mb"));
+  const total = toNumber(cell(snapshot, row, "mem_total_mb"));
+  const power = toNumber(cell(snapshot, row, "power_w"));
+  const limit = toNumber(cell(snapshot, row, "power_limit_w"));
+  const facts = [
+    String(cell(snapshot, row, "vendor") ?? "").toUpperCase(),
+    used !== null && total ? `${formatBytes(used * 1048576)} of ${formatBytes(total * 1048576)}` : "",
+    power !== null ? `${power.toFixed(0)} W${limit ? ` of ${limit.toFixed(0)} W` : ""}` : "",
+    toNumber(cell(snapshot, row, "clock_mhz")) !== null ? `${toNumber(cell(snapshot, row, "clock_mhz"))} MHz` : "",
+    toNumber(cell(snapshot, row, "fan_percent")) !== null ? `fan ${toNumber(cell(snapshot, row, "fan_percent"))!.toFixed(0)}%` : "",
+  ].filter(Boolean);
+  const title = `GPU ${index} · ${name}`;
+  return (
+    <>
+      <GPUChart className="span-6" title={`${title}: use (%)`} description={facts.join(" · ")} result={mine} loading={loading} viz={{ type: "timeseries", x: "t", y: ["busy", "memory_used", "memory_busy"], unit: "percent" }} />
+      <GPUChart className="span-3" title="Temperature (°C)" description={`${title}, hottest reading per interval.`} result={mine} loading={loading} viz={{ type: "timeseries", x: "t", y: ["temperature"], unit: "none" }} />
+      <GPUChart className="span-3" title="Power (W)" description={`${title}, average draw against its power limit.`} result={mine} loading={loading} viz={{ type: "timeseries", x: "t", y: ["power", "power_limit"], unit: "none" }} />
+    </>
+  );
+}
+
+function GPUChart({ className, title, description, result, loading, viz }: { className: string; title: string; description: string; result?: Result; loading: boolean; viz: Viz }) {
+  const tokens = useChartTokens();
+  const height = className === "span-3" ? 180 : 220;
+  return (
+    <Panel
+      className={className}
+      title={title}
+      description={description}
+      result={result}
+      loading={loading}
+      bodyHeight={height}
+      note={vizNote(result, viz, tokens)}
+      chart={result && <VizView result={result} viz={viz} height={height} title={title} empty="This GPU reported no readings in this time range." />}
+      table={result && <DataTable result={result} maxHeight={height} defaultUnit={viz.unit} />}
+    />
   );
 }

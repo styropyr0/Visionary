@@ -232,7 +232,19 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Look for saturation",
-        text: "The tiles show the latest reading. Charts follow under **CPU**, **Memory**, **Disk**, **Network**, **Process and runtime** and **Database pool**; waiting for a database connection above zero means the pool is too small.",
+        text: "The tiles show the latest reading. Charts follow under **CPU**, **Memory**, **Pressure**, **Virtual memory**, **Disk**, **Network**, **System limits**, **Thermals**, **Process and runtime** and **Database pool**; waiting for a database connection above zero means the pool is too small.",
+      },
+      {
+        title: "Read pressure and memory",
+        text: "**Pressure** is the share of time tasks stalled waiting for CPU, memory or disk (Linux). Worry when memory or I/O pressure stays above a few percent, or full pressure is above zero. Under **Virtual memory**, major page faults and swap in read memory back from disk: a steady stream of either means the machine needs more memory. Reclaim scanning far above pages reclaimed means the kernel is struggling to free any.",
+      },
+      {
+        title: "Check limits and heat",
+        text: "**System limits** shows the kernel tables that fail quietly: open file handles against fs.file-max, tracked connections against nf_conntrack_max (a full table drops new connections), sockets in TIME_WAIT and CLOSE_WAIT, and UDP datagrams dropped for full buffers. **Thermals** shows the hottest CPU sensor, the clock against its maximum and throttle events; a hot CPU slows itself down. Alerts has presets for each of these.",
+      },
+      {
+        title: "Watch GPUs",
+        text: "With NVIDIA (nvidia-smi, Linux and Windows) or AMD (amdgpu, Linux) GPUs, a **GPUs** section appears. With the host agent each GPU gets a card with its use, memory, temperature and power over time, and a table lists the processes holding GPU memory. `VISIONARY_AGENT_GPU=off` or `VISIONARY_SYSTEM_GPU=false` turns it off.",
       },
       {
         title: "Investigate a spike",

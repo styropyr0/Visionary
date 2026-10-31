@@ -2,7 +2,7 @@ import { api, rangeQuery, type Result } from "./api";
 import { formatCount, formatMs, formatPercent } from "./format";
 import type { MetricQuery } from "./metrics";
 
-export type AlertUnit = "ms" | "percent" | "rpm" | "score" | "minutes" | "count" | "burn" | "gb" | "mb" | "days" | "none";
+export type AlertUnit = "ms" | "percent" | "rpm" | "score" | "minutes" | "count" | "burn" | "gb" | "mb" | "days" | "celsius" | "none";
 export type Severity = "info" | "warning" | "critical";
 export type RuleKind = "threshold" | "anomaly" | "slo";
 export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
@@ -471,6 +471,8 @@ export function formatAlertValue(v: number | null | undefined, unit: AlertUnit):
       return `${formatCount(Math.round(v))} MB`;
     case "days":
       return `${v.toFixed(1)} days`;
+    case "celsius":
+      return `${Math.round(v)} °C`;
     default:
       return formatCount(Math.round(v * 100) / 100, false);
   }
@@ -605,6 +607,16 @@ export const RULE_PRESETS: RulePreset[] = [
   { id: "pool", group: "System", label: "Database pool nearly exhausted", name: "DB pool above 90% in use", severity: "warning", spec: th("db_pool_usage", ">", 90, "5m", "5m") },
   { id: "pool_waits", group: "System", label: "Requests waiting for a DB connection", name: "DB pool waits", severity: "warning", spec: th("db_pool_waits", ">", 10, "5m", "5m") },
   { id: "goroutines", group: "System", label: "Goroutine leak", name: "Goroutines above 10,000", severity: "warning", spec: th("goroutines", ">", 10000, "15m", "15m") },
+  { id: "mem_pressure", group: "System", label: "Memory pressure (tasks stalled on memory)", name: "Memory pressure above 10%", severity: "warning", spec: th("memory_pressure", ">", 10, "10m", "5m") },
+  { id: "io_pressure", group: "System", label: "I/O pressure (tasks stalled on disk)", name: "I/O pressure above 30%", severity: "warning", spec: th("io_pressure", ">", 30, "10m", "10m") },
+  { id: "major_faults", group: "System", label: "Major page faults (reading memory back from disk)", name: "Over 100 major faults per second", severity: "warning", spec: th("major_faults_ps", ">", 100, "10m", "10m") },
+  { id: "swap_in", group: "System", label: "Swapping memory back in", name: "Over 100 swap-ins per second", severity: "warning", spec: th("swap_in_ps", ">", 100, "10m", "5m") },
+  { id: "conntrack", group: "System", label: "Connection tracking table filling", name: "Conntrack above 80% of its limit", severity: "critical", spec: th("conntrack_percent", ">", 80, "5m", "0s", { repeat: "1h" }) },
+  { id: "file_handles", group: "System", label: "System file handles near the limit", name: "File handles above 80% of fs.file-max", severity: "warning", spec: th("file_handles_percent", ">", 80, "5m", "5m") },
+  { id: "cpu_temp", group: "System", label: "CPU running hot (above 90 °C)", name: "CPU above 90 °C", severity: "warning", spec: th("cpu_temp", ">", 90, "5m", "5m") },
+  { id: "gpu_memory", group: "System", label: "GPU memory almost full", name: "GPU memory above 90%", severity: "warning", spec: th("gpu_memory", ">", 90, "5m", "5m") },
+  { id: "gpu_temp", group: "System", label: "GPU running hot (above 85 °C)", name: "GPU above 85 °C", severity: "warning", spec: th("gpu_temp", ">", 85, "5m", "5m") },
+  { id: "gpu_saturated", group: "System", label: "GPU saturated", name: "GPU busy above 95%", severity: "info", spec: th("gpu_util", ">", 95, "30m", "30m") },
   { id: "heap", group: "System", label: "Heap growing past 1 GB", name: "Heap above 1 GB", severity: "warning", spec: th("heap_inuse_mb", ">", 1024, "15m", "15m") },
 
   // Uptime
