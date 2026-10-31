@@ -561,6 +561,9 @@
   margin-bottom: 6px;
 }
 
+.ret-row.no-action {
+  grid-template-columns: minmax(0, 1fr) 150px;
+}
 .ret-row.changed {
   border-color: var(--accent);
   background: var(--accent-wash);
@@ -590,7 +593,8 @@
 }
 
 @media (max-width: 640px) {
-  .ret-row {
+  .ret-row,
+  .ret-row.no-action {
     grid-template-columns: 1fr;
     gap: 8px;
   }

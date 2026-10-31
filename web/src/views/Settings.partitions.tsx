@@ -91,8 +91,9 @@ export function PartitionsCard() {
             .map((t) => {
               const c = t.conversion;
               const running = c && !c.done;
+              const canConvert = !t.partitioned && view.enabled && view.can_admin;
               return (
-                <div key={t.table} className="ret-row">
+                <div key={t.table} className={`ret-row${canConvert ? "" : " no-action"}`}>
                   <div className="ret-what">
                     <div className="ret-label">
                       <code>{t.table}</code>
@@ -111,13 +112,13 @@ export function PartitionsCard() {
                     <div>About {formatCount(t.rows)} rows</div>
                     <div className="dim">{formatBytes(t.bytes)}</div>
                   </div>
-                  <div className="ret-keep">
-                    {!t.partitioned && view.enabled && view.can_admin && (
+                  {canConvert && (
+                    <div className="ret-keep">
                       <button type="button" className="btn sm" disabled={busy || !!running} onClick={() => setConfirm(t)}>
                         {running ? "Converting…" : "Convert"}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
