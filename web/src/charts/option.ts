@@ -43,12 +43,16 @@ function isAdditive(viz: Viz): boolean {
  */
 function colorize(names: string[], t: ChartTokens): Map<string, string> {
   const out = new Map<string, string>();
-  const allStatus = names.every((n) => n === "Other" || statusColor(n, t) !== null);
+  const anyStatus = names.some((n) => statusColor(n, t) !== null);
+  // Beside status series, other series skip the green, amber and red slots so
+  // nothing looks like a success, warning or failure it isn't.
+  const slots = anyStatus ? [0, 6, 4, 1].map((i) => t.series[i]) : t.series.slice(0, MAX_SERIES);
   let slot = 0;
   for (const n of names) {
+    const status = n === "Other" ? null : statusColor(n, t);
     if (n === "Other") out.set(n, t.text3);
-    else if (allStatus) out.set(n, statusColor(n, t)!);
-    else out.set(n, t.series[slot++ % MAX_SERIES]);
+    else if (status) out.set(n, status);
+    else out.set(n, slots[slot++ % slots.length]);
   }
   return out;
 }
