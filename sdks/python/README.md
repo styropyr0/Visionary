@@ -457,10 +457,10 @@ the first of these that is set:
    visionary.init(cfg)
    ```
 
-   The SDK keeps that connection for itself (one shared connection for
-   PostgreSQL and MySQL, one per worker thread for SQLite), reconnects
-   through the factory after an error and closes it at shutdown. Each batch
-   is one transaction; an autocommit connection makes batches non-atomic.
+   The SDK keeps those connections for itself (up to four for PostgreSQL
+   and MySQL, one per worker thread for SQLite), reconnects through the
+   factory after an error and closes them at shutdown. Each batch is one
+   transaction; an autocommit connection makes batches non-atomic.
 
 2. **`VISIONARY_DATABASE_URL`**.
 3. **`D1_ACCOUNT_ID`, `D1_DATABASE_ID` and `D1_API_TOKEN`**.
@@ -473,7 +473,13 @@ the first of these that is set:
 | Cloudflare D1 | leave it unset, or `d1://`, and set `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | nothing |
 
 The D1 token needs D1 edit access; `D1_API_BASE` overrides the API URL.
-SQLite works only when the app and the server run on the same host.
+SQLite works only when the app and the server run on the same host; the SDK
+opens it in WAL mode with a 5 s busy timeout, since both write to the file.
+
+On SQL databases each batch (500 rows) goes out as one multi-row INSERT per
+table, and PostgreSQL and MySQL write up to four batches at once, which keeps
+up with several thousand requests a second. D1 takes 50 rows a call, one
+INSERT each. `agent.writer_stats()` reports rows queued, written and dropped.
 
 Tables are created at startup from the schema files in the package
 (`visionary/schema/<dialect>/`), on the background threads, so a slow
@@ -519,7 +525,7 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets per metric name. |
 | | `log_queue_size` | `10000` | Log line queue; when full, new lines are dropped and logged. |
 | | `queue_size` | `5000` | Request queue entries; when full, new entries are dropped and logged. |
-| | `batch_size` | `50` | Rows per write. |
+| | `batch_size` | `0` | Rows per write; 0 means 500 on SQL databases (at most 2000) and 50 on D1. |
 | | `flush_interval` | `3.0` | Seconds between writes. |
 | | `db_stats` | | Pool stats for the `db_*` columns. |
 | | `disk_path` | working directory | Filesystem reported in the disk columns. |
@@ -563,6 +569,7 @@ time and kept (up to an hour) while the database is unreachable.
 | `init(config=None)` | Builds, starts and returns the process-wide agent; flushes at exit. Never raises. |
 | `get_agent()` | The agent from `init()`, if any. |
 | `from_env()`, `Config(...)`, `Agent(config).start()`, `agent.close(timeout=10)` | Explicit setup. |
+| `agent.writer_stats()` | `WriterStats(queued, written, dropped)`, summed over the request, log and metric writers, for load tests and health checks. |
 | `VisionaryMiddleware` (Django), `Visionary` (Flask), `VisionaryASGIMiddleware` | Framework integrations, in `visionary.integrations.*`. |
 | `set_user(id, handle=None, role=None)`, `set_route(pattern)`, `login_attempt(account)` | Annotate the current request. |
 | `capture_exception(exc=None)` | Record a handled error. |

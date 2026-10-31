@@ -9,13 +9,12 @@ namespace Styropyr0.Visionary;
 
 /// <summary>
 /// Writes custom metrics every interval: one row per series that has something to say, in
-/// batches of 50 with two retries, apart from the request writer. The table is created at the
+/// batches (see <see cref="Batches"/>) with two retries, apart from the request writer. The table is created at the
 /// first interval with rows, so services without custom metrics never get it. On shutdown the
 /// last interval is written.
 /// </summary>
 internal sealed class MetricsWriter : BackgroundService
 {
-    private const int BatchSize = 50;
     private const int QueueSize = 20_000;
 
     private readonly VisionaryAgent _agent;
@@ -91,6 +90,7 @@ internal sealed class MetricsWriter : BackgroundService
         if (rows.Count > QueueSize)
         {
             _agent.Logger.LogWarning("visionary: metrics queue full; {Dropped} rows dropped", rows.Count - QueueSize);
+            _agent.Writes.Lost(rows.Count - QueueSize);
             rows.RemoveRange(QueueSize, rows.Count - QueueSize);
         }
         try
@@ -106,16 +106,18 @@ internal sealed class MetricsWriter : BackgroundService
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
             _agent.Logger.LogError("visionary: create metrics failed; {Count} rows dropped: {Error}", rows.Count, e.Message);
+            _agent.Writes.Lost(rows.Count);
             return;
         }
-        for (var i = 0; i < rows.Count; i += BatchSize)
+        var size = Batches.Size(_agent.Store, _agent.Options.BatchSize);
+        for (var i = 0; i < rows.Count; i += size)
         {
-            var stmts = new List<Stmt>(BatchSize);
-            for (var j = i; j < Math.Min(i + BatchSize, rows.Count); j++)
+            var stmts = new List<Stmt>(size);
+            for (var j = i; j < Math.Min(i + size, rows.Count); j++)
             {
                 stmts.Add(_rows.Metric(rows[j]));
             }
-            await WriteAsync(stmts, ct).ConfigureAwait(false);
+            await WriteAsync(Batches.Combine(_agent.Store, stmts), ct).ConfigureAwait(false);
         }
     }
 
@@ -129,6 +131,7 @@ internal sealed class MetricsWriter : BackgroundService
             try
             {
                 await _agent.Store!.BatchAsync(stmts, timeout.Token).ConfigureAwait(false);
+                _agent.Writes.Wrote(Batches.RowCount(stmts));
                 return;
             }
             catch (Exception e)
@@ -151,6 +154,8 @@ internal sealed class MetricsWriter : BackgroundService
                 }
             }
         }
-        _agent.Logger.LogError("visionary: metrics write failed; {Count} rows dropped: {Error}", stmts.Count, last?.Message);
+        var lost = Batches.RowCount(stmts);
+        _agent.Logger.LogError("visionary: metrics write failed; {Count} rows dropped: {Error}", lost, last?.Message);
+        _agent.Writes.Lost(lost);
     }
 }

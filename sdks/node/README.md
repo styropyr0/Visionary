@@ -531,6 +531,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | | `dbStats` | | Pool stats for the `db_*` columns (`pgPoolStats(pool)`). |
 | | `diskPath` | working directory | Filesystem reported in the disk columns. |
 | | `lookupUser` | | `(id) => ({ handle, role })`, see [the signed-in user](#the-signed-in-user). |
+| | `batchSize` | `500` | Rows per write on PostgreSQL, MySQL and SQLite (at most `2000`), sent as multi-row INSERTs; PostgreSQL and MySQL write up to 4 batches at once. D1 always takes 50. |
 | | `logger` | console | Anything with `info`, `warn` and `error`. |
 
 Booleans accept `true/false/1/0/yes/no`. Old rows are normally deleted by the
@@ -548,6 +549,7 @@ truncated bodies.
 | `init(options?)` | Builds, starts and returns the process-wide agent. Never throws; with no database it does nothing. |
 | `close(timeoutMs = 10000)` | Flushes queued rows and stops. |
 | `getAgent()` | The agent from `init()`, if any. |
+| `getAgent()?.writerStats()` | `{ queued, written, dropped }` rows of the background writers, for load tests and health checks. |
 | `express()`, `expressErrorHandler()`, `fastify()`, `koa()`, `wrap(handler)` | Framework integrations. |
 | `VisionaryModule.forRoot(options?)`, `VisionaryInterceptor` | NestJS. |
 | `setUser({ id, handle?, role? })`, `setRoute(pattern)`, `loginAttempt(account)` | Annotate the current request. |

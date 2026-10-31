@@ -24,12 +24,14 @@ from ._db import instrument_connection, instrument_cursor
 from ._http import instrument_http
 from ._loghandler import LogHandler, capture_logging
 from ._metrics import Counter, Gauge, Histogram, counter, describe_metric, gauge, histogram
+from ._writer import WriterStats
 
 __version__ = "0.2.0"
 
 __all__ = [
-    "Agent", "Config", "Counter", "Gauge", "Histogram", "LogHandler", "background", "background_span",
-    "capture_exception", "capture_logging", "counter", "describe_metric", "from_env", "gauge", "get_agent",
+    "Agent", "Config", "Counter", "Gauge", "Histogram", "LogHandler", "WriterStats", "background",
+    "background_span", "capture_exception", "capture_logging", "counter", "describe_metric", "from_env", "gauge",
+    "get_agent",
     "histogram", "init", "instrument_connection", "instrument_cursor", "instrument_http", "instrument_sqlalchemy",
     "login_attempt", "set_route", "set_user", "span", "__version__",
 ]

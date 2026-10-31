@@ -73,6 +73,12 @@ module Visionary
       @writer&.enqueue(item) unless @closed
     end
 
+    # The request, log and metric writers' counters, summed.
+    def writer_stats
+      zero = WriterStats.new(queued: 0, written: 0, dropped: 0)
+      [@writer, @logs&.writer, @metrics&.writer].compact.sum(zero, &:stats)
+    end
+
     # The route pattern for a finished request: the app's own resolver,
     # then what the framework left in the env.
     def route_for(env)

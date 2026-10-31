@@ -23,6 +23,7 @@ import { Profiler } from "./telemetry/profiler.js";
 import type { SpanRow } from "./telemetry/spans.js";
 import { setSpanSink, spanValues, visibility } from "./telemetry/spans.js";
 import { formatTs } from "./util.js";
+import type { WriterStats } from "./writer.js";
 import { Retention, Writer } from "./writer.js";
 
 export const SDK_VERSION: string = typeof __SDK_VERSION__ === "string" ? __SDK_VERSION__ : "0.0.0";
@@ -125,6 +126,16 @@ export class Agent {
   /** True when anything is collected (a database and at least one feature). */
   get active(): boolean {
     return !!this.writer || !!this.recorder || !!this.logWriter || !!this.metricWriter;
+  }
+
+  /** How far behind the database the writers for requests, logs and metrics are, summed; for load tests and health checks. */
+  writerStats(): WriterStats {
+    const out: WriterStats = { queued: 0, written: 0, dropped: 0 };
+    for (const w of [this.writer, this.logWriter, this.metricWriter]) {
+      const s = w?.stats();
+      if (s) for (const k of ["queued", "written", "dropped"] as const) out[k] += s[k];
+    }
+    return out;
   }
 
   /** Whether a request to path gets an api_logs row. */

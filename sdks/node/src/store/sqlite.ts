@@ -43,8 +43,10 @@ export class SqliteStore implements Store {
       }
       db = new nodeSqlite.DatabaseSync(path) as SyncDatabase;
     }
-    // Other processes (the Visionary server, other instances) share the file.
-    db!.exec("PRAGMA busy_timeout = 10000");
+    // Other processes (the Visionary server, other instances) share the file:
+    // wait for its lock instead of failing at once.
+    db!.exec("PRAGMA busy_timeout = 5000");
+    db!.exec("PRAGMA journal_mode = WAL");
     return new SqliteStore(db!, true);
   }
 
@@ -58,11 +60,17 @@ export class SqliteStore implements Store {
     });
   }
 
+  /** Statements that repeat are prepared once and kept; one-off ones (multi-row INSERTs) are not. */
   async batch(stmts: Stmt[]): Promise<void> {
     quietly(() => {
+      const uses = new Map<string, number>();
+      for (const s of stmts) uses.set(s.sql, (uses.get(s.sql) ?? 0) + 1);
       this.db.exec("BEGIN");
       try {
-        for (const s of stmts) this.stmt(s.sql).run(...s.args);
+        for (const s of stmts) {
+          const once = uses.get(s.sql) === 1 && !this.prepared.has(s.sql);
+          (once ? this.db.prepare(s.sql) : this.stmt(s.sql)).run(...s.args);
+        }
         this.db.exec("COMMIT");
       } catch (e) {
         try {

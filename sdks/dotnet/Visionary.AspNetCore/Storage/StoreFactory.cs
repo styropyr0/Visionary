@@ -159,8 +159,30 @@ internal static class StoreFactory
         {
             var conn = f.CreateConnection() ?? throw new InvalidOperationException("visionary: the driver returned no connection");
             conn.ConnectionString = cs;
-            return OpenAsync(conn, ct);
+            return d == VisionaryDialect.Sqlite ? OpenSqliteAsync(conn, ct) : OpenAsync(conn, ct);
         }, d, Redacted(raw) + $" ({Name(d)})");
+
+    /// <summary>
+    /// The writers and the Visionary server share the file: wait up to 5 s for its lock instead
+    /// of failing at once, and use WAL so readers don't block the writers.
+    /// </summary>
+    private static async ValueTask<DbConnection> OpenSqliteAsync(DbConnection conn, CancellationToken ct)
+    {
+        await OpenAsync(conn, ct).ConfigureAwait(false);
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL";
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return conn;
+        }
+        catch
+        {
+            await conn.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
 
     private static async ValueTask<DbConnection> OpenAsync(DbConnection conn, CancellationToken ct)
     {

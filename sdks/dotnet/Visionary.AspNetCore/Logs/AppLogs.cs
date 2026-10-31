@@ -258,6 +258,7 @@ internal sealed class AppLogs
         if (!Queue.Writer.TryWrite(r))
         {
             Interlocked.Increment(ref _dropped);
+            _agent.Writes.Lost(1);
         }
     }
 

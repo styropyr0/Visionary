@@ -37,6 +37,7 @@ internal sealed class RowBuilder
 
     public static string Timestamp(DateTime t) => t.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
 
+    /// <summary>The batch's inserts: one per row on D1, multi-row per table elsewhere.</summary>
     public async Task<List<Stmt>> BuildAsync(List<WriteItem> batch, CancellationToken ct)
     {
         var users = await LookupUsersAsync(batch, ct).ConfigureAwait(false);
@@ -74,7 +75,7 @@ internal sealed class RowBuilder
                     break;
             }
         }
-        return stmts;
+        return Batches.Combine(_agent.Store, stmts);
     }
 
     private object?[] Request(RequestEntry e, VisionaryUser? u)

@@ -88,6 +88,7 @@ module Visionary
 
       def bind(conn, sql, args)
         i = -1
+        return sql.gsub("?") { conn.quote(args[i += 1]) } unless sql.include?("'")
         quote = nil
         out = +""
         sql.each_char do |ch|

@@ -172,6 +172,13 @@ module Visionary
       "INSERT INTO #{table} (#{cols.join(', ')}) VALUES (#{([mark] * cols.size).join(', ')})"
     end
 
+    # One INSERT carrying n rows, for SQL backends.
+    def insert_rows_sql(table, n)
+      cols = TABLES.fetch(table)
+      row = "(#{(['?'] * cols.size).join(', ')})"
+      "INSERT INTO #{table} (#{cols.join(', ')}) VALUES #{([row] * n).join(', ')}"
+    end
+
     # MySQL in strict mode rejects over-long values, which would fail the
     # whole batch, so values are cut to the column size first: characters for
     # VARCHAR(n), bytes for TEXT and MEDIUMTEXT. Read from the shipped schema.

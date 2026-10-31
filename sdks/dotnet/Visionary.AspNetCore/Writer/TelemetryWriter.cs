@@ -9,24 +9,27 @@ using Microsoft.Extensions.Logging;
 namespace Styropyr0.Visionary;
 
 /// <summary>
-/// The single background writer for api_logs, spans, errors and releases: flushes every 50
-/// entries or 3 seconds as one batch, retries a failed batch twice (after 1 s, then 2 s), and
-/// drains the queue on shutdown.
+/// The background writer for api_logs, spans, errors and releases: flushes when a batch is full
+/// (see <see cref="Batches"/>) or every 3 seconds, up to 4 batches at once on PostgreSQL and
+/// MySQL, retries a failed batch twice (after 1 s, then 2 s), and drains the queue on shutdown.
 /// </summary>
 internal sealed class TelemetryWriter : BackgroundService
 {
-    private const int BatchSize = 50;
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(10);
 
     private readonly VisionaryAgent _agent;
     private readonly RowBuilder _rows;
+    private readonly int _batchSize;
+    private readonly Flushes _flushes;
     private bool _schemaReady;
 
     public TelemetryWriter(VisionaryAgent agent)
     {
         _agent = agent;
         _rows = new RowBuilder(agent);
+        _batchSize = Batches.Size(agent.Store, agent.Options.BatchSize);
+        _flushes = new Flushes(Batches.Flushers(agent.Store));
     }
 
     private bool TelemetryTables => _agent.Options.Spans || _agent.Options.Errors || _agent.Version is not null;
@@ -61,7 +64,7 @@ internal sealed class TelemetryWriter : BackgroundService
         var retention = Retention.RunAsync(_agent, tables, stoppingToken);
 
         var reader = _agent.Queue.Reader;
-        var batch = new List<WriteItem>(BatchSize);
+        var batch = new List<WriteItem>(_batchSize);
         var deadline = DateTime.UtcNow + FlushInterval;
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -79,15 +82,16 @@ internal sealed class TelemetryWriter : BackgroundService
                     // flush interval reached, or shutting down
                 }
             }
-            while (batch.Count < BatchSize && reader.TryRead(out var item))
+            while (batch.Count < _batchSize && reader.TryRead(out var item))
             {
                 batch.Add(item);
             }
-            if (batch.Count >= BatchSize || DateTime.UtcNow >= deadline)
+            if (batch.Count >= _batchSize || DateTime.UtcNow >= deadline)
             {
                 // Not stoppingToken: a batch in flight at shutdown still gets written.
-                await WriteAsync(batch, CancellationToken.None).ConfigureAwait(false);
-                batch.Clear();
+                var full = batch;
+                await _flushes.RunAsync(() => WriteAsync(full, CancellationToken.None)).ConfigureAwait(false);
+                batch = new List<WriteItem>(_batchSize);
                 deadline = DateTime.UtcNow + FlushInterval;
                 var dropped = _agent.TakeDropped();
                 if (dropped > 0)
@@ -98,11 +102,12 @@ internal sealed class TelemetryWriter : BackgroundService
         }
 
         // Shutting down: drain what is queued, bounded by a timeout.
+        await _flushes.DrainAsync().ConfigureAwait(false);
         using var drain = new CancellationTokenSource(DrainTimeout);
         while (reader.TryRead(out var item))
         {
             batch.Add(item);
-            if (batch.Count >= BatchSize)
+            if (batch.Count >= _batchSize)
             {
                 await WriteAsync(batch, drain.Token).ConfigureAwait(false);
                 batch.Clear();
@@ -178,6 +183,7 @@ internal sealed class TelemetryWriter : BackgroundService
                 try
                 {
                     await _agent.Store!.BatchAsync(stmts, timeout.Token).ConfigureAwait(false);
+                    _agent.Writes.Wrote(Batches.RowCount(stmts));
                     return;
                 }
                 catch (Exception e) when (!ct.IsCancellationRequested)
@@ -190,11 +196,13 @@ internal sealed class TelemetryWriter : BackgroundService
                 }
             }
             _agent.Logger.LogError("visionary: batch write failed; {Count} entries dropped: {Error}", batch.Count, last?.Message);
+            _agent.Writes.Lost(Batches.RowCount(stmts));
         }
         catch (Exception e)
         {
             // Shutdown timeout or a bug in row building: never take the writer down with it.
             _agent.Logger.LogError("visionary: batch write failed; {Count} entries dropped: {Error}", batch.Count, e.Message);
+            _agent.Writes.Lost(batch.Count);
         }
     }
 }

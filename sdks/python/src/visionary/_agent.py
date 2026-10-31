@@ -16,7 +16,7 @@ from ._entry import Entry
 from ._profiler import Profiler
 from ._storage import Backend, open_backend
 from ._system import HttpCounters, Recorder
-from ._writer import Release, RequestWriter, Retention
+from ._writer import Release, RequestWriter, Retention, WriterStats
 
 logger = logging.getLogger("visionary")
 
@@ -104,6 +104,13 @@ class Agent:
     @property
     def logging_requests(self) -> bool:
         return self._requests is not None and self.config.log_requests
+
+    def writer_stats(self) -> WriterStats:
+        """How far behind the database the writers are, for load tests and
+        health checks."""
+        writers = [self._requests, self._logs and self._logs.writer, self._metrics and self._metrics.writer]
+        stats = [w.stats() for w in writers if w is not None]
+        return WriterStats(*(sum(s[i] for s in stats) for i in range(3)))
 
     def should_log(self, path: str) -> bool:
         """Whether a request to path gets an api_logs row (integration API)."""

@@ -100,6 +100,7 @@ internal sealed class VisionaryAgent : IDisposable
     public HttpCounters Http { get; } = new();
     public RequestTally Tally { get; } = new();
     public Channel<WriteItem> Queue { get; }
+    public WriterCounters Writes { get; } = new();
 
     /// <summary>Null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
     public AppLogs? Logs { get; }
@@ -113,6 +114,7 @@ internal sealed class VisionaryAgent : IDisposable
         if (!Queue.Writer.TryWrite(item))
         {
             Interlocked.Increment(ref _dropped);
+            Writes.Lost(1);
         }
     }
 

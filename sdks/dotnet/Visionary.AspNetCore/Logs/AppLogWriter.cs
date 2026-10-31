@@ -10,13 +10,14 @@ namespace Styropyr0.Visionary;
 // Separate from TelemetryWriter so a flood of log lines can't crowd out request rows.
 internal sealed class AppLogWriter : BackgroundService
 {
-    private const int BatchSize = 50;
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan Poll = TimeSpan.FromSeconds(30);
 
     private readonly VisionaryAgent _agent;
     private readonly RowBuilder _rows;
+    private readonly int _batchSize;
+    private readonly Flushes _flushes;
     private bool _schemaReady;
     private bool _readFailedLogged;
 
@@ -24,6 +25,8 @@ internal sealed class AppLogWriter : BackgroundService
     {
         _agent = agent;
         _rows = new RowBuilder(agent);
+        _batchSize = Batches.Size(agent.Store, agent.Options.BatchSize);
+        _flushes = new Flushes(Batches.Flushers(agent.Store));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -47,7 +50,7 @@ internal sealed class AppLogWriter : BackgroundService
         var retention = Retention.RunAsync(_agent, tables, stoppingToken);
 
         var reader = logs.Queue.Reader;
-        var batch = new List<LogRecord>(BatchSize);
+        var batch = new List<LogRecord>(_batchSize);
         var deadline = DateTime.UtcNow + FlushInterval;
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -65,15 +68,16 @@ internal sealed class AppLogWriter : BackgroundService
                     // flush interval reached, or shutting down
                 }
             }
-            while (batch.Count < BatchSize && reader.TryRead(out var item))
+            while (batch.Count < _batchSize && reader.TryRead(out var item))
             {
                 batch.Add(item);
             }
-            if (batch.Count >= BatchSize || DateTime.UtcNow >= deadline)
+            if (batch.Count >= _batchSize || DateTime.UtcNow >= deadline)
             {
                 // Not stoppingToken: a batch in flight at shutdown still gets written.
-                await WriteAsync(batch, CancellationToken.None).ConfigureAwait(false);
-                batch.Clear();
+                var full = batch;
+                await _flushes.RunAsync(() => WriteAsync(full, CancellationToken.None)).ConfigureAwait(false);
+                batch = new List<LogRecord>(_batchSize);
                 deadline = DateTime.UtcNow + FlushInterval;
                 var dropped = logs.TakeDropped();
                 if (dropped > 0)
@@ -83,11 +87,12 @@ internal sealed class AppLogWriter : BackgroundService
             }
         }
 
+        await _flushes.DrainAsync().ConfigureAwait(false);
         using var drain = new CancellationTokenSource(DrainTimeout);
         while (reader.TryRead(out var item))
         {
             batch.Add(item);
-            if (batch.Count >= BatchSize)
+            if (batch.Count >= _batchSize)
             {
                 await WriteAsync(batch, drain.Token).ConfigureAwait(false);
                 batch.Clear();
@@ -171,6 +176,7 @@ internal sealed class AppLogWriter : BackgroundService
             {
                 stmts.Add(_rows.Log(r, secrets));
             }
+            stmts = Batches.Combine(_agent.Store, stmts);
             Exception? last = null;
             for (var attempt = 1; attempt <= 3; attempt++)
             {
@@ -179,6 +185,7 @@ internal sealed class AppLogWriter : BackgroundService
                 try
                 {
                     await _agent.Store!.BatchAsync(stmts, timeout.Token).ConfigureAwait(false);
+                    _agent.Writes.Wrote(batch.Count);
                     return;
                 }
                 catch (Exception e) when (!ct.IsCancellationRequested)
@@ -191,11 +198,13 @@ internal sealed class AppLogWriter : BackgroundService
                 }
             }
             _agent.Logger.LogError("visionary: log batch write failed; {Count} lines dropped: {Error}", batch.Count, last?.Message);
+            _agent.Writes.Lost(batch.Count);
         }
         catch (Exception e)
         {
             // Never let one bad batch take the writer down.
             _agent.Logger.LogError("visionary: log batch write failed; {Count} lines dropped: {Error}", batch.Count, e.Message);
+            _agent.Writes.Lost(batch.Count);
         }
     }
 }

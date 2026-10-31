@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import threading
+from functools import lru_cache
 from importlib import resources
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import unquote, urlsplit
@@ -117,6 +119,12 @@ _D1_REQUIRED = {
 
 PURGE_CHUNK = 5000
 
+# A multi-row INSERT binds at most this many parameters (SQLite allows 32766
+# since 3.32, PostgreSQL and MySQL 65535).
+MAX_PARAMS = 30000
+# PostgreSQL and MySQL connections, one per batch written at once.
+POOL_SIZE = 4
+
 # MySQL rejects over-long values in strict mode, which would fail the whole
 # batch, so values are cut to the column size first. VARCHAR(n) counts
 # characters; TEXT/MEDIUMTEXT count bytes.
@@ -193,6 +201,33 @@ def _purge_sql(dialect: str, table: str, ph: str) -> str:
         return "DELETE FROM %s WHERE created_at < %s ORDER BY id LIMIT %d" % (name, ph, PURGE_CHUNK)
     return "DELETE FROM %s WHERE id IN (SELECT id FROM %s WHERE created_at < %s LIMIT %d)" % (
         name, name, ph, PURGE_CHUNK)
+
+
+@lru_cache(maxsize=64)
+def insert_rows_sql(table: str, cols: Tuple[str, ...], n: int, ph: str) -> str:
+    """One INSERT carrying n rows; ph "$" numbers the placeholders ($1, $2...)."""
+    head = "INSERT INTO %s (%s) VALUES " % (table, ", ".join(cols))
+    k = len(cols)
+    if ph == "$":
+        return head + ", ".join("(" + ", ".join("$%d" % (i * k + j) for j in range(1, k + 1)) + ")"
+                                for i in range(n))
+    row = "(" + ", ".join([ph] * k) + ")"
+    return head + ", ".join([row] * n)
+
+
+def insert_statements(table: str, cols: Sequence[str], rows: List[Tuple[Any, ...]], ph: str,
+                      max_params: int = MAX_PARAMS) -> List[Tuple[str, List[Any], int]]:
+    """rows as multi-row INSERTs of at most max_params parameters each, as
+    (sql, params, row count)."""
+    per = max(1, max_params // len(cols))
+    out = []
+    for i in range(0, len(rows), per):
+        chunk = rows[i:i + per]
+        params: List[Any] = []
+        for r in chunk:
+            params.extend(r)
+        out.append((insert_rows_sql(table, tuple(cols), len(chunk), ph), params, len(chunk)))
+    return out
 
 
 class Backend:
@@ -299,9 +334,10 @@ class D1Backend(Backend):
 class SQLBackend(Backend):
     """A DB-API connection obtained from ``connect``.
 
-    PostgreSQL and MySQL share one connection behind a lock. SQLite gets one
-    connection per worker thread, because sqlite3 connections refuse
-    cross-thread use by default and are cheap to open.
+    PostgreSQL and MySQL keep a pool of up to POOL_SIZE connections, so a few
+    batches can be written at once. SQLite gets one connection per worker
+    thread, because sqlite3 connections refuse cross-thread use by default
+    and are cheap to open.
     """
 
     def __init__(self, dialect: str, connect: Callable[[], Any]) -> None:
@@ -314,14 +350,20 @@ class SQLBackend(Backend):
             table: "INSERT INTO %s (%s) VALUES (%s)" % (name, ", ".join(cols), ", ".join([self._ph] * len(cols)))
             for table, (name, cols) in TABLES.items()
         }
+        self._max_params = MAX_PARAMS
+        if dialect == "sqlite":
+            import sqlite3
+
+            if sqlite3.sqlite_version_info < (3, 32, 0):
+                self._max_params = 999
         self._per_thread = dialect == "sqlite"
         self._reset()
 
     def _reset(self) -> None:
-        self._lock = threading.RLock()  # serializes use of the shared connection
-        self._conns_lock = threading.Lock()  # guards _all only, never held during I/O
+        self._slots = threading.BoundedSemaphore(POOL_SIZE)
+        self._conns_lock = threading.Lock()  # guards _idle and _all, never held during I/O
         self._local = threading.local()
-        self._shared: Optional[Any] = None
+        self._idle: List[Any] = []
         self._all: List[Any] = []
 
     def after_fork(self) -> None:
@@ -329,26 +371,40 @@ class SQLBackend(Backend):
         # from the child; forget them and reconnect lazily.
         self._reset()
 
-    def _get(self) -> Any:
-        conn = getattr(self._local, "conn", None) if self._per_thread else self._shared
-        if conn is not None and _is_closed(conn):
-            self._discard(conn)
-            conn = None
-        if conn is None:
-            conn = self._connect()
-            if self._per_thread:
-                self._local.conn = conn
-            else:
-                self._shared = conn
+    def _acquire(self) -> Any:
+        if self._per_thread:
+            conn = getattr(self._local, "conn", None)
+        else:
+            self._slots.acquire()
             with self._conns_lock:
-                self._all.append(conn)
+                conn = self._idle.pop() if self._idle else None
+        try:
+            if conn is not None and _is_closed(conn):
+                self._discard(conn)
+                conn = None
+            if conn is None:
+                conn = self._connect()
+                if self._per_thread:
+                    self._local.conn = conn
+                with self._conns_lock:
+                    self._all.append(conn)
+        except BaseException:
+            if not self._per_thread:
+                self._slots.release()
+            raise
         return conn
 
-    def _discard(self, conn: Any) -> None:
+    def _release(self, conn: Any, healthy: bool) -> None:
         if self._per_thread:
+            return
+        with self._conns_lock:
+            if healthy and conn in self._all:
+                self._idle.append(conn)
+        self._slots.release()
+
+    def _discard(self, conn: Any) -> None:
+        if self._per_thread and getattr(self._local, "conn", None) is conn:
             self._local.conn = None
-        elif self._shared is conn:
-            self._shared = None
         with self._conns_lock:
             if conn in self._all:
                 self._all.remove(conn)
@@ -358,19 +414,22 @@ class SQLBackend(Backend):
             pass
 
     def _run(self, fn: Callable[[Any], Any]) -> Any:
-        lock = _NullLock() if self._per_thread else self._lock
-        with lock:
-            conn = self._get()
+        conn = self._acquire()
+        healthy = False
+        try:
+            result = fn(conn)
+            conn.commit()
+            healthy = True
+            return result
+        except Exception:
             try:
-                result = fn(conn)
-                conn.commit()
-                return result
+                conn.rollback()
+                healthy = True
             except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    self._discard(conn)
-                raise
+                self._discard(conn)
+            raise
+        finally:
+            self._release(conn, healthy)
 
     def create_schema(self, table: str) -> None:
         for stmt in schema_statements(self.dialect, table):
@@ -397,20 +456,36 @@ class SQLBackend(Backend):
         self._run(lambda c: _execute(c, sql))
 
     def insert_many(self, groups: List[Tuple[str, List[Tuple[Any, ...]]]]) -> None:
-        work = [(self._sql[table], [self._fit(TABLES[table][1], row) for row in rows])
-                for table, rows in groups if rows]
+        work = [(table, [self._fit(TABLES[table][1], row) for row in rows]) for table, rows in groups if rows]
         if not work:
             return
 
         def write(conn: Any) -> None:
-            cur = conn.cursor()
+            cur, ph = self._insert_cursor(conn)
             try:
-                for sql, rows in work:
-                    cur.executemany(sql, rows)
+                for table, rows in work:
+                    if self.dialect == "mysql":
+                        # PyMySQL's executemany already sends multi-row INSERTs,
+                        # cut to its packet size, which long bodies could overrun.
+                        cur.executemany(self._sql[table], rows)
+                        continue
+                    name, cols = TABLES[table]
+                    for sql, params, _ in insert_statements(name, cols, rows, ph, self._max_params):
+                        cur.execute(sql, params)
             finally:
                 cur.close()
 
         self._run(write)
+
+    def _insert_cursor(self, conn: Any) -> Tuple[Any, str]:
+        """A cursor and its placeholder. psycopg 3.2's RawCursor sends $n
+        placeholders as they are; otherwise psycopg parses every long
+        multi-row INSERT again, which costs more than the write."""
+        psycopg = sys.modules.get("psycopg")
+        raw = getattr(psycopg, "RawCursor", None)
+        if raw is not None and isinstance(conn, psycopg.Connection):
+            return raw(conn), "$"
+        return conn.cursor(), self._ph
 
     def purge(self, table: str, cutoff: str) -> int:
         sql = _purge_sql(self.dialect, table, self._ph)
@@ -456,21 +531,12 @@ class SQLBackend(Backend):
 
     def close(self) -> None:
         with self._conns_lock:
-            conns, self._all = self._all, []
-        self._shared = None
+            conns, self._all, self._idle = self._all, [], []
         for conn in conns:
             try:
                 conn.close()
             except Exception:
                 pass
-
-
-class _NullLock:
-    def __enter__(self) -> None:
-        return None
-
-    def __exit__(self, *exc: Any) -> None:
-        return None
 
 
 def _execute(conn: Any, sql: str) -> None:
@@ -564,7 +630,14 @@ def _sqlite_path(rest: str) -> str:
 def _sqlite_connect(path: str) -> Callable[[], Any]:
     import sqlite3
 
-    return lambda: sqlite3.connect(path, timeout=10)
+    # The writers and the Visionary server share the file: wait for its lock
+    # instead of failing at once.
+    def connect() -> Any:
+        conn = sqlite3.connect(path, timeout=5)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    return connect
 
 
 def _mysql_kwargs(url: str) -> Dict[str, Any]:

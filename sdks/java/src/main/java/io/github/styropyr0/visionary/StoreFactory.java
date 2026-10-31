@@ -57,6 +57,9 @@ final class StoreFactory {
 
     private static Store jdbc(String rawUrl, ClassLoader loader) {
         JdbcTarget target = JdbcTarget.parse(rawUrl);
+        if (target.dialect == Dialect.SQLITE) {
+            target.sharedFile();
+        }
         Driver driver = driver(target, loader);
         return JdbcStore.forDriver(target.dialect, driver, target.url, target.props, target.describe());
     }
@@ -105,6 +108,20 @@ final class StoreFactory {
             }
             throw new IllegalArgumentException("unsupported VISIONARY_DATABASE_URL scheme in " + redact(raw)
                     + " (use postgres://, mysql://, sqlite://, d1:// or a jdbc: URL)");
+        }
+
+        /**
+         * The writers and the Visionary server share a SQLite file: wait up to 5 s
+         * for its lock instead of failing at once, and use WAL.
+         */
+        void sharedFile() {
+            String lower = url.toLowerCase(Locale.ROOT);
+            if (!lower.contains("busy_timeout")) {
+                props.setProperty("busy_timeout", "5000");
+            }
+            if (!lower.contains("journal_mode")) {
+                props.setProperty("journal_mode", "WAL");
+            }
         }
 
         private static Dialect dialectOf(String jdbcUrl) {

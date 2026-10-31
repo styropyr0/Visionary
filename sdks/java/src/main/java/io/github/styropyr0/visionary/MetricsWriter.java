@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -19,7 +20,7 @@ import org.apache.commons.logging.LogFactory;
  * interval that has something to write; services without custom metrics never
  * get it. On shutdown the last interval is written before the thread ends.
  */
-final class MetricsWriter {
+final class MetricsWriter implements VisionaryWriterStats.Source {
 
     private static final Log log = LogFactory.getLog(MetricsWriter.class);
 
@@ -30,11 +31,14 @@ final class MetricsWriter {
     private final Origin origin;
     private final Metrics registry;
     private final Duration interval;
+    private final int batchSize;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition wake = lock.newCondition();
     private final ArrayDeque<Object[]> queue = new ArrayDeque<>();
     private long dropped;
+    private final AtomicLong lost = new AtomicLong();
+    private final AtomicLong written = new AtomicLong();
     private boolean closing;
 
     private final Thread thread;
@@ -44,6 +48,7 @@ final class MetricsWriter {
         this.store = store;
         this.origin = origin;
         this.registry = registry;
+        this.batchSize = store.batchSize();
         this.interval = interval.isZero() || interval.isNegative() ? Duration.ofSeconds(15) : interval;
         if (maxSeries > 0) {
             registry.maxSeries = maxSeries;
@@ -53,6 +58,7 @@ final class MetricsWriter {
     }
 
     void start() {
+        VisionaryWriterStats.add(this);
         thread.start();
     }
 
@@ -65,6 +71,7 @@ final class MetricsWriter {
             lock.unlock();
         }
         if (!thread.isAlive()) {
+            VisionaryWriterStats.remove(this);
             return;
         }
         try {
@@ -75,6 +82,27 @@ final class MetricsWriter {
         if (thread.isAlive()) {
             log.warn("visionary: metrics flush timed out");
         }
+        VisionaryWriterStats.remove(this);
+    }
+
+    @Override
+    public int queued() {
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public long written() {
+        return written.get();
+    }
+
+    @Override
+    public long dropped() {
+        return lost.get();
     }
 
     private void run() {
@@ -104,7 +132,7 @@ final class MetricsWriter {
         }
     }
 
-    /** Takes the interval and writes it, 50 rows per insert. */
+    /** Takes the interval and writes it, a batch per insert. */
     void flush() {
         for (Map.Entry<String, Long> e : registry.takeDropped().entrySet()) {
             log.warn("visionary: metric series dropped over the limit (metric " + e.getKey() + ", dropped "
@@ -114,11 +142,11 @@ final class MetricsWriter {
             enqueue(row(r));
         }
         while (true) {
-            List<Object[]> batch = new ArrayList<>(RequestWriter.BATCH_SIZE);
+            List<Object[]> batch = new ArrayList<>(batchSize);
             long droppedNow;
             lock.lock();
             try {
-                while (batch.size() < RequestWriter.BATCH_SIZE && !queue.isEmpty()) {
+                while (batch.size() < batchSize && !queue.isEmpty()) {
                     batch.add(queue.poll());
                 }
                 droppedNow = dropped;
@@ -141,6 +169,7 @@ final class MetricsWriter {
         try {
             if (queue.size() >= QUEUE_SIZE) {
                 dropped++;
+                lost.incrementAndGet();
                 return;
             }
             queue.add(row);
@@ -158,6 +187,7 @@ final class MetricsWriter {
                     schemaReady = true;
                 }
                 store.insert(Table.METRICS, rows);
+                written.addAndGet(rows.size());
                 return;
             } catch (Exception e) {
                 last = e;
@@ -166,6 +196,7 @@ final class MetricsWriter {
                 }
             }
         }
+        lost.addAndGet(rows.size());
         log.error("visionary: metrics write failed; " + rows.size() + " rows dropped: " + last);
     }
 

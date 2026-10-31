@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -22,15 +23,15 @@ import org.apache.commons.logging.LogFactory;
 /**
  * The single background writer for {@code api_logs}, {@code spans}, {@code errors}
  * and {@code releases}: a bounded queue that never blocks the request thread,
- * flushed every 50 entries or 3 seconds. A request and the spans it stores count
- * as one entry; each batch is written as one unit.
+ * flushed every batch (50 entries on D1, 500 on SQL) or 3 seconds. A request and
+ * the spans it stores count as one entry; each batch is written as one unit, up
+ * to four at once on PostgreSQL and MySQL.
  */
-final class RequestWriter {
+final class RequestWriter implements VisionaryWriterStats.Source {
 
     private static final Log log = LogFactory.getLog(RequestWriter.class);
 
     static final int QUEUE_SIZE = 5000;
-    static final int BATCH_SIZE = 50;
     static final Duration FLUSH_INTERVAL = Duration.ofSeconds(3);
     private static final int ATTEMPTS = 3;
     /** Redaction regexes recurse; a roomy stack keeps pathological bodies from failing. */
@@ -43,11 +44,15 @@ final class RequestWriter {
     private final ErrorFields errorFields;
     private final VisionaryUserLookup userLookup;
     private final boolean bodies;
+    private final int batchSize;
+    private final WriterFlushes flushes;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition wake = lock.newCondition();
     private final ArrayDeque<Queued> queue = new ArrayDeque<>();
     private long dropped;
+    private final AtomicLong lost = new AtomicLong();
+    private final AtomicLong written = new AtomicLong();
     private boolean closing;
 
     private final Thread thread;
@@ -62,6 +67,8 @@ final class RequestWriter {
         this.errorFields = new ErrorFields(json, cfg.errorCodeField(), cfg.errorKeyField());
         this.userLookup = userLookup;
         this.bodies = cfg.logBodies();
+        this.batchSize = store.batchSize();
+        this.flushes = new WriterFlushes(store, "visionary-requests", STACK_SIZE);
         this.thread = new Thread(null, this::run, "visionary-requests", STACK_SIZE);
         this.thread.setDaemon(true);
     }
@@ -71,6 +78,7 @@ final class RequestWriter {
         if (origin.version() != null) {
             enqueue(new ReleaseEntry(Instant.now()));
         }
+        VisionaryWriterStats.add(this);
         thread.start();
     }
 
@@ -84,10 +92,11 @@ final class RequestWriter {
         try {
             if (closing || queue.size() >= QUEUE_SIZE) {
                 dropped++;
+                lost.incrementAndGet();
                 return;
             }
             queue.add(e);
-            if (queue.size() >= BATCH_SIZE) {
+            if (queue.size() >= batchSize) {
                 wake.signal();
             }
         } finally {
@@ -112,6 +121,27 @@ final class RequestWriter {
         if (thread.isAlive()) {
             log.warn("visionary: request log flush timed out");
         }
+        VisionaryWriterStats.remove(this);
+    }
+
+    @Override
+    public int queued() {
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public long written() {
+        return written.get();
+    }
+
+    @Override
+    public long dropped() {
+        return lost.get();
     }
 
     private void run() {
@@ -127,15 +157,15 @@ final class RequestWriter {
             boolean last;
             lock.lock();
             try {
-                while (!closing && queue.size() < BATCH_SIZE) {
+                while (!closing && queue.size() < batchSize) {
                     long wait = nextFlush - System.nanoTime();
                     if (wait <= 0) {
                         break;
                     }
                     wake.awaitNanos(wait);
                 }
-                batch = new ArrayList<>(Math.min(queue.size(), BATCH_SIZE));
-                while (batch.size() < BATCH_SIZE && !queue.isEmpty()) {
+                batch = new ArrayList<>(Math.min(queue.size(), batchSize));
+                while (batch.size() < batchSize && !queue.isEmpty()) {
                     batch.add(queue.poll());
                 }
                 droppedNow = dropped;
@@ -150,12 +180,13 @@ final class RequestWriter {
                 log.warn("visionary: request queue full; " + droppedNow + " entries dropped");
             }
             if (!batch.isEmpty()) {
-                write(batch);
+                flushes.run(() -> write(batch));
             }
             if (last) {
+                flushes.finish(Duration.ofSeconds(60));
                 return;
             }
-            if (batch.size() < BATCH_SIZE) {
+            if (batch.size() < batchSize) {
                 nextFlush = System.nanoTime() + FLUSH_INTERVAL.toNanos();
             }
         }
@@ -192,6 +223,7 @@ final class RequestWriter {
             }
         } catch (RuntimeException e) {
             log.error("visionary: could not prepare " + batch.size() + " rows; dropped", e);
+            lost.addAndGet(batch.size());
             return;
         }
         rows.values().removeIf(List::isEmpty);
@@ -201,11 +233,13 @@ final class RequestWriter {
         if (rows.isEmpty()) {
             return;
         }
+        long count = rows.values().stream().mapToLong(List::size).sum();
         Exception last = null;
         for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
             try {
                 ensureSchema();
                 store.insert(rows);
+                written.addAndGet(count);
                 return;
             } catch (Exception e) {
                 last = e;
@@ -214,6 +248,7 @@ final class RequestWriter {
                 }
             }
         }
+        lost.addAndGet(count);
         log.error("visionary: batch write failed; " + batch.size() + " entries dropped: " + last);
     }
 
@@ -230,7 +265,7 @@ final class RequestWriter {
         }
     }
 
-    private void ensureSchema() throws Exception {
+    private synchronized void ensureSchema() throws Exception {
         if (logRequests && !requestsReady) {
             store.createSchema(Table.API_LOGS);
             requestsReady = true;

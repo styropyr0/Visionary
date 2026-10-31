@@ -167,6 +167,20 @@ final class Table {
                 + String.join(", ", ph) + ")";
     }
 
+    /** One INSERT carrying {@code n} rows, for SQL backends. */
+    String insertRowsSql(int n) {
+        String row = "(" + String.join(", ", Collections.nCopies(columns.size(), "?")) + ")";
+        StringBuilder b = new StringBuilder(64 + 16 * columns.size() + n * (row.length() + 2));
+        b.append("INSERT INTO ").append(name).append(" (").append(String.join(", ", columns)).append(") VALUES ");
+        for (int i = 0; i < n; i++) {
+            if (i > 0) {
+                b.append(", ");
+            }
+            b.append(row);
+        }
+        return b.toString();
+    }
+
     private static Builder builder(String name, String schemaName) {
         return new Builder(name, schemaName);
     }

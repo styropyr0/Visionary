@@ -60,11 +60,53 @@ internal sealed class SqlStore : IStore
         }
         await using var lease = await OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await lease.Connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+        // On SQLite, statements that repeat are prepared once; one-off ones run directly. Npgsql fixes
+        // parameter types at prepare time, which a column that is NULL in one row and a number in
+        // the next breaks, so PostgreSQL and MySQL always run statements directly.
+        var uses = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var st in stmts)
         {
-            await using var cmd = Command(lease.Connection, st.Sql, st.Args);
-            cmd.Transaction = tx;
-            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            uses[st.Sql] = Dialect == VisionaryDialect.Sqlite ? uses.GetValueOrDefault(st.Sql) + 1 : 1;
+        }
+        var prepared = new Dictionary<string, DbCommand>(StringComparer.Ordinal);
+        try
+        {
+            foreach (var st in stmts)
+            {
+                if (uses[st.Sql] == 1)
+                {
+                    await using var once = Command(lease.Connection, st.Sql, st.Args);
+                    once.Transaction = tx;
+                    await once.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    continue;
+                }
+                if (prepared.TryGetValue(st.Sql, out var cmd) && cmd.Parameters.Count == st.Args.Length)
+                {
+                    for (var i = 0; i < st.Args.Length; i++)
+                    {
+                        cmd.Parameters[i].Value = st.Args[i] ?? DBNull.Value;
+                    }
+                }
+                else
+                {
+                    cmd = Command(lease.Connection, st.Sql, st.Args);
+                    cmd.Transaction = tx;
+                    await cmd.PrepareAsync(ct).ConfigureAwait(false);
+                    if (prepared.Remove(st.Sql, out var old))
+                    {
+                        await old.DisposeAsync().ConfigureAwait(false);
+                    }
+                    prepared[st.Sql] = cmd;
+                }
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            foreach (var cmd in prepared.Values)
+            {
+                await cmd.DisposeAsync().ConfigureAwait(false);
+            }
         }
         await tx.CommitAsync(ct).ConfigureAwait(false);
     }

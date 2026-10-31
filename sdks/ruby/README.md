@@ -71,6 +71,11 @@ visionary: recording system metrics every 15.0s as web-1
 Tables are created on first use. At exit the SDK flushes what is queued (it
 registers an `at_exit` hook that calls `Visionary.close`).
 
+Rows are written as multi-row INSERTs, 500 rows a batch, with up to four
+batches in flight on PostgreSQL and MySQL (one at a time on SQLite and D1).
+`Visionary.writer_stats` returns rows `queued`, `written` and `dropped`, for
+load tests and health checks.
+
 **5. Check the dashboard.** Open the Visionary dashboard. The request appears
 on the API overview within a few seconds, with its route, status, time and
 any error. Open it from Performance → Slowest requests to see its database and
@@ -154,7 +159,7 @@ Call it from any auth code (a `before_action`, a Warden callback, a Rack
 middleware) once the user is known. Only `id` is required. To fill in handle
 and role from the id, set `lookup_user` as in the Rails recipe. It runs on the
 writer thread, once per distinct user per batch, only for users missing a
-handle or role.
+handle or role; on PostgreSQL and MySQL from up to four batches at once.
 
 **Records:** `user_id`, `user_handle`, `user_role` on the request row and on
 its errors.
@@ -573,7 +578,7 @@ Options only available in code:
 | `disk_path` | working directory | Filesystem whose usage is reported |
 | `queue_size` | `5000` | Rows queued before new ones are dropped |
 | `log_queue_size` | `10000` | Log lines queued (on their own writer) before new ones are dropped |
-| `batch_size` | `50` | Rows per write (1 to 50) |
+| `batch_size` | `500` on SQL, `50` on D1 | Rows per write (up to 2000; D1 at most 50) |
 | `flush_interval` | `3.0` | Seconds between writes when the batch isn't full |
 
 Always redacted: the headers `Authorization`, `Proxy-Authorization`,

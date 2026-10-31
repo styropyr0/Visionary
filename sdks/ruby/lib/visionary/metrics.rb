@@ -418,7 +418,7 @@ module Visionary
         @logger.warn("visionary: metrics queue full; #{n} rows dropped") if n.positive?
       end
 
-      def statements(kind, row, _users) = [stmt(kind, row)]
+      def statements(kind, row, _users) = [fit(kind, row)]
     end
   end
 end

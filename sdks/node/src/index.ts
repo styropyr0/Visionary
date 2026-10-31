@@ -32,6 +32,7 @@ export type { DbStats } from "./system/recorder.js";
 export type { Labels, MetricOptions } from "./metrics.js";
 export { Counter, DEFAULT_BUCKETS, Gauge, Histogram } from "./metrics.js";
 export type { SpanKind } from "./telemetry/spans.js";
+export type { WriterStats } from "./writer.js";
 export type { Explainer } from "./telemetry/explain.js";
 export { expressRoute } from "./integrations/express.js";
 export { fastifyRoute } from "./integrations/fastify.js";
