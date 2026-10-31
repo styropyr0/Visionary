@@ -98,6 +98,16 @@ export function KindTile({ check, runs, heartbeat }: { check: UptimeCheck; runs?
   );
 }
 
+/** Adds a Location column to a runs table when runs came from more than the server. */
+export function withLocation(result: Result, cols: Column[], runs?: DetailRun[]): { result: Result; columns: Column[] } {
+  if (!runs?.some((r) => r.location && r.location !== "server")) return { result, columns: cols };
+  const at = Math.max(1, cols.findIndex((c) => c.key === "ok") + 1);
+  return {
+    result: { ...result, columns: [...result.columns, "location"], rows: result.rows.map((row, i) => [...row, runs[i]?.location ?? "server"]) },
+    columns: [...cols.slice(0, at), { key: "location", label: "Location" }, ...cols.slice(at)],
+  };
+}
+
 /** A panel that shows its own content rather than a chart or table. */
 function Box({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
@@ -166,7 +176,7 @@ export function PingPanels({ runs, loading, error }: { runs?: DetailRun[]; loadi
         chart={loss && <VizView result={loss} viz={LOSS} height={240} title="Packet loss" empty="No runs in this range." />}
         table={loss && <DataTable result={loss} maxHeight={240} />}
       />
-      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable result={table} columns={cols} maxHeight={440} sortable={false} />} />
+      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable {...withLocation(table, cols, runs)} maxHeight={440} sortable={false} />} />
     </>
   );
 }
@@ -197,7 +207,7 @@ export function DnsPanels({ runs, loading, error }: { runs?: DetailRun[]; loadin
           <div className="panel-state">No runs in this range.</div>
         )}
       </Box>
-      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable result={table} columns={cols} maxHeight={440} sortable={false} />} />
+      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable {...withLocation(table, cols, runs)} maxHeight={440} sortable={false} />} />
     </>
   );
 }
@@ -213,7 +223,7 @@ export function TcpPanels({ runs, loading, error }: { runs?: DetailRun[]; loadin
     { key: "banner", label: "Reply", render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>) },
     { key: "error", label: "Error", render: errCell },
   ];
-  return <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first, with the start of what the server sent." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable result={table} columns={cols} maxHeight={440} sortable={false} />} />;
+  return <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first, with the start of what the server sent." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable {...withLocation(table, cols, runs)} maxHeight={440} sortable={false} />} />;
 }
 
 /** The certificate the last run saw, and each run's verdict. */
@@ -265,7 +275,7 @@ export function CertPanels({ check, runs, loading, error }: { check: UptimeCheck
           <div className="panel-state">{runs?.[0]?.error || (loading ? "" : "No certificate seen in this range.")}</div>
         )}
       </Box>
-      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable result={table} columns={cols} maxHeight={440} sortable={false} />} />
+      <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable {...withLocation(table, cols, runs)} maxHeight={440} sortable={false} />} />
     </>
   );
 }

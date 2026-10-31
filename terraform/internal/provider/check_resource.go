@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -54,6 +55,9 @@ type checkModel struct {
 	Steps           []stepModel     `tfsdk:"steps"`
 	Secrets         types.Map       `tfsdk:"secrets"`
 	FinalScreenshot types.Bool      `tfsdk:"final_screenshot"`
+	Locations       types.List      `tfsdk:"locations"`
+	LocationRule    types.String    `tfsdk:"location_rule"`
+	StatusShowLocs  types.Bool      `tfsdk:"status_show_locations"`
 	API             *apiModel       `tfsdk:"api"`
 	TCP             *tcpModel       `tfsdk:"tcp"`
 	DNS             *dnsModel       `tfsdk:"dns"`
@@ -93,6 +97,9 @@ type apiCheck struct {
 	Steps           []apiStepB        `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	Locations       []string          `json:"locations"`
+	LocationRule    string            `json:"location_rule"`
+	StatusShowLocs  bool              `json:"status_show_locations"`
 	API             *apiAPI           `json:"api,omitempty"`
 	TCP             *apiTCP           `json:"tcp,omitempty"`
 	DNS             *apiDNS           `json:"dns,omitempty"`
@@ -175,6 +182,17 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"secrets":          schema.MapAttribute{Description: "Browser and api check secrets, used as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"final_screenshot": schema.BoolAttribute{Description: "Keep a screenshot of every browser run, not only failed ones.", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
+			"locations": schema.ListAttribute{
+				Description: `Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).`,
+				Optional:    true, Computed: true, ElementType: types.StringType,
+				Default:    listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{types.StringValue("server")})),
+				Validators: []validator.List{listvalidator.SizeBetween(1, 10)},
+			},
+			"location_rule": schema.StringAttribute{
+				Description: "With several locations, the check is down when any, a majority (default) or all of them fail.", Optional: true, Computed: true,
+				Default: stringdefault.StaticString("majority"), Validators: []validator.String{stringvalidator.OneOf("any", "majority", "all")},
+			},
+			"status_show_locations": schema.BoolAttribute{Description: "Break the check down by location on the status page (location names become public).", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
 		},
 	}
 	for k, v := range kindAttributes() {
@@ -220,6 +238,7 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		IntervalS: m.IntervalS.ValueInt64(), TimeoutMs: m.TimeoutMs.ValueInt64(), DegradedMs: m.DegradedMs.ValueInt64(),
 		FollowRedirects: m.FollowRedirects.ValueBool(), Enabled: m.Enabled.ValueBool(), OnStatusPage: m.OnStatusPage.ValueBool(),
 		StatusShowURL: m.StatusShowURL.ValueBool(), Secrets: mapOf(ctx, m.Secrets, diags), FinalScreenshot: m.FinalScreenshot.ValueBool(),
+		Locations: stringsOf(ctx, m.Locations, diags), LocationRule: m.LocationRule.ValueString(), StatusShowLocs: m.StatusShowLocs.ValueBool(),
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
@@ -259,6 +278,14 @@ func (m *checkModel) fill(c apiCheck) {
 	m.IntervalS, m.TimeoutMs, m.DegradedMs = types.Int64Value(c.IntervalS), types.Int64Value(c.TimeoutMs), optInt(c.DegradedMs, m.DegradedMs)
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
+	if len(c.Locations) == 0 {
+		c.Locations = []string{"server"}
+	}
+	m.Locations = optStringList(c.Locations, m.Locations)
+	if c.LocationRule == "" {
+		c.LocationRule = "majority"
+	}
+	m.LocationRule, m.StatusShowLocs = types.StringValue(c.LocationRule), types.BoolValue(c.StatusShowLocs)
 	m.kindFill(c)
 	if c.Kind != "heartbeat" {
 		m.HeartbeatPath = types.StringNull()

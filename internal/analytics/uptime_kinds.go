@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/netip"
-	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 // Check kinds beyond http and browser: multi-step API checks (uptime_api.go),
@@ -31,10 +29,20 @@ var settingsKinds = map[string]bool{"api": true, "tcp": true, "dns": true, "ping
 const (
 	kindMaxTimeoutMs = 120000
 	detailsMaxRuns   = 500
+	detailsMaxBytes  = 64 << 10
 )
 
-var (
-	hostNameRe = regexp.MustCompile(`(?i)^[a-z0-9_]([a-z0-9_-]{0,62})?(\.[a-z0-9_]([a-z0-9_-]{0,62})?)*\.?$`)
+// The kinds' settings are uptimecore's, which runs them for the server and
+// for location runners alike.
+type (
+	APIConfig    = uptimecore.APIConfig
+	APIRequest   = uptimecore.APIRequest
+	APIExtract   = uptimecore.APIExtract
+	APIAssertion = uptimecore.APIAssertion
+	TCPConfig    = uptimecore.TCPConfig
+	DNSConfig    = uptimecore.DNSConfig
+	PingConfig   = uptimecore.PingConfig
+	SSLConfig    = uptimecore.SSLConfig
 )
 
 func (s *Server) uptimeKindsSchema() []string {
@@ -62,7 +70,8 @@ CREATE TABLE IF NOT EXISTS uptime_run_details (
     created_at ` + ts + ` NOT NULL,
     check_id   ` + key + ` NOT NULL,
     ok         ` + num + ` NOT NULL,
-    detail     ` + big + ` NOT NULL
+    detail     ` + big + ` NOT NULL,
+    location   ` + tok + `
 )` + tail + `;
 CREATE INDEX ` + ine + `idx_uptime_run_details_check ON uptime_run_details (check_id, created_at);
 CREATE INDEX ` + ine + `idx_uptime_run_details_created ON uptime_run_details (created_at);
@@ -123,31 +132,41 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 		if c.API == nil {
 			return errors.New("an API check needs at least one request")
 		}
-		err = c.normalizeAPI(prev)
+		var prevAPI *APIConfig
+		var prevSecrets map[string]string
+		if prev != nil {
+			prevAPI, prevSecrets = prev.API, prev.Secrets
+		}
+		if c.Secrets, err = normalizeSecrets(c.Secrets, prevSecrets); err == nil {
+			err = c.API.Normalize(prevAPI, c.Secrets)
+		}
+		if err == nil {
+			c.URL = c.API.Requests[0].URL
+		}
 	case "tcp":
 		if c.TCP == nil {
 			return errors.New("a TCP check needs a host and port")
 		}
-		err = c.TCP.normalize()
+		err = c.TCP.Normalize()
 		c.URL = "tcp://" + net.JoinHostPort(c.TCP.Host, strconv.Itoa(c.TCP.Port))
 	case "dns":
 		if c.DNS == nil {
 			return errors.New("a DNS check needs a name to resolve")
 		}
-		err = c.DNS.normalize()
+		err = c.DNS.Normalize()
 		c.URL = "dns://" + c.DNS.Name + "?type=" + c.DNS.RecordType
 	case "ping":
 		timeout, maxTimeout, minTimeout = 2000, 10000, 100
 		if c.Ping == nil {
 			return errors.New("a ping check needs a host")
 		}
-		err = c.Ping.normalize()
-		c.URL = "ping://" + bracketHost(c.Ping.Host)
+		err = c.Ping.Normalize()
+		c.URL = "ping://" + uptimecore.BracketHost(c.Ping.Host)
 	case "ssl":
 		if c.SSL == nil {
 			return errors.New("an SSL check needs a host")
 		}
-		err = c.SSL.normalize()
+		err = c.SSL.Normalize()
 		c.URL = "ssl://" + net.JoinHostPort(c.SSL.Host, strconv.Itoa(c.SSL.Port))
 	case "heartbeat":
 		if c.Heartbeat == nil {
@@ -158,8 +177,10 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 			old = prev.Heartbeat
 		}
 		err = c.Heartbeat.normalize(old)
-		// The runner looks for missed pings every minute; nothing is probed.
+		// The server looks for missed pings every minute; nothing is probed,
+		// so locations do not apply.
 		c.URL, c.IntervalS, c.TimeoutMs, c.DegradedMs = "", 60, 1000, 0
+		c.Locations, c.StatusShowLocations = []string{serverLocation}, false
 	}
 	if err != nil {
 		return err
@@ -178,7 +199,7 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 	}
 	budget := c.TimeoutMs
 	if c.Kind == "ping" {
-		budget = c.Ping.Packets * (c.TimeoutMs + pingGapMs)
+		budget = c.Ping.Packets * (c.TimeoutMs + uptimecore.PingGapMs)
 	}
 	if budget > c.IntervalS*1000 {
 		return errors.New("timeout must be shorter than the interval")
@@ -190,28 +211,6 @@ func (c *UptimeCheck) normalizeKind(prev *UptimeCheck) error {
 		c.StatusShowURL = false
 	}
 	return nil
-}
-
-func bracketHost(h string) string {
-	if strings.Contains(h, ":") {
-		return "[" + h + "]"
-	}
-	return h
-}
-
-// normalizeHost accepts a host name or an IP address, without a port.
-func normalizeHost(h string) (string, error) {
-	h = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(h), "["), "]")
-	if h == "" {
-		return "", errors.New("host is required")
-	}
-	if a, err := netip.ParseAddr(h); err == nil {
-		return a.String(), nil
-	}
-	if len(h) > 253 || !hostNameRe.MatchString(h) {
-		return "", fmt.Errorf("host %q is not a valid name or IP address", h)
-	}
-	return strings.ToLower(h), nil
 }
 
 // normalizeSecrets checks secret names and puts back values sent as the
@@ -389,42 +388,12 @@ func maskHeaders(h map[string]string) map[string]string {
 	return out
 }
 
-var templateRefRe = regexp.MustCompile(`\{\{\s*(var|secret)\.([A-Za-z0-9_]+)\s*\}\}`)
-
 // onlyTemplates is true for a value that holds no literal secret, such as
 // "Bearer {{secret.TOKEN}}".
 func onlyTemplates(v string) bool {
-	rest := templateRefRe.ReplaceAllString(v, "")
+	rest := uptimecore.TemplateRefRe.ReplaceAllString(v, "")
 	rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), "Bearer"))
 	return rest == "" || strings.EqualFold(rest, "basic")
-}
-
-// maskValues replaces each value with the mask, in anything a run records.
-func maskValues(vals []string) func(string) string {
-	var keep []string
-	for _, v := range vals {
-		if len(v) >= 3 {
-			keep = append(keep, v)
-		}
-	}
-	return func(s string) string {
-		for _, v := range keep {
-			s = strings.ReplaceAll(s, v, uptimeMask)
-			if e := url.QueryEscape(v); e != v {
-				s = strings.ReplaceAll(s, e, uptimeMask)
-			}
-		}
-		return s
-	}
-}
-
-// attemptTimeout is how long one attempt of the check may take: a ping
-// check waits for each packet in turn, after looking up the host.
-func (c UptimeCheck) attemptTimeout() time.Duration {
-	if c.Kind == "ping" && c.Ping != nil {
-		return time.Duration(c.Ping.Packets)*(time.Duration(c.TimeoutMs+pingGapMs)*time.Millisecond) + 10*time.Second
-	}
-	return time.Duration(c.TimeoutMs) * time.Millisecond
 }
 
 // kindSettingsOrNil is kindSettings for any check, for comparing two.
@@ -435,84 +404,17 @@ func (c UptimeCheck) kindSettingsOrNil() any {
 	return c.kindSettings()
 }
 
-// probeKind runs one attempt of a check of the kinds above.
-func (u *uptimeRunner) probeKind(ctx context.Context, c UptimeCheck) uptimeResult {
-	switch c.Kind {
-	case "api":
-		return u.probeAPI(ctx, c)
-	case "tcp":
-		return u.probeTCP(ctx, c)
-	case "dns":
-		return u.probeDNS(ctx, c)
-	case "ping":
-		return u.probePing(ctx, c)
-	case "ssl":
-		return u.probeSSL(ctx, c)
-	case "heartbeat":
-		return u.s.heartbeatResult(ctx, c, time.Now())
-	}
-	return uptimeResult{CreatedAt: uptimeNow(), Error: "unknown check kind"}
-}
-
-// kindDialer connects to a check's target, refusing private addresses
-// unless they are allowed.
-func (u *uptimeRunner) kindDialer(timeout time.Duration) *net.Dialer {
-	d := &net.Dialer{Timeout: timeout}
-	if !u.allowPrivate() {
-		d.Control = dialGuard
-	}
-	return d
-}
-
-// precheckHost refuses a loopback name or a literal private address before
-// anything is sent.
-func (u *uptimeRunner) precheckHost(host string) error {
-	if u.allowPrivate() {
-		return nil
-	}
-	return precheckURL(&url.URL{Scheme: "http", Host: bracketHost(host)})
-}
-
-// resolveGuarded looks a host up and returns its first address (IPv4
-// first), refusing private ones unless they are allowed.
-func (u *uptimeRunner) resolveGuarded(ctx context.Context, host string) (netip.Addr, error) {
-	if err := u.precheckHost(host); err != nil {
-		return netip.Addr{}, err
-	}
-	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-	if err != nil {
-		return netip.Addr{}, err
-	}
-	if len(addrs) == 0 {
-		return netip.Addr{}, fmt.Errorf("%s has no address", host)
-	}
-	pick := addrs[0]
-	for _, a := range addrs {
-		if a.Unmap().Is4() {
-			pick = a.Unmap()
-			break
-		}
-	}
-	if !u.allowPrivate() && blockedAddr(pick) {
-		return netip.Addr{}, fmt.Errorf("%w: %s is a private, loopback or link-local address (an admin can allow it in Settings → Server → Other)", errBlockedAddress, pick)
-	}
-	return pick, nil
-}
-
-func msSince(t time.Time) float64 { return float64(time.Since(t).Microseconds()) / 1000 }
-
-func msPtr(v float64) *float64 { return &v }
-
 // recordDetail keeps what a run found beyond its uptime_results row.
-func (u *uptimeRunner) recordDetail(ctx context.Context, c UptimeCheck, r uptimeResult) error {
-	if r.Detail == nil {
+func (s *Server) recordDetail(ctx context.Context, c UptimeCheck, r uptimeResult, location string) error {
+	if r.Detail == nil || !settingsKinds[c.Kind] {
 		return nil
 	}
 	b, err := json.Marshal(r.Detail)
-	if err != nil {
+	if err != nil || len(b) > detailsMaxBytes {
 		return err
 	}
-	return u.s.db.Exec(ctx, `INSERT INTO uptime_run_details (created_at, check_id, ok, detail) VALUES (?, ?, ?, ?)`, r.CreatedAt, c.ID, boolInt(r.OK), string(b))
+	return s.db.Exec(ctx, `INSERT INTO uptime_run_details (created_at, check_id, ok, detail, location) VALUES (?, ?, ?, ?, ?)`,
+		r.CreatedAt, c.ID, boolInt(r.OK), string(b), location)
 }
 
 // handleUptimeDetails lists a check's run details in the range, newest
@@ -527,8 +429,9 @@ func (s *Server) handleUptimeDetails(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT d.created_at, d.ok, d.detail, u.duration_ms, u.error, u.status, u.retried, u.degraded
+	rows, err := s.db.Query(r.Context(), `SELECT d.created_at, d.ok, d.detail, u.duration_ms, u.error, u.status, u.retried, u.degraded, d.location
 FROM uptime_run_details d LEFT JOIN uptime_results u ON u.check_id = d.check_id AND u.created_at = d.created_at
+  AND COALESCE(u.location, 'server') = COALESCE(d.location, 'server')
 WHERE d.check_id = ? AND d.created_at >= ? AND d.created_at < ?
 ORDER BY d.created_at DESC LIMIT `+strconv.Itoa(detailsMaxRuns), id, tr.From.UTC().Format(tsLayout), tr.To.UTC().Format(tsLayout))
 	if err != nil {
@@ -546,11 +449,11 @@ ORDER BY d.created_at DESC LIMIT `+strconv.Itoa(detailsMaxRuns), id, tr.From.UTC
 			detail = []byte("{}")
 		}
 		runs = append(runs, map[string]any{"created_at": toString(row[0]), "ok": toInt(row[1]) == 1, "detail": detail,
-			"duration_ms": row[3], "error": toString(row[4]), "status": toInt(row[5]), "retried": toInt(row[6]) == 1, "degraded": toInt(row[7]) == 1})
+			"duration_ms": row[3], "error": toString(row[4]), "status": toInt(row[5]), "retried": toInt(row[6]) == 1, "degraded": toInt(row[7]) == 1, "location": fallback(toString(row[8]), serverLocation)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
 
 func (s *Server) handlePingStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, pingStatus())
+	writeJSON(w, http.StatusOK, uptimecore.PingStatus())
 }

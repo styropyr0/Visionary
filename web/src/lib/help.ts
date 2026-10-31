@@ -353,7 +353,7 @@ agent, err := visionary.New(cfg)`,
     id: "netcheck",
     title: "Check a port, a DNS name, a ping or a certificate",
     intro:
-      "TCP checks connect to host:port within the timeout; optionally they send text first and look for text in the reply, such as SSH-2.0 or +PONG. DNS checks resolve a name (A, AAAA, CNAME, MX, TXT or NS) with the system resolver or a server you name, and can require that the answers contain or equal your values; the resolution time is the response time. Ping checks send 1 to 20 ICMP echoes and record loss and round trip times; they fail above the loss you allow. Certificate checks connect with TLS, without an HTTP request, and fail when the certificate is expired, untrusted, for another name, below a minimum TLS version, or closer to expiry than your fail threshold; under the warn threshold the check is degraded.",
+      "TCP checks connect to host:port within the timeout; optionally they send text first and look for text in the reply, such as SSH-2.0 or +PONG. DNS checks resolve a name (A, AAAA, CNAME, MX, TXT or NS) with the system resolver or a server you name, and can require that the answers contain or equal your values; the resolution time is the response time. Ping checks send 1 to 20 ICMP echoes and record loss and round trip times; they fail above the loss you allow. Certificate checks connect with TLS, without an HTTP request, and fail when the certificate is expired, untrusted, for another name, below a minimum TLS version, or closer to expiry than your fail threshold; under the warn threshold the check is degraded. Location runners run these kinds too, and API checks; ping only where the agent's machine allows it, which the location picker shows.",
     any: {
       note: "Ping needs no root: Windows uses its ICMP helper, Linux and macOS use unprivileged ICMP sockets, which Linux allows for groups in the sysctl below (Docker allows them by default), or the CAP_NET_RAW capability. Without either, ping checks are paused and the page says why.",
       code: `sysctl -w net.ipv4.ping_group_range="0 2147483647"`,
@@ -369,6 +369,19 @@ agent, err := visionary.New(cfg)`,
       note: "The URL needs no sign-in, so keep it like a password; unknown URLs get a plain 404, and pings are rate limited. It stays open when Settings → Security limits the dashboard to some addresses.",
       code: `0 3 * * * curl -fsS -m 10 --retry 3 ${origin}/api/heartbeat/<token>/start && /usr/local/bin/backup.sh; curl -fsS -m 10 --retry 3 ${origin}/api/heartbeat/<token>/$?`,
       label: "crontab",
+    },
+  },
+  locations: {
+    id: "locations",
+    title: "Run checks from more places",
+    intro:
+      "A check runs from this server unless you add locations: Uptime → Locations → Add location makes one and shows its key once. Run the host agent with that key and VISIONARY_AGENT_LOCATION on a VPS in another region or inside a private network, then pick the location under Runs from in a check's form. Each location runs the check on its schedule; the check is down when any, a majority (the default) or all of them fail, so a failure in one place shows as such without opening an incident. Incidents name the locations that failed. A location that stops reporting for two minutes is marked stale and left out of the vote, and the Uptime location offline alert (made with the first location) tells admins once. Browser checks run from a location only when Chrome or Chromium is installed there. The status page shows the per-location state only for checks that tick it.",
+    any: {
+      note: "On the location's machine (or with deploy/location/compose.yaml in Docker):",
+      code: `VISIONARY_URL=https://visionary.example.com \
+VISIONARY_KEY=<location key> \
+VISIONARY_AGENT_LOCATION=frankfurt-vps visionary-agent`,
+      label: "Shell",
     },
   },
   statuspage: {
@@ -687,7 +700,7 @@ curl -H "Authorization: Bearer <read key>" \\
     id: "terraform",
     title: "Configuration as code",
     intro:
-      "Keep alert rules, channels, silences, uptime checks of every kind, dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
+      "Keep alert rules, channels, silences, uptime checks of every kind, uptime locations, dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
     any: {
       label: "main.tf",
       code: `terraform {
@@ -986,8 +999,9 @@ export const HELP: Record<Route, PageHelp> = {
       "An API check's runs show each request's status, time and size and the assertion that failed. Ping checks chart round trips and loss, DNS checks list their answers, certificate checks show the certificate and its chain.",
       "A heartbeat is not retried: it is down as soon as a ping is overdue past its grace time, or a job reports a failure, and up again with the next successful ping.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
+      "A check that runs from several locations shows a dot per location in the list, and By location on its page: each location's uptime and response time. Its state combines them by its rule; Not reporting means a location is stale and left out.",
     ],
-    setup: ["checks", "apicheck", "browsercheck", "netcheck", "heartbeat", "statuspage"],
+    setup: ["checks", "apicheck", "browsercheck", "netcheck", "heartbeat", "locations", "statuspage"],
   },
   ci: {
     title: "CI",

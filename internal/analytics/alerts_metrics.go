@@ -121,6 +121,9 @@ func alertMetrics(rule apdexRule) []metricDef {
 		{ID: "uptime_failing", Label: "Uptime check failing", Group: "uptime", Unit: "count",
 			Description: "Consecutive failed results of an uptime check, newest first. Fires per check.",
 			Scopes:      []string{"check"}, Op: ">=", Threshold: 2, UpIsBad: true},
+		{ID: "uptime_location_offline", Label: "Uptime location offline", Group: "uptime", Unit: "minutes",
+			Description: "Minutes since an uptime location's runner last reported. Fires per location; its checks are left out of the vote meanwhile.",
+			Scopes:      []string{}, Op: ">", Threshold: 5, UpIsBad: true},
 	}
 }
 
@@ -297,6 +300,8 @@ func (s *Server) observe(ctx context.Context, r alertRule, now time.Time) ([]obs
 		return s.observeLiveness(ctx, r, now)
 	case "uptime_failing":
 		return s.observeUptime(ctx, r, now)
+	case "uptime_location_offline":
+		return s.observeLocations(ctx, r, now)
 	case "security_events":
 		return s.observeSecurity(ctx, r, now)
 	case "container_events":

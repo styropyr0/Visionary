@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -61,8 +61,8 @@ const (
 	dnsMaxValues = 20
 )
 
-func (t *TCPConfig) normalize() error {
-	h, err := normalizeHost(t.Host)
+func (t *TCPConfig) Normalize() error {
+	h, err := NormalizeHost(t.Host)
 	if err != nil {
 		return err
 	}
@@ -76,9 +76,9 @@ func (t *TCPConfig) normalize() error {
 	return nil
 }
 
-func (d *DNSConfig) normalize() error {
+func (d *DNSConfig) Normalize() error {
 	d.Name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d.Name)), ".")
-	if d.Name == "" || len(d.Name) > 253 || !hostNameRe.MatchString(d.Name) {
+	if d.Name == "" || len(d.Name) > 253 || !HostNameRe.MatchString(d.Name) {
 		return errors.New("give a valid name to resolve, such as example.com")
 	}
 	d.RecordType = strings.ToUpper(strings.TrimSpace(d.RecordType))
@@ -94,7 +94,7 @@ func (d *DNSConfig) normalize() error {
 		if h, p, err := net.SplitHostPort(d.Server); err == nil {
 			host, port = h, p
 		}
-		h, err := normalizeHost(host)
+		h, err := NormalizeHost(host)
 		if err != nil {
 			return fmt.Errorf("DNS server: %w", err)
 		}
@@ -128,8 +128,8 @@ func (d *DNSConfig) normalize() error {
 	return nil
 }
 
-func (s *SSLConfig) normalize() error {
-	h, err := normalizeHost(s.Host)
+func (s *SSLConfig) Normalize() error {
+	h, err := NormalizeHost(s.Host)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (s *SSLConfig) normalize() error {
 	}
 	s.ServerName = strings.TrimSpace(s.ServerName)
 	if s.ServerName != "" {
-		if s.ServerName, err = normalizeHost(s.ServerName); err != nil {
+		if s.ServerName, err = NormalizeHost(s.ServerName); err != nil {
 			return fmt.Errorf("server name: %w", err)
 		}
 	}
@@ -166,7 +166,8 @@ func unescape(s string) string {
 	return strings.NewReplacer(`\r`, "\r", `\n`, "\n", `\t`, "\t", `\\`, `\`).Replace(s)
 }
 
-func printable(b []byte) string {
+// Printable keeps text readable: control characters become a dot.
+func Printable(b []byte) string {
 	out := make([]rune, 0, len(b))
 	for _, r := range strings.ToValidUTF8(string(b), "") {
 		switch {
@@ -182,33 +183,33 @@ func printable(b []byte) string {
 	return string(out)
 }
 
-type tcpDetail struct {
+type TCPDetail struct {
 	Address   string  `json:"address,omitempty"`
 	ConnectMs float64 `json:"connect_ms,omitempty"`
 	Banner    string  `json:"banner,omitempty"`
 }
 
-func (u *uptimeRunner) probeTCP(ctx context.Context, c UptimeCheck) (res uptimeResult) {
+func probeTCP(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	timeout := time.Duration(c.TimeoutMs) * time.Millisecond
-	detail := tcpDetail{}
+	detail := TCPDetail{}
 	defer func() {
-		res.CreatedAt = start.UTC().Format(tsLayout)
+		res.CreatedAt = start.UTC().Format(TimeLayout)
 		res.DurationMs = msSince(start)
 		res.Degraded = res.OK && c.DegradedMs > 0 && res.DurationMs > float64(c.DegradedMs)
 		res.Detail = detail
 	}()
-	fail := func(err error) uptimeResult {
-		res.OK, res.Error, res.blocked = false, probeError(err, c.TimeoutMs), errors.Is(err, errBlockedAddress)
+	fail := func(err error) Result {
+		res.OK, res.Error, res.blocked = false, ProbeError(err, c.TimeoutMs), errors.Is(err, ErrBlockedAddress)
 		return res
 	}
 	t := c.TCP
-	if err := u.precheckHost(t.Host); err != nil {
+	if err := precheckHost(allowPrivate, t.Host); err != nil {
 		return fail(err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	conn, err := u.kindDialer(timeout).DialContext(ctx, "tcp", net.JoinHostPort(t.Host, strconv.Itoa(t.Port)))
+	conn, err := kindDialer(allowPrivate, timeout).DialContext(ctx, "tcp", net.JoinHostPort(t.Host, strconv.Itoa(t.Port)))
 	if err != nil {
 		return fail(err)
 	}
@@ -234,7 +235,7 @@ func (u *uptimeRunner) probeTCP(ctx context.Context, c UptimeCheck) (res uptimeR
 				break
 			}
 		}
-		detail.Banner = clip(printable(buf), 200)
+		detail.Banner = clip(Printable(buf), 200)
 		if !strings.Contains(string(buf), want) {
 			if len(buf) == 0 {
 				return fail(fmt.Errorf("nothing received; expected %q", t.Expect))
@@ -246,7 +247,7 @@ func (u *uptimeRunner) probeTCP(ctx context.Context, c UptimeCheck) (res uptimeR
 	return res
 }
 
-type dnsDetail struct {
+type DNSDetail struct {
 	Server    string   `json:"server"`
 	Type      string   `json:"type"`
 	Answers   []string `json:"answers"`
@@ -284,12 +285,12 @@ func dnsHas(recordType string, answers []string, value string) bool {
 	return false
 }
 
-func (u *uptimeRunner) resolver(ctx context.Context, server string, timeout time.Duration) (*net.Resolver, error) {
+func resolver(ctx context.Context, allowPrivate func() bool, server string, timeout time.Duration) (*net.Resolver, error) {
 	if server == "" {
 		return net.DefaultResolver, nil
 	}
 	host, port, _ := net.SplitHostPort(server)
-	addr, err := u.resolveGuarded(ctx, host)
+	addr, err := resolveGuarded(ctx, allowPrivate, host)
 	if err != nil {
 		return nil, fmt.Errorf("DNS server: %w", err)
 	}
@@ -347,27 +348,27 @@ func lookupDNS(ctx context.Context, r *net.Resolver, recordType, name string) ([
 	return out, nil
 }
 
-func (u *uptimeRunner) probeDNS(ctx context.Context, c UptimeCheck) (res uptimeResult) {
+func probeDNS(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	timeout := time.Duration(c.TimeoutMs) * time.Millisecond
 	d := c.DNS
-	detail := dnsDetail{Server: d.Server, Type: d.RecordType, Answers: []string{}}
+	detail := DNSDetail{Server: d.Server, Type: d.RecordType, Answers: []string{}}
 	if detail.Server == "" {
 		detail.Server = "system resolver"
 	}
 	defer func() {
-		res.CreatedAt = start.UTC().Format(tsLayout)
+		res.CreatedAt = start.UTC().Format(TimeLayout)
 		res.DurationMs = msSince(start)
 		res.Degraded = res.OK && c.DegradedMs > 0 && res.DurationMs > float64(c.DegradedMs)
 		res.Detail = detail
 	}()
-	fail := func(err error) uptimeResult {
-		res.OK, res.Error, res.blocked = false, probeError(err, c.TimeoutMs), errors.Is(err, errBlockedAddress)
+	fail := func(err error) Result {
+		res.OK, res.Error, res.blocked = false, ProbeError(err, c.TimeoutMs), errors.Is(err, ErrBlockedAddress)
 		return res
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	r, err := u.resolver(ctx, d.Server, timeout)
+	r, err := resolver(ctx, allowPrivate, d.Server, timeout)
 	if err != nil {
 		return fail(err)
 	}
@@ -413,7 +414,7 @@ func (u *uptimeRunner) probeDNS(ctx context.Context, c UptimeCheck) (res uptimeR
 	return res
 }
 
-type sslDetail struct {
+type SSLDetail struct {
 	Subject       string   `json:"subject,omitempty"`
 	Issuer        string   `json:"issuer,omitempty"`
 	Names         []string `json:"names,omitempty"`
@@ -445,26 +446,26 @@ func certName(c *x509.Certificate) string {
 	return c.Subject.String()
 }
 
-func (u *uptimeRunner) probeSSL(ctx context.Context, c UptimeCheck) (res uptimeResult) {
+func probeSSL(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	timeout := time.Duration(c.TimeoutMs) * time.Millisecond
 	cfg := c.SSL
-	detail := sslDetail{}
+	detail := SSLDetail{}
 	defer func() {
-		res.CreatedAt = start.UTC().Format(tsLayout)
+		res.CreatedAt = start.UTC().Format(TimeLayout)
 		res.DurationMs = msSince(start)
 		res.Detail = detail
 	}()
-	fail := func(err error) uptimeResult {
-		res.OK, res.Error, res.blocked = false, probeError(err, c.TimeoutMs), errors.Is(err, errBlockedAddress)
+	fail := func(err error) Result {
+		res.OK, res.Error, res.blocked = false, ProbeError(err, c.TimeoutMs), errors.Is(err, ErrBlockedAddress)
 		return res
 	}
-	if err := u.precheckHost(cfg.Host); err != nil {
+	if err := precheckHost(allowPrivate, cfg.Host); err != nil {
 		return fail(err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	raw, err := u.kindDialer(timeout).DialContext(ctx, "tcp", net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)))
+	raw, err := kindDialer(allowPrivate, timeout).DialContext(ctx, "tcp", net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)))
 	if err != nil {
 		return fail(err)
 	}
@@ -497,7 +498,7 @@ func (u *uptimeRunner) probeSSL(ctx context.Context, c UptimeCheck) (res uptimeR
 	for _, ip := range leaf.IPAddresses {
 		detail.Names = append(detail.Names, ip.String())
 	}
-	detail.NotBefore, detail.NotAfter = leaf.NotBefore.UTC().Format(tsLayout), leaf.NotAfter.UTC().Format(tsLayout)
+	detail.NotBefore, detail.NotAfter = leaf.NotBefore.UTC().Format(TimeLayout), leaf.NotAfter.UTC().Format(TimeLayout)
 	detail.DaysLeft = int(leaf.NotAfter.Sub(now).Hours() / 24)
 	if leaf.NotAfter.Before(now) {
 		detail.DaysLeft = -1
@@ -506,7 +507,7 @@ func (u *uptimeRunner) probeSSL(ctx context.Context, c UptimeCheck) (res uptimeR
 	for _, cert := range st.PeerCertificates {
 		detail.Chain = append(detail.Chain, certName(cert))
 	}
-	res.CertExpiresAt = leaf.NotAfter.UTC().Format(tsLayout)
+	res.CertExpiresAt = leaf.NotAfter.UTC().Format(TimeLayout)
 	inter := x509.NewCertPool()
 	for _, cert := range st.PeerCertificates[1:] {
 		inter.AddCert(cert)

@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -26,14 +26,14 @@ type PingConfig struct {
 }
 
 const (
-	pingGapMs      = 200
+	PingGapMs      = 200
 	pingMaxPackets = 20
 )
 
 var errPingUnavailable = errors.New("ICMP ping is not available on this server")
 
-func (p *PingConfig) normalize() error {
-	h, err := normalizeHost(p.Host)
+func (p *PingConfig) Normalize() error {
+	h, err := NormalizeHost(p.Host)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (p *PingConfig) normalize() error {
 	return nil
 }
 
-type pingDetail struct {
+type PingDetail struct {
 	Address  string     `json:"address"`
 	Sent     int        `json:"sent"`
 	Received int        `json:"received"`
@@ -62,7 +62,7 @@ type pingDetail struct {
 	Method   string     `json:"method"`
 }
 
-type pingState struct {
+type PingState struct {
 	Available bool   `json:"available"`
 	Method    string `json:"method,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -72,19 +72,19 @@ type pingState struct {
 var pingProbe struct {
 	sync.Mutex
 	at    time.Time
-	state pingState
+	state PingState
 }
 
-// pingStatus says whether ping checks can run here, tested at most once a
+// PingStatus says whether ping checks can run here, tested at most once a
 // minute.
-func pingStatus() pingState {
+func PingStatus() PingState {
 	pingProbe.Lock()
 	defer pingProbe.Unlock()
 	if time.Since(pingProbe.at) < time.Minute {
 		return pingProbe.state
 	}
 	method, err := pingOpen()
-	st := pingState{Available: err == nil, Method: method}
+	st := PingState{Available: err == nil, Method: method}
 	if err != nil {
 		st.Error, st.Help = errPingUnavailable.Error()+": "+err.Error(), pingHelp
 	}
@@ -92,12 +92,12 @@ func pingStatus() pingState {
 	return st
 }
 
-func (u *uptimeRunner) probePing(ctx context.Context, c UptimeCheck) (res uptimeResult) {
+func probePing(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	p := c.Ping
-	detail := pingDetail{Sent: p.Packets, RTTs: []*float64{}}
+	detail := PingDetail{Sent: p.Packets, RTTs: []*float64{}}
 	defer func() {
-		res.CreatedAt = start.UTC().Format(tsLayout)
+		res.CreatedAt = start.UTC().Format(TimeLayout)
 		if detail.AvgMs != nil {
 			res.DurationMs = math.Round(*detail.AvgMs*1000) / 1000
 		} else {
@@ -105,18 +105,18 @@ func (u *uptimeRunner) probePing(ctx context.Context, c UptimeCheck) (res uptime
 		}
 		res.Detail = detail
 	}()
-	fail := func(err error) uptimeResult {
-		res.OK, res.Error, res.blocked = false, probeError(err, c.TimeoutMs), errors.Is(err, errBlockedAddress)
+	fail := func(err error) Result {
+		res.OK, res.Error, res.blocked = false, ProbeError(err, c.TimeoutMs), errors.Is(err, ErrBlockedAddress)
 		return res
 	}
-	st := pingStatus()
+	st := PingStatus()
 	if !st.Available {
-		res.skip = st.Error
+		res.Skip = st.Error
 		return res
 	}
 	detail.Method = st.Method
 	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	addr, err := u.resolveGuarded(rctx, p.Host)
+	addr, err := resolveGuarded(rctx, allowPrivate, p.Host)
 	cancel()
 	if err != nil {
 		return fail(err)

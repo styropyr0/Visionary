@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 func kindRunner(t *testing.T) (*Server, *uptimeRunner) {
@@ -112,25 +114,6 @@ func TestAPICheckNormalize(t *testing.T) {
 	}
 }
 
-func TestJSONPath(t *testing.T) {
-	var doc any
-	_ = json.Unmarshal([]byte(`{"a":{"b":[1,{"c d":"x"}]},"n":2.5}`), &doc)
-	for path, want := range map[string]string{"$.a.b[0]": "1", "$.a.b[1]['c d']": "x", "a.b[-1][\"c d\"]": "x", "$.n": "2.5", "$.a.b.length": "2", "$.a": `{"b":[1,{"c d":"x"}]}`} {
-		steps, err := parseJSONPath(path)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		v, ok := jsonPathGet(doc, steps)
-		if !ok || jsonText(v) != want {
-			t.Errorf("%s = %v %v, want %s", path, jsonText(v), ok, want)
-		}
-	}
-	steps, _ := parseJSONPath("$.a.z")
-	if _, ok := jsonPathGet(doc, steps); ok {
-		t.Error("missing key found")
-	}
-}
-
 func TestAPICheckRun(t *testing.T) {
 	site := apiSite()
 	defer site.Close()
@@ -142,7 +125,7 @@ func TestAPICheckRun(t *testing.T) {
 	if !res.OK || res.Status != 200 || res.Retried {
 		t.Fatalf("passing check: %+v", res)
 	}
-	d := res.Detail.(apiDetail)
+	d := res.Detail.(uptimecore.APIDetail)
 	if len(d.Requests) != 2 || d.Requests[0].State != "passed" || d.Requests[1].URL != site.URL+"/users/42" || d.Requests[0].Size == 0 {
 		t.Fatalf("detail: %+v", d)
 	}
@@ -158,8 +141,8 @@ func TestAPICheckRun(t *testing.T) {
 	bad.API.Requests[1].Assert = append(bad.API.Requests[1].Assert, APIAssertion{Source: "json", Path: "$.orders", Op: "gt", Value: "10"})
 	bad.API.Requests = append(bad.API.Requests, APIRequest{Method: "GET", URL: site.URL + "/never"})
 	bad = normalized(t, bad)
-	res = u.probeKind(ctx, bad)
-	d = res.Detail.(apiDetail)
+	res = uptimecore.ProbeKind(ctx, bad.core(), u.allowPrivate)
+	d = res.Detail.(uptimecore.APIDetail)
 	if res.OK || d.Requests[1].State != "failed" || d.Requests[2].State != "skipped" || d.Requests[1].Assertion != "$.orders > 10" || d.Requests[1].Got != "3" {
 		t.Fatalf("failing check: %+v %+v", res, d)
 	}
@@ -172,8 +155,8 @@ func TestAPICheckRun(t *testing.T) {
 	wrong.Secrets["PASS"] = "nope-wrong"
 	wrong.API.Requests[0].Body = `{"password":"{{secret.PASS}}","echo":"{{secret.PASS}}"}`
 	wrong = normalized(t, wrong)
-	res = u.probeKind(ctx, wrong)
-	d = res.Detail.(apiDetail)
+	res = uptimecore.ProbeKind(ctx, wrong.core(), u.allowPrivate)
+	d = res.Detail.(uptimecore.APIDetail)
 	if res.OK || res.Status != 401 || !strings.Contains(d.Requests[0].Excerpt, "bad password") {
 		t.Fatalf("wrong password: %+v %+v", res, d)
 	}
@@ -186,7 +169,7 @@ func TestAPICheckRun(t *testing.T) {
 	s.live().Config["uptime_allow_private"] = "false"
 	guarded := newUptimeRunner(s, uptimeSettings{workers: 1})
 	res = guarded.probeWithRetry(ctx, c)
-	if res.OK || !res.blocked || res.Retried {
+	if res.OK || !res.Blocked() || res.Retried {
 		t.Fatalf("guarded: %+v", res)
 	}
 }
@@ -218,12 +201,12 @@ func TestTCPCheck(t *testing.T) {
 	_, u := kindRunner(t)
 	ctx := context.Background()
 	check := func(tcp TCPConfig) uptimeResult {
-		return u.probeKind(ctx, normalized(t, UptimeCheck{Name: "tcp", Kind: "tcp", TimeoutMs: 2000, TCP: &tcp}))
+		return uptimecore.ProbeKind(ctx, normalized(t, UptimeCheck{Name: "tcp", Kind: "tcp", TimeoutMs: 2000, TCP: &tcp}).core(), u.allowPrivate)
 	}
 	if res := check(TCPConfig{Host: "127.0.0.1", Port: port}); !res.OK || res.ConnectMs == nil {
 		t.Fatalf("connect: %+v", res)
 	}
-	if res := check(TCPConfig{Host: "127.0.0.1", Port: port, Expect: "SSH-2.0"}); !res.OK || !strings.Contains(res.Detail.(tcpDetail).Banner, "SSH-2.0-Test") {
+	if res := check(TCPConfig{Host: "127.0.0.1", Port: port, Expect: "SSH-2.0"}); !res.OK || !strings.Contains(res.Detail.(uptimecore.TCPDetail).Banner, "SSH-2.0-Test") {
 		t.Fatalf("banner: %+v", res)
 	}
 	if res := check(TCPConfig{Host: "127.0.0.1", Port: port, Send: `PING\r\n`, Expect: "+PONG"}); !res.OK {
@@ -240,7 +223,7 @@ func TestTCPCheck(t *testing.T) {
 	}
 	u.s.live().Config["uptime_allow_private"] = "false"
 	u = newUptimeRunner(u.s, uptimeSettings{workers: 1})
-	if res := check(TCPConfig{Host: "localhost", Port: port}); res.OK || !res.blocked {
+	if res := check(TCPConfig{Host: "localhost", Port: port}); res.OK || !res.Blocked() {
 		t.Fatalf("guarded: %+v", res)
 	}
 }
@@ -305,10 +288,10 @@ func TestDNSCheck(t *testing.T) {
 	ctx := context.Background()
 	check := func(d DNSConfig) uptimeResult {
 		d.Server = server
-		return u.probeKind(ctx, normalized(t, UptimeCheck{Name: "dns", Kind: "dns", TimeoutMs: 3000, DNS: &d}))
+		return uptimecore.ProbeKind(ctx, normalized(t, UptimeCheck{Name: "dns", Kind: "dns", TimeoutMs: 3000, DNS: &d}).core(), u.allowPrivate)
 	}
 	res := check(DNSConfig{Name: "example.test", RecordType: "A"})
-	if !res.OK || res.DNSMs == nil || strings.Join(res.Detail.(dnsDetail).Answers, ",") != "192.0.2.10,192.0.2.11" {
+	if !res.OK || res.DNSMs == nil || strings.Join(res.Detail.(uptimecore.DNSDetail).Answers, ",") != "192.0.2.10,192.0.2.11" {
 		t.Fatalf("A: %+v", res)
 	}
 	if res := check(DNSConfig{Name: "example.test", RecordType: "A", Match: "contains", Values: []string{"192.0.2.11"}}); !res.OK {
@@ -328,25 +311,25 @@ func TestDNSCheck(t *testing.T) {
 	}
 	u.s.live().Config["uptime_allow_private"] = "false"
 	u = newUptimeRunner(u.s, uptimeSettings{workers: 1})
-	if res := check(DNSConfig{Name: "example.test", RecordType: "A"}); res.OK || !res.blocked {
+	if res := check(DNSConfig{Name: "example.test", RecordType: "A"}); res.OK || !res.Blocked() {
 		t.Fatalf("guarded server: %+v", res)
 	}
 }
 
 func TestPingCheck(t *testing.T) {
-	if !pingStatus().Available {
-		t.Skip("ICMP ping is not available here: " + pingStatus().Error)
+	if !uptimecore.PingStatus().Available {
+		t.Skip("ICMP ping is not available here: " + uptimecore.PingStatus().Error)
 	}
 	_, u := kindRunner(t)
 	c := normalized(t, UptimeCheck{Name: "ping", Kind: "ping", TimeoutMs: 1000, Ping: &PingConfig{Host: "127.0.0.1", Packets: 3}})
-	res := u.probeKind(context.Background(), c)
-	d := res.Detail.(pingDetail)
+	res := uptimecore.ProbeKind(context.Background(), c.core(), u.allowPrivate)
+	d := res.Detail.(uptimecore.PingDetail)
 	if !res.OK || d.Received != 3 || d.LossPct != 0 || d.AvgMs == nil || len(d.RTTs) != 3 {
 		t.Fatalf("ping: %+v %+v", res, d)
 	}
 	u.s.live().Config["uptime_allow_private"] = "false"
 	u = newUptimeRunner(u.s, uptimeSettings{workers: 1})
-	if res := u.probeKind(context.Background(), c); res.OK || !res.blocked {
+	if res := uptimecore.ProbeKind(context.Background(), c.core(), u.allowPrivate); res.OK || !res.Blocked() {
 		t.Fatalf("guarded: %+v", res)
 	}
 }
@@ -392,10 +375,10 @@ func TestSSLCheck(t *testing.T) {
 	port := tlsListener(t, shortCert(t, 5), 0)
 	check := func(s SSLConfig) uptimeResult {
 		s.Host, s.Port = "127.0.0.1", cmpOr(s.Port, port)
-		return u.probeKind(ctx, normalized(t, UptimeCheck{Name: "ssl", Kind: "ssl", TimeoutMs: 3000, SSL: &s}))
+		return uptimecore.ProbeKind(ctx, normalized(t, UptimeCheck{Name: "ssl", Kind: "ssl", TimeoutMs: 3000, SSL: &s}).core(), u.allowPrivate)
 	}
 	res := check(SSLConfig{})
-	d := res.Detail.(sslDetail)
+	d := res.Detail.(uptimecore.SSLDetail)
 	if res.OK || d.ChainValid || !d.HostnameValid || d.DaysLeft != 5 || !strings.Contains(res.Error, "not trusted") || res.CertExpiresAt == "" {
 		t.Fatalf("self-signed: %+v %+v", res, d)
 	}
@@ -510,7 +493,7 @@ func TestHeartbeatEndpoint(t *testing.T) {
 		return rec.Code
 	}
 	base := "/api/heartbeat/" + c.Heartbeat.Token
-	if res := u.probeWithRetry(ctx, stored); res.skip == "" {
+	if res := u.probeWithRetry(ctx, stored); res.Skip == "" {
 		t.Fatalf("before any ping: %+v", res)
 	}
 	if code := ping("GET", base+"/start", ""); code != 200 {
@@ -596,7 +579,7 @@ func TestKindNormalize(t *testing.T) {
 	if err := again.normalize(&hb); err != nil || again.Heartbeat.Token != hb.Heartbeat.Token {
 		t.Fatalf("token kept: %v", err)
 	}
-	if !blockedAddr(netip.MustParseAddr("127.0.0.1")) {
+	if !uptimecore.BlockedAddr(netip.MustParseAddr("127.0.0.1")) {
 		t.Fatal("guard")
 	}
 }

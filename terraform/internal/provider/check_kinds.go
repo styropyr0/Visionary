@@ -327,6 +327,11 @@ func kindProblems(kind string, set func(string) bool) map[string]string {
 					out[n] = n + " does not apply to heartbeat checks: pings are looked for every minute."
 				}
 			}
+			for _, n := range []string{"locations", "location_rule", "status_show_locations"} {
+				if set(n) {
+					out[n] = n + " does not apply to heartbeat checks: the job pings the server."
+				}
+			}
 		}
 	}
 	return out

@@ -1,6 +1,6 @@
 //go:build windows
 
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -64,7 +64,7 @@ func pingHost(ctx context.Context, addr netip.Addr, n int, wait time.Duration) (
 			continue
 		}
 		if i > 0 {
-			time.Sleep(pingGapMs * time.Millisecond)
+			time.Sleep(PingGapMs * time.Millisecond)
 		}
 		t0 := time.Now()
 		got, _, _ := icmpSendEcho.Call(h, uintptr(dst), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)), 0,

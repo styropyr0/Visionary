@@ -135,6 +135,8 @@ export interface DetailRun {
   duration_ms: number | null;
   error: string;
   detail: RunDetail;
+  /** "server" or the uptime location that ran it. */
+  location: string;
 }
 
 export interface HeartbeatPing {

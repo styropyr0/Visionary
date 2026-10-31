@@ -28,6 +28,9 @@ func TestKindProblems(t *testing.T) {
 	if p := check("ssl", "ssl", "secrets"); p["secrets"] == "" {
 		t.Fatal("ssl takes no secrets")
 	}
+	if p := check("heartbeat", "heartbeat", "locations"); p["locations"] == "" {
+		t.Fatal("heartbeat takes no locations")
+	}
 	if p := check("heartbeat", "heartbeat", "interval_s"); p["interval_s"] == "" {
 		t.Fatal("heartbeat takes no interval")
 	}

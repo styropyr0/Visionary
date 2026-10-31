@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"errors"
@@ -27,9 +27,14 @@ var blockedPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("2002::/16"),    // 6to4 likewise
 }
 
-var errBlockedAddress = errors.New("blocked address")
+// ErrBlockedAddress is wrapped by every refusal of the guard.
+var ErrBlockedAddress = errors.New("blocked address")
 
-func blockedAddr(a netip.Addr) bool {
+// GuardHint follows a refusal and says how to lift the guard where the
+// check runs.
+var GuardHint = " (an admin can allow it in Settings → Server → Other)"
+
+func BlockedAddr(a netip.Addr) bool {
 	a = a.Unmap()
 	if !a.IsValid() || a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() ||
 		a.IsInterfaceLocalMulticast() || a.IsMulticast() || a.IsUnspecified() {
@@ -43,36 +48,36 @@ func blockedAddr(a netip.Addr) bool {
 	return false
 }
 
-// dialGuard is a net.Dialer Control function: it sees the resolved address
+// DialGuard is a net.Dialer Control function: it sees the resolved address
 // of every connection, just before connecting.
-func dialGuard(_, address string, _ syscall.RawConn) error {
+func DialGuard(_, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return err
 	}
 	a, err := netip.ParseAddr(host)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errBlockedAddress, host)
+		return fmt.Errorf("%w: %s", ErrBlockedAddress, host)
 	}
-	if blockedAddr(a) {
-		return fmt.Errorf("%w: %s is a private, loopback or link-local address (an admin can allow it in Settings → Server → Other)", errBlockedAddress, a)
+	if BlockedAddr(a) {
+		return fmt.Errorf("%w: %s is a private, loopback or link-local address%s", ErrBlockedAddress, a, GuardHint)
 	}
 	return nil
 }
 
-// precheckURL refuses obvious targets before any request: a literal private
+// PrecheckURL refuses obvious targets before any request: a literal private
 // IP or localhost. Names that resolve to private addresses are caught by
-// dialGuard.
-func precheckURL(u *url.URL) error {
+// DialGuard.
+func PrecheckURL(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return fmt.Errorf("%w: %s is a loopback name (an admin can allow it in Settings → Server → Other)", errBlockedAddress, host)
+		return fmt.Errorf("%w: %s is a loopback name%s", ErrBlockedAddress, host, GuardHint)
 	}
-	if a, err := netip.ParseAddr(host); err == nil && blockedAddr(a) {
-		return fmt.Errorf("%w: %s is a private, loopback or link-local address (an admin can allow it in Settings → Server → Other)", errBlockedAddress, a)
+	if a, err := netip.ParseAddr(host); err == nil && BlockedAddr(a) {
+		return fmt.Errorf("%w: %s is a private, loopback or link-local address%s", ErrBlockedAddress, a, GuardHint)
 	}
 	return nil
 }

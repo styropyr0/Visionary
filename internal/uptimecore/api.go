@@ -1,4 +1,4 @@
-package analytics
+package uptimecore
 
 import (
 	"bytes"
@@ -80,21 +80,14 @@ var (
 	numericOps = map[string]bool{"lt": true, "lte": true, "gt": true, "gte": true}
 )
 
-func (c *UptimeCheck) normalizeAPI(prev *UptimeCheck) error {
-	var prevSecrets map[string]string
+// Normalize validates the requests; prev is the stored config on update,
+// whose masked header values survive, and secrets the check's secrets.
+func (a *APIConfig) Normalize(prev *APIConfig, secrets map[string]string) error {
 	var prevReqs []APIRequest
 	if prev != nil {
-		prevSecrets = prev.Secrets
-		if prev.API != nil {
-			prevReqs = prev.API.Requests
-		}
+		prevReqs = prev.Requests
 	}
-	secrets, err := normalizeSecrets(c.Secrets, prevSecrets)
-	if err != nil {
-		return err
-	}
-	c.Secrets = secrets
-	reqs := c.API.Requests
+	reqs := a.Requests
 	if len(reqs) == 0 || len(reqs) > apiMaxRequests {
 		return fmt.Errorf("an API check needs 1–%d requests", apiMaxRequests)
 	}
@@ -111,7 +104,6 @@ func (c *UptimeCheck) normalizeAPI(prev *UptimeCheck) error {
 			defined[ex.Var] = true
 		}
 	}
-	c.URL = reqs[0].URL
 	return nil
 }
 
@@ -124,14 +116,14 @@ func (rq *APIRequest) normalize(old *APIRequest, defined map[string]bool, secret
 	if rq.Method == "" {
 		rq.Method = "GET"
 	}
-	if !uptimeMethods[rq.Method] {
+	if !methods[rq.Method] {
 		return fmt.Errorf("method %q is not supported", rq.Method)
 	}
 	rq.URL = strings.TrimSpace(rq.URL)
 	if len(rq.URL) > 2048 {
 		return errors.New("URL is too long")
 	}
-	u, err := url.Parse(templateRefRe.ReplaceAllString(rq.URL, "x"))
+	u, err := url.Parse(TemplateRefRe.ReplaceAllString(rq.URL, "x"))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return errors.New("URL must be an absolute http:// or https:// address")
 	}
@@ -141,14 +133,14 @@ func (rq *APIRequest) normalize(old *APIRequest, defined map[string]bool, secret
 	if len(rq.Body) > apiMaxBody {
 		return errors.New("body is limited to 64 KB")
 	}
-	if rq.BodyType == "json" && rq.Body != "" && !json.Valid([]byte(templateRefRe.ReplaceAllString(rq.Body, "0"))) {
+	if rq.BodyType == "json" && rq.Body != "" && !json.Valid([]byte(TemplateRefRe.ReplaceAllString(rq.Body, "0"))) {
 		return errors.New("body is not valid JSON")
 	}
 	if rq.TimeoutMs != 0 && (rq.TimeoutMs < 1000 || rq.TimeoutMs > 60000) {
 		return errors.New("timeout must be between 1 and 60 seconds")
 	}
-	if len(rq.Headers) > uptimeMaxHeaders {
-		return fmt.Errorf("at most %d headers", uptimeMaxHeaders)
+	if len(rq.Headers) > maxHeaders {
+		return fmt.Errorf("at most %d headers", maxHeaders)
 	}
 	headers := make(map[string]string, len(rq.Headers))
 	for k, v := range rq.Headers {
@@ -159,7 +151,7 @@ func (rq *APIRequest) normalize(old *APIRequest, defined map[string]bool, secret
 		if strings.ContainsAny(v, "\r\n") || len(v) > 4096 {
 			return fmt.Errorf("header %s has an invalid value", k)
 		}
-		if v == uptimeMask {
+		if v == Mask {
 			prev, ok := "", false
 			if old != nil {
 				prev, ok = headerValue(old.Headers, k)
@@ -179,7 +171,7 @@ func (rq *APIRequest) normalize(old *APIRequest, defined map[string]bool, secret
 	for _, v := range rq.Headers {
 		refs += "\n" + v
 	}
-	for _, m := range templateRefRe.FindAllStringSubmatch(refs, -1) {
+	for _, m := range TemplateRefRe.FindAllStringSubmatch(refs, -1) {
 		if _, ok := secrets[m[2]]; m[1] == "secret" && !ok {
 			return fmt.Errorf("uses secret %s, which is not defined", m[2])
 		}
@@ -254,7 +246,7 @@ func (a *APIAssertion) normalize() error {
 	case a.Op == "exists" || a.Op == "not_exists":
 		a.Value = ""
 	case a.Op == "in":
-		if _, err := parseExpectStatus(strings.ReplaceAll(a.Value, " ", "")); err != nil {
+		if _, err := ParseExpectStatus(strings.ReplaceAll(a.Value, " ", "")); err != nil {
 			return err
 		}
 	case a.Op == "matches":
@@ -484,8 +476,8 @@ func (a APIAssertion) check(r *apiResponse) (bool, string) {
 	}
 	switch a.Op {
 	case "in":
-		rs, _ := parseExpectStatus(strings.ReplaceAll(a.Value, " ", ""))
-		return show(statusAccepted(rs, r.status))
+		rs, _ := ParseExpectStatus(strings.ReplaceAll(a.Value, " ", ""))
+		return show(StatusAccepted(rs, r.status))
 	case "equals", "not_equals":
 		eq := got == a.Value
 		if x, err1 := strconv.ParseFloat(got, 64); err1 == nil {
@@ -548,10 +540,10 @@ func (ex APIExtract) extract(r *apiResponse) (string, error) {
 	return jsonText(v), nil
 }
 
-// apiRequestResult is how one request of a run did. Nothing in it holds a
+// APIRequestResult is how one request of a run did. Nothing in it holds a
 // secret: URLs and texts are masked, and only a short excerpt of a failed
 // response's body is kept.
-type apiRequestResult struct {
+type APIRequestResult struct {
 	Name       string  `json:"name"`
 	Method     string  `json:"method"`
 	URL        string  `json:"url"`
@@ -565,8 +557,8 @@ type apiRequestResult struct {
 	Excerpt    string  `json:"excerpt,omitempty"`
 }
 
-type apiDetail struct {
-	Requests []apiRequestResult `json:"requests"`
+type APIDetail struct {
+	Requests []APIRequestResult `json:"requests"`
 }
 
 func (rq APIRequest) label(i int) string {
@@ -579,8 +571,8 @@ func (rq APIRequest) label(i int) string {
 // fill puts variables and secrets into a template.
 func fill(s string, vars, secrets map[string]string) (string, error) {
 	var missing error
-	out := templateRefRe.ReplaceAllStringFunc(s, func(m string) string {
-		p := templateRefRe.FindStringSubmatch(m)
+	out := TemplateRefRe.ReplaceAllStringFunc(s, func(m string) string {
+		p := TemplateRefRe.FindStringSubmatch(m)
 		src := vars
 		if p[1] == "secret" {
 			src = secrets
@@ -594,13 +586,13 @@ func fill(s string, vars, secrets map[string]string) (string, error) {
 	return out, missing
 }
 
-func (u *uptimeRunner) probeAPI(ctx context.Context, c UptimeCheck) (res uptimeResult) {
+func probeAPI(ctx context.Context, c Check, allowPrivate func() bool) (res Result) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	vars := map[string]string{}
 	reqs := c.API.Requests
-	detail := apiDetail{Requests: make([]apiRequestResult, len(reqs))}
+	detail := APIDetail{Requests: make([]APIRequestResult, len(reqs))}
 	failed := -1
 	for i, rq := range reqs {
 		rr := &detail.Requests[i]
@@ -608,7 +600,7 @@ func (u *uptimeRunner) probeAPI(ctx context.Context, c UptimeCheck) (res uptimeR
 		if failed >= 0 {
 			continue
 		}
-		why, blocked := u.apiRequest(ctx, c, rq, vars, rr)
+		why, blocked := apiRequest(ctx, allowPrivate, c, rq, vars, rr)
 		if why != "" {
 			failed, rr.State = i, "failed"
 			res.Error, res.blocked = fmt.Sprintf("%s: %s", rq.label(i), why), blocked
@@ -622,14 +614,14 @@ func (u *uptimeRunner) probeAPI(ctx context.Context, c UptimeCheck) (res uptimeR
 		vals = append(vals, v)
 	}
 	for k, v := range vars {
-		if secretHeaderRe.MatchString(k) {
+		if SecretNameRe.MatchString(k) {
 			vals = append(vals, v)
 		}
 	}
-	mask := maskValues(vals)
+	mask := MaskValues(vals)
 	for i := range detail.Requests {
 		rr := &detail.Requests[i]
-		rr.URL = mask(redactURL(rr.URL))
+		rr.URL = mask(RedactURL(rr.URL))
 		rr.Got, rr.Error, rr.Excerpt = mask(rr.Got), mask(rr.Error), mask(rr.Excerpt)
 		if rr.Status > 0 {
 			res.Status = rr.Status
@@ -638,7 +630,7 @@ func (u *uptimeRunner) probeAPI(ctx context.Context, c UptimeCheck) (res uptimeR
 	res.Error = clip(mask(res.Error), 300)
 	res.OK = failed < 0
 	res.Detail = detail
-	res.CreatedAt = start.UTC().Format(tsLayout)
+	res.CreatedAt = start.UTC().Format(TimeLayout)
 	res.DurationMs = msSince(start)
 	res.Degraded = res.OK && c.DegradedMs > 0 && res.DurationMs > float64(c.DegradedMs)
 	return res
@@ -646,7 +638,7 @@ func (u *uptimeRunner) probeAPI(ctx context.Context, c UptimeCheck) (res uptimeR
 
 // apiRequest sends one request and checks its response, filling rr. It
 // returns why the request failed, or "".
-func (u *uptimeRunner) apiRequest(ctx context.Context, c UptimeCheck, rq APIRequest, vars map[string]string, rr *apiRequestResult) (string, bool) {
+func apiRequest(ctx context.Context, allowPrivate func() bool, c Check, rq APIRequest, vars map[string]string, rr *APIRequestResult) (string, bool) {
 	target, err := fill(rq.URL, vars, c.Secrets)
 	if err != nil {
 		return err.Error(), false
@@ -660,9 +652,9 @@ func (u *uptimeRunner) apiRequest(ctx context.Context, c UptimeCheck, rq APIRequ
 	if rq.TimeoutMs > 0 {
 		timeout = min(timeout, rq.TimeoutMs)
 	}
-	if !u.allowPrivate() {
-		if err := precheckURL(parsed); err != nil {
-			return probeError(err, timeout), true
+	if !allowPrivate() {
+		if err := PrecheckURL(parsed); err != nil {
+			return ProbeError(err, timeout), true
 		}
 	}
 	body, err := fill(rq.Body, vars, c.Secrets)
@@ -686,7 +678,7 @@ func (u *uptimeRunner) apiRequest(ctx context.Context, c UptimeCheck, rq APIRequ
 	if err != nil {
 		return "invalid request", false
 	}
-	req.Header.Set("User-Agent", uptimeUserAgent)
+	req.Header.Set("User-Agent", userAgent)
 	if ct := apiBodyTypes[rq.BodyType]; ct != "" && body != "" {
 		req.Header.Set("Content-Type", ct)
 	}
@@ -704,17 +696,17 @@ func (u *uptimeRunner) apiRequest(ctx context.Context, c UptimeCheck, rq APIRequ
 	cc := c
 	cc.TimeoutMs = timeout
 	t0 := time.Now()
-	resp, err := u.client(cc).Do(req)
+	resp, err := client(cc, allowPrivate).Do(req)
 	if err != nil {
 		rr.DurationMs = msSince(t0)
-		return probeError(err, timeout), errors.Is(err, errBlockedAddress)
+		return ProbeError(err, timeout), errors.Is(err, ErrBlockedAddress)
 	}
 	defer resp.Body.Close()
-	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, uptimeMaxBody))
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	r := &apiResponse{status: resp.StatusCode, header: resp.Header, body: raw, ms: msSince(t0)}
 	rr.Status, rr.DurationMs, rr.Size = r.status, r.ms, len(raw)
 	if readErr != nil {
-		return probeError(readErr, timeout), false
+		return ProbeError(readErr, timeout), false
 	}
 	excerpt := func() string { return clip(string(bytes.TrimSpace(raw)), apiExcerpt) }
 	hasStatus := false

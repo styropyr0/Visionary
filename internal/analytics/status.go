@@ -34,6 +34,14 @@ type statusCheck struct {
 	State    string      `json:"state"` // operational, degraded, outage, paused, unknown
 	Uptime90 *float64    `json:"uptime_90d"`
 	Days     []statusDay `json:"days"`
+	// Locations break the state down by where the check runs from, for
+	// checks that opt in; location names can be internal.
+	Locations []statusLocation `json:"locations,omitempty"`
+}
+
+type statusLocation struct {
+	Name  string `json:"name"`
+	State string `json:"state"` // operational, degraded, outage, unknown
 }
 
 type statusDay struct {
@@ -43,11 +51,12 @@ type statusDay struct {
 }
 
 type statusIncident struct {
-	Check     string  `json:"check"`
-	StartedAt string  `json:"started_at"`
-	EndedAt   *string `json:"ended_at"`
-	DurationS int64   `json:"duration_s"`
-	Ongoing   bool    `json:"ongoing"`
+	Check     string   `json:"check"`
+	StartedAt string   `json:"started_at"`
+	EndedAt   *string  `json:"ended_at"`
+	DurationS int64    `json:"duration_s"`
+	Ongoing   bool     `json:"ongoing"`
+	Locations []string `json:"locations,omitempty"`
 }
 
 // dayLevel colors a day: any failure is at least minor; below 99% major.
@@ -118,6 +127,10 @@ func (s *Server) buildStatus(ctx context.Context) (*statusPage, error) {
 	if err != nil {
 		return nil, err
 	}
+	locs, err := s.locationStates(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	page := &statusPage{Title: s.statusTitle(), Checks: []statusCheck{}, Incidents: []statusIncident{}, UpdatedAt: now.Format(tsLayout)}
 	var down, slow, live int
@@ -127,6 +140,20 @@ func (s *Server) buildStatus(ctx context.Context) (*statusPage, error) {
 		sc := statusCheck{Name: c.Name, Days: make([]statusDay, len(st.Days))}
 		if c.StatusShowURL {
 			sc.URL = redactURL(c.URL)
+		}
+		if c.StatusShowLocations {
+			for _, l := range locs[c.ID] {
+				state := "unknown"
+				switch l.State {
+				case "up":
+					state = "operational"
+				case "degraded":
+					state = "degraded"
+				case "down":
+					state = "outage"
+				}
+				sc.Locations = append(sc.Locations, statusLocation{Name: l.Name, State: state})
+			}
 		}
 		var n, failed int64
 		for i, b := range st.Days {
@@ -158,7 +185,11 @@ func (s *Server) buildStatus(ctx context.Context) (*statusPage, error) {
 			return nil, err
 		}
 		for _, in := range incidents {
-			page.Incidents = append(page.Incidents, statusIncident{Check: c.Name, StartedAt: in.StartedAt, EndedAt: in.EndedAt, DurationS: in.DurationS, Ongoing: in.Ongoing})
+			si := statusIncident{Check: c.Name, StartedAt: in.StartedAt, EndedAt: in.EndedAt, DurationS: in.DurationS, Ongoing: in.Ongoing}
+			if c.StatusShowLocations {
+				si.Locations = in.Locations
+			}
+			page.Incidents = append(page.Incidents, si)
 		}
 	}
 	switch {

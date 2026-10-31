@@ -92,6 +92,7 @@ func (p *visionaryProvider) Resources(context.Context) []func() resource.Resourc
 		newAlertChannelResource,
 		newAlertSilenceResource,
 		newUptimeCheckResource,
+		newUptimeLocationResource,
 		newDashboardResource,
 		newAPIKeyResource,
 	}

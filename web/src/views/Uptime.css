@@ -403,6 +403,145 @@ table.data.up-table td {
   overflow-wrap: anywhere;
 }
 
+/* Locations */
+.up-loc-intro {
+  margin: 0;
+  padding: 0 16px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.modal .up-loc-intro { padding: 0; margin: 10px 0 6px; }
+.up-loc-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.up-loc-name svg { flex: none; color: var(--text-3); }
+.up-loc-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.up-loc-state i,
+.up-loc-dot i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.up-loc-state.online i { background: var(--good); }
+.up-loc-state.offline i { background: var(--critical); }
+.up-key-secret {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.up-key-secret code,
+.up-key-secret pre {
+  flex: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12.5px;
+}
+.up-loc-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.up-loc-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.up-loc-pick.on { border-color: var(--accent); background: var(--accent-wash); }
+.up-loc-pick.off { color: var(--text-3); cursor: default; }
+.up-loc-pick input { accent-color: var(--accent); margin: 0; }
+.up-loc-rule { align-items: center; margin-top: 4px; }
+.up-loc-rule > span { color: var(--text-2); font-size: 12.5px; }
+.up-loc-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 3px;
+}
+.up-loc-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.up-loc-dot.up i { background: var(--good); }
+.up-loc-dot.degraded i { background: var(--warning); }
+.up-loc-dot.down i { background: var(--critical); }
+.up-loc-dot.down { color: var(--critical-text); }
+.up-loc-dot.stale i,
+.up-loc-dot.no_browser i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.up-loc-dot.stale,
+.up-loc-dot.no_browser { color: var(--text-3); }
+.up-loc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 4px 16px 16px;
+}
+.up-loc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.up-loc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.up-loc-card-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.up-loc-card-head .up-loc-dot { margin-left: auto; }
+.up-loc-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.up-loc-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.up-loc-figures div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.up-loc-figures span { font-size: 11.5px; }
+.up-loc-figures b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.up-loc-mini { height: 34px; }
+.up-loc-mini svg { display: block; width: 100%; height: 100%; }
+.up-loc-mini.none { display: flex; align-items: center; font-size: 11.5px; }
+
 /* Kinds of check: the picker in the form, the icon in the list, and what the
    detail page shows for API, TCP, DNS, ping, certificate and heartbeat checks. */
 .up-kinds {

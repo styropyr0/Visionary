@@ -141,11 +141,14 @@ variable "probe_password" {
 - `heartbeat` (Attributes) Heartbeat check (kind heartbeat): a job calls its URL; it is down when no ping arrives in time or the job reports a failure. (see [below for nested schema](#nestedatt--heartbeat))
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
 - `kind` (String) http (default), browser, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.
+- `location_rule` (String) With several locations, the check is down when any, a majority (default) or all of them fail.
+- `locations` (List of String) Where the check runs from: "server" (the Visionary server) and names of visionary_uptime_location (default ["server"]).
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
 - `ping` (Attributes) Ping check (kind ping): ICMP echo, reporting loss and round trip time. timeout_ms is each reply's wait (default 2000). (see [below for nested schema](#nestedatt--ping))
 - `secrets` (Map of String, Sensitive) Browser and api check secrets, used as {{secret.NAME}}.
 - `ssl` (Attributes) Certificate check (kind ssl): validity, days to expiry, hostname, chain and TLS version, without an HTTP request. (see [below for nested schema](#nestedatt--ssl))
+- `status_show_locations` (Boolean) Break the check down by location on the status page (location names become public).
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
 - `tcp` (Attributes) TCP check (kind tcp): the port accepts a connection, and optionally answers what is sent. (see [below for nested schema](#nestedatt--tcp))

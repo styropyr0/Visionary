@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 // Heartbeat checks are pushed to instead of probed: a cron job, backup
@@ -201,13 +203,13 @@ func (s *Server) heartbeatResult(ctx context.Context, c UptimeCheck, now time.Ti
 	p, err := s.lastHeartbeats(ctx, c.ID)
 	if err != nil {
 		res.Error = "could not read the pings"
-		res.skip = res.Error
+		res.Skip = res.Error
 		return res
 	}
 	created, _ := time.Parse(tsLayout, c.CreatedAt)
 	v := c.Heartbeat.verdict(p, created, now)
 	if v.waiting {
-		res.skip = "no ping yet; the first is expected by " + v.next.UTC().Format("2006-01-02 15:04 UTC")
+		res.Skip = "no ping yet; the first is expected by " + v.next.UTC().Format("2006-01-02 15:04 UTC")
 	}
 	res.OK, res.Error = v.ok, v.reason
 	if p.durationMs != nil {
@@ -299,7 +301,7 @@ func (s *Server) handleHeartbeatPing(w http.ResponseWriter, r *http.Request) {
 			message = string(b)
 		}
 	}
-	message = clip(strings.TrimSpace(printable([]byte(message))), heartbeatMaxMessage)
+	message = clip(strings.TrimSpace(uptimecore.Printable([]byte(message))), heartbeatMaxMessage)
 	now := time.Now().UTC()
 	var duration any
 	if kind == "success" {
@@ -335,7 +337,7 @@ func (s *Server) handleHeartbeatPing(w http.ResponseWriter, r *http.Request) {
 		wasUp := err == nil && len(last.Rows) > 0 && toInt(last.Rows[0][0]) == 1
 		if kind == "fail" || !wasUp {
 			res := s.heartbeatResult(ctx, c, now.Add(time.Millisecond))
-			if res.skip == "" {
+			if res.Skip == "" {
 				if err := runnerFor(s).record(ctx, c, res); err != nil {
 					s.logger.Warn("heartbeat result not saved", "check_id", id, "err", err)
 				}

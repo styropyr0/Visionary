@@ -87,7 +87,7 @@ func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Each part may refer to the ones before it.
-	steps := []func(configDoc) error{ci.channels, ci.checks, ci.rules, ci.silences, ci.panels, ci.dashboards, ci.logViews, ci.pages}
+	steps := []func(configDoc) error{ci.channels, ci.locations, ci.checks, ci.rules, ci.silences, ci.panels, ci.dashboards, ci.logViews, ci.pages}
 	for _, step := range steps {
 		if err := step(doc); err != nil {
 			s.fail(w, err)
@@ -282,6 +282,7 @@ func (ci *configImport) checks(doc configDoc) error {
 			BodyContains: in.BodyContains, Headers: in.Headers, IntervalS: in.IntervalS, TimeoutMs: in.TimeoutMs, DegradedMs: in.DegradedMs,
 			FollowRedirects: orTrue(in.FollowRedirects), Enabled: orTrue(in.Enabled), OnStatusPage: in.OnStatusPage,
 			StatusShowURL: in.StatusShowURL, Steps: in.Steps, Secrets: in.Secrets, FinalScreenshot: in.FinalScreenshot,
+			Locations: in.Locations, LocationRule: in.LocationRule, StatusShowLocations: in.StatusShowLocations,
 			API: in.API, TCP: in.TCP, DNS: in.DNS, Ping: in.Ping, SSL: in.SSL, Heartbeat: in.Heartbeat}
 		name := strings.TrimSpace(in.Name)
 		var cur *UptimeCheck
@@ -300,6 +301,10 @@ func (ci *configImport) checks(doc configDoc) error {
 				why += " (secrets are left out of exports: put the value in the file)"
 			}
 			ci.skip("uptime_check", name, why)
+			continue
+		}
+		if missing := ci.missingLocation(c); missing != "" {
+			ci.skip("uptime_check", name, "no location named "+strconv.Quote(missing))
 			continue
 		}
 		var alert *checkAlertInput

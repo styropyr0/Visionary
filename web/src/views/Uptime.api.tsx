@@ -10,6 +10,7 @@ import { formatLogTime } from "../lib/time";
 import { MASK } from "../lib/uptime";
 import type { ApiAssertion, ApiExtract, ApiRequest, AssertOp, AssertSource, DetailRun } from "../lib/uptimeKinds";
 import { KeyValueRows } from "./Uptime.kinds";
+import { withLocation } from "./Uptime.results";
 import { StateBadge } from "./Uptime.parts";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -240,7 +241,7 @@ export function ApiRunsPanel({ runs, loading, error }: { runs?: DetailRun[]; loa
         loading={loading}
         error={error ?? undefined}
         bodyHeight={120}
-        table={result && (runs!.length === 0 ? <div className="panel-state">No runs in this range.</div> : <DataTable result={result} columns={cols} maxHeight={440} sortable={false} onRowClick={(row) => setOpen(runs![Number(row[6])])} />)}
+        table={result && (runs!.length === 0 ? <div className="panel-state">No runs in this range.</div> : <DataTable {...withLocation(result, cols, runs)} maxHeight={440} sortable={false} onRowClick={(row) => setOpen(runs![Number(row[6])])} />)}
       />
       {open && (
         <Drawer title={`Run at ${formatLogTime(open.created_at)}`} onClose={() => setOpen(null)}>

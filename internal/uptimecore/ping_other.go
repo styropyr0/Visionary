@@ -1,6 +1,6 @@
 //go:build !windows
 
-package analytics
+package uptimecore
 
 import (
 	"context"
@@ -80,7 +80,7 @@ func pingHost(ctx context.Context, addr netip.Addr, n int, wait time.Duration) (
 			continue
 		}
 		if seq > 1 {
-			time.Sleep(pingGapMs * time.Millisecond)
+			time.Sleep(PingGapMs * time.Millisecond)
 		}
 		msg := icmp.Message{Type: echo, Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte("visionary-uptime-ping")}}
 		b, err := msg.Marshal(nil)
