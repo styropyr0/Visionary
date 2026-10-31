@@ -1984,11 +1984,15 @@ pre.code {
   gap: 4px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .tabs button {
+  flex: none;
   height: 34px;
   padding: 0 10px;
+  white-space: nowrap;
   margin-bottom: -1px;
   border: 0;
   border-bottom: 2px solid transparent;
