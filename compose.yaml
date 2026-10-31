@@ -12,6 +12,10 @@
 #
 #   VISIONARY_TARGET=browser docker compose up -d --build
 #
+# The host agent for this machine too, with a server key from Settings → API keys:
+#
+#   VISIONARY_KEY=<server key> docker compose --profile agent up -d --build
+#
 # Two replicas behind a proxy: see deploy/replicas/compose.yaml
 name: visionary
 
@@ -51,5 +55,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Only with --profile agent, and on the host network so it reaches the server at localhost
+  agent:
+    profiles: [agent]
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: ghcr.io/styropyr0/visionary-agent
+    pid: host
+    network_mode: host
+    volumes:
+      - /:/host:ro
+      - agent:/var/lib/visionary-agent
+    environment:
+      HOST_ROOT: /host
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ETC: /host/etc
+      VISIONARY_URL: http://localhost:8090
+      VISIONARY_KEY: ${VISIONARY_KEY:-}
+    depends_on:
+      - visionary
+    restart: unless-stopped
+
 volumes:
   db:
+  agent:

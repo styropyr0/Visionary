@@ -11,10 +11,9 @@ does nothing without a server to send to.
 | To watch a whole machine: its drives, processes, services, Docker containers and SSH logins | this agent, installed on that machine |
 | To watch your app (requests, errors, its own CPU and memory) | an SDK in the app ([SDKs](../../Readme.md)) |
 
-There is no Docker image of the agent. It runs on the machine itself as a
-systemd service, because it reads the machine's processes, logs and container
-engine directly. An older `ghcr.io/styropyr0/visionary-agent` image from
-before v0.5.0 is no longer built or updated.
+The usual install runs it on the machine itself as a systemd service. It can
+also [run in a container](#run-it-in-a-container) from the
+`ghcr.io/styropyr0/visionary-agent` image.
 
 ## What it reports
 
@@ -83,6 +82,44 @@ none runs when `VISIONARY_AGENT_SECURITY` is off):
 `VISIONARY_AGENT_GPU=off` (`-gpu=false`) stops GPU readings, so nvidia-smi
 never runs. Counting sockets in CLOSE_WAIT walks `/proc/net/tcp`, so it is
 skipped on hosts with more than 20,000 sockets in use.
+
+## Run it in a container
+
+The host install above is still the recommended way. Where a container is
+easier, the `ghcr.io/styropyr0/visionary-agent` image (built from
+[`Dockerfile.agent`](../../Dockerfile.agent) on every release) does the same
+job if it is given the host:
+
+```sh
+docker run -d --name visionary-agent --restart unless-stopped \
+  --pid=host --net=host -v /:/host:ro \
+  -v visionary-agent:/var/lib/visionary-agent \
+  -e HOST_ROOT=/host -e HOST_PROC=/host/proc -e HOST_SYS=/host/sys -e HOST_ETC=/host/etc \
+  -e VISIONARY_URL=https://visionary.example.com -e VISIONARY_KEY=<server key> \
+  ghcr.io/styropyr0/visionary-agent
+```
+
+`--pid=host` shows the host's processes, `--net=host` its interfaces and
+listening ports, and `/:/host` its drives, `/etc`, home directories and logs.
+With `HOST_ROOT` set the agent reads host files under it, takes the machine's
+name from `/host/etc/hostname`, finds the Docker or Podman socket under
+`/host/run` (or one mounted at `/var/run/docker.sock`), and runs `systemctl`,
+`journalctl` and the package manager of the host through `chroot /host`, so
+systemd units, the journal, SSH logins and pending updates work as on the
+host. Paths in `VISIONARY_AGENT_LOGS` are host paths. The volume keeps log
+positions across restarts.
+
+What differs from the host install:
+
+- GPUs need the NVIDIA container toolkit and `--gpus all`. Without it the
+  agent tries the host's nvidia-smi through the chroot, which only works when
+  the container can open the GPU devices.
+- It runs as root in the container, and with `/` mounted read-only it sees
+  every file the host's root can read.
+- The agent's own container shows up in the container list with host network
+  and host PID findings.
+- Uptime location mode has no Chromium in this image, so browser checks are
+  skipped.
 
 ## Logs
 

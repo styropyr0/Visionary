@@ -1,0 +1,32 @@
+# Visionary host agent: watches the machine it runs on and reports it to a
+# Visionary server (see cmd/visionary-agent/README.md)
+#   docker build -f Dockerfile.agent -t visionary-agent .
+#
+# The container has to see the host, not itself:
+#   docker run -d --name visionary-agent --restart unless-stopped \
+#     --pid=host --net=host -v /:/host:ro \
+#     -e HOST_ROOT=/host -e HOST_PROC=/host/proc -e HOST_SYS=/host/sys -e HOST_ETC=/host/etc \
+#     -e VISIONARY_URL=https://visionary.example.com -e VISIONARY_KEY=<server key> \
+#     ghcr.io/styropyr0/visionary-agent
+#
+# systemctl, journalctl and the package manager run on the host through
+# chroot into /host, so the image keeps busybox and runs as root
+
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.22 AS build
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY sdks/go/go.mod sdks/go/go.sum sdks/go/
+RUN go mod download
+COPY cmd/visionary-agent/ cmd/visionary-agent/
+COPY internal/agentapi/ internal/agentapi/
+COPY internal/uptimecore/ internal/uptimecore/
+COPY sdks/go/ sdks/go/
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION:-dev}" -o /out/visionary-agent ./cmd/visionary-agent
+
+FROM alpine:3.22
+COPY --from=build /out/visionary-agent /usr/local/bin/visionary-agent
+ENTRYPOINT ["/usr/local/bin/visionary-agent"]

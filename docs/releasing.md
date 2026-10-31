@@ -23,8 +23,9 @@ Some packages need no upload:
   which is what `go get github.com/styropyr0/visionary/sdks/go@v0.4.0` resolves.
 - **Host agent**: the `visionary-agent-linux-amd64` and `-arm64` binaries (plus `SHA256SUMS`)
   are attached to the GitHub Release, where
-  [`deploy/agent/install.sh`](../deploy/agent/install.sh) downloads them. It runs on the host, so
-  there is no image.
+  [`deploy/agent/install.sh`](../deploy/agent/install.sh) downloads them. The same tag also
+  publishes the `ghcr.io/styropyr0/visionary-agent` image from
+  [`Dockerfile.agent`](../Dockerfile.agent), for running it in a container.
 - **Uptime checks CLI**: the same job builds `visionary-checks-<os>-<arch>` (Linux, macOS and
   Windows, amd64 and arm64) from [`cmd/visionary-checks`](../cmd/visionary-checks) and adds them
   to `SHA256SUMS`. The composite action [`.github/actions/run-checks`](../.github/actions/run-checks/action.yml)
@@ -299,7 +300,7 @@ they already have).
 
    - **SDK packages** (`sdks.yml`)
    - **Android SDK** (JitPack, `android.yml`)
-   - the Docker image (`image.yml`)
+   - the Docker images `visionary` and `visionary-agent` (`image.yml`)
 
 3. Watch the run at https://github.com/styropyr0/Visionary/actions/workflows/sdks.yml.
    - The summary of the "GitHub Release" job shows each package's status.

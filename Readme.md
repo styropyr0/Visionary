@@ -80,8 +80,12 @@ POSTGRES_PASSWORD=something-long docker compose up -d --build
 Open http://localhost:8090. Your services' SDKs write to the same database:
 `postgres://visionary:<password>@<this machine>:5432/visionary?sslmode=disable`.
 For browser uptime checks, start it with `VISIONARY_TARGET=browser` to build
-the image that includes Chromium. [`compose.yaml`](compose.yaml) explains each
-line; [`deploy/replicas`](deploy/replicas) runs two replicas behind a proxy.
+the image that includes Chromium. To watch the machine itself too, add the
+host agent with a server key (Settings → API keys):
+`VISIONARY_KEY=<server key> docker compose --profile agent up -d --build`.
+Without the profile only the server and database start.
+[`compose.yaml`](compose.yaml) explains each line;
+[`deploy/replicas`](deploy/replicas) runs two replicas behind a proxy.
 
 **Docker** (`linux/amd64` and `linux/arm64`), with a database you already have:
 
@@ -380,6 +384,11 @@ a systemd service running as root:
 curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \
   | sudo VISIONARY_URL=https://visionary.example.com VISIONARY_KEY=<server key> sh
 ```
+
+It can also run in a container from `ghcr.io/styropyr0/visionary-agent`, given
+the host with `--pid=host --net=host -v /:/host:ro` and `HOST_ROOT=/host`. The
+host install is still recommended; see
+[Run it in a container](cmd/visionary-agent/README.md#run-it-in-a-container).
 
 It reports to three pages:
 
@@ -738,4 +747,5 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_AGENT_SECURITY` | `true` | `false` turns off all security findings. |
 | `VISIONARY_AGENT_SSH_KEYS`, `VISIONARY_AGENT_FILE_INTEGRITY`, `VISIONARY_AGENT_PROCESS_CHECKS`, `VISIONARY_AGENT_CONTAINER_RISKS` | `true` | Turn off one kind of security check. |
 | `VISIONARY_AGENT_LOCATION` | none | Run as an uptime location (with that location's key) instead of reporting the host. |
+| `HOST_ROOT`, `HOST_PROC`, `HOST_SYS`, `HOST_ETC` | unset | In a container: where the host's `/`, `/proc`, `/sys` and `/etc` are mounted. |
 | `VISIONARY_AGENT_ALLOW_PRIVATE` | the server's setting | Location mode: `true` or `false`, may checks reach private addresses. |
