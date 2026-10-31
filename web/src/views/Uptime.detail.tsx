@@ -11,7 +11,7 @@ import type { Result, Viz } from "../lib/api";
 import { formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
-import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
+import { deviceLabel, formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
 import { BrowserRunsPanel, LastRunTile, StepStatsPanel } from "./Uptime.browser";
 import { BrowserNotice } from "./Uptime.steps";
 import { CheckAlertLine, DefaultRuleModal } from "./Uptime.alerts";
@@ -136,7 +136,7 @@ export function UptimeDetail({ id }: { id: number }) {
                   </div>
                   <div className="dim">
                     Every {formatInterval(c.interval_s)} · timeout {c.timeout_ms / 1000}s
-                    {browser ? ` · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
+                    {browser ? ` · ${deviceLabel(c)} · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
                     {!browser && c.body_contains && ` and “${c.body_contains}”`}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}

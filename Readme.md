@@ -398,7 +398,8 @@ of reports and retries. Variables are listed under
 
 A browser check plays scripted steps in a headless Chrome, Chromium or Edge on
 the server: go to a URL, click, type (values can be `{{secret.NAME}}`, masked in
-results), wait, and check text, the URL or an element. Each run records step
+results), wait, and check text, the URL or an element, at a desktop, laptop,
+tablet, phone or custom screen size. Each run records step
 times, LCP, CLS, TTFB, console and network errors, and a screenshot on
 failure. Optional limits on LCP, CLS, TTFB, total time and each step's time
 fail a run, or mark it degraded above a lower warning. Each run sends a W3C

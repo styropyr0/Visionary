@@ -80,6 +80,7 @@ type runState struct {
 	urls    map[network.RequestID]string
 	navs    int
 	mask    func(string) string
+	touch   bool
 	// navigations seen when the previous step began
 	lastDoc int
 }
@@ -154,7 +155,8 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		}
 	}()
 	mask := masker(c.Secrets)
-	st := &runState{urls: map[network.RequestID]string{}, mask: mask}
+	dev := c.device()
+	st := &runState{urls: map[network.RequestID]string{}, mask: mask, touch: dev.Mobile}
 	traceID, spanID := newTraceIDs()
 	patterns := c.tracePatterns()
 	if len(patterns) > 0 {
@@ -171,7 +173,7 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 	setup := func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
-		if err := chromedp.Do(ctx, chromedp.EmulateViewport(browserViewportW, browserViewportH)); err != nil {
+		if err := dev.emulate(ctx); err != nil {
 			return err
 		}
 		if _, err := chromedp.Call(ctx, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: vitalsScript}); err != nil {
@@ -242,9 +244,9 @@ func runBrowserCheck(ctx context.Context, b context.Context, c UptimeCheck, guar
 		res.LCPMs, res.CLS, res.TTFBMs = roundMs(v.LCP), v.CLS, roundMs(v.TTFB)
 	}
 	if failure != nil {
-		run.Screenshot = screenshot(after)
+		run.Screenshot = screenshot(after, dev.Scale)
 	} else if c.FinalScreenshot {
-		run.Final = screenshot(after)
+		run.Final = screenshot(after, dev.Scale)
 	}
 	if len(patterns) > 0 {
 		_, _ = chromedp.Call(after, fetch.Disable, cdp.Empty{})
@@ -358,10 +360,19 @@ func collect(ctx context.Context, wg *sync.WaitGroup, st *runState) {
 }
 
 // screenshot takes a JPEG of the viewport, lowering the quality until it
-// fits the size cap; nil when it never does.
-func screenshot(ctx context.Context) []byte {
+// fits the size cap; nil when it never does. A device with a pixel ratio
+// above 1 is captured at CSS size.
+func screenshot(ctx context.Context, scale float64) []byte {
+	p := page.CaptureScreenshotParams{Format: page.CaptureScreenshotFormatJpeg}
+	if scale > 1 {
+		if m, err := chromedp.Call(ctx, page.GetLayoutMetrics, cdp.Empty{}); err == nil && m.CSSVisualViewport != nil {
+			v := m.CSSVisualViewport
+			p.Clip = &page.Viewport{X: v.PageX, Y: v.PageY, Width: v.ClientWidth, Height: v.ClientHeight, Scale: 1 / scale}
+		}
+	}
 	for _, q := range []int64{70, 50, 30} {
-		res, err := chromedp.Call(ctx, page.CaptureScreenshot, page.CaptureScreenshotParams{Format: page.CaptureScreenshotFormatJpeg, Quality: &q})
+		p.Quality = &q
+		res, err := chromedp.Call(ctx, page.CaptureScreenshot, p)
 		if err != nil {
 			return nil
 		}
@@ -506,6 +517,9 @@ func playStep(ctx context.Context, s BrowserStep, secrets map[string]string, st 
 		p, err := waitJS[*elementAt](ctx, findJS(s), remaining(ctx), func(p *elementAt) bool { return p != nil })
 		if err != nil {
 			return 0, notFound(err)
+		}
+		if st.touch {
+			return 0, chromedp.Do(ctx, chromedp.TapXY(p.X, p.Y))
 		}
 		return 0, chromedp.Do(ctx, chromedp.MouseClickXY(p.X, p.Y))
 	case "type":

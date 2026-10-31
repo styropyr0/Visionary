@@ -64,6 +64,7 @@ variable "probe_password" {
 
 - `body_contains` (String) Text the body must contain.
 - `degraded_ms` (Number) Slower than this counts as degraded.
+- `device` (String) Screen a browser check runs at: desktop (1280×800, default), laptop (1440×900), tablet (768×1024), phone (390×844, mobile user agent, touch, pixel ratio 3) or custom (viewport_w × viewport_h).
 - `enabled` (Boolean) Default true.
 - `expect_status` (String) Accepted statuses: 200, 200-299, 2xx, comma separated (default 200-299).
 - `final_screenshot` (Boolean) Keep a screenshot of every browser run, not only failed ones.
@@ -84,6 +85,8 @@ variable "probe_password" {
 - `trace_headers` (Boolean) Send a W3C traceparent with each browser run's trace id, so the run links to its backend trace (default true).
 - `trace_origins` (List of String) Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.
 - `url` (String) Address probed (http checks). For browser checks it is the first step's URL.
+- `viewport_h` (Number) Height of a custom device, 320 to 2160.
+- `viewport_w` (Number) Width of a custom device, 320 to 3840.
 - `warn_cls` (Number) A browser run whose CLS is above this counts as degraded.
 - `warn_lcp_ms` (Number) A browser run whose LCP is slower than this counts as degraded.
 - `warn_ttfb_ms` (Number) A browser run whose TTFB is slower than this counts as degraded.

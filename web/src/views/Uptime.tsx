@@ -6,7 +6,7 @@ import { RefreshControl, TopBar } from "../components/Toolbar";
 import { formatMs } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatRelative } from "../lib/time";
-import { formatInterval, formatUptime, listChecks, runCheck, setEnabled, type CheckList, type UptimeCheck } from "../lib/uptime";
+import { deviceLabel, formatInterval, formatUptime, listChecks, runCheck, setEnabled, type CheckList, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { UptimeDetail } from "./Uptime.detail";
 import { CheckDrawer } from "./Uptime.form";
@@ -161,7 +161,7 @@ function UptimeList() {
                             {c.name}
                           </a>
                           <span className="mono dim" title={c.url}>
-                            {c.kind === "browser" ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
+                            {c.kind === "browser" ? `Browser · ${deviceLabel(c)} · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
                           </span>
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>

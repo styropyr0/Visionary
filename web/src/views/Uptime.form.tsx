@@ -6,7 +6,7 @@ import { useToast } from "../components/Toast";
 import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, saveCheck, type BrowserStep, type CheckInput, type CheckKind, type UptimeCheck } from "../lib/uptime";
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
-import { LimitSettings, TraceSettings } from "./Uptime.settings";
+import { DeviceSettings, LimitSettings, TraceSettings } from "./Uptime.settings";
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -93,6 +93,9 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           warn_lcp_ms: undefined,
           warn_cls: undefined,
           warn_ttfb_ms: undefined,
+          device: undefined,
+          viewport_w: undefined,
+          viewport_h: undefined,
         };
     setBusy(true);
     try {
@@ -158,6 +161,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
         </label>
         {browser && <StepsEditor steps={steps} onChange={setSteps} />}
+        {browser && <DeviceSettings form={form} set={set} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
         {browser && <TraceSettings form={form} set={set} steps={steps} />}
         {!browser && (

@@ -38,6 +38,26 @@ export interface UptimeCheck {
   warn_lcp_ms?: number;
   warn_cls?: number;
   warn_ttfb_ms?: number;
+  /** The screen a browser check runs at; custom uses viewport_w × viewport_h. */
+  device?: Device;
+  viewport_w?: number;
+  viewport_h?: number;
+}
+
+export type Device = "desktop" | "laptop" | "tablet" | "phone" | "custom";
+
+export const DEVICES: { value: Device; label: string; size: string }[] = [
+  { value: "desktop", label: "Desktop", size: "1280 × 800" },
+  { value: "laptop", label: "Laptop", size: "1440 × 900" },
+  { value: "tablet", label: "Tablet", size: "768 × 1024" },
+  { value: "phone", label: "Phone", size: "390 × 844, mobile, touch, 3×" },
+  { value: "custom", label: "Custom", size: "" },
+];
+
+/** "Phone" or "Custom 1000 × 700", for lists. */
+export function deviceLabel(c: Pick<UptimeCheck, "device" | "viewport_w" | "viewport_h">): string {
+  if (c.device === "custom") return `${c.viewport_w} × ${c.viewport_h}`;
+  return DEVICES.find((d) => d.value === (c.device || "desktop"))?.label ?? "Desktop";
 }
 
 export type StepAction =

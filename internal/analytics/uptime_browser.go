@@ -45,6 +45,11 @@ type BrowserOptions struct {
 	TraceOrigins []string `json:"trace_origins,omitempty"`
 	NoTrace      bool     `json:"no_trace,omitempty"`
 	BrowserLimits
+	// Device is desktop (the default), laptop, tablet, phone or custom, whose
+	// size is ViewportW × ViewportH.
+	Device    string `json:"device,omitempty"`
+	ViewportW int    `json:"viewport_w,omitempty"`
+	ViewportH int    `json:"viewport_h,omitempty"`
 }
 
 const (
@@ -196,6 +201,9 @@ func (c *UptimeCheck) normalizeBrowser(prev *UptimeCheck) error {
 		return errors.New("the first step must go to a URL")
 	}
 	if err := c.normalizeTrace(); err != nil {
+		return err
+	}
+	if err := c.normalizeDevice(); err != nil {
 		return err
 	}
 	c.URL = c.Steps[0].Value

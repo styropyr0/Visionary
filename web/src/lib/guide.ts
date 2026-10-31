@@ -377,7 +377,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Script a browser check",
-        text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. Under **Performance limits**, a run fails above a limit on LCP, CLS, TTFB or total time and is degraded above a warning; each step can have its own time limit. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
+        text: "In **New check**, pick **Browser steps**. Start with **Go to URL**, then add steps: click by CSS selector or visible text, type into a field, press a key, choose an option, wait for an element, text or the next page, and check text, the URL or an element count. Put passwords under **Secrets** and type them as `{{secret.NAME}}`. **Device** picks the screen: desktop, laptop, tablet, phone or a custom size. Under **Performance limits**, a run fails above a limit on LCP, CLS, TTFB or total time and is degraded above a warning; each step can have its own time limit. The server needs Chrome, Chromium or Edge; the form says which one it uses, or how to install one.",
         shot: "uptime-browser",
         caption: "A browser check: each step's result, timings and Web Vitals.",
       },

@@ -63,6 +63,9 @@ type checkModel struct {
 	WarnLCPMs       types.Int64   `tfsdk:"warn_lcp_ms"`
 	WarnCLS         types.Float64 `tfsdk:"warn_cls"`
 	WarnTTFBMs      types.Int64   `tfsdk:"warn_ttfb_ms"`
+	Device          types.String  `tfsdk:"device"`
+	ViewportW       types.Int64   `tfsdk:"viewport_w"`
+	ViewportH       types.Int64   `tfsdk:"viewport_h"`
 }
 
 type stepModel struct {
@@ -105,6 +108,9 @@ type apiCheck struct {
 	WarnLCPMs       int64             `json:"warn_lcp_ms,omitempty"`
 	WarnCLS         float64           `json:"warn_cls,omitempty"`
 	WarnTTFBMs      int64             `json:"warn_ttfb_ms,omitempty"`
+	Device          string            `json:"device,omitempty"`
+	ViewportW       int64             `json:"viewport_w,omitempty"`
+	ViewportH       int64             `json:"viewport_h,omitempty"`
 }
 
 type apiStepB struct {
@@ -195,6 +201,13 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"warn_lcp_ms":     limit("A browser run whose LCP is slower than this counts as degraded."),
 			"warn_cls":        schema.Float64Attribute{Description: "A browser run whose CLS is above this counts as degraded.", Optional: true},
 			"warn_ttfb_ms":    limit("A browser run whose TTFB is slower than this counts as degraded."),
+			"device": schema.StringAttribute{
+				Description: "Screen a browser check runs at: desktop (1280×800, default), laptop (1440×900), tablet (768×1024), phone (390×844, mobile user agent, touch, pixel ratio 3) or custom (viewport_w × viewport_h).",
+				Optional:    true, Computed: true, Default: stringdefault.StaticString("desktop"),
+				Validators: []validator.String{stringvalidator.OneOf("desktop", "laptop", "tablet", "phone", "custom")},
+			},
+			"viewport_w": schema.Int64Attribute{Description: "Width of a custom device, 320 to 3840.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 3840)}},
+			"viewport_h": schema.Int64Attribute{Description: "Height of a custom device, 320 to 2160.", Optional: true, Validators: []validator.Int64{int64validator.Between(320, 2160)}},
 			"trace_origins": schema.ListAttribute{
 				Description: "Origins that get the traceparent header, such as https://api.example.com or https://*.example.com. Default: the first page's origin.",
 				Optional:    true, ElementType: types.StringType, Validators: []validator.List{listvalidator.SizeAtMost(10)},
@@ -227,7 +240,7 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		if !set("url") {
 			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
 		}
-		for _, n := range []string{"steps", "secrets", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms"} {
+		for _, n := range []string{"steps", "secrets", "trace_origins", "max_lcp_ms", "max_cls", "max_ttfb_ms", "max_duration_ms", "warn_lcp_ms", "warn_cls", "warn_ttfb_ms", "viewport_w", "viewport_h"} {
 			if set(n) {
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
 			}
@@ -251,6 +264,10 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		TraceOrigins: stringsOf(ctx, m.TraceOrigins, diags), NoTrace: !m.TraceHeaders.IsNull() && !m.TraceHeaders.IsUnknown() && !m.TraceHeaders.ValueBool(),
 		MaxLCPMs: m.MaxLCPMs.ValueInt64(), MaxCLS: m.MaxCLS.ValueFloat64(), MaxTTFBMs: m.MaxTTFBMs.ValueInt64(), MaxDurationMs: m.MaxDurationMs.ValueInt64(),
 		WarnLCPMs: m.WarnLCPMs.ValueInt64(), WarnCLS: m.WarnCLS.ValueFloat64(), WarnTTFBMs: m.WarnTTFBMs.ValueInt64(),
+		ViewportW: m.ViewportW.ValueInt64(), ViewportH: m.ViewportH.ValueInt64(),
+	}
+	if in.Kind == "browser" {
+		in.Device = m.Device.ValueString()
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
@@ -283,6 +300,13 @@ func unmask(server map[string]string, ref types.Map) types.Map {
 	return optStringMap(out, ref)
 }
 
+func fallbackStr(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
 func (m *checkModel) fill(c apiCheck) {
 	m.ID, m.Name, m.Kind, m.URL = idString(c.ID), types.StringValue(c.Name), types.StringValue(c.Kind), types.StringValue(c.URL)
 	m.Method, m.ExpectStatus, m.BodyContains = types.StringValue(c.Method), types.StringValue(c.ExpectStatus), optString(c.BodyContains, m.BodyContains)
@@ -293,6 +317,7 @@ func (m *checkModel) fill(c apiCheck) {
 	m.TraceOrigins, m.TraceHeaders = optStringList(c.TraceOrigins, m.TraceOrigins), types.BoolValue(!c.NoTrace)
 	m.MaxLCPMs, m.MaxCLS, m.MaxTTFBMs, m.MaxDurationMs = optInt(c.MaxLCPMs, m.MaxLCPMs), optFloat(c.MaxCLS, m.MaxCLS), optInt(c.MaxTTFBMs, m.MaxTTFBMs), optInt(c.MaxDurationMs, m.MaxDurationMs)
 	m.WarnLCPMs, m.WarnCLS, m.WarnTTFBMs = optInt(c.WarnLCPMs, m.WarnLCPMs), optFloat(c.WarnCLS, m.WarnCLS), optInt(c.WarnTTFBMs, m.WarnTTFBMs)
+	m.Device, m.ViewportW, m.ViewportH = types.StringValue(fallbackStr(c.Device, "desktop")), optInt(c.ViewportW, m.ViewportW), optInt(c.ViewportH, m.ViewportH)
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

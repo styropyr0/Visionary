@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { BrowserStep, CheckInput } from "../lib/uptime";
+import { Laptop, Maximize2, Monitor, Smartphone, Tablet } from "lucide-react";
+import { DEVICES, type BrowserStep, type CheckInput, type Device } from "../lib/uptime";
 
 type Set = <K extends keyof CheckInput>(k: K, v: CheckInput[K]) => void;
 
@@ -10,6 +11,48 @@ const originOf = (url: string | undefined) => {
     return "";
   }
 };
+
+const DEVICE_ICON = { desktop: Monitor, laptop: Laptop, tablet: Tablet, phone: Smartphone, custom: Maximize2 };
+
+/** The screen the check runs at. */
+export function DeviceSettings({ form, set }: { form: CheckInput; set: Set }) {
+  const device = form.device || "desktop";
+  const pick = (d: Device) => {
+    set("device", d);
+    if (d === "custom" && !form.viewport_w) {
+      set("viewport_w", 1280);
+      set("viewport_h", 800);
+    }
+  };
+  return (
+    <div className="field">
+      <span>Device</span>
+      <div className="segmented" role="radiogroup" aria-label="Device">
+        {DEVICES.map((d) => {
+          const Icon = DEVICE_ICON[d.value];
+          return (
+            <button key={d.value} type="button" role="radio" aria-checked={device === d.value} className={device === d.value ? "on" : ""} title={d.size || "Your own width and height"} onClick={() => pick(d.value)}>
+              <Icon size={13} />
+              {d.label}
+            </button>
+          );
+        })}
+      </div>
+      {device === "custom" ? (
+        <div className="up-row">
+          <input className="input" type="number" min={320} max={3840} style={{ width: 110 }} value={form.viewport_w || ""} aria-label="Width" placeholder="Width" onChange={(e) => set("viewport_w", Number(e.target.value) || 0)} />
+          <span className="dim" style={{ alignSelf: "center" }}>
+            ×
+          </span>
+          <input className="input" type="number" min={320} max={2160} style={{ width: 110 }} value={form.viewport_h || ""} aria-label="Height" placeholder="Height" onChange={(e) => set("viewport_h", Number(e.target.value) || 0)} />
+          <small style={{ alignSelf: "center" }}>CSS pixels, 320–3840 wide and 320–2160 high.</small>
+        </div>
+      ) : (
+        <small>{DEVICES.find((d) => d.value === device)?.size}. The phone is a mobile browser: its user agent, touch taps and a pixel ratio of 3.</small>
+      )}
+    </div>
+  );
+}
 
 type NumKey = "max_lcp_ms" | "max_cls" | "max_ttfb_ms" | "max_duration_ms" | "warn_lcp_ms" | "warn_cls" | "warn_ttfb_ms" | "degraded_ms";
 
