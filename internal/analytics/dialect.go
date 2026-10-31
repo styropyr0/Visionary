@@ -47,9 +47,12 @@ func (q sqlDialect) ident(name string) string {
 	return name
 }
 
+// text casts expr to text. On MySQL the cast takes the connection's
+// collation, which mixed with a column's in COALESCE can't be compared, so it
+// is pinned to a binary one: case-sensitive, as on the other databases.
 func (q sqlDialect) text(expr string) string {
 	if q.d == sdk.MySQL {
-		return "CAST(" + expr + " AS CHAR)"
+		return "CAST(" + expr + " AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin"
 	}
 	return "CAST(" + expr + " AS TEXT)"
 }
