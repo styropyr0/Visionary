@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 import { formatCount, formatMs, formatPercent } from "../../lib/format";
 import { serviceColors, serviceLabel, type MapEdge, type MapNode, type ServiceMap } from "../../lib/traces";
+import { TIP_DELAY, TipBubble } from "../InfoTip";
 import { KIND_COLOR } from "./Waterfall";
 
 const NODE_W = 204;
@@ -137,6 +138,33 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
   // A drag that ends over a box or arrow must not count as a click on it.
   const suppressClick = useRef(false);
 
+  const tipId = useId();
+  const tipTimer = useRef<number>();
+  const [tip, setTip] = useState<{ el: Element; body: ReactNode } | null>(null);
+  const hideTip = useCallback(() => {
+    window.clearTimeout(tipTimer.current);
+    setTip(null);
+  }, []);
+  const showTip = (el: Element, body: ReactNode) => {
+    window.clearTimeout(tipTimer.current);
+    if (pointers.current.size > 0) return;
+    tipTimer.current = window.setTimeout(() => setTip({ el, body }), TIP_DELAY);
+  };
+  const tipProps = (body: () => ReactNode, hoverKey?: string) => ({
+    "aria-describedby": tip ? tipId : undefined,
+    onMouseEnter: (ev: { currentTarget: Element }) => {
+      if (hoverKey) setHover(hoverKey);
+      showTip(ev.currentTarget, body());
+    },
+    onMouseLeave: () => {
+      if (hoverKey) setHover(null);
+      hideTip();
+    },
+    onFocus: (ev: ReactFocusEvent<SVGGElement>) => ev.currentTarget.matches(":focus-visible") && showTip(ev.currentTarget, body()),
+    onBlur: hideTip,
+  });
+  useEffect(() => () => window.clearTimeout(tipTimer.current), []);
+
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -175,13 +203,14 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      hideTip();
       const r = el.getBoundingClientRect();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
       zoomAt(Math.exp((-e.deltaY * unit) / (e.ctrlKey ? 100 : 600)), e.clientX - r.left, e.clientY - r.top);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [zoomAt]);
+  }, [zoomAt, hideTip]);
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = box.current!.getBoundingClientRect();
@@ -190,6 +219,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    hideTip();
     box.current?.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     if (pointers.current.size === 2) {
@@ -250,6 +280,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
   };
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape") hideTip();
     if (e.target !== box.current) return;
     const step = 60;
     const keys: Record<string, () => void> = {
@@ -317,8 +348,15 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
               <g
                 key={key}
                 className={`smap-edge ${on ? "on" : ""}`}
-                onMouseEnter={() => setHover(key)}
-                onMouseLeave={() => setHover(null)}
+                {...tipProps(() => (
+                  <>
+                    <span className="tip-title">
+                      {serviceLabel(a.name)} → {b.kind === "service" ? serviceLabel(b.name) : b.name}
+                    </span>
+                    <div>{edgeSummary(e)}</div>
+                    <div>{formatCount(e.calls)} calls</div>
+                  </>
+                ), key)}
                 onClick={clickGuard(() => onEdge(e))}
                 tabIndex={0}
                 role="button"
@@ -333,7 +371,6 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
                     {e.error_rate > 0 ? ` · ${formatPercent(e.error_rate)}` : ""}
                   </text>
                 )}
-                <title>{`${serviceLabel(a.name)} → ${b.name}\n${edgeSummary(e)}\n${formatCount(e.calls)} calls`}</title>
               </g>
             );
           })}
@@ -347,6 +384,24 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
                 data-node={n.id}
                 className="smap-node"
                 transform={`translate(${n.x}, ${n.y})`}
+                {...tipProps(() => (
+                  <>
+                    <span className="tip-title">{svc ? serviceLabel(n.name) : n.name}</span>
+                    {svc ? (
+                      n.requests > 0 ? (
+                        <>
+                          <div>{formatCount(n.requests)} requests · {formatPercent(failed)} failed</div>
+                          {n.p95 !== null && <div>p95 {formatMs(n.p95)}</div>}
+                        </>
+                      ) : (
+                        <div>No requests in this range</div>
+                      )
+                    ) : (
+                      <div>{KIND_NAME[n.kind] ?? n.kind}</div>
+                    )}
+                    <div className="dim">Click to list its traces</div>
+                  </>
+                ))}
                 onClick={clickGuard(() => onNode(n))}
                 tabIndex={0}
                 role="button"
@@ -365,7 +420,6 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
                       : "no requests"
                     : (KIND_NAME[n.kind] ?? n.kind)}
                 </text>
-                <title>{svc ? serviceLabel(n.name) : `${n.name} (${KIND_NAME[n.kind] ?? n.kind})`}</title>
               </g>
             );
           })}
@@ -402,6 +456,11 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
           </button>
         )}
       </div>
+      {tip && tip.el.isConnected && (
+        <TipBubble anchor={tip.el} id={tipId} className="rich">
+          {tip.body}
+        </TipBubble>
+      )}
     </div>
   );
 }

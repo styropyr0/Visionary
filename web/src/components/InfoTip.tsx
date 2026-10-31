@@ -5,7 +5,8 @@ import { Info } from "lucide-react";
 const GAP = 8;
 const EDGE = 12;
 /** How long the pointer rests before a tip shows, the same for every tip. */
-const DELAY = 200;
+export const TIP_DELAY = 200;
+const DELAY = TIP_DELAY;
 
 /**
  * The one tooltip bubble of the app: info icons, warnings and every element
@@ -13,7 +14,7 @@ const DELAY = 200;
  * with overflow: hidden never clip it, and flips above the anchor when there
  * is no room below.
  */
-function TipBubble({ anchor, id, side, className = "", children }: { anchor: HTMLElement; id: string; side?: "right"; className?: string; children: ReactNode }) {
+export function TipBubble({ anchor, id, side, className = "", children }: { anchor: Element; id: string; side?: "right"; className?: string; children: ReactNode }) {
   const tip = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; place: "below" | "above" | "right"; arrow: number } | null>(null);
 
