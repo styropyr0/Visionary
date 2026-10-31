@@ -113,7 +113,7 @@ public class VisionaryAutoConfiguration {
     FilterRegistrationBean<VisionaryFilter> visionaryFilter(VisionaryAgent agent) {
         FilterRegistrationBean<VisionaryFilter> registration = new FilterRegistrationBean<>(
                 new VisionaryFilter(agent.counters(), agent.requests(), agent.telemetry(), agent.logs(),
-                        agent.config()));
+                        agent.skip(), agent.config()));
         registration.setName("visionaryFilter");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         registration.setDispatcherTypes(DispatcherType.REQUEST);

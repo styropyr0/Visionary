@@ -102,7 +102,7 @@ class TraceTest {
         telemetry = new Telemetry(true, true, 100, 100, writer::enqueue);
         telemetry.activate();
         writer.start();
-        VisionaryFilter filter = new VisionaryFilter(new HttpCounters(), writer, telemetry, null,
+        VisionaryFilter filter = new VisionaryFilter(new HttpCounters(), writer, telemetry, null, null,
                 VisionaryConfig.from(new StandardEnvironment()));
 
         AtomicReference<TraceContext> server = new AtomicReference<>();
@@ -147,7 +147,7 @@ class TraceTest {
 
     @Test
     void anUnloggedRequestStillCarriesTheTraceOn() throws Exception {
-        VisionaryFilter filter = new VisionaryFilter(new HttpCounters(), null, null, null,
+        VisionaryFilter filter = new VisionaryFilter(new HttpCounters(), null, null, null, null,
                 VisionaryConfig.from(new StandardEnvironment()));
         AtomicReference<TraceContext> server = new AtomicReference<>();
         List<HttpHeaders> sent = new ArrayList<>();

@@ -44,6 +44,7 @@ module Visionary
       if cfg.log_requests || cfg.spans || cfg.errors || cfg.version || cfg.profile
         @writer = Writer.new(cfg, @store, @schemas, @logger)
       end
+      @skip = SkipList.new(@store, @logger) if cfg.log_requests && @writer
       @profiler = Profiler.new(cfg, @instance, @store, @writer, @logger) if cfg.profile && @writer
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
       @logs = Logs::Pipeline.new(cfg, @instance, @store, @schemas, @logger) if cfg.logs
@@ -66,7 +67,10 @@ module Visionary
 
     def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil? || !@metrics.nil?)
 
-    def log_path?(path) = @config.log_requests && !@writer.nil? && path.start_with?(@config.path_prefix.to_s)
+    # A skipped path is treated exactly like one outside the prefix.
+    def log_path?(path)
+      @config.log_requests && !@writer.nil? && path.start_with?(@config.path_prefix.to_s) && !@skip&.skip?(path)
+    end
 
     # Queues a row for the writer; never blocks.
     def enqueue(item)
@@ -105,6 +109,7 @@ module Visionary
       end
       @logs&.start
       @metrics&.start
+      @skip&.start
       @retention.start
       @profiler&.start
       install_hooks
@@ -121,6 +126,7 @@ module Visionary
       end
       deadline = mono + timeout
       @retention&.close
+      @skip&.close
       @profiler&.close
       idle = @writer ? @writer.close(timeout) : true
       idle = @logs.close([deadline - mono, 0].max) && idle if @logs
@@ -145,6 +151,7 @@ module Visionary
       @writer&.after_fork
       @logs&.after_fork
       @metrics&.after_fork
+      @skip&.after_fork
       @retention&.after_fork if @retention&.needed?
       @profiler&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")

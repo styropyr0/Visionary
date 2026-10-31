@@ -24,6 +24,7 @@ import { TimeRangePicker, TopBar } from "../components/Toolbar";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { PagesTab, ProfilingTab } from "./Settings.profiling";
 import { DataTab } from "./Settings.data";
+import { SkipPathsCard } from "./Settings.skip";
 import { PreferencesTab, RetentionCard, StatusPageTab, ThresholdsTab } from "./Settings.server";
 import { PartitionsCard } from "./Settings.partitions";
 import { OwnPasswordCard, ServerTab, SigninTab } from "./Settings.config";
@@ -111,6 +112,7 @@ export function Settings({ user }: { user: SessionUser | null }) {
         {current === "pages" && <PagesTab />}
         {current === "data" && (
           <div className="settings-stack">
+            <SkipPathsCard />
             <RetentionCard />
             <PartitionsCard />
             <DataTab />

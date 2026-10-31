@@ -10,6 +10,7 @@ import { consoleLogger, errMessage } from "./log.js";
 import { LogPipeline, activeLogs, logValues, setActiveLogs } from "./logs/pipeline.js";
 import { parseLevel, secretKeys } from "./logs/rules.js";
 import { collectMetrics, configureMetrics, metricsLimit } from "./metrics.js";
+import { SkipList } from "./skip.js";
 import { openStore } from "./store/open.js";
 import type { Table, Value } from "./store/sql.js";
 import { insertSQL } from "./store/sql.js";
@@ -44,6 +45,7 @@ export class Agent {
   private retention?: Retention;
   private profiler?: Profiler;
   private explainer?: ExplainWorker;
+  private skip?: SkipList;
   /** Own writer, so a flood of log lines never crowds out request rows. */
   private logs?: LogPipeline;
   private logWriter?: Writer;
@@ -77,6 +79,10 @@ export class Agent {
     const cfg = this.config;
     if (cfg.logRequests || cfg.spans || cfg.errors) {
       this.writer = new Writer(cfg, this.store, () => this.writerReady(), this.logger);
+      if (cfg.logRequests) {
+        const store = this.store;
+        this.skip = new SkipList(() => store.rows(`SELECT name, value FROM visionary_settings WHERE name LIKE 'requests.%'`, []));
+      }
     }
     if (cfg.systemMetrics && cfg.systemInterval > 0) {
       this.recorder = new Recorder(
@@ -138,7 +144,9 @@ export class Agent {
 
   /** Whether a request to path gets an api_logs row. */
   shouldLog(path: string): boolean {
-    return !!this.writer && this.config.logRequests && path.startsWith(this.config.pathPrefix);
+    return (
+      !!this.writer && this.config.logRequests && path.startsWith(this.config.pathPrefix) && !this.skip?.has(path)
+    );
   }
 
   /** Launches the background work. Tables are created asynchronously, so a
@@ -151,6 +159,7 @@ export class Agent {
       this.writer.start();
       void this.writerReady();
       if (cfg.logRequests) {
+        this.skip?.start();
         this.logger.info(
           `visionary: logging requests (path_prefix=${JSON.stringify(cfg.pathPrefix)}, bodies=${cfg.captureBodies}, retention_days=${cfg.retentionDays})`,
         );
@@ -217,6 +226,7 @@ export class Agent {
       if (this.metricTimer) clearInterval(this.metricTimer);
       this.retention?.stop();
       this.profiler?.stop();
+      this.skip?.stop();
       this.explainer?.stop();
       this.logs?.stop();
       if (this.logs && activeLogs() === this.logs) setActiveLogs(undefined);

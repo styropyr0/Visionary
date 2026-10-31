@@ -2,6 +2,8 @@ package io.github.styropyr0.visionary;
 
 import java.time.Duration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -23,6 +25,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     private final HttpCounters counters = new HttpCounters();
     private final RequestWriter writer;
     private final boolean logRequests;
+    private final RequestSkip skip;
     private final Telemetry telemetry;
     private final SystemSampler system;
     private final AppLogs logs;
@@ -39,6 +42,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.origin = null;
         this.writer = null;
         this.logRequests = false;
+        this.skip = null;
         this.telemetry = null;
         this.system = null;
         this.logs = null;
@@ -55,6 +59,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.origin = origin;
         this.writer = writer;
         this.logRequests = cfg.logRequests();
+        this.skip = logRequests ? new RequestSkip(store, new ObjectMapper()) : null;
         this.telemetry = cfg.spans() || cfg.errors() ? new Telemetry(cfg, writer) : null;
         this.system = cfg.systemEnabled()
                 ? new SystemSampler(store, origin, cfg.systemInterval(), counters, pool)
@@ -132,6 +137,11 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         return logRequests ? writer : null;
     }
 
+    /** Null when request logging is off. */
+    RequestSkip skip() {
+        return skip;
+    }
+
     /** Null when off or Visionary is disabled. */
     AppLogs logs() {
         return logs;
@@ -149,6 +159,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         }
         running = true;
         writer.start();
+        if (skip != null) {
+            skip.start();
+        }
         if (telemetry != null) {
             telemetry.activate();
         }
@@ -171,6 +184,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
             return;
         }
         running = false;
+        if (skip != null) {
+            skip.stop();
+        }
         if (telemetry != null) {
             telemetry.deactivate();
         }

@@ -14,6 +14,7 @@ from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
 from ._profiler import Profiler
+from ._skip import SkipList
 from ._storage import Backend, open_backend
 from ._system import HttpCounters, Recorder
 from ._writer import Release, RequestWriter, Retention, WriterStats
@@ -39,6 +40,7 @@ class Agent:
         self._system: Optional[Recorder] = None
         self._retention: Optional[Retention] = None
         self._profiler: Optional[Profiler] = None
+        self._skip: Optional[SkipList] = None
         # Own writer, so a flood of log lines never crowds out request rows.
         self._logs: Optional[_logs.LogPipeline] = None
         self._metrics: Optional[_metrics.MetricsRecorder] = None
@@ -65,6 +67,8 @@ class Agent:
             self._requests = RequestWriter(cfg, self._backend, logger, instance, _errors.runtime())
             self.spans_on = cfg.spans
             self.errors_on = cfg.errors
+        if self._requests is not None and cfg.log_requests:
+            self._skip = SkipList(self._backend, logger)
         if self._requests is not None and cfg.profile:
             self._profiler = Profiler(self._backend, self._requests.log, logger, cfg.service,
                                       cfg.log_retention_days)
@@ -113,7 +117,8 @@ class Agent:
 
     def should_log(self, path: str) -> bool:
         """Whether a request to path gets an api_logs row (integration API)."""
-        return self.logging_requests and path.startswith(self.config.path_prefix)
+        return (self.logging_requests and path.startswith(self.config.path_prefix)
+                and not (self._skip is not None and self._skip.skipped(path)))
 
     def record(self, entry: Entry) -> None:
         """Queue a captured request (integration API). Never blocks."""
@@ -186,6 +191,8 @@ class Agent:
             self._requests.start()
             if self.config.version:
                 self._requests.log(Release(time.time(), _sdk_version(), _errors.runtime()))
+            if self._skip is not None:
+                self._skip.start()
             if self.logging_requests:
                 logger.info("visionary: logging requests (path_prefix=%r, bodies=%s, retention_days=%d)",
                             self.config.path_prefix, self.config.capture_bodies, self.config.log_retention_days)
@@ -227,6 +234,8 @@ class Agent:
             deadline = _Deadline(timeout)
             if self._profiler is not None:
                 self._profiler.close()
+            if self._skip is not None:
+                self._skip.close()
             if self._retention is not None:
                 self._retention.close()
             if self._requests is not None:
@@ -264,6 +273,8 @@ class Agent:
             self._retention.restart_after_fork()
         if self._profiler is not None:
             self._profiler.restart_after_fork()
+        if self._skip is not None:
+            self._skip.restart_after_fork()
         if self._logs is not None:
             self._logs.writer.restart_after_fork()
             self._logs.restart_after_fork()

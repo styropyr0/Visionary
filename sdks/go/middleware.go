@@ -117,7 +117,7 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 		start := time.Now()
 		ann := &annotations{agent: a, method: r.Method, path: r.URL.Path}
 		ann.span, ann.parentSpanID = requestSpan(r.Header)
-		logIt := a.cfg.Requests.Enabled && a.writer != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix)
+		logIt := a.cfg.Requests.Enabled && a.writer != nil && strings.HasPrefix(r.URL.Path, a.cfg.Requests.PathPrefix) && !a.skipped(r.URL.Path)
 		if logIt {
 			ann.requestID = r.Header.Get(requestIDHeader)
 			if ann.requestID == "" || len(ann.requestID) > 128 {

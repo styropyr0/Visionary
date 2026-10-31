@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Requests on the Settings → Data skip list (`requests.skip`) are handled
+  like paths outside `VISIONARY_LOG_PATH_PREFIX`: no `api_logs` row or spans.
+
 - Faster writes: SQL backends get each table's rows as multi-row INSERTs
   (500 rows a batch, `batch_size` up to 2000), with up to four batches in
   flight on PostgreSQL and MySQL. SQLite opens in WAL mode with a 5 s busy

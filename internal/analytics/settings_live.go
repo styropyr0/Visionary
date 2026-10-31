@@ -12,6 +12,7 @@ import (
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
 	"github.com/styropyr0/visionary/sdks/go/logrules"
+	"github.com/styropyr0/visionary/sdks/go/skiplist"
 )
 
 // The settings the server itself runs on (thresholds, retention, the status
@@ -111,6 +112,8 @@ type liveSettings struct {
 	// logs.* as the SDKs read it, and the server-only logserver.*
 	Logs      *logrules.Settings `json:"-"`
 	LogServer *logServerSettings `json:"-"`
+	// RequestSkip is requests.skip, which OTLP traces follow like the SDKs.
+	RequestSkip []string `json:"-"`
 }
 
 const (
@@ -170,6 +173,7 @@ func (s *Server) refreshLive(ctx context.Context) error {
 		}
 	}
 	l.Logs, l.LogServer = parseLogSettings(m)
+	l.RequestSkip = skiplist.Parse(m[skiplist.Setting][0])
 	l.StatusPage = m[settingStatusPage][0] == "true"
 	l.StatusTitle = m[settingStatusTitle][0]
 	l.Partitioning = m[settingPartitioning][0]

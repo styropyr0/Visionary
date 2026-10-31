@@ -9,6 +9,8 @@ import (
 	"time"
 
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+
+	"github.com/styropyr0/visionary/sdks/go/skiplist"
 )
 
 // Traces become requests (api_logs), calls (spans) and exceptions (errors).
@@ -37,6 +39,8 @@ type otlpReqInfo struct {
 	res                         *otlpResource
 	keepSpans                   bool
 	stored                      int
+	// skipped requests match Settings → Data: no row, no spans.
+	skipped bool
 }
 
 type otlpRecent struct {
@@ -164,10 +168,13 @@ func otlpIsRequest(sp *otlpSpan) bool {
 // The caller holds o.mu.
 func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows *otlpRows) {
 	spansOn, threshold := o.spansOn(), o.thresholdMs()
+	skip := o.s.live().RequestSkip
 	reqs := map[string]*otlpReqInfo{}
 	for sid, sp := range group {
 		if otlpIsRequest(sp) {
-			reqs[sid] = otlpNewReq(sp)
+			r := otlpNewReq(sp)
+			r.skipped = skiplist.Match(skip, r.path)
+			reqs[sid] = r
 		}
 	}
 	// owner finds the request a span belongs to; ok is false while an
@@ -229,10 +236,12 @@ func (o *otlpState) processTrace(group map[string]*otlpSpan, now time.Time, rows
 			}
 		}
 		status := otlpRequestStatus(sp)
-		r.keepSpans = spansOn
-		if !spansOn {
+		r.keepSpans = spansOn && !r.skipped
+		switch {
+		case r.skipped:
+		case !spansOn:
 			rows.add(otlpRequestsTable, otlpRequestRow(sp, r, status, nil, nil, nil, nil))
-		} else {
+		default:
 			rows.add(otlpRequestsTable, otlpRequestRow(sp, r, status, dbCount, otlpRound(dbMs), httpCount, otlpRound(httpMs)))
 		}
 		o.addErrors(rows, sp, r)
@@ -594,6 +603,9 @@ func (o *otlpState) addError(rows *otlpRows, res *otlpResource, r *otlpReqInfo, 
 	var requestID, method, route, path, userID any
 	if r != nil {
 		requestID, method, route, path, userID = r.requestID, r.method, otlpNullStr(r.route), r.path, otlpNullStr(r.userID)
+		if r.skipped {
+			requestID = nil // no row to link to
+		}
 	}
 	h := int64(0)
 	if handled {

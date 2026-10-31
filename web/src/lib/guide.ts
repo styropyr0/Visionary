@@ -171,6 +171,10 @@ export const GUIDE: GuideSection[] = [
         title: "Go further back",
         text: "**Load older requests** at the bottom continues the list.",
       },
+      {
+        title: "Leave out noisy paths",
+        text: "**Settings → Data → Paths not logged** lists paths no service logs, such as `/healthz` or `/static/*` (a `*` at the end covers everything under it). They still count in throughput and error rates, and their errors and log lines are kept. Services follow a change within 30 seconds.",
+      },
     ],
   },
   {
@@ -831,7 +835,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Set targets and retention",
-        text: "**Thresholds** sets the Apdex target and SLO, with routes that have their own. **Data** sets how long each kind of data is kept, and deletes data after a preview.",
+        text: "**Thresholds** sets the Apdex target and SLO, with routes that have their own. **Data** sets the paths that are not logged, how long each kind of data is kept, and deletes data after a preview.",
       },
       {
         title: "Partition busy tables",

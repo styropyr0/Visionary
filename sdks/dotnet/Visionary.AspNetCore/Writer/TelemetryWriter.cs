@@ -15,12 +15,14 @@ internal sealed class TelemetryWriter : BackgroundService
 {
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SkipPoll = TimeSpan.FromSeconds(30);
 
     private readonly VisionaryAgent _agent;
     private readonly RowBuilder _rows;
     private readonly int _batchSize;
     private readonly Flushes _flushes;
     private bool _schemaReady;
+    private bool _skipFailedLogged;
 
     public TelemetryWriter(VisionaryAgent agent)
     {
@@ -60,6 +62,7 @@ internal sealed class TelemetryWriter : BackgroundService
             tables.Add(("profiles", o.LogRetentionDays));
         }
         var retention = Retention.RunAsync(_agent, tables, stoppingToken);
+        var skip = o.LogRequests ? PollSkipAsync(stoppingToken) : Task.CompletedTask;
 
         var reader = _agent.Queue.Reader;
         var batch = new List<WriteItem>(_batchSize);
@@ -112,13 +115,46 @@ internal sealed class TelemetryWriter : BackgroundService
             }
         }
         await WriteAsync(batch, drain.Token).ConfigureAwait(false);
+        foreach (var task in new[] { retention, skip })
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // stopped with the host
+            }
+        }
+    }
+
+    private async Task PollSkipAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await ReadSkipAsync(ct).ConfigureAwait(false);
+            await Task.Delay(SkipPoll, ct).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task ReadSkipAsync(CancellationToken ct)
+    {
         try
         {
-            await retention.ConfigureAwait(false);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            var rows = await _agent.Store!.RowsAsync(SkipList.Query, timeout.Token).ConfigureAwait(false);
+            _agent.Skip = SkipList.Parse(rows);
+            _skipFailedLogged = false;
         }
-        catch (OperationCanceledException)
+        catch (Exception e) when (!ct.IsCancellationRequested)
         {
-            // stopped with the host
+            // No server yet or the table is missing; keep the last list.
+            if (!_skipFailedLogged)
+            {
+                _skipFailedLogged = true;
+                _agent.Logger.LogDebug("visionary: skip list unavailable; keeping the current one: {Error}", e.Message);
+            }
         }
     }
 

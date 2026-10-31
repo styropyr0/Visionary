@@ -32,6 +32,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
     private final Telemetry telemetry;
     private final AppLogs logs;
     private final String pathPrefix;
+    private final RequestSkip skip;
     private final boolean bodies;
     private final int maxBodyBytes;
 
@@ -39,13 +40,15 @@ final class VisionaryFilter extends OncePerRequestFilter {
      * @param writer    null when request logging is off
      * @param telemetry null when spans and errors are both off
      * @param logs      null when application logs are off
+     * @param skip      null when request logging is off
      */
     VisionaryFilter(HttpCounters counters, RequestWriter writer, Telemetry telemetry, AppLogs logs,
-            VisionaryConfig cfg) {
+            RequestSkip skip, VisionaryConfig cfg) {
         this.counters = counters;
         this.writer = writer;
         this.telemetry = telemetry;
         this.logs = logs;
+        this.skip = skip;
         this.pathPrefix = cfg == null ? "" : cfg.pathPrefix();
         this.bodies = cfg != null && cfg.logBodies();
         this.maxBodyBytes = cfg == null ? 8192 : cfg.maxBodyBytes();
@@ -70,7 +73,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         counters.begin();
         ProfileTally.started();
-        if (writer == null || !request.getRequestURI().startsWith(pathPrefix)) {
+        if (!logged(request.getRequestURI())) {
             countOnly(request, response, chain);
             return;
         }
@@ -124,6 +127,11 @@ final class VisionaryFilter extends OncePerRequestFilter {
                 finish.run();
             }
         }
+    }
+
+    /** Inside the path prefix and not on Settings → Data's skip list. */
+    boolean logged(String path) {
+        return writer != null && path.startsWith(pathPrefix) && (skip == null || !skip.skipped(path));
     }
 
     private void countOnly(HttpServletRequest request, HttpServletResponse response, FilterChain chain)

@@ -112,6 +112,20 @@ Keep this cheap; everything slow happens on the writer thread.
 `application/pdf` (case-insensitive prefix match).
 
 Only paths starting with `VISIONARY_LOG_PATH_PREFIX` are logged (empty = all).
+
+**Skip list** (Settings → Data): the Visionary server keeps
+`requests.skip` in `visionary_settings`, a JSON array of paths. The SDK reads
+`SELECT name, value FROM visionary_settings WHERE name LIKE 'requests.%'` at
+start and then every 30 seconds, off the request path, while request logging
+is on; a missing table or failed read keeps the last list (at first, none),
+and a value that isn't a JSON array of strings means none. Entries are
+trimmed and empty ones ignored. A request's raw path (no query string)
+matches an entry equal to it, or, when the entry ends in `*`, one starting
+with the text before the `*` (`/static/*` matches `/static/app.js`, not
+`/static`). Matching is case-sensitive. A matching request is treated exactly
+like a path outside the prefix: no `api_logs` row, no span rows, no request
+id header; it still counts in `http_requests` and `http_errors`, and its
+errors and log lines are captured as usual.
 Never break or slow the response. Streaming responses must still stream; only
 copy up to the cap.
 

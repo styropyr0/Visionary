@@ -15,6 +15,8 @@ export interface ProfileSettings {
 export interface TeamSettings {
   profile: ProfileSettings;
   hidden_pages: string[];
+  /** Paths the SDKs leave out of the request log (Settings → Data). */
+  request_skip: string[];
   can_admin: boolean;
   can_edit: boolean;
 }
@@ -71,6 +73,9 @@ export const saveProfileSettings = (p: Pick<ProfileSettings, "enabled" | "servic
 export const profileNow = () => api<TeamSettings>("/api/settings/profile/now", { method: "POST", json: {} }).then(publish);
 
 export const saveHiddenPages = (hidden: string[]) => api<TeamSettings>("/api/settings/pages", { method: "PUT", json: { hidden_pages: hidden } }).then(publish);
+
+export const saveRequestSkip = (paths: string[]) =>
+  api<TeamSettings>("/api/settings/requests", { method: "PUT", json: { request_skip: paths } }).then(publish);
 
 export const profiledServices = (signal?: AbortSignal) => api<{ services: ProfiledService[] }>("/api/settings/profile/services", { signal });
 

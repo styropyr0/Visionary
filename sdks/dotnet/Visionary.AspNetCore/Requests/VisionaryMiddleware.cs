@@ -57,7 +57,7 @@ internal sealed class VisionaryMiddleware
         var threw = false;
         try
         {
-            if (!o.LogRequests || !path.StartsWith(o.PathPrefix, StringComparison.Ordinal))
+            if (!_agent.LogsPath(path))
             {
                 await PassThrough(ctx).ConfigureAwait(false);
                 return;

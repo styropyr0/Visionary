@@ -39,6 +39,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/styropyr0/visionary/sdks/go/d1"
@@ -294,6 +295,8 @@ type Agent struct {
 	// logs has its own writer so a flood of lines never crowds out request rows.
 	logs    *logger
 	metrics *metricsRecorder
+	// skip holds the paths Settings → Data leaves out.
+	skip atomic.Pointer[[]string]
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -403,6 +406,9 @@ func (a *Agent) Start(ctx context.Context) {
 		}
 		if len(a.cfg.Explain) > 0 && !a.cfg.ExplainOff {
 			go a.explainLoop(ctx)
+		}
+		if a.cfg.Requests.Enabled {
+			go a.skipLoop(ctx)
 		}
 	}
 	if a.system != nil {

@@ -10,11 +10,13 @@ import (
 	"time"
 
 	sdk "github.com/styropyr0/visionary/sdks/go"
+	"github.com/styropyr0/visionary/sdks/go/skiplist"
 )
 
 // Team-wide settings changed from the dashboard, kept in visionary_settings
 // (name, value). The SDKs read the profile.* rows to know whether to take CPU
-// profiles (see sdks/SPEC.md, "CPU profiles"); ui.* rows shape the dashboard.
+// profiles (see sdks/SPEC.md, "CPU profiles") and requests.skip for the paths
+// they leave out of the request log; ui.* rows shape the dashboard.
 
 const (
 	settingProfileEnabled  = "profile.enabled"
@@ -23,6 +25,12 @@ const (
 	settingProfileDuration = "profile.duration_ms"
 	settingProfileNow      = "profile.now"
 	settingHiddenPages     = "ui.hidden_pages"
+	settingRequestSkip     = skiplist.Setting
+)
+
+const (
+	maxSkipPaths   = 200
+	maxSkipPathLen = 512
 )
 
 // The pages that can be hidden from the sidebar; Settings always shows, so
@@ -37,6 +45,7 @@ func (s *Server) settingsRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/settings/profile/now", s.authed(s.handleProfileNow))
 	mux.Handle("GET /api/settings/profile/services", s.authed(s.handleProfileServices))
 	mux.Handle("PUT /api/settings/pages", s.authed(s.handlePageSettings))
+	mux.Handle("PUT /api/settings/requests", s.authed(s.handleRequestSettings))
 	mux.Handle("GET /api/settings/config", s.authed(s.handleConfigSettings))
 	mux.Handle("PUT /api/settings/config", s.authed(s.handlePutConfig))
 	mux.Handle("POST /api/settings/restart", s.authed(s.handleRestart))
@@ -89,6 +98,7 @@ type profileSettings struct {
 type settingsView struct {
 	Profile     profileSettings `json:"profile"`
 	HiddenPages []string        `json:"hidden_pages"`
+	RequestSkip []string        `json:"request_skip"`
 	CanAdmin    bool            `json:"can_admin"`
 	CanEdit     bool            `json:"can_edit"`
 }
@@ -131,7 +141,11 @@ func (s *Server) loadSettings(ctx context.Context) (settingsView, error) {
 	if v := m[settingHiddenPages][0]; v != "" {
 		_ = json.Unmarshal([]byte(v), &hidden)
 	}
-	return settingsView{Profile: p, HiddenPages: hidden}, nil
+	skip := skiplist.Parse(m[settingRequestSkip][0])
+	if skip == nil {
+		skip = []string{}
+	}
+	return settingsView{Profile: p, HiddenPages: hidden, RequestSkip: skip}, nil
 }
 
 func (s *Server) writeSettings(ctx context.Context, kv map[string]string) error {
@@ -298,5 +312,48 @@ func (s *Server) handlePageSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "pages.update", "", map[string]any{"hidden": hidden})
+	s.handleSettings(w, r)
+}
+
+// handleRequestSettings saves the paths every SDK leaves out of the request log.
+func (s *Server) handleRequestSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r, "admin") {
+		return
+	}
+	var body struct {
+		Skip []string `json:"request_skip"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	skip := []string{}
+	for _, p := range body.Skip {
+		p = strings.TrimSpace(p)
+		switch {
+		case p == "" || slices.Contains(skip, p):
+			continue
+		case !strings.HasPrefix(p, "/"):
+			writeError(w, http.StatusBadRequest, "paths start with /: "+p)
+			return
+		case len(p) > maxSkipPathLen:
+			writeError(w, http.StatusBadRequest, "paths are at most 512 characters")
+			return
+		case strings.Contains(strings.TrimSuffix(p, "*"), "*") || strings.Contains(p, "?"):
+			writeError(w, http.StatusBadRequest, "a * may only end a path, and paths have no query string: "+p)
+			return
+		}
+		skip = append(skip, p)
+	}
+	if len(skip) > maxSkipPaths {
+		writeError(w, http.StatusBadRequest, "at most 200 paths")
+		return
+	}
+	list, _ := json.Marshal(skip)
+	if err := s.writeSettings(r.Context(), map[string]string{settingRequestSkip: string(list)}); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.audit(r, "requests.skip", "", map[string]any{"paths": skip})
 	s.handleSettings(w, r)
 }

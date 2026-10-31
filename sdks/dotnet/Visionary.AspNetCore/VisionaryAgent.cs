@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -41,6 +42,7 @@ internal sealed class VisionaryAgent : IDisposable
     private static VisionaryAgent? _current;
     private readonly ErrorLimiter _limiter = new();
     private long _dropped;
+    private IReadOnlyList<string> _skip = Array.Empty<string>();
 
     public VisionaryAgent(IOptions<VisionaryOptions> options, ILoggerFactory loggers, IHostApplicationLifetime? lifetime = null)
     {
@@ -104,6 +106,17 @@ internal sealed class VisionaryAgent : IDisposable
 
     /// <summary>Null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
     public AppLogs? Logs { get; }
+
+    /// <summary>Settings → Data's skip list, refreshed by the telemetry writer.</summary>
+    public IReadOnlyList<string> Skip
+    {
+        get => Volatile.Read(ref _skip);
+        set => Volatile.Write(ref _skip, value);
+    }
+
+    /// <summary>Whether a request to this path gets an api_logs row, spans and a request id.</summary>
+    public bool LogsPath(string path) =>
+        Options.LogRequests && path.StartsWith(Options.PathPrefix, StringComparison.Ordinal) && !SkipList.Match(Skip, path);
 
     public bool SpansOn => Enabled && Options.Spans;
     public bool ErrorsOn => Enabled && Options.Errors;
