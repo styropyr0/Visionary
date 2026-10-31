@@ -26,7 +26,7 @@ module Visionary
 
       path = "#{env['SCRIPT_NAME']}#{env['PATH_INFO']}"
       path = "/" if path.empty?
-      # Unlogged requests still pass the trace on to their outbound calls.
+      # Unlogged requests still pass the trace on to their outbound calls
       span, parent = TraceContext.request_span(env)
       TraceContext.with(span) do
         next passthrough(agent, env) unless agent.log_path?(path)

@@ -35,7 +35,7 @@ class Config:
     capture_bodies: bool = True
     max_body_bytes: int = 8192
     queue_size: int = 5000
-    # 0 means 50 rows on D1 and 500 on SQL backends; at most 2000.
+    # 0 means 50 rows on D1 and 500 on SQL, at most 2000
     batch_size: int = 0
     flush_interval: float = 3.0
     log_retention_days: int = 0  # 0: off, the Visionary server applies Settings → Retention
@@ -44,8 +44,7 @@ class Config:
     redact_request_fields: List[str] = field(default_factory=list)
     error_code_field: str = "error.code"
     error_key_field: str = "error.key"
-    # Called on the writer threads, once per user per batch, for users missing
-    # a handle or role. Return (handle, role) or None.
+    # Runs on the writer threads for users missing a handle or role, returns (handle, role) or None
     lookup_user: Optional[LookupUser] = None
 
     system_metrics: bool = True
@@ -76,8 +75,7 @@ class Config:
     log_level: str = "info"
     log_queue_size: int = 10000
 
-    # Custom metrics are written every metrics_interval seconds. Past
-    # metrics_max_series label sets per name, new ones are dropped.
+    # Past metrics_max_series label sets per name, new ones are dropped
     metrics: bool = True
     metrics_interval: float = 15.0
     metrics_max_series: int = 1000

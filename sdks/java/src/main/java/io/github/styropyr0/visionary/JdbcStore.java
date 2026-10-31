@@ -21,12 +21,12 @@ import javax.sql.DataSource;
  * <p>With its own URL it keeps a few idle connections and drops one after an
  * error, so it recovers from a database restart. With the application's
  * DataSource it borrows a pooled connection per operation. Rows go in as
- * multi-row INSERTs built here, since SQLite's driver has no batch rewriting.
+ * multi-row INSERTs built here, since SQLite's driver has no batch rewriting
  */
 final class JdbcStore implements Store {
 
     private static final int MYSQL_DUPLICATE_KEY_NAME = 1061;
-    /** Below every backend's bound-parameter limit (SQLite's is 32766). */
+    /** Below every backend's bound-parameter limit (SQLite's is 32766) */
     static final int MAX_PARAMS_PER_STATEMENT = 30_000;
     static final int BATCH_SIZE = 500;
     static final int PARALLEL_WRITES = 4;
@@ -144,7 +144,6 @@ final class JdbcStore implements Store {
         });
     }
 
-    /** Writes the rows as INSERTs of as many rows as the parameter limit allows. */
     private void insert(Connection conn, Table table, List<Object[]> rows) throws SQLException {
         int per = rowsPerStatement(table);
         PreparedStatement ps = null;
@@ -183,7 +182,7 @@ final class JdbcStore implements Store {
         return BATCH_SIZE;
     }
 
-    /** PostgreSQL and MySQL insert in parallel; SQLite takes one writer at a time. */
+    /** PostgreSQL and MySQL insert in parallel, SQLite takes one writer at a time */
     @Override
     public int parallelWrites() {
         Dialect d = dialect;

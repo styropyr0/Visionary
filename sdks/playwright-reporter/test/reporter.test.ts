@@ -7,8 +7,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import VisionaryReporter, { buildPayload, flattenSteps, isFinal, newTraceparent, parseInterval, traceIdOf, type PWTestCase, type PWTestResult } from "../src/index.js";
 
-// Events as Playwright 1.4x hands them to a reporter, trimmed to what the
-// reporter reads.
 function testCase(over: Partial<PWTestCase> = {}): PWTestCase {
   return {
     title: "pays by card",

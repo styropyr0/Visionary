@@ -4,9 +4,7 @@
 request made through ``requests`` also passes through urllib3; the context
 flag below keeps that to one span.
 
-Each request carries a W3C ``traceparent`` naming its span (the current span
-when spans are off), so a service that reads it continues the trace. A
-``traceparent`` the caller set is left alone.
+Each request carries a W3C ``traceparent`` unless the caller set one
 """
 
 from __future__ import annotations
@@ -71,7 +69,6 @@ def _begin(method: str, url: str) -> Tuple[Optional[_spans.Span], Any]:
 
 
 def _trace_headers(span: Optional[_spans.Span], headers: Any) -> Optional[Dict[str, str]]:
-    """The trace headers to add to a request with these headers, or None."""
     if _spans.is_internal() or has_header(headers, TRACEPARENT):
         return None
     sc = span.context() if span is not None else _tracecontext.current_span()
@@ -196,7 +193,6 @@ def _patch_urllib3() -> None:
 
 
 def _inject_urllib3(pool: Any, span: Optional[_spans.Span], args: tuple, kwargs: dict) -> Tuple[tuple, dict]:
-    """urlopen's arguments with trace headers added to a copy of its headers."""
     try:
         positional = len(args) >= 2
         headers = args[1] if positional else kwargs.get("headers")

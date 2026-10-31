@@ -43,7 +43,7 @@ export class SqliteStore implements Store {
       }
       db = new nodeSqlite.DatabaseSync(path) as SyncDatabase;
     }
-    // The server and other instances share the file, so wait for its lock.
+    // The server and other instances share the file, so wait for its lock
     db!.exec("PRAGMA busy_timeout = 5000");
     db!.exec("PRAGMA journal_mode = WAL");
     return new SqliteStore(db!, true);
@@ -59,7 +59,7 @@ export class SqliteStore implements Store {
     });
   }
 
-  /** Statements that repeat are prepared once and kept; one-off ones (multi-row INSERTs) are not. */
+  // Only repeated statements are cached, not one-off multi-row INSERTs
   async batch(stmts: Stmt[]): Promise<void> {
     quietly(() => {
       const uses = new Map<string, number>();

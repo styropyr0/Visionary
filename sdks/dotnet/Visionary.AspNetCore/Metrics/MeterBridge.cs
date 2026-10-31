@@ -6,10 +6,7 @@ using System.Linq;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>
-/// Records instruments of the meters in VISIONARY_METRICS_METERS as custom metrics, tags as labels.
-/// Up-down counters become gauges; observable counters are skipped since they report running totals.
-/// </summary>
+// Up-down counters become gauges, observable counters are skipped since they report totals
 internal sealed class MeterBridge : IDisposable
 {
     private static readonly ConcurrentDictionary<Instrument, string?> Kinds = new();
@@ -36,7 +33,6 @@ internal sealed class MeterBridge : IDisposable
         _listener.Start();
     }
 
-    /// <summary>Reads observable gauges; called before each interval is collected.</summary>
     public void Observe() => _listener.RecordObservableInstruments();
 
     public void Dispose()

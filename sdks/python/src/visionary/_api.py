@@ -19,9 +19,8 @@ class span:
 
     ``kind`` is ``db``, ``http``, ``cache``, ``queue``, ``custom`` or
     ``background`` (anything else becomes ``custom``). An exception leaving
-    the block marks the span as failed and propagates unchanged. Calls made
-    inside the block are its children in the trace. Does nothing when spans
-    are off.
+    the block marks the span as failed and propagates unchanged. Does nothing
+    when spans are off
     """
 
     __slots__ = ("_args", "_span", "_token")

@@ -32,7 +32,6 @@ import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpResponse;
 
-/** W3C trace context: incoming headers, span ids and parents, outbound headers and log lines. */
 class TraceTest {
 
     private static final String TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -241,7 +240,7 @@ class TraceTest {
         assertEquals("CREATE INDEX idx_spans_trace_id ON spans (trace_id)", Dialect.MYSQL.traceIndex("spans"));
     }
 
-    /** One RestTemplate/RestClient call through the interceptor; returns the headers it sent. */
+    /** One call through the interceptor, returns the headers it sent */
     private static HttpHeaders call(HttpHeaders headers) throws java.io.IOException {
         HttpRequest req = new HttpRequest() {
             @Override

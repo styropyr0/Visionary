@@ -29,7 +29,7 @@ export class MysqlStore implements Store {
   static fromUrl(url: string): MysqlStore {
     const mysql = optionalRequire("mysql2/promise");
     if (!mysql?.createPool) throw new Error("visionary: MySQL needs the mysql2 package: npm install mysql2");
-    // Room for the writer's 4 parallel batches and a read.
+    // Room for the writer's 4 parallel batches and a read
     const pool = mysql.createPool({ uri: url, connectionLimit: 5, timezone: "Z", charset: "utf8mb4", connectTimeout: 10_000 });
     return new MysqlStore(pool, true);
   }

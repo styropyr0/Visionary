@@ -7,10 +7,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>
-/// Writes one row per active series each interval, with two retries. The table is only created
-/// once there are rows, and the last interval is written on shutdown.
-/// </summary>
 internal sealed class MetricsWriter : BackgroundService
 {
     private const int QueueSize = 20_000;
@@ -69,7 +65,6 @@ internal sealed class MetricsWriter : BackgroundService
         }
     }
 
-    /// <summary>Takes the interval that ends at <paramref name="now"/> and writes it.</summary>
     internal async Task FlushAsync(DateTime now, CancellationToken ct)
     {
         _meters?.Observe();

@@ -2,7 +2,7 @@ namespace Styropyr0.Visionary;
 
 public static partial class Visionary
 {
-    /// <summary>How far the background writers lag behind, for load tests and health checks.</summary>
+    /// <summary>How far the background writers lag behind</summary>
     public static VisionaryWriterStats WriterStats()
     {
         if (VisionaryAgent.Current is not { } agent)
@@ -14,8 +14,8 @@ public static partial class Visionary
     }
 }
 
-/// <summary>Writer totals across request rows, logs and metrics.</summary>
-/// <param name="Queued">Rows waiting for the database.</param>
-/// <param name="Written">Rows written since start.</param>
-/// <param name="Dropped">Rows lost to a full queue or a write that failed three times.</param>
+/// <summary>Writer totals across request rows, logs and metrics</summary>
+/// <param name="Queued">Rows waiting for the database</param>
+/// <param name="Written">Rows written since start</param>
+/// <param name="Dropped">Rows lost to a full queue or a write that failed three times</param>
 public sealed record VisionaryWriterStats(int Queued, long Written, long Dropped);

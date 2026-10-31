@@ -1,8 +1,3 @@
-"""Tests for W3C trace context (SPEC "Trace context").
-
-Run from sdks/python:  python -m unittest discover -s tests -v
-"""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,8 +1,4 @@
-"""W3C trace context (https://www.w3.org/TR/trace-context/).
-
-A request continues the trace in its ``traceparent`` header or starts one,
-and outgoing requests carry it on so the services they reach join it.
-"""
+"""W3C trace context (https://www.w3.org/TR/trace-context/)"""
 
 from __future__ import annotations
 
@@ -16,14 +12,12 @@ TRACESTATE = "tracestate"
 
 
 class SpanContext:
-    """The span that calls made in a context belong to."""
-
     __slots__ = ("trace_id", "span_id", "flags", "state")
 
     def __init__(self, trace_id: str, span_id: str, flags: str = "01", state: str = "") -> None:
         self.trace_id = trace_id
         self.span_id = span_id
-        # flags is the trace-flags byte in hex; state is the caller's tracestate, passed on as is.
+        # state is the caller's tracestate, passed on as is
         self.flags = flags or "01"
         self.state = state
 
@@ -38,8 +32,7 @@ _current: ContextVar[Optional[SpanContext]] = ContextVar("visionary_span", defau
 
 
 def current_span() -> Optional[SpanContext]:
-    """The innermost span: a custom or background span, else the request's
-    server span. None outside any trace."""
+    """The innermost custom, background or request span, or None outside a trace"""
     return _current.get()
 
 
@@ -62,14 +55,13 @@ def _hex(s: str, n: int) -> bool:
 
 
 def parse_traceparent(header: Optional[str]) -> Optional[SpanContext]:
-    """The caller's span from a traceparent header, or None for anything
-    malformed, version ff and all-zero ids."""
+    """The caller's span, or None when the header is malformed, version ff or has zero ids"""
     if not header:
         return None
     parts = header.strip().split("-")
     if len(parts) < 4 or parts[0] == "ff":
         return None
-    # Version 00 has exactly four fields; later versions may append more.
+    # Version 00 has exactly four fields, later versions may append more
     if parts[0] == "00" and len(parts) != 4:
         return None
     version, trace_id, parent, flags = parts[:4]
@@ -80,7 +72,6 @@ def parse_traceparent(header: Optional[str]) -> Optional[SpanContext]:
     return SpanContext(trace_id, parent, flags)
 
 
-# random's generator is seeded from the OS; the ids are not secrets.
 def new_trace_id() -> str:
     n = 0
     while n == 0:
@@ -96,9 +87,7 @@ def new_span_id() -> str:
 
 
 def request_span(traceparent: Optional[str], tracestate: Optional[str] = None) -> Tuple[SpanContext, str]:
-    """The server span of an incoming request and its parent span id ("" when
-    it starts a trace). An active OpenTelemetry span wins over the header,
-    since OpenTelemetry already read it."""
+    """An active OpenTelemetry span wins over the header, since OpenTelemetry already read it"""
     parent = _otel_span() or parse_traceparent(traceparent)
     if parent is not None:
         if tracestate and not parent.state:
@@ -125,7 +114,6 @@ def _otel_span() -> Optional[SpanContext]:
 
 
 def has_header(headers: Any, name: str) -> bool:
-    """Case-insensitive lookup in a mapping or a list of pairs."""
     if headers is None:
         return False
     try:

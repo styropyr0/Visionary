@@ -3,14 +3,7 @@
 require "digest"
 
 module Visionary
-  # Custom metrics: counters, gauges and histograms the application defines.
-  # Values add up in memory and the started agent writes one metrics row per
-  # series every interval (15 s by default). Recording never waits for the
-  # database, and works before the agent starts.
-  #
-  # Each distinct label set is one series; past max_series (1000) series per
-  # metric name new ones are dropped and counted, so a label holding user ids
-  # cannot fill the database.
+  # Counters, gauges and histograms, written as one metrics row per series every interval
   module Metrics
     MAX_NAME = 200
     MAX_LABELS = 20
@@ -18,10 +11,9 @@ module Visionary
     MAX_VALUE = 200
     DEFAULT_MAX_SERIES = 1000
 
-    # OpenTelemetry's defaults, which suit milliseconds.
+    # OpenTelemetry's defaults, in milliseconds
     DEFAULT_BUCKETS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10_000].map(&:to_f).freeze
 
-    # One series. Every kind shares it; the handles below use their part.
     class Series
       attr_reader :name, :kind, :unit, :labels, :id, :bounds
 
@@ -68,8 +60,7 @@ module Visionary
         end
       end
 
-      # This interval's row values, or nil when there is nothing to write;
-      # counters and histograms start the next interval from zero.
+      # Counters and histograms start the next interval from zero
       def take
         @mutex.synchronize do
           case @kind
@@ -102,11 +93,10 @@ module Visionary
       end
     end
 
-    # A counter series. Rows hold the increase over each interval.
     class Counter
       def initialize(series) = @s = series
 
-      # Adds n (ignored unless positive and finite).
+      # Ignored unless positive and finite
       def add(n = 1)
         n = Metrics.number(n)
         @s.add(n) if @s && n&.positive?
@@ -116,18 +106,16 @@ module Visionary
       def inc = add(1)
     end
 
-    # A gauge series. Rows hold the last value, every interval once set.
     class Gauge
       def initialize(series) = @s = series
 
-      # Sets the gauge (ignored when not finite).
       def set(v)
         v = Metrics.number(v)
         @s.set(v) if @s && v
         nil
       end
 
-      # Moves the gauge by delta, from 0 when it was never set.
+      # Moves the gauge by delta, from 0 when it was never set
       def add(delta)
         delta = Metrics.number(delta)
         @s.move(delta) if @s && delta
@@ -135,12 +123,9 @@ module Visionary
       end
     end
 
-    # A histogram series. Rows hold each interval's count, sum, min, max and
-    # bucket counts.
     class Histogram
       def initialize(series) = @s = series
 
-      # Records one value (ignored when not finite).
       def observe(v)
         v = Metrics.number(v)
         @s.observe(v) if @s && v
@@ -148,7 +133,6 @@ module Visionary
       end
     end
 
-    # Every series of the process, for its whole life.
     class Registry
       attr_accessor :max_series
 
@@ -170,7 +154,7 @@ module Visionary
         @mutex.synchronize { @opts[name] = { unit: unit.empty? ? nil : unit, buckets: buckets && !buckets.empty? ? buckets : nil } }
       end
 
-      # The series, or nil when the name is empty or the name is over its cap.
+      # nil when the name is empty or over its cap
       def get(name, kind, labels)
         name = Metrics.clean_name(name)
         return nil if name.empty?
@@ -192,8 +176,6 @@ module Visionary
         end
       end
 
-      # Each series' interval as rows (in series order) and the drops since
-      # the last call, by name.
       def collect
         all, dropped = @mutex.synchronize do
           d = @dropped
@@ -209,8 +191,7 @@ module Visionary
       end
     end
 
-    # metrics columns after created_at, service and instance, which the
-    # recorder fills in.
+    # Columns after created_at, service and instance
     def self.row(s, v)
       [s.name, s.kind, s.unit, s.labels, s.id, v[:value], v[:count], v[:sum], v[:min], v[:max], v[:buckets]]
     end
@@ -224,7 +205,6 @@ module Visionary
       def gauge(name, labels) = Gauge.new(get(name, "gauge", labels))
       def histogram(name, labels) = Histogram.new(get(name, "histogram", labels))
 
-      # VISIONARY_METRICS=false makes every handle a no-op.
       def get(name, kind, labels)
         Visionary.config.metrics ? registry.get(name, kind, labels) : nil
       end
@@ -237,7 +217,6 @@ module Visionary
         hash.to_h.merge(kw)
       end
 
-      # A finite Float, or nil.
       def number(v)
         f = Float(v)
         f.finite? ? f : nil
@@ -247,8 +226,6 @@ module Visionary
 
       def clean_name(name) = cut(name.to_s.strip, MAX_NAME)
 
-      # String keys and values: empty keys dropped, keys and values cut, the
-      # first 20 keys in byte order kept, in that order.
       def clean_labels(labels)
         return {} if labels.nil? || labels.empty?
 
@@ -261,9 +238,7 @@ module Visionary
         out.keys.sort.first(MAX_LABELS).to_h { |k| [k, out[k]] }
       end
 
-      # The canonical labels text of a series and its id (sdks/SPEC.md):
-      # a JSON object with keys in byte order, and the first 16 hex digits of
-      # SHA-256 over name, a newline and that text. labels must be clean.
+      # Labels as JSON with sorted keys, and the first 16 hex digits of SHA-256 over name, newline, JSON
       def series(name, labels)
         text = +"{"
         labels.keys.sort.each_with_index do |k, i|
@@ -274,7 +249,7 @@ module Visionary
         [text, Digest::SHA256.hexdigest("#{name}\n#{text}")[0, 16]]
       end
 
-      # Escapes only what JSON requires, so every SDK produces the same bytes.
+      # Escapes only what JSON requires, so every SDK produces the same bytes
       def json_string(s)
         out = +"\""
         s.each_char do |c|
@@ -287,14 +262,12 @@ module Visionary
         out << "\""
       end
 
-      # {"bounds":[...],"counts":[...]} with whole numbers written as such.
       def encode_buckets(bounds, counts)
         "{\"bounds\":[#{bounds.map { |b| num(b) }.join(',')}],\"counts\":[#{counts.join(',')}]}"
       end
 
       def num(f) = f == f.floor && f.abs < 1e15 ? f.to_i.to_s : f.to_s
 
-      # UTF-8, cut to max bytes on a character boundary.
       def cut(s, max)
         s = Visionary.utf8(s)
         return s if s.bytesize <= max
@@ -303,7 +276,6 @@ module Visionary
       end
     end
 
-    # Writes the registry every interval through a writer of its own.
     class Recorder
       def initialize(cfg, instance, store, schemas, logger, registry: Metrics.registry)
         @cfg = cfg
@@ -324,7 +296,6 @@ module Visionary
         self
       end
 
-      # Writes the last interval, then flushes.
       def close(timeout)
         @mutex.synchronize do
           @stopped = true
@@ -334,7 +305,7 @@ module Visionary
         @writer.close(timeout)
       end
 
-      # The parent writes what it recorded before the fork.
+      # The parent writes what it recorded before the fork
       def after_fork
         @registry.collect
         reset
@@ -350,7 +321,7 @@ module Visionary
         end
         return if rows.empty?
 
-        # Services without custom metrics never get the table.
+        # Services without custom metrics never get the table
         @writer.use_table!
         stamp = Visionary.timestamp(at)
         rows.each do |r|
@@ -392,7 +363,6 @@ module Visionary
       def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    # Its own thread and queue (room for many series at once).
     class Writer < Visionary::Writer
       QUEUE_SIZE = 20_000
 

@@ -10,7 +10,7 @@ require "sqlite3"
 class MetricsTest < Minitest::Test
   M = Visionary::Metrics
 
-  # Row positions after created_at, service and instance.
+  # Row positions after created_at, service and instance
   NAME = 0
   KIND = 1
   LABELS = 3

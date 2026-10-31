@@ -110,10 +110,7 @@ final class StoreFactory {
                     + " (use postgres://, mysql://, sqlite://, d1:// or a jdbc: URL)");
         }
 
-        /**
-         * The writers and the Visionary server share a SQLite file: wait up to 5 s
-         * for its lock instead of failing at once, and use WAL.
-         */
+        /** The server shares the SQLite file, so wait up to 5 s for its lock and use WAL */
         void sharedFile() {
             String lower = url.toLowerCase(Locale.ROOT);
             if (!lower.contains("busy_timeout")) {

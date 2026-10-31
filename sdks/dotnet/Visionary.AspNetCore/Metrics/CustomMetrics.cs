@@ -8,8 +8,8 @@ using System.Threading;
 
 namespace Styropyr0.Visionary;
 
-// Values add up in memory and the metrics writer stores one row per series each interval,
-// so recording never waits for the database.
+// Values add up in memory and the writer stores one row per series each interval,
+// so recording never waits for the database
 
 internal sealed class MetricSeries
 {
@@ -51,7 +51,6 @@ internal sealed record MetricRecord
     public string? Buckets { get; init; }
 }
 
-/// <summary>Every series the process has recorded; series are never forgotten.</summary>
 internal sealed class MetricRegistry
 {
     public const int MaxName = 200;
@@ -60,7 +59,6 @@ internal sealed class MetricRegistry
     public const int MaxLabelValue = 200;
     public const int DefaultMaxSeries = 1000;
 
-    /// <summary>OpenTelemetry's default histogram bounds, which suit milliseconds.</summary>
     public static readonly double[] DefaultBuckets = { 0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000 };
 
     public static MetricRegistry Shared { get; } = new();
@@ -79,7 +77,7 @@ internal sealed class MetricRegistry
         set => Volatile.Write(ref _maxSeries, value > 0 ? value : DefaultMaxSeries);
     }
 
-    /// <summary>VISIONARY_METRICS=false: every call records nothing.</summary>
+    // VISIONARY_METRICS=false makes every call a no-op
     public bool Off
     {
         get => _off;
@@ -100,7 +98,6 @@ internal sealed class MetricRegistry
         }
     }
 
-    /// <summary>Sets the unit of a metric that was not described.</summary>
     public void DescribeUnit(string name, string unit)
     {
         name = CleanName(name);
@@ -110,7 +107,7 @@ internal sealed class MetricRegistry
         }
     }
 
-    /// <summary>The series, created on first use; null when it records nothing (no name, off, over the cap).</summary>
+    // Null when it records nothing (no name, off, over the cap)
     public MetricSeries? Get(string? name, string kind, IEnumerable<KeyValuePair<string, string?>>? labels)
     {
         if (_off)
@@ -154,10 +151,6 @@ internal sealed class MetricRegistry
         }
     }
 
-    /// <summary>
-    /// Counters and histograms that moved this interval plus every gauge ever set, and the
-    /// number of series dropped over the cap per name.
-    /// </summary>
     public (List<MetricRecord> Rows, Dictionary<string, long> Dropped) Collect(DateTime now)
     {
         MetricSeries[] all;
@@ -221,10 +214,7 @@ internal sealed class MetricRegistry
         Value = value,
     };
 
-    /// <summary>
-    /// Labels as JSON with keys in UTF-8 byte order, so every SDK writes the same bytes. Empty keys
-    /// are dropped, keys and values cut to 100 and 200 bytes, and at most 20 keys kept.
-    /// </summary>
+    // Keys sorted in UTF-8 byte order so every SDK writes the same bytes
     public static string LabelsJson(IEnumerable<KeyValuePair<string, string?>>? labels)
     {
         var clean = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -255,7 +245,7 @@ internal sealed class MetricRegistry
         return sb.Append('}').ToString();
     }
 
-    /// <summary>The first 16 hex digits of SHA-256 over the name, a newline and the labels text.</summary>
+    // First 16 hex digits of SHA-256 over the name, a newline and the labels
     public static string SeriesId(string name, string labels) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name + "\n" + labels)), 0, 8).ToLowerInvariant();
 
@@ -289,12 +279,12 @@ internal sealed class MetricRegistry
         return sb.Append("]}").ToString();
     }
 
-    // Shortest round-trip form with a lowercase e, as Go writes it.
+    // Shortest round-trip form with a lowercase e, as Go writes it
     private static string Number(double d) => d.ToString("R", CultureInfo.InvariantCulture).Replace('E', 'e');
 
     public static string CleanName(string? name) => CutUtf8((name ?? "").Trim(), MaxName);
 
-    /// <summary>Cuts s to at most n UTF-8 bytes on a character boundary; broken surrogates become U+FFFD.</summary>
+    // Broken surrogates become U+FFFD
     public static string CutUtf8(string s, int n)
     {
         var bytes = Encoding.UTF8.GetBytes(s);

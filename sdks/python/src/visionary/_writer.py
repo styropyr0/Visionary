@@ -16,18 +16,16 @@ from ._storage import PURGE_CHUNK, Backend
 
 _STOP = object()
 
-# Rows per batch. D1 takes 50 statements a call; an app may raise the SQL batch to 2000.
+# D1 takes 50 statements a call
 D1_BATCH = 50
 SQL_BATCH = 500
 MAX_SQL_BATCH = 2000
-# Batches written at once on PostgreSQL and MySQL; SQLite and D1 take one.
+# Batches written at once on PostgreSQL and MySQL, SQLite and D1 take one
 PARALLEL_FLUSHES = 4
 
 
 class WriterStats(NamedTuple):
-    """Totals across the writers: rows queued, and rows written or dropped since start.
-
-    A row is dropped when the queue is full or its write fails three times."""
+    """Rows queued, written and dropped (queue full or three failed writes) since start"""
 
     queued: int = 0
     written: int = 0
@@ -181,8 +179,6 @@ class RequestWriter:
                 self._free.release()
 
     def _flush(self, batch: List[Any]) -> None:
-        """Write batch here, or hand it to a free flusher; while all are busy
-        the queue absorbs the load."""
         if not self._flush_threads:
             self._write(batch)
             return

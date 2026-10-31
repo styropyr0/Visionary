@@ -162,10 +162,7 @@ internal static class StoreFactory
             return d == VisionaryDialect.Sqlite ? OpenSqliteAsync(conn, ct) : OpenAsync(conn, ct);
         }, d, Redacted(raw) + $" ({Name(d)})");
 
-    /// <summary>
-    /// The server shares the file, so wait up to 5 s for the lock and use WAL so readers don't
-    /// block writers.
-    /// </summary>
+    // The server shares the file, so wait up to 5 s for the lock and use WAL
     private static async ValueTask<DbConnection> OpenSqliteAsync(DbConnection conn, CancellationToken ct)
     {
         await OpenAsync(conn, ct).ConfigureAwait(false);

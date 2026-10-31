@@ -15,7 +15,6 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-/** Custom metrics: series identity, aggregation per interval and the rows written. */
 class MetricsTest {
 
     private final Metrics reg = Metrics.REGISTRY;
@@ -46,7 +45,7 @@ class MetricsTest {
         labels.put("a", "1");
         assertEquals("{\"a\":\"1\",\"b\":\"q\\\"\\\\\\u000a<&é\"}", Metrics.series("x", labels)[0]);
 
-        // Byte order: U+FF21 sorts before a supplementary character in UTF-8, after it in UTF-16.
+        // U+FF21 sorts before a supplementary character in UTF-8, after it in UTF-16
         Map<String, String> order = new LinkedHashMap<>();
         order.put("😀", "2");
         order.put("Ａ", "1");

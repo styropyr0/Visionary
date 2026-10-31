@@ -6,10 +6,6 @@ using System.Threading.Tasks;
 
 namespace Styropyr0.Visionary;
 
-/// <summary>
-/// D1 gets one INSERT per row, 50 to a call; SQL backends get multi-row INSERTs kept under the
-/// bound-parameter limit.
-/// </summary>
 internal static class Batches
 {
     public const int D1Size = 50;
@@ -17,11 +13,10 @@ internal static class Batches
     public const int MaxSqlSize = 2000;
     public const int MaxParamsPerStatement = 30_000;
 
-    // Microsoft.Data.Sqlite binds parameters by name in quadratic time: 30000 take seconds.
+    // Microsoft.Data.Sqlite binds parameters by name in quadratic time, so 30000 take seconds
     public const int MaxSqliteParams = 250;
     public const int ParallelFlushes = 4;
 
-    /// <summary>Rows per batch for this store, honouring <see cref="VisionaryOptions.BatchSize"/>.</summary>
     public static int Size(IStore? store, int configured)
     {
         if (store is null || store.StringParams)
@@ -31,11 +26,11 @@ internal static class Batches
         return configured is > 0 and <= MaxSqlSize ? configured : DefaultSqlSize;
     }
 
-    /// <summary>How many batches may be written at once: SQLite and D1 take one writer at a time.</summary>
+    // SQLite and D1 take one writer at a time
     public static int Flushers(IStore? store) =>
         store is null || store.StringParams || store.Dialect == VisionaryDialect.Sqlite ? 1 : ParallelFlushes;
 
-    /// <summary>Merges single-row INSERTs into multi-row ones; D1 statements pass through.</summary>
+    // D1 statements pass through
     public static List<Stmt> Combine(IStore? store, List<Stmt> stmts)
     {
         if (store is null || store.StringParams || stmts.Count < 2)
@@ -113,7 +108,6 @@ internal static class Batches
     }
 }
 
-/// <summary>Caps concurrent batch writes; the writer loop waits for a free slot.</summary>
 internal sealed class Flushes
 {
     private readonly SemaphoreSlim _slots;
@@ -150,7 +144,6 @@ internal sealed class Flushes
     }
 }
 
-/// <summary>Rows written and dropped since start, summed over the writers.</summary>
 internal sealed class WriterCounters
 {
     private long _written;

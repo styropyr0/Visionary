@@ -43,7 +43,6 @@ module Visionary
 
     def size = @mutex.synchronize { @items.size }
 
-    # Every item dropped since the queue was made.
     def dropped_total = @mutex.synchronize { @dropped_total }
 
     def take_dropped

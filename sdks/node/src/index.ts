@@ -1,9 +1,8 @@
 /**
  * Visionary collector for Node.js. It writes one row per HTTP request
  * (api_logs), periodic host/process/runtime samples (system_metrics), and the
- * spans, errors, releases, application logs and custom metrics of the
- * service, in batches off the request path. Requests continue the caller's
- * W3C trace (traceparent) and outbound HTTP calls carry it on.
+ * spans, errors, releases, app logs and custom metrics, in batches off the
+ * request path. Traces continue across incoming and outbound HTTP calls
  *
  *     import visionary from "visionary-sdk";
  *     visionary.init();

@@ -90,7 +90,6 @@ export function trackedState(req: unknown): RequestState | undefined {
   return (req as Record<symbol, RequestState | undefined> | undefined)?.[TRACKED];
 }
 
-/** Runs fn inside the request's span and, when it is logged, its state. */
 export function enterRequest<T>(req: unknown, fn: () => T): T {
   const span = (req as Record<symbol, SpanContext | undefined> | undefined)?.[TRACE];
   const state = trackedState(req);
@@ -103,7 +102,7 @@ export function enterRequest<T>(req: unknown, fn: () => T): T {
  * logged, a RequestState plus copies of the bodies (up to the cap) taken as
  * they stream. The row is queued when the response finishes. Request events
  * run inside the span and state, so code after body parsing still sees
- * setUser and the trace.
+ * setUser and the trace
  *
  * `url` is the full original URL (Express rewrites req.url in sub-routers).
  */

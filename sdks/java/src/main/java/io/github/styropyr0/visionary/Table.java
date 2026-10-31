@@ -131,7 +131,7 @@ final class Table {
     final List<Type> types;
     /** Columns added after the first release, in insert order. */
     final List<String> addedColumns;
-    /** Whether {@code idx_<name>_trace_id} is created after the added columns. */
+    /** Whether {@code idx_<name>_trace_id} is created after the added columns */
     final boolean traceIndex;
     private final Map<String, Integer> index;
 
@@ -167,7 +167,6 @@ final class Table {
                 + String.join(", ", ph) + ")";
     }
 
-    /** One INSERT carrying {@code n} rows, for SQL backends. */
     String insertRowsSql(int n) {
         String row = "(" + String.join(", ", Collections.nCopies(columns.size(), "?")) + ")";
         StringBuilder b = new StringBuilder(64 + 16 * columns.size() + n * (row.length() + 2));
@@ -216,7 +215,7 @@ final class Table {
             return this;
         }
 
-        /** Older tables only have trace_id once the added columns are in, so the index follows them. */
+        /** Older tables only get trace_id with the added columns, so the index follows them */
         Builder traceIndex() {
             traceIndex = true;
             return this;

@@ -2,25 +2,14 @@ import { createHash } from "node:crypto";
 import type { Value } from "./store/sql.js";
 import { formatTs } from "./util.js";
 
-/**
- * Custom counters, gauges and histograms. Values add up in memory and the
- * agent writes one row per series every interval (15 s by default).
- *
- *     visionary.counter("orders_placed", { region: "eu" }).add(1);
- *     visionary.gauge("queue_depth", { queue: "emails" }).set(n);
- *     visionary.histogram("checkout_ms").observe(took);
- *
- * Each label set is one series. Past 1000 series per metric name new ones are
- * dropped and counted, so a label holding user ids can't fill the database.
- */
+// Each label set is one series. Past the series cap new ones are dropped and counted
 
 const MAX_NAME = 200;
 const MAX_LABELS = 20;
 const MAX_KEY = 100;
 const MAX_VALUE = 200;
 
-/** Histogram bucket upper bounds unless describeMetric sets others
- * (OpenTelemetry's defaults, which suit milliseconds). */
+// OpenTelemetry's defaults, which suit milliseconds
 export const DEFAULT_BUCKETS: readonly number[] = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000];
 
 export type Labels = Record<string, string | number | boolean | null | undefined>;
@@ -28,7 +17,7 @@ export type Labels = Record<string, string | number | boolean | null | undefined
 export interface MetricOptions {
   /** "ms", "bytes", "requests"… */
   unit?: string;
-  /** Histogram bucket upper bounds. */
+  /** Histogram bucket upper bounds */
   buckets?: number[];
 }
 
@@ -56,11 +45,10 @@ class Series {
   }
 }
 
-/** A counter series. Rows hold the increase over each interval. */
 export class Counter {
   constructor(private readonly s?: Series) {}
 
-  /** Adds n (ignored unless positive and finite). */
+  /** Ignored unless positive and finite */
   add(n: number): void {
     const s = this.s;
     if (!s || !(n > 0) || n === Infinity) return;
@@ -73,7 +61,6 @@ export class Counter {
   }
 }
 
-/** A gauge series. Rows hold the last value, every interval once it was set. */
 export class Gauge {
   constructor(private readonly s?: Series) {}
 
@@ -84,7 +71,7 @@ export class Gauge {
     s.touched = true;
   }
 
-  /** Moves the gauge by delta, from 0 when it was never set. */
+  /** Starts from 0 when the gauge was never set */
   add(delta: number): void {
     const s = this.s;
     if (!s || !Number.isFinite(delta)) return;
@@ -93,8 +80,6 @@ export class Gauge {
   }
 }
 
-/** A histogram series. Rows hold each interval's count, sum, min, max and
- * bucket counts. */
 export class Histogram {
   constructor(private readonly s?: Series) {}
 
@@ -118,7 +103,6 @@ const options = new Map<string, MetricOptions>();
 let maxSeries = 1000;
 let enabled = true;
 
-/** Set by the agent from its configuration (VISIONARY_METRICS, VISIONARY_METRICS_MAX_SERIES). */
 export function configureMetrics(on: boolean, max: number): void {
   enabled = on;
   if (max > 0) maxSeries = max;
@@ -152,8 +136,7 @@ function get(name: string, kind: Kind, labels: Labels | undefined): Series | und
   return s;
 }
 
-/** The counter `name` with `labels`. Works before init(); keep the handle to
- * skip the lookup. */
+/** Works before init(). Keep the handle to skip the lookup */
 export function counter(name: string, labels?: Labels): Counter {
   return new Counter(get(name, "counter", labels));
 }
@@ -166,8 +149,7 @@ export function histogram(name: string, labels?: Labels): Histogram {
   return new Histogram(get(name, "histogram", labels));
 }
 
-/** Sets a metric's unit and histogram buckets. Call it before the metric's
- * first use; series created earlier keep theirs. */
+/** Call before the metric's first use, earlier series keep their settings */
 export function describeMetric(name: string, opts: MetricOptions): void {
   name = cleanName(name);
   if (!name) return;
@@ -178,10 +160,6 @@ export function describeMetric(name: string, opts: MetricOptions): void {
   options.set(name, o);
 }
 
-/**
- * Takes each series' interval as rows (without service and instance):
- * counters and histograms that moved, and every gauge ever set.
- */
 export function collectMetrics(at: number): { rows: Value[][]; dropped: Map<string, number> } {
   const out: { id: string; row: Value[] }[] = [];
   const ts = formatTs(at);
@@ -208,12 +186,8 @@ export function collectMetrics(at: number): { rows: Value[][]; dropped: Map<stri
   return { rows: out.map((o) => o.row), dropped: d };
 }
 
-/**
- * The canonical labels text of a series and its id: labels as a JSON object
- * with keys in byte order, and the first 16 hex digits of SHA-256 over name,
- * a newline and that text. Empty keys are dropped, keys and values are cut to
- * 100 and 200 bytes, and only the first 20 keys are kept.
- */
+// Labels as JSON with sorted keys, and the id is 16 hex of SHA-256 over name, newline and that text
+// Every SDK must produce the same bytes
 export function metricSeries(name: string, labels: Record<string, string>): [string, string] {
   const clean = new Map<string, string>();
   for (const [k, v] of Object.entries(labels)) {
@@ -226,7 +200,7 @@ export function metricSeries(name: string, labels: Record<string, string>): [str
   return [text, id];
 }
 
-/** Escapes only what JSON requires, so every SDK produces the same bytes. */
+// Escapes only what JSON requires, to match the other SDKs
 function jsonString(s: string): string {
   let out = '"';
   for (const ch of s) {
@@ -238,7 +212,6 @@ function jsonString(s: string): string {
   return out + '"';
 }
 
-/** Cuts to n UTF-8 bytes on a character boundary; lone surrogates become U+FFFD. */
 function cutBytes(s: string, n: number): string {
   const b = Buffer.from(s, "utf8");
   if (b.length <= n) return b.toString("utf8");
@@ -251,7 +224,7 @@ function cleanName(name: string): string {
   return cutBytes(String(name ?? "").trim(), MAX_NAME);
 }
 
-/** Forgets every series (tests). */
+/** For tests */
 export function resetMetrics(): void {
   series.clear();
   perName.clear();

@@ -51,10 +51,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
         this.maxBodyBytes = cfg == null ? 8192 : cfg.maxBodyBytes();
     }
 
-    /**
-     * Continues the caller's trace or starts one, for every request: outbound calls
-     * carry it on even when the request is not logged.
-     */
+    /** Continues the caller's trace or starts one, even when the request is not logged */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

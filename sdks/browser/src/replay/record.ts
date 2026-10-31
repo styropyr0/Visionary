@@ -1,8 +1,4 @@
-/**
- * The DOM recorder: a full snapshot of the page, then its mutations, mouse,
- * scroll, input and viewport changes. Each event is [time ms, type, data];
- * the dashboard's player reads the same shapes (web/src/lib/replay.ts).
- */
+// Events are [time ms, type, data], the shapes web/src/lib/replay.ts plays back
 
 export type Ev = [number, number, unknown];
 
@@ -14,7 +10,7 @@ export const SCROLL = 5;
 export const INPUT = 6;
 export const VIEWPORT = 7;
 
-/** A serialized node: t is the node type (1 element, 3 text, 8 anything else). */
+/** t is the node type: 1 element, 3 text, 8 anything else */
 export interface SNode {
   i: number;
   t: 1 | 3 | 8;
@@ -22,9 +18,8 @@ export interface SNode {
   a?: Record<string, string>;
   c?: SNode[];
   x?: string;
-  /** Set on SVG elements. */
   s?: 1;
-  /** Blocked: drawn as an empty box of this size. */
+  /** Blocked, drawn as an empty box of this size */
   b?: [number, number];
 }
 
@@ -40,7 +35,7 @@ const MASK = "[data-visionary-mask]";
 const SECRET_NAME = /pass|card|cc-?(num|csc|exp)|cvv|cvc|ssn|iban|secret|token|otp|\bpin\b/i;
 const MASKED_ATTRS = ["title", "alt", "placeholder", "aria-label"];
 
-/** Fields whose value is never recorded, whatever the options say. */
+/** Fields never recorded, whatever the options say */
 export function secretField(el: Element): boolean {
   const type = (el.getAttribute("type") || "").toLowerCase();
   if (type === "password" || type === "email" || type === "tel" || type === "hidden") return true;
@@ -73,7 +68,7 @@ function throttle<A extends unknown[]>(ms: number, fn: (...a: A) => void): (...a
 export class Recorder {
   private ids = new WeakMap<Node, number>();
   private next = 1;
-  /** Elements whose children are not recorded: blocked ones, scripts, textareas. */
+  /** Children not recorded: blocked elements, scripts, textareas */
   private opaque = new WeakSet<Node>();
   private observer: MutationObserver | null = null;
   private off: (() => void)[] = [];
@@ -95,7 +90,7 @@ export class Recorder {
         try {
           fn(e);
         } catch {
-          // Never break the page.
+          // Never break the page
         }
       };
       target.addEventListener(type, h, { capture: true, passive: true });
@@ -128,7 +123,6 @@ export class Recorder {
     this.off = [];
   }
 
-  /** Records what the observer has not delivered yet. */
   takeRecords() {
     const r = this.observer?.takeRecords();
     if (r?.length) this.mutations(r);
@@ -176,7 +170,7 @@ export class Recorder {
     if (n.nodeType !== 1) return { i, t: 8 };
     const el = n as Element;
     const tag = el.tagName.toLowerCase();
-    // Scripts never run in the player; noscript would show there.
+    // Scripts never run in the player and noscript would show there
     if (tag === "script" || tag === "noscript") {
       this.opaque.add(el);
       return { i, t: 8 };
@@ -211,7 +205,7 @@ export class Recorder {
     }
     s.c = [];
     if (tag === "style" && !el.textContent?.trim()) {
-      // CSS-in-JS libraries insert rules without text; keep them as text.
+      // CSS-in-JS inserts rules without text, so keep them as text
       try {
         const css = Array.from((el as HTMLStyleElement).sheet?.cssRules ?? [], (r) => r.cssText).join("\n");
         if (css) {
@@ -219,7 +213,7 @@ export class Recorder {
           return s;
         }
       } catch {
-        // A cross-origin sheet: nothing to read.
+        // Cross-origin sheet, nothing to read
       }
     }
     for (let c = el.firstChild; c; c = c.nextSibling) s.c.push(this.serialize(c, masked));
@@ -234,7 +228,7 @@ export class Recorder {
       if (!this.o.maskInputs) this.emit([Date.now(), INPUT, { i, si: (el as HTMLSelectElement).selectedIndex }]);
     } else if (f.type === "checkbox" || f.type === "radio") {
       this.emit([Date.now(), INPUT, { i, c: f.checked }]);
-      // The other radios of a group change without an event.
+      // Other radios in the group change without an event
       if (f.type === "radio" && f.name) {
         document.querySelectorAll(`input[type=radio][name="${CSS.escape(f.name)}"]`).forEach((r) => {
           const j = this.ids.get(r);
@@ -280,7 +274,7 @@ export class Recorder {
       }
       if (top) tops.push(n);
     }
-    // Last first, so each node's next sibling is already known to the player.
+    // Last first, so each node's next sibling is already known to the player
     tops.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : -1));
     for (const n of tops) {
       const parent = n.parentNode as Element;

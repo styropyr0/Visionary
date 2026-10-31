@@ -73,7 +73,6 @@ module Visionary
       @writer&.enqueue(item) unless @closed
     end
 
-    # The request, log and metric writers' counters, summed.
     def writer_stats
       zero = WriterStats.new(queued: 0, written: 0, dropped: 0)
       [@writer, @logs&.writer, @metrics&.writer].compact.sum(zero, &:stats)
@@ -164,7 +163,7 @@ module Visionary
       nil
     end
 
-    # Net::HTTP carries the trace on even when spans are off.
+    # Net::HTTP carries the trace on even when spans are off
     def install_hooks
       Telemetry::NetHTTPHook.install
       return unless @telemetry&.spans_on

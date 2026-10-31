@@ -11,8 +11,6 @@ module Visionary
     keyword_init: true
   )
 
-  # Rows queued, and rows written or dropped since start (see
-  # Visionary.writer_stats).
   WriterStats = Struct.new(:queued, :written, :dropped, keyword_init: true) do
     def +(other)
       WriterStats.new(queued: queued + other.queued, written: written + other.written,
@@ -20,13 +18,9 @@ module Visionary
     end
   end
 
-  # The background thread that batches api_logs, spans, errors and releases
-  # rows, and CPU profiles. Queue items are [:request, Entry], [:span, row],
-  # [:error, row], [:release, row] or [:profile, row].
+  # Queue items are [:request, Entry], [:span, row], [:error, row], [:release, row] or [:profile, row]
   class Writer
-    # D1 takes 50 statements a call, one row each. SQL backends get each
-    # table's rows as multi-row INSERTs, under every backend's parameter limit
-    # (SQLite's is 32766).
+    # D1 takes 50 statements a call, SQLite allows 32766 parameters
     D1_BATCH = 50
     SQL_BATCH = 500
     MAX_SQL_BATCH = 2000
@@ -136,9 +130,7 @@ module Visionary
       end
     end
 
-    # PostgreSQL and MySQL take a few batches at once, each on its own
-    # connection; while all are busy the queue absorbs the load. SQLite, D1
-    # and an ActiveRecord pool take one at a time, on this thread.
+    # SQLite, D1 and an ActiveRecord pool take one batch at a time, on this thread
     def start_flushers
       n = @store.respond_to?(:parallel) ? @store.parallel : 1
       return nil if n <= 1
@@ -198,8 +190,7 @@ module Visionary
       @stats.synchronize { instance_variable_set(var, instance_variable_get(var) + n) }
     end
 
-    # [kind, values] rows as statements: one INSERT per row for D1, else one
-    # multi-row INSERT per table, split at MAX_PARAMS.
+    # One INSERT per row for D1, else multi-row INSERTs split at MAX_PARAMS
     def inserts(rows)
       return rows.map { |kind, values| [@sql.fetch(kind), values] } if @store.string_params?
 

@@ -1,6 +1,4 @@
-// The parts of Playwright's reporter API this package reads. They are kept
-// structural so the package builds without @playwright/test, and older and
-// newer Playwright versions both fit.
+// Structural, so the package builds without @playwright/test and fits any version
 
 export interface PWAttachment {
   name: string;

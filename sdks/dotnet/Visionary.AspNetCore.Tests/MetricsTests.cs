@@ -45,14 +45,14 @@ public sealed class MetricsTests : IDisposable
     {
         var text = MetricRegistry.LabelsJson(L(("region", "eu")));
         Assert.Equal("{\"region\":\"eu\"}", text);
-        // Every SDK must produce this id.
+        // Every SDK must produce this id
         Assert.Equal("da4f5c6244c4f3e4", MetricRegistry.SeriesId("orders_placed", text));
 
         Assert.Equal("{\"a\\\"b\":\"x\\u000ay\",\"region\":\"eu\"}", MetricRegistry.LabelsJson(L(("region", "eu"), ("a\"b", "x\ny"), ("", "dropped"))));
         Assert.Equal("{}", MetricRegistry.LabelsJson(null));
         Assert.Equal("{\"k\":\"<é>\"}", MetricRegistry.LabelsJson(L(("k", "<é>"))));
         Assert.Equal("{\"k\":\"\"}", MetricRegistry.LabelsJson(L(("k", null))));
-        // UTF-8 byte order: U+FF5E sorts before U+1F600, unlike UTF-16 order.
+        // UTF-8 byte order puts U+FF5E before U+1F600, unlike UTF-16
         Assert.Equal("{\"～\":\"1\",\"😀\":\"2\"}", MetricRegistry.LabelsJson(L(("😀", "2"), ("～", "1"))));
     }
 

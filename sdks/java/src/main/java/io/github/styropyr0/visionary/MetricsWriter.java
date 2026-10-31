@@ -14,10 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-/**
- * Writes custom metrics every interval on its own thread, so they never crowd out
- * request rows. The table is only created once there is something to write.
- */
+/** Runs on its own thread so metrics never crowd out request rows */
 final class MetricsWriter implements VisionaryWriterStats.Source {
 
     private static final Log log = LogFactory.getLog(MetricsWriter.class);
@@ -130,7 +127,6 @@ final class MetricsWriter implements VisionaryWriterStats.Source {
         }
     }
 
-    /** Takes the interval and writes it, a batch per insert. */
     void flush() {
         for (Map.Entry<String, Long> e : registry.takeDropped().entrySet()) {
             log.warn("visionary: metric series dropped over the limit (metric " + e.getKey() + ", dropped "

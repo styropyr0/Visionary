@@ -29,8 +29,7 @@ import { Retention, Writer } from "./writer.js";
 export const SDK_VERSION: string = typeof __SDK_VERSION__ === "string" ? __SDK_VERSION__ : "0.0.0";
 
 /**
- * Runs request logging, system metrics, spans, errors, app logs and custom
- * metrics for one process.
+ * Runs request logging, metrics, spans, errors and app logs for one process
  * With no database configured it logs one warning and every method is a
  * no-op; it never throws into the application once constructed.
  */
@@ -127,7 +126,7 @@ export class Agent {
     return !!this.writer || !!this.recorder || !!this.logWriter || !!this.metricWriter;
   }
 
-  /** Rows queued, written and dropped across the request, log and metrics writers. */
+  /** Rows queued, written and dropped across all writers */
   writerStats(): WriterStats {
     const out: WriterStats = { queued: 0, written: 0, dropped: 0 };
     for (const w of [this.writer, this.logWriter, this.metricWriter]) {

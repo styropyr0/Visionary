@@ -24,8 +24,8 @@ import org.apache.commons.logging.LogFactory;
  * The single background writer for {@code api_logs}, {@code spans}, {@code errors}
  * and {@code releases}: a bounded queue that never blocks the request thread,
  * flushed every batch (50 entries on D1, 500 on SQL) or 3 seconds. A request and
- * the spans it stores count as one entry; each batch is written as one unit, up
- * to four at once on PostgreSQL and MySQL.
+ * the spans it stores count as one entry, and each batch is written as one unit,
+ * up to four at once on PostgreSQL and MySQL
  */
 final class RequestWriter implements VisionaryWriterStats.Source {
 
