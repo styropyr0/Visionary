@@ -1,3 +1,4 @@
+import { Shapes, type LucideIcon } from "lucide-react";
 import type { Route } from "../components/Sidebar";
 
 /**
@@ -20,6 +21,8 @@ export interface GuideSection {
   title: string;
   /** The page it describes; its HELP text fills "What it shows" and "Good to know". */
   route?: Route;
+  /** For a section with no page of its own; a page's section takes the page's icon. */
+  icon?: LucideIcon;
   intro: string;
   shot?: string;
   caption?: string;
@@ -55,6 +58,40 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Make it yours",
         text: "**Settings → Preferences** sets your start page, the range and refresh a visit starts with, the theme, time zone and clock. The moon or sun at the bottom of the sidebar switches the theme, and **Collapse** folds the sidebar to icons.",
+      },
+    ],
+  },
+  {
+    id: "concepts",
+    group: "Start here",
+    title: "How the data fits together",
+    icon: Shapes,
+    intro:
+      "A few words that every page uses: services, requests and their calls, traces and logs, and where each comes from. Knowing which source fills which page tells you what to add when a page stays empty.",
+    steps: [
+      {
+        title: "Services",
+        text: "A service is one app that sends data: `shop-api`, a worker, a second backend. It is only a name stamped on everything that app writes, so there is nothing to register: a service appears as soon as data arrives with its name. Server SDKs take it from `VISIONARY_SERVICE`, OpenTelemetry from `OTEL_SERVICE_NAME`, browser and mobile SDKs from the app name you give them. Without one, rows have no service and several apps can't be told apart. Service filters, the service map and **Workspaces** all go by this name.",
+      },
+      {
+        title: "Instances and versions",
+        text: "An **instance** is one running copy of a service: a pod, a container, a machine (the hostname unless you set one). Three replicas are one service with three instances. A **version** is the release that is deployed, from `VISIONARY_RELEASE` or the platform's commit variable; it draws the deploy markers and the before-and-after-deploy comparisons.",
+      },
+      {
+        title: "Requests and their calls",
+        text: "A **request** is one call your service answered, written by the SDK's middleware (or an OpenTelemetry server span). Each database query, outbound HTTP call, cache or queue call made while answering it is a **span** of that request. **Requests**, **API overview**, **Performance**, **Queries** and **Dependencies** are all built from these rows, so they need the SDK (or OpenTelemetry instrumentation) inside the app.",
+      },
+      {
+        title: "Traces",
+        text: "A **trace** is the same requests and calls, followed across services. Each row also carries a trace ID; a service that calls another passes it on in the `traceparent` header, and the service it reaches records its work under the same ID. With one service, a trace is that request's waterfall. With several, **Traces** joins every service's piece of one user action into one timeline and draws the service map. It is not a separate collector: the same SDK rows, with three IDs added.",
+      },
+      {
+        title: "Logs, and what they don't do",
+        text: "**Logs** holds lines from the SDKs, the host agent, log shippers, syslog, OpenTelemetry and plain HTTP. SDK lines are linked to the request that wrote them; others are linked when they carry a `trace_id` or `request_id`. A log line never becomes a request or a query: an nginx access line is searchable in **Logs** with its method, path and status as fields, but it doesn't show in **Requests**, **Performance** or **Queries**. Use the SDK for linked, request-level detail and the agent or a shipper as the catch-all for everything else the machine writes, crashes included.",
+      },
+      {
+        title: "Production and staging",
+        text: "There is no environment switch: keep each environment apart by giving it its own database and Visionary server, so staging's tests can't slow prod, page anyone or show prod data to testers. **Settings → Configuration** (or Terraform) copies alert rules, dashboards and checks from one install to the other. If you'd rather share one install for non-prod builds, put the environment in the service name (`shop-api-staging`) and filter alerts by service; never let two environments share one service name.",
       },
     ],
   },
@@ -118,7 +155,8 @@ export const GUIDE: GuideSection[] = [
     group: "Monitor",
     title: "Queries",
     route: "queries",
-    intro: "Every SQL statement your services run, the routes that run them, and what a deploy changed.",
+    intro:
+      "Every SQL statement your services run, the routes that run them, and what a deploy changed. Statements come from the SDK's database hook (or OpenTelemetry database spans); a database's own slow-query log goes to Logs, not here.",
     shot: "queries",
     steps: [
       {
@@ -493,6 +531,14 @@ export const GUIDE: GuideSection[] = [
         text: "In an SDK, route your logger to Visionary (the **Help** button on the page has each language's line); or point OpenTelemetry, Fluent Bit, Vector, Filebeat, Logstash or Promtail at this server with a server key; or set `VISIONARY_AGENT_LOGS` on the host agent. Info and above is kept; a failed or slow request also keeps its debug lines.",
       },
       {
+        title: "Catch everything, not just what the app logs",
+        text: "The SDK only sees what your code logs while it runs. To also keep crashes, panics, startup failures and other programs' output, collect from outside the app: the host agent with `VISIONARY_AGENT_LOGS=journald,docker,/var/log/myapp/*.log` (the systemd journal, every container's output, any files, followed through rotation), a shipper or a node-level DaemonSet in Kubernetes, your platform's log drain pointed at `/loki/api/v1/push` or `/api/ingest/logs`, or the syslog receiver in **Settings → Logs**. These lines go to Logs only; they never become requests or queries.",
+      },
+      {
+        title: "Collect nginx or Apache logs",
+        text: "On the machine, `VISIONARY_AGENT_LOGS=/var/log/nginx/*.log`; in Docker, `docker` (the official image writes to its output); or, with no agent, `access_log syslog:server=<this server>:<port>,tag=nginx combined;` once the syslog receiver is on. Lines in the standard `combined` format are read into `client.ip`, `http.method`, `http.path`, `http.status`, `http.bytes`, `http.referer` and `user_agent`, with 5xx as errors and 4xx as warnings, so `http.status:>=500` finds failures. Error-log lines and a custom `log_format` need a parse rule in **Settings → Logs**, or switch nginx to a JSON `log_format`, which is read without one.",
+      },
+      {
         title: "Search",
         text: "Type words to match the message, `field:value` for a column or a field (`service:api`, `order_id:42`), `level:error+` for errors and worse, `route:/checkout` or `status:5xx` for lines of those requests, `-word` to leave out, `OR` between alternatives and `/regex/`. The **?** lists it all. With the analyst on, **Ask** turns a question into a search and **Explain** reads the lines for you.",
       },
@@ -529,7 +575,8 @@ export const GUIDE: GuideSection[] = [
     group: "Investigate",
     title: "Requests",
     route: "logs",
-    intro: "Every request your services served, searchable, with its headers, bodies and calls.",
+    intro:
+      "Every request your services served, searchable, with its headers, bodies and calls. Rows come from the SDK's middleware or OpenTelemetry server spans; log lines, including nginx access lines, stay in Logs.",
     shot: "logs",
     steps: [
       {
@@ -556,6 +603,10 @@ export const GUIDE: GuideSection[] = [
     intro: "One request followed through every service it called, and the map of which services call which.",
     steps: [
       {
+        title: "Traces and requests",
+        text: "A trace is built from the same rows as **Requests**: the requests and calls the SDK already writes, each carrying a trace ID. A request shows one service's part; a trace joins the parts of every service the user's action reached. With a single service, a trace and its request's waterfall show the same thing.",
+      },
+      {
         title: "Find a trace",
         text: "**Search** lists the traces that started in the range. Narrow them by **Services** (a comma list finds traces that touched all of them), **Route**, a call's name or target such as `SELECT users` or `api.stripe.com`, **Min ms**, or **Only with errors**. Click a row to open it.",
       },
@@ -569,7 +620,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Use the service map",
-        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; **Show table** gives each one's rate, failure rate and p95. Click an arrow or a box to search its traces.",
+        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it; the buttons in the corner zoom, fit the map and put moved boxes back. Click an arrow or a box to search its traces.",
       },
       {
         title: "Connect more services",

@@ -96,7 +96,7 @@ export function Guide() {
             <div className="guide-toc-group" key={group}>
               <div className="nav-label">{group}</div>
               {items.map((s) => {
-                const Icon = s.route ? ICONS[s.route] : Rocket;
+                const Icon = s.icon ?? (s.route ? ICONS[s.route] : Rocket);
                 return (
                   <a key={s.id} href={`#/guide/${s.id}`} className={`guide-toc-item ${active === s.id ? "active" : ""}`} aria-current={active === s.id ? "location" : undefined}>
                     <Icon size={14} />
@@ -130,7 +130,7 @@ export function Guide() {
 
 function Section({ section: s, onZoom }: { section: GuideSection; onZoom: (z: { src: string; caption: string }) => void }) {
   const help = s.route ? HELP[s.route] : undefined;
-  const Icon = s.route ? ICONS[s.route] : Rocket;
+  const Icon = s.icon ?? (s.route ? ICONS[s.route] : Rocket);
   return (
     <section className="panel guide-section" id={`guide-${s.id}`} aria-labelledby={`guide-h-${s.id}`}>
       <header className="guide-head">
