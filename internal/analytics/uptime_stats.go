@@ -96,7 +96,7 @@ FROM uptime_results r JOIN (
 	browserMissing := false
 	for _, c := range checks {
 		if c.Kind == "browser" && c.Enabled {
-			browserMissing = !runnerFor(s).browser.available()
+			browserMissing = !runnerFor(s).browser.Available()
 			break
 		}
 	}

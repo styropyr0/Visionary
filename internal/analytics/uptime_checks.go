@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 // checkWithAlert is a check as the form sends it, with its alert settings
@@ -52,14 +54,13 @@ const (
 	uptimeMaxHeaders  = 20
 	uptimeMinInterval = 30
 	uptimeMaxInterval = 3600
-	uptimeMask        = "********"
+	uptimeMask        = uptimecore.Mask
 )
 
 var (
 	uptimeMethods    = map[string]bool{"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "OPTIONS": true}
 	headerNameRe     = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_|~-]{1,64}$`)
-	secretHeaderRe   = regexp.MustCompile(`(?i)(auth|token|secret|key|cookie|session|password|signature|credential)`)
-	expectStatusPart = regexp.MustCompile(`^([1-5])xx$|^(\d{3})(?:-(\d{3}))?$`)
+	secretHeaderRe   = uptimecore.SecretNameRe
 )
 
 const uptimeCheckCols = `id, name, url, method, expect_status, body_contains, headers, interval_s, timeout_ms, degraded_ms,
@@ -160,7 +161,7 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	if c.ExpectStatus == "" {
 		c.ExpectStatus = "200-299"
 	}
-	if _, err := parseExpectStatus(c.ExpectStatus); err != nil {
+	if _, err := uptimecore.ParseExpectStatus(c.ExpectStatus); err != nil {
 		return err
 	}
 	if len(c.BodyContains) > 512 {
@@ -242,46 +243,6 @@ func (c UptimeCheck) masked() UptimeCheck {
 		c.Secrets = sec
 	}
 	return c
-}
-
-// statusRange is an inclusive range of accepted HTTP statuses.
-type statusRange struct{ lo, hi int }
-
-// parseExpectStatus reads "200-299", "2xx", "200,204,301" or a mix.
-func parseExpectStatus(spec string) ([]statusRange, error) {
-	var out []statusRange
-	for _, part := range strings.Split(spec, ",") {
-		m := expectStatusPart.FindStringSubmatch(strings.ToLower(part))
-		if m == nil {
-			return nil, fmt.Errorf("expected status %q: use a code (200), a range (200-299) or a class (2xx), comma separated", part)
-		}
-		var r statusRange
-		switch {
-		case m[1] != "":
-			d, _ := strconv.Atoi(m[1])
-			r = statusRange{d * 100, d*100 + 99}
-		default:
-			r.lo, _ = strconv.Atoi(m[2])
-			r.hi = r.lo
-			if m[3] != "" {
-				r.hi, _ = strconv.Atoi(m[3])
-			}
-		}
-		if r.lo < 100 || r.hi > 599 || r.hi < r.lo {
-			return nil, fmt.Errorf("expected status %q is out of range", part)
-		}
-		out = append(out, r)
-	}
-	return out, nil
-}
-
-func statusAccepted(rs []statusRange, code int) bool {
-	for _, r := range rs {
-		if code >= r.lo && code <= r.hi {
-			return true
-		}
-	}
-	return false
 }
 
 func boolInt(b bool) int {

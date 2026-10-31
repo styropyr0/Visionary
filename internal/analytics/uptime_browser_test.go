@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/styropyr0/visionary/internal/uptimecore"
 )
 
 func TestBrowserCheckNormalize(t *testing.T) {
@@ -62,35 +64,6 @@ func TestBrowserCheckNormalize(t *testing.T) {
 	}
 }
 
-func TestBrowserMasker(t *testing.T) {
-	m := masker(map[string]string{"A": "s3cr3t value", "B": "ab"})
-	got := m("typed s3cr3t value and s3cr3t+value, ab")
-	if strings.Contains(got, "s3cr3t") || !strings.Contains(got, "ab") {
-		t.Fatalf("masked: %q", got)
-	}
-}
-
-// The guard proxy refuses loopback, as the HTTP checks' dialer does.
-func TestGuardProxyRefusesPrivate(t *testing.T) {
-	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "hi") }))
-	defer site.Close()
-	g, err := startGuardProxy()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer g.close()
-	pu, _ := url.Parse(g.addr())
-	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}, Timeout: 5 * time.Second}
-	resp, err := client.Get(site.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadGateway || len(g.refused()) == 0 {
-		t.Fatalf("status %d, refused %v", resp.StatusCode, g.refused())
-	}
-}
-
 // testSite is a login form that leads to a dashboard.
 func testSite() *httptest.Server {
 	mux := http.NewServeMux()
@@ -119,7 +92,7 @@ func TestBrowserCheckRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts a browser")
 	}
-	if _, _, err := findBrowser(""); err != nil {
+	if _, _, err := uptimecore.FindBrowser(""); err != nil {
 		t.Skip("no Chrome or Chromium on this machine")
 	}
 	s := logsTestServer(t, nil)
@@ -127,7 +100,7 @@ func TestBrowserCheckRun(t *testing.T) {
 	site := testSite()
 	defer site.Close()
 	u := newUptimeRunner(s, s.uptimeSettings())
-	defer u.browser.close()
+	defer u.browser.Close()
 	ctx := context.Background()
 
 	login := []BrowserStep{
@@ -180,7 +153,7 @@ func TestBrowserCheckRun(t *testing.T) {
 	if err := s.saveUptimeCheck(ctx, &fail); err != nil {
 		t.Fatal(err)
 	}
-	res, run, err = u.playOnce(ctx, fail)
+	res, run, err = u.browser.PlayOnce(ctx, fail.core(), u.allowPrivate())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,12 +193,12 @@ func TestBrowserCheckRun(t *testing.T) {
 	// With the guard on, the browser may not open a loopback page.
 	s.live().Config["uptime_allow_private"] = "false"
 	guarded := newUptimeRunner(s, uptimeSettings{workers: 1, browserWorkers: 1})
-	defer guarded.browser.close()
-	res, _, err = guarded.playOnce(ctx, pass)
+	defer guarded.browser.Close()
+	res, _, err = guarded.browser.PlayOnce(ctx, pass.core(), guarded.allowPrivate())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.OK || !res.blocked {
+	if res.OK || !res.Blocked() {
 		t.Fatalf("guarded run: %+v", res)
 	}
 }
