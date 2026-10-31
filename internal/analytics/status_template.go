@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,6 +43,7 @@ func (s *Server) statusFontPath() string {
 }
 
 var statusFuncs = template.FuncMap{
+	"join": func(v []string) string { return strings.Join(v, ", ") },
 	"pct": func(p *float64) string {
 		if p == nil {
 			return "—"
@@ -238,6 +240,10 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .bars .ok { background: var(--good); } .bars .minor { background: var(--warning); } .bars .major { background: var(--critical); }
 .axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-3); }
 .axis .d30 { display: none; }
+.locs { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 11.5px; color: var(--text-2); }
+.locs span { display: inline-flex; align-items: center; gap: 5px; }
+.locs i { width: 7px; height: 7px; border-radius: 50%; background: var(--surface-3); }
+.locs .operational i { background: var(--good); } .locs .degraded i { background: var(--warning); } .locs .outage i { background: var(--critical); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 10px 0; color: var(--text-3); font-size: 12px; }
 .legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--surface-3); }
 .legend .ok { background: var(--good); } .legend .minor { background: var(--warning); } .legend .major { background: var(--critical); }
@@ -314,7 +320,7 @@ footer a { color: var(--text-2); }
       <tbody>
 {{range .Checks}}        <tr>
           <td><span class="state {{.State}}">{{if eq .State "operational"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>{{else if eq .State "degraded"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>{{else if eq .State "outage"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>{{end}}{{stateLabel .State}}</span></td>
-          <td><div class="svc">{{.Name}}</div>{{if .URL}}<div class="url">{{.URL}}</div>{{end}}</td>
+          <td><div class="svc">{{.Name}}</div>{{if .URL}}<div class="url">{{.URL}}</div>{{end}}{{if .Locations}}<div class="locs">{{range .Locations}}<span class="{{.State}}" title="{{stateLabel .State}}"><i></i>{{.Name}}</span>{{end}}</div>{{end}}</td>
           <td class="bars-cell"><div class="bars" role="img" aria-label="Daily uptime for the last 90 days">{{range .Days}}<span class="{{.Level}}" title="{{day .Day}}: {{if .Uptime}}{{pct .Uptime}} up, {{end}}{{levelLabel .Level}}"></span>{{end}}</div><div class="axis"><span class="d90">90 days ago</span><span class="d30">30 days ago</span><span>Today</span></div></td>
           <td class="num hide-sm">{{pct .Uptime90}}</td>
         </tr>
@@ -332,7 +338,7 @@ footer a { color: var(--text-2); }
       <thead><tr><th>Service</th><th>Started</th><th class="hide-sm">Ended</th><th class="num">Duration</th></tr></thead>
       <tbody>
 {{range .Incidents}}        <tr>
-          <td><span class="svc">{{.Check}}</span> {{if .Ongoing}}<span class="tag live">Ongoing</span>{{end}}</td>
+          <td><span class="svc">{{.Check}}</span> {{if .Ongoing}}<span class="tag live">Ongoing</span>{{end}}{{if .Locations}}<div class="url">from {{join .Locations}}</div>{{end}}</td>
           <td>{{when .StartedAt}}</td>
           <td class="hide-sm">{{if .Ongoing}}<span class="url">still down</span>{{else}}{{whenp .EndedAt}}{{end}}</td>
           <td class="num">{{dur .DurationS}}{{if .Ongoing}} so far{{end}}</td>

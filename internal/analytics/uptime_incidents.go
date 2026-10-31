@@ -35,6 +35,9 @@ type incident struct {
 	Status    int64   `json:"status"`
 	Error     string  `json:"error,omitempty"`
 	Ongoing   bool    `json:"ongoing"`
+	// Locations that failed during it, for checks that run from more than
+	// the server.
+	Locations []string `json:"locations,omitempty"`
 }
 
 func (s *Server) checkIncidents(ctx context.Context, id int64, tr timeRange) ([]incident, *Result, error) {
@@ -56,6 +59,9 @@ func (s *Server) checkIncidents(ctx context.Context, id int64, tr timeRange) ([]
 		}
 		in.DurationS = int64(end.Sub(start).Seconds())
 		out = append(out, in)
+	}
+	if err := s.incidentLocations(ctx, id, tr, out); err != nil {
+		return nil, nil, err
 	}
 	return out, res, nil
 }

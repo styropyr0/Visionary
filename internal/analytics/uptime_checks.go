@@ -47,6 +47,11 @@ type UptimeCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	// Locations the check runs from (uptime_locations.go), the rule that
+	// combines them, and whether the status page breaks it down by them.
+	Locations           []string `json:"locations"`
+	LocationRule        string   `json:"location_rule"`
+	StatusShowLocations bool     `json:"status_show_locations"`
 }
 
 const (
@@ -109,6 +114,9 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadBrowserConfigs(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.loadLocationConfigs(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -123,7 +131,9 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 		return UptimeCheck{}, errCheckNotFound
 	}
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
-	err = s.loadBrowserConfigs(ctx, checks)
+	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
+		err = s.loadLocationConfigs(ctx, checks)
+	}
 	return checks[0], err
 }
 
@@ -133,6 +143,9 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
 		return errors.New("name must be 1–120 characters")
+	}
+	if err := c.normalizeLocations(); err != nil {
+		return err
 	}
 	switch c.Kind {
 	case "", "http":
@@ -274,7 +287,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
 	if err != nil {
 		return err
 	}
-	return s.saveBrowserConfig(ctx, *c)
+	if err := s.saveBrowserConfig(ctx, *c); err != nil {
+		return err
+	}
+	return s.saveLocationConfig(ctx, *c)
 }
 
 // --- handlers ---
@@ -322,9 +338,14 @@ func (s *Server) handleUptimeList(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	locs, err := s.locationStates(r.Context(), checks)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	out := make([]map[string]any, 0, len(checks))
 	for _, c := range checks {
-		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID], "alert": alerts[c.ID]})
+		out = append(out, map[string]any{"check": c.masked(), "state": states[c.ID], "alert": alerts[c.ID], "locations": locs[c.ID]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checks": out, "can_edit": s.can(r, "edit")})
 }
@@ -352,6 +373,10 @@ func (s *Server) handleUptimeCreate(w http.ResponseWriter, r *http.Request) {
 	c.ID = 0
 	if err := c.normalize(nil); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.checkLocations(r.Context(), c); err != nil {
+		s.fail(w, err)
 		return
 	}
 	existing, err := s.listUptimeChecks(r.Context())
@@ -402,6 +427,10 @@ func (s *Server) handleUptimeUpdate(w http.ResponseWriter, r *http.Request) {
 	c.ID, c.CreatedAt = prev.ID, prev.CreatedAt
 	if err := c.normalize(&prev); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.checkLocations(r.Context(), c); err != nil {
+		s.fail(w, err)
 		return
 	}
 	if err := s.saveUptimeCheck(r.Context(), &c); err != nil {
@@ -460,6 +489,9 @@ func checkChanges(a, b UptimeCheck) []string {
 	add("enabled", a.Enabled != b.Enabled)
 	add("on_status_page", a.OnStatusPage != b.OnStatusPage)
 	add("status_show_url", a.StatusShowURL != b.StatusShowURL)
+	add("locations", strings.Join(a.Locations, ",") != strings.Join(b.Locations, ","))
+	add("location_rule", a.LocationRule != b.LocationRule)
+	add("status_show_locations", a.StatusShowLocations != b.StatusShowLocations)
 	sort.Strings(out)
 	return out
 }
@@ -512,6 +544,9 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
+	if err := s.db.Exec(r.Context(), `DELETE FROM uptime_check_locations WHERE check_id = ?`, c.ID); err != nil {
+		s.logger.Warn("check locations not deleted", "check_id", c.ID, "err", err)
+	}
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)

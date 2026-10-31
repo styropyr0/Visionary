@@ -30,7 +30,10 @@ type configDoc struct {
 	Rules        []configRule      `json:"rules"`
 	Silences     []silenceInput    `json:"silences"`
 	UptimeChecks []configCheck     `json:"uptime_checks"`
-	SavedPanels  []configPanel     `json:"saved_panels"`
+	// UptimeLocations are the runner locations checks name; keys stay
+	// behind and are made in the Locations tab.
+	UptimeLocations []configLocation `json:"uptime_locations,omitempty"`
+	SavedPanels      []configPanel     `json:"saved_panels"`
 	Dashboards   []configDashboard `json:"dashboards"`
 	LogViews     []configLogView   `json:"log_views"`
 	Pages        *configPages      `json:"pages,omitempty"`
@@ -87,6 +90,10 @@ type configCheck struct {
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	Alert           *configCheckAlert `json:"alert,omitempty"`
+	// Locations default to the server alone, and the rule to majority.
+	Locations           []string `json:"locations,omitempty"`
+	LocationRule        string   `json:"location_rule,omitempty"`
+	StatusShowLocations bool     `json:"status_show_locations,omitempty"`
 }
 
 // configCheckAlert is a check's own alert (mode custom or off); checks
@@ -135,6 +142,8 @@ type configState struct {
 	rules    []alertRule
 	silences []alertSilence
 	checks   []UptimeCheck
+	// locations include the server's, first
+	locations []uptimeLocation
 	panels   []Panel
 	dashes   []dashboard
 	views    []logView
@@ -157,6 +166,9 @@ func (s *Server) loadConfigState(ctx context.Context) (*configState, error) {
 		return nil, err
 	}
 	if st.checks, err = s.listUptimeChecks(ctx); err != nil {
+		return nil, err
+	}
+	if st.locations, err = s.listLocations(ctx); err != nil {
 		return nil, err
 	}
 	if st.panels, err = s.listPanels(ctx); err != nil {
@@ -263,6 +275,13 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	if len(out.Headers) == 0 {
 		out.Headers = nil
 	}
+	if !(len(c.Locations) == 1 && c.Locations[0] == serverLocation) {
+		out.Locations = c.Locations
+	}
+	if c.LocationRule != "majority" {
+		out.LocationRule = c.LocationRule
+	}
+	out.StatusShowLocations = c.StatusShowLocations
 	if m.Kind == "browser" {
 		// The start URL is the first step's; the rest does not apply.
 		out.URL, out.Method, out.ExpectStatus, out.FollowRedirects = "", "", "", nil
@@ -311,6 +330,11 @@ func (st *configState) document() configDoc {
 	}
 	for _, c := range st.checks {
 		doc.UptimeChecks = append(doc.UptimeChecks, st.checkConfig(c))
+	}
+	for _, l := range st.locations {
+		if !l.Builtin {
+			doc.UptimeLocations = append(doc.UptimeLocations, configLocation{Name: l.Name})
+		}
 	}
 	for _, p := range st.panels {
 		doc.SavedPanels = append(doc.SavedPanels, configPanel{Title: p.Title, Description: p.Description, Prompt: p.Prompt, Query: p.Query, Viz: p.Viz})

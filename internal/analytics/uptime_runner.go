@@ -76,7 +76,7 @@ func (u *uptimeRunner) load(ctx context.Context) ([]uptimecore.Check, error) {
 	byID := make(map[int64]UptimeCheck, len(checks))
 	out := make([]uptimecore.Check, 0, len(checks))
 	for _, c := range checks {
-		if !c.Enabled {
+		if !c.Enabled || !c.runsAt(serverLocation) {
 			continue
 		}
 		byID[c.ID] = c
@@ -149,17 +149,37 @@ func optional(p *float64) any {
 }
 
 func (u *uptimeRunner) record(ctx context.Context, c UptimeCheck, r uptimeResult) error {
+	return u.s.recordResult(ctx, c, r, serverLocation)
+}
+
+// recordResult stores a run from location. ok is the check's verdict across
+// its locations; when it is down, error names the failing locations.
+func (s *Server) recordResult(ctx context.Context, c UptimeCheck, r uptimeResult, location string) error {
+	ok, errMsg := r.OK, r.Error
+	if len(c.Locations) > 1 {
+		var failing []string
+		var err error
+		if ok, failing, err = s.locationVerdict(ctx, c, location, r.OK); err != nil {
+			return err
+		}
+		if !ok {
+			errMsg = "down in " + strings.Join(failing, ", ")
+			if r.Error != "" {
+				errMsg += ": " + r.Error
+			}
+		}
+	}
 	var errText, cert any
-	if r.Error != "" {
-		errText = r.Error
+	if errMsg != "" {
+		errText = errMsg
 	}
 	if r.CertExpiresAt != "" {
 		cert = r.CertExpiresAt
 	}
 	cols := []string{"created_at", "check_id", "check_name", "url", "ok", "status", "duration_ms", "error", "degraded", "retried",
-		"dns_ms", "connect_ms", "tls_ms", "ttfb_ms", "cert_expires_at"}
-	vals := []any{r.CreatedAt, c.ID, c.Name, redactURL(c.URL), boolInt(r.OK), r.Status, r.DurationMs, errText, boolInt(r.Degraded),
-		boolInt(r.Retried), optional(r.DNSMs), optional(r.ConnectMs), optional(r.TLSMs), optional(r.TTFBMs), cert}
+		"dns_ms", "connect_ms", "tls_ms", "ttfb_ms", "cert_expires_at", "location", "location_ok"}
+	vals := []any{r.CreatedAt, c.ID, c.Name, redactURL(c.URL), boolInt(ok), r.Status, r.DurationMs, errText, boolInt(r.Degraded),
+		boolInt(r.Retried), optional(r.DNSMs), optional(r.ConnectMs), optional(r.TLSMs), optional(r.TTFBMs), cert, location, boolInt(r.OK)}
 	if c.Kind == "browser" {
 		cols = append(cols, "lcp_ms", "cls")
 		vals = append(vals, optional(r.LCPMs), optional(r.CLS))
@@ -176,7 +196,7 @@ func (u *uptimeRunner) record(ctx context.Context, c UptimeCheck, r uptimeResult
 		marks[i] = "?"
 		args = append(args, v)
 	}
-	return u.s.db.Exec(ctx, "INSERT INTO uptime_results ("+strings.Join(cols, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...)
+	return s.db.Exec(ctx, "INSERT INTO uptime_results ("+strings.Join(cols, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...)
 }
 
 // redactURL drops credentials and secret-looking query values, for tables
