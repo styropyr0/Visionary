@@ -179,7 +179,7 @@ func (s *Server) parseOverride(raw string, checks []UptimeCheck) (string, error)
 			continue
 		}
 		if siteOf(cu.Hostname()) != siteOf(u.Hostname()) && !hostAllowed(u.Hostname(), allowed) {
-			return "", fmt.Errorf("%s is not on the same site as check %q (%s); an admin can allow it in Settings → Server → Other → Hosts runs from CI may target",
+			return "", fmt.Errorf("the override host %s is not on the same site as check %q (%s); an admin can allow it in Settings → Server → Other → Hosts runs from CI may target",
 				u.Hostname(), c.Name, cu.Hostname())
 		}
 	}

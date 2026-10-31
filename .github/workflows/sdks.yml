@@ -1,7 +1,8 @@
 name: SDK packages
 
 # Publishes every SDK to its registry when a release tag is pushed:
-#   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser)
+#   npm          visionary-sdk (sdks/node), visionary-browser (sdks/browser),
+#                visionary-playwright-reporter (sdks/playwright-reporter)
 #   PyPI         visionary-sdk (sdks/python)
 #   RubyGems     visionary-sdk (sdks/ruby)
 #   NuGet        Visionary.AspNetCore and Visionary.AspNetCore.Profiling (sdks/dotnet)
@@ -173,6 +174,71 @@ jobs:
         run: npm ci
       - if: steps.check.outputs.status == ''
         run: npm run build
+      - if: steps.check.outputs.status == ''
+        name: Package contents
+        run: npm pack --dry-run
+      - if: steps.check.outputs.status == ''
+        id: publish
+        name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          STAGED: ${{ vars.NPM_STAGED_PUBLISH }}
+        run: |
+          tag=latest
+          [ "$PRERELEASE" = true ] && tag=next
+          if [ "$STAGED" = true ]; then
+            npm stage publish --tag "$tag"
+            echo "status=staged (approve it on npmjs.com)" >> "$GITHUB_OUTPUT"
+          else
+            npm publish --tag "$tag"
+            echo "status=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  npm-playwright-reporter:
+    name: npm (visionary-playwright-reporter)
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/visionary-playwright-reporter
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.check.outputs.status }}
+    defaults:
+      run:
+        working-directory: sdks/playwright-reporter
+    env:
+      PACKAGE: visionary-playwright-reporter
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - id: check
+        name: Skip if already published
+        run: |
+          npm --version
+          if npm view "$PACKAGE@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$PACKAGE@$VERSION is already on npm; skipping"
+            echo "status=already published" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.status == ''
+        name: Set version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - if: steps.check.outputs.status == ''
+        run: npm ci
+      - if: steps.check.outputs.status == ''
+        run: npm test && npm run build
       - if: steps.check.outputs.status == ''
         name: Package contents
         run: npm pack --dry-run
@@ -583,7 +649,7 @@ jobs:
 
   github-release:
     name: GitHub Release
-    needs: [version, npm-node, npm-browser, pypi, rubygems, nuget, maven-central-java, maven-central-android, go-module, agent-binaries]
+    needs: [version, npm-node, npm-browser, npm-playwright-reporter, pypi, rubygems, nuget, maven-central-java, maven-central-android, go-module, agent-binaries]
     if: always() && needs.version.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -610,6 +676,7 @@ jobs:
             echo "| --- | --- | --- |"
             echo "| npm | [\`visionary-sdk@$VERSION\`](https://www.npmjs.com/package/visionary-sdk/v/$VERSION) | $(status npm-node) |"
             echo "| npm | [\`visionary-browser@$VERSION\`](https://www.npmjs.com/package/visionary-browser/v/$VERSION) | $(status npm-browser) |"
+            echo "| npm | [\`visionary-playwright-reporter@$VERSION\`](https://www.npmjs.com/package/visionary-playwright-reporter/v/$VERSION) | $(status npm-playwright-reporter) |"
             echo "| PyPI | [\`visionary-sdk $VERSION\`](https://pypi.org/project/visionary-sdk/) | $(status pypi) |"
             echo "| RubyGems | [\`visionary-sdk $VERSION\`](https://rubygems.org/gems/visionary-sdk) | $(status rubygems) |"
             echo "| NuGet | [\`Visionary.AspNetCore $VERSION\`](https://www.nuget.org/packages/Visionary.AspNetCore/$VERSION) | $(status nuget) |"

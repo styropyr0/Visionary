@@ -147,7 +147,7 @@ func runChecks(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	if !o.wait {
-		fmt.Fprintf(stdout, "Started run #%d with %d checks: %s\n", b.ID, b.Total, c.link())
+		fmt.Fprintf(stdout, "Started run #%d with %s: %s\n", b.ID, plural(b.Total, "check"), c.link())
 		return exitPassed
 	}
 	for !b.Done && time.Now().Before(deadline) && ctx.Err() == nil {
@@ -334,7 +334,7 @@ func summary(w io.Writer, b batch, link string) {
 		}
 		fmt.Fprintln(w, strings.TrimRight(line, " "))
 	}
-	tail := fmt.Sprintf("%d checks: %d passed", b.Total, b.Passed)
+	tail := fmt.Sprintf("%s: %d passed", plural(b.Total, "check"), b.Passed)
 	if b.Failed > 0 {
 		tail += fmt.Sprintf(", %d failed", b.Failed)
 	}
@@ -345,6 +345,13 @@ func summary(w io.Writer, b batch, link string) {
 		tail += ", still running"
 	}
 	fmt.Fprintln(w, tail+" · "+link)
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func duration(ms *float64, status string) string {

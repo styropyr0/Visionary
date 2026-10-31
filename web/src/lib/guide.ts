@@ -396,6 +396,10 @@ export const GUIDE: GuideSection[] = [
         text: "Create a key with the **CI** scope in **Settings → API keys**; it can only run checks and report tests. In your pipeline, after the deploy, use the `styropyr0/Visionary/.github/actions/run-checks` action (or the `visionary-checks` CLI) with a tag: it runs those checks once, now, prints each result, can write JUnit XML and fails the job when one fails. Pass `url-override` to run them against a preview deployment; those results stay with the run and never count toward uptime. Runs appear under **Runs from CI** below the list, and on the **CI** page beside the pipeline of the same commit. **Run a tag** starts one from here.",
       },
       {
+        title: "Report Playwright tests",
+        text: "Add `visionary-playwright-reporter` to your Playwright config with a CI-scope key, and run your tests as usual: in CI, a scheduled workflow, or your own host. Each test becomes a **Playwright test** check with its runs, steps, screenshot, trace and the trace id it sent. This server never runs your test code. Set **Expect a run** in the check's form: without a run for that long the check is **stale** and counts as down. Pick **Playwright test** in **New check** to declare one, so it alerts before its first run.",
+      },
+      {
         title: "Publish a status page",
         text: "Tick **Show on the public status page** on the checks you want public, then switch on **Public status page** in **Settings → Status page**. **Status page** in the top bar opens it.",
       },

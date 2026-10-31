@@ -180,6 +180,13 @@ resource "visionary_uptime_check" "login" {
   ]
 }
 
+resource "visionary_uptime_check" "checkout_test" {
+  name       = "Checkout pays by card"
+  kind       = "playwright"
+  interval_s = 1200
+  playwright = { project = "chromium", title = "checkout.spec.ts › pays by card" }
+}
+
 resource "visionary_dashboard" "main" {
   name        = "Checkout"
   description = "Latency and errors"
@@ -230,6 +237,7 @@ EOT`
 					resource.TestCheckResourceAttr("visionary_uptime_check.home", "headers.Authorization", "Bearer abc"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "url", "https://example.com/login"),
 					resource.TestCheckResourceAttr("visionary_uptime_check.login", "interval_s", "300"),
+					resource.TestCheckResourceAttr("visionary_uptime_check.checkout_test", "playwright.project", "chromium"),
 					resource.TestMatchResourceAttr("visionary_api_key.ci", "secret", regexp.MustCompile(`^vis_`)),
 					resource.TestCheckResourceAttrPair("data.visionary_alert_channel.ops", "id", "visionary_alert_channel.ops", "id"),
 					resource.TestCheckResourceAttr("data.visionary_alert_channel.ops", "kind", "email"),

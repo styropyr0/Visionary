@@ -373,6 +373,27 @@ agent, err := visionary.New(cfg)`,
 # VISIONARY_URL=${origin} VISIONARY_KEY=<ci key> visionary-checks run --tag smoke --junit checks.xml`,
     },
   },
+  playwright: {
+    id: "playwright",
+    title: "Report Playwright tests as checks",
+    intro:
+      "Keep end-to-end tests in your repository and run them where they already run: CI, a scheduled workflow every 10 minutes, or your own host. The `visionary-playwright-reporter` package posts each test's final result here (after retries) with its duration, steps, error, browser, retries, a small screenshot and trace, and the trace id when the test sent a traceparent. Each test becomes a Playwright check, keyed by its project and title path, with uptime, incidents, alerts and the status page like any other check. This server never runs your test code. Give the check an expected interval in its form (the reporter's `expectedInterval` sets it for new ones): without a run for longer, the check is stale and counts as down, like a missed heartbeat. Use a key with the CI scope. Declare a check in the form or Terraform to alert on it before its first run.",
+    any: {
+      label: "playwright.config.ts",
+      code: `// npm i -D visionary-playwright-reporter
+export default defineConfig({
+  reporter: [
+    ["list"],
+    ["visionary-playwright-reporter", {
+      server: "${origin}",          // or VISIONARY_URL
+      // key: VISIONARY_KEY from the environment (a CI scope key)
+      expectedInterval: "15m",      // stale after 15 minutes without a run
+    }],
+  ],
+  use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
+});`,
+    },
+  },
   agent: {
     id: "agent",
     title: "Install the host agent",
@@ -974,13 +995,13 @@ export const HELP: Record<Route, PageHelp> = {
   uptime: {
     title: "Uptime",
     tip: "Checks that call your endpoints from outside on a schedule, with response times, incidents and an optional public status page.",
-    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
+    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK, and Playwright tests your own runs report. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
     read: [
       "A check fails after its retries, so a single slow answer does not open an incident.",
       "A browser check's runs show each step, Web Vitals, console and network errors, and a screenshot of the page when a step failed. It is paused while the server has no browser.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
     ],
-    setup: ["checks", "browsercheck", "cichecks", "statuspage"],
+    setup: ["checks", "browsercheck", "cichecks", "playwright", "statuspage"],
   },
   ci: {
     title: "CI",

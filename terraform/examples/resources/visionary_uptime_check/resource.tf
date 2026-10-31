@@ -28,6 +28,20 @@ resource "visionary_uptime_check" "sign_in" {
   ]
 }
 
+# A Playwright test your CI runs with visionary-playwright-reporter; declared so it
+# is alerted on before its first run, and stale when no run arrives for 20 minutes.
+resource "visionary_uptime_check" "checkout_test" {
+  name       = "Checkout pays by card"
+  kind       = "playwright"
+  interval_s = 1200
+  tags       = ["checkout"]
+
+  playwright = {
+    project = "chromium"
+    title   = "checkout.spec.ts › pays by card"
+  }
+}
+
 variable "health_token" {
   type      = string
   sensitive = true

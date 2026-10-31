@@ -56,6 +56,12 @@ type checkModel struct {
 	Secrets         types.Map    `tfsdk:"secrets"`
 	FinalScreenshot types.Bool   `tfsdk:"final_screenshot"`
 	Tags            types.Set    `tfsdk:"tags"`
+	Playwright      *pwModel     `tfsdk:"playwright"`
+}
+
+type pwModel struct {
+	Project types.String `tfsdk:"project"`
+	Title   types.String `tfsdk:"title"`
 }
 
 type stepModel struct {
@@ -89,6 +95,12 @@ type apiCheck struct {
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	Tags            []string          `json:"tags"`
+	Playwright      *apiPlaywright    `json:"playwright,omitempty"`
+}
+
+type apiPlaywright struct {
+	Project string `json:"project"`
+	Title   string `json:"title"`
 }
 
 type apiStepB struct {
@@ -118,14 +130,15 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 		"label":    optStr("Name shown in results."),
 	}
 	resp.Schema = schema.Schema{
-		Description: "An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. " +
+		Description: "An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, or a Playwright test " +
+			"your own runs report (declared here so it exists before its first run). " +
 			"Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).",
 		Attributes: map[string]schema.Attribute{
 			"id":   idAttribute(),
 			"name": schema.StringAttribute{Description: "Name.", Required: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 120)}},
 			"kind": schema.StringAttribute{
-				Description: "http (default) or browser.", Optional: true, Computed: true, Default: stringdefault.StaticString("http"),
-				Validators: []validator.String{stringvalidator.OneOf("http", "browser")},
+				Description: "http (default), browser or playwright.", Optional: true, Computed: true, Default: stringdefault.StaticString("http"),
+				Validators: []validator.String{stringvalidator.OneOf("http", "browser", "playwright")},
 			},
 			"url": schema.StringAttribute{
 				Description: "Address probed (http checks). For browser checks it is the first step's URL.",
@@ -141,9 +154,10 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"body_contains": schema.StringAttribute{Description: "Text the body must contain.", Optional: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 512)}},
 			"headers":       schema.MapAttribute{Description: "Request headers.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"interval_s": schema.Int64Attribute{
-				Description: "Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).", Optional: true, Computed: true,
+				Description: "Seconds between runs, 30 to 3600 (default 60; 300 for browser checks). For playwright checks, how often a run is expected, 60 to 604800 (default 3600); without one for longer the check is stale.",
+				Optional:    true, Computed: true,
 				PlanModifiers: []planmodifier.Int64{keepIf("kind")},
-				Validators:    []validator.Int64{int64validator.Between(30, 3600)},
+				Validators:    []validator.Int64{int64validator.Between(30, 604800)},
 			},
 			"timeout_ms": schema.Int64Attribute{
 				Description: "Timeout in ms (default 10000; 30000 for browser checks).", Optional: true, Computed: true,
@@ -168,6 +182,14 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:    true, ElementType: types.StringType,
 				Validators: []validator.Set{setvalidator.SizeAtMost(20), setvalidator.ValueStringsAre(stringvalidator.RegexMatches(tagRe, "must be lower case letters, digits and _ . : -, up to 40"))},
 			},
+			"playwright": schema.SingleNestedAttribute{
+				Description: "The Playwright test a playwright check follows, as visionary-playwright-reporter reports it.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"project": schema.StringAttribute{Description: "Playwright project name (empty without projects).", Optional: true, Computed: true, Default: stringdefault.StaticString("")},
+					"title":   schema.StringAttribute{Description: "Title path: file › describe › test, e.g. checkout.spec.ts › pays by card.", Required: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 1000)}},
+				},
+			},
 		},
 	}
 }
@@ -183,7 +205,17 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root(name), &v)...)
 		return v != nil && !v.IsNull()
 	}
-	if kind.ValueString() == "browser" {
+	switch kind.ValueString() {
+	case "playwright":
+		if !set("playwright") {
+			resp.Diagnostics.AddAttributeError(path.Root("playwright"), "Missing playwright", "Playwright checks need the test's project and title.")
+		}
+		for _, n := range []string{"method", "expect_status", "body_contains", "headers", "steps", "secrets", "timeout_ms"} {
+			if set(n) {
+				resp.Diagnostics.AddAttributeError(path.Root(n), "Not for playwright checks", n+" does not apply: the test's own runs report the result.")
+			}
+		}
+	case "browser":
 		if !set("steps") {
 			resp.Diagnostics.AddAttributeError(path.Root("steps"), "Missing steps", "Browser checks need steps, starting with goto.")
 		}
@@ -192,7 +224,7 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Not for browser checks", n+" applies to http checks; a browser check starts at its first goto step.")
 			}
 		}
-	} else {
+	default:
 		if !set("url") {
 			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
 		}
@@ -201,6 +233,9 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
 			}
 		}
+	}
+	if kind.ValueString() != "playwright" && set("playwright") {
+		resp.Diagnostics.AddAttributeError(path.Root("playwright"), "Only for playwright checks", `Set kind = "playwright" to use playwright.`)
 	}
 	var onPage, showURL types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("on_status_page"), &onPage)...)
@@ -220,6 +255,9 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 	}
 	if in.Headers == nil {
 		in.Headers = map[string]string{}
+	}
+	if m.Playwright != nil {
+		in.Playwright = &apiPlaywright{Project: m.Playwright.Project.ValueString(), Title: m.Playwright.Title.ValueString()}
 	}
 	in.Tags = []string{}
 	if !m.Tags.IsNull() && !m.Tags.IsUnknown() {
@@ -260,6 +298,10 @@ func (m *checkModel) fill(c apiCheck) {
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
 	m.Tags = optStringSet(c.Tags, m.Tags)
+	m.Playwright = nil
+	if c.Playwright != nil {
+		m.Playwright = &pwModel{Project: types.StringValue(c.Playwright.Project), Title: types.StringValue(c.Playwright.Title)}
+	}
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return

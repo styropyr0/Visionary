@@ -46,6 +46,7 @@ type UptimeCheck struct {
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	Tags            []string          `json:"tags"`
+	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 }
 
 const (
@@ -109,7 +110,7 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadBrowserConfigs(ctx, out); err != nil {
 		return nil, err
 	}
-	if err := s.loadCheckTags(ctx, out); err != nil {
+	if err := s.loadCheckExtras(ctx, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -127,7 +128,7 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 	}
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
 	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
-		err = s.loadCheckTags(ctx, checks)
+		err = s.loadCheckExtras(ctx, checks)
 	}
 	return checks[0], err
 }
@@ -144,11 +145,16 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 		return err
 	}
 	c.Tags = tags
+	if c.Kind != "playwright" {
+		c.Playwright = nil
+	}
 	switch c.Kind {
 	case "", "http":
 		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
 	case "browser":
 		return c.normalizeBrowser(prev)
+	case "playwright":
+		return c.normalizePlaywright()
 	default:
 		return fmt.Errorf("unknown check kind %q", c.Kind)
 	}
@@ -324,7 +330,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
 	if err != nil {
 		return err
 	}
-	if err := s.saveCheckTags(ctx, *c); err != nil {
+	if err := s.saveCheckExtras(ctx, *c); err != nil {
 		return err
 	}
 	return s.saveBrowserConfig(ctx, *c)
@@ -498,6 +504,7 @@ func checkChanges(a, b UptimeCheck) []string {
 	kb, _ := json.Marshal(b.Secrets)
 	add("kind", a.Kind != b.Kind)
 	add("tags", strings.Join(a.Tags, ",") != strings.Join(b.Tags, ","))
+	add("playwright", fmt.Sprint(a.Playwright) != fmt.Sprint(b.Playwright))
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
@@ -566,7 +573,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
-	s.deleteCheckTags(r.Context(), c.ID)
+	s.deleteCheckExtras(r.Context(), c.ID)
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)
@@ -581,6 +588,10 @@ func (s *Server) handleUptimeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	c, ok := s.loadCheck(w, r)
 	if !ok {
+		return
+	}
+	if c.Kind == "playwright" {
+		writeError(w, http.StatusConflict, "Playwright checks are reported by your test runs; they can't be run from here")
 		return
 	}
 	run := runnerFor(s)

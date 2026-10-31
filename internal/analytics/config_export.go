@@ -87,6 +87,7 @@ type configCheck struct {
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
 	Tags            []string          `json:"tags,omitempty"`
+	Playwright      *PlaywrightTest   `json:"playwright,omitempty"`
 	Alert           *configCheckAlert `json:"alert,omitempty"`
 }
 
@@ -260,7 +261,7 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	out := configCheck{Name: m.Name, Kind: m.Kind, URL: m.URL, Method: m.Method, ExpectStatus: m.ExpectStatus, BodyContains: m.BodyContains,
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
-		FinalScreenshot: m.FinalScreenshot, Tags: m.Tags}
+		FinalScreenshot: m.FinalScreenshot, Tags: m.Tags, Playwright: m.Playwright}
 	if len(out.Tags) == 0 {
 		out.Tags = nil
 	}
@@ -270,6 +271,9 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	if m.Kind == "browser" {
 		// The start URL is the first step's; the rest does not apply.
 		out.URL, out.Method, out.ExpectStatus, out.FollowRedirects = "", "", "", nil
+	}
+	if m.Kind == "playwright" {
+		out.Method, out.ExpectStatus, out.FollowRedirects = "", "", nil
 	}
 	if a, ok := st.alerts[c.ID]; ok && (a.Mode == "custom" || a.Mode == "off") {
 		out.Alert = &configCheckAlert{Mode: a.Mode, Channels: idNames(a.ChannelIDs, st.chanName), Failures: a.Failures, Severity: a.Severity}

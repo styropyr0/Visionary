@@ -1,6 +1,6 @@
 import { api, rangeQuery, type Result } from "./api";
 
-export type CheckKind = "http" | "browser";
+export type CheckKind = "http" | "browser" | "playwright";
 
 export interface UptimeCheck {
   id: number;
@@ -29,6 +29,8 @@ export interface UptimeCheck {
   final_screenshot?: boolean;
   /** Lower case, sorted. */
   tags?: string[];
+  /** Playwright checks only: the test its reported runs come from. */
+  playwright?: { project: string; title: string };
 }
 
 export type StepAction =

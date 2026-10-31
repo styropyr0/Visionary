@@ -196,6 +196,9 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO uptime_browser_results (created_at, check_id, ok, failed_step, steps, console, network) VALUES (?, ?, 0, 0, ?, ?, '[]')`,
 			ts, svc.num, `[{"label":"`+m+` step","ok":false,"error":"`+m+` timeout"}]`, `["`+m+` console"]`)
 		exec(`INSERT INTO uptime_check_tags (check_id, tag) VALUES (?, ?)`, svc.num, m+"-tag")
+		exec(`INSERT INTO uptime_playwright_checks (check_id, test_key, project, title) VALUES (?, ?, ?, ?)`, svc.num, "key"+svc.num, m+"-project", m+".spec.ts › works")
+		exec(`INSERT INTO uptime_playwright_results (created_at, check_id, ok, status, steps, attachments, error, project) VALUES (?, ?, 0, 'failed', ?, '[]', ?, ?)`,
+			ts, svc.num, `[{"title":"`+m+` step","duration_ms":1}]`, m+" assertion", m+"-project")
 		exec(`INSERT INTO uptime_run_batches (id, created_at, deadline_at, status, workspace_id, release_name, commit_sha, tags, created_by, total)
 VALUES (?, ?, ?, 'failed', ?, ?, ?, '[]', ?, 1)`, svc.num, ts, ts, svc.num, m+"-release", "abcdef"+svc.num, m+"-ci")
 		exec(`INSERT INTO uptime_run_items (batch_id, created_at, check_id, check_name, kind, status, error) VALUES (?, ?, ?, ?, 'http', 'failed', ?)`,

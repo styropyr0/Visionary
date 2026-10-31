@@ -159,6 +159,7 @@ func (s *Server) uptimeStart(ctx context.Context) {
 	r := newUptimeRunner(s, s.uptimeSettings())
 	uptimeRunners.Store(s, r)
 	s.leased("uptime", r.run)
+	s.leased("uptime-playwright", s.watchPlaywright)
 }
 
 func (s *Server) uptimePrompt() string {

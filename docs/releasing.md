@@ -7,6 +7,7 @@ which publishes:
 | --- | --- | --- |
 | npm | `visionary-sdk` | `sdks/node` |
 | npm | `visionary-browser` | `sdks/browser` |
+| npm | `visionary-playwright-reporter` | `sdks/playwright-reporter` |
 | PyPI | `visionary-sdk` | `sdks/python` |
 | RubyGems | `visionary-sdk` | `sdks/ruby` |
 | NuGet | `Visionary.AspNetCore` | `sdks/dotnet` |
@@ -143,11 +144,11 @@ first versions still get provenance.
      so you cannot pick them)
    - Tick **Bypass two-factor authentication**, because CI cannot type a one-time code.
 2. Add it as the secret `NPM_TOKEN` in the `npm` GitHub environment.
-3. Push the release tag. The two npm jobs publish `visionary-sdk` and `visionary-browser` with
-   that token.
+3. Push the release tag. The three npm jobs publish `visionary-sdk`, `visionary-browser` and
+   `visionary-playwright-reporter` with that token.
 
 Alternatively, publish the first version by hand. From `sdks/node`, then again from
-`sdks/browser`, run:
+`sdks/browser` and `sdks/playwright-reporter`, run:
 
 ```sh
 npm login
@@ -159,8 +160,8 @@ git checkout package.json package-lock.json
 
 The workflow then skips that version on npm.
 
-**3b. Add the trusted publisher to each package.** Do this for both `visionary-sdk` and
-`visionary-browser`. On https://www.npmjs.com/package/visionary-sdk, go to **Settings** and find
+**3b. Add the trusted publisher to each package.** Do this for `visionary-sdk`,
+`visionary-browser` and `visionary-playwright-reporter`. On https://www.npmjs.com/package/visionary-sdk, go to **Settings** and find
 **Trusted Publisher**, then choose **GitHub Actions** and enter:
 
 - Organization or user: `styropyr0`
@@ -183,8 +184,8 @@ if it expires.
 optionally, under each package's **Settings > Publishing access**, choose "Require two-factor
 authentication and disallow tokens". Trusted publishing keeps working with that setting.
 
-npm also refuses names it considers too similar to an existing package. `visionary-sdk` and
-`visionary-browser` were unused in October 2026, but that rule is only checked when you publish.
+npm also refuses names it considers too similar to an existing package. `visionary-sdk`,
+`visionary-browser` and `visionary-playwright-reporter` were unused in October 2026, but that rule is only checked when you publish.
 
 ### 4. RubyGems: pending trusted publisher
 
@@ -334,7 +335,7 @@ A tag with a suffix, like `v0.4.0-rc.1`, is a prerelease:
 These are the same build steps CI runs, minus the upload.
 
 ```sh
-# npm (each of sdks/node and sdks/browser)
+# npm (each of sdks/node, sdks/browser and sdks/playwright-reporter)
 npm ci && npm run build && npm pack --dry-run
 
 # PyPI

@@ -166,7 +166,8 @@ func (u *uptimeRunner) reload(ctx context.Context, schedule map[int64]*scheduled
 	}
 	seen := map[int64]bool{}
 	for _, c := range checks {
-		if !c.Enabled {
+		// Playwright checks are pushed by the reporter; nothing runs them here.
+		if !c.Enabled || c.Kind == "playwright" {
 			continue
 		}
 		seen[c.ID] = true

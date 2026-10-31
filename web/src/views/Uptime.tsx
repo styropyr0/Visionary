@@ -15,6 +15,7 @@ import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alert
 import { BrowserNotice } from "./Uptime.steps";
 import { readTagParam, TagFilter, TagPills } from "./Uptime.tags";
 import { RunsPanel } from "./Uptime.runs";
+import { isStale } from "../lib/uptimePlaywright";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -156,16 +157,21 @@ function UptimeList() {
                     {tagged(data.checks, tag).map(({ check: c, state: s, alert }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
-                          <span title={s.no_browser ? "Waiting for a browser on the server" : undefined}>
+                          <span title={s.no_browser ? "Waiting for a browser on the server" : isStale(c, s) ? "No run reported within the expected interval" : undefined}>
                             <StateBadge state={s.state} />
                           </span>
+                          {isStale(c, s) && <div className="up-sub">stale</div>}
                         </td>
                         <td className="up-name">
                           <a href={`#/uptime?check=${c.id}`} title={c.name} onClick={(e) => e.stopPropagation()}>
                             {c.name}
                           </a>
-                          <span className="mono dim" title={c.url}>
-                            {c.kind === "browser" ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
+                          <span className="mono dim" title={c.kind === "playwright" ? c.playwright?.title : c.url}>
+                            {c.kind === "playwright"
+                              ? `Playwright · ${[c.playwright?.project, c.playwright?.title].filter(Boolean).join(" · ")}`
+                              : c.kind === "browser"
+                                ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}`
+                                : `${c.method} ${c.url}`}
                           </span>
                           <TagPills tags={c.tags} />
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
@@ -182,14 +188,18 @@ function UptimeList() {
                         </td>
                         <td className="dim" title={s.last_at}>
                           {s.last_at ? formatRelative(s.last_at) : "never"}
-                          <div className="up-sub">every {formatInterval(c.interval_s)}</div>
+                          <div className="up-sub">
+                            {c.kind === "playwright" ? "expected " : ""}every {formatInterval(c.interval_s)}
+                          </div>
                         </td>
                         <td className="num" onClick={(e) => e.stopPropagation()}>
                           {canEdit && (
                             <div className="up-actions">
-                              <button type="button" className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
-                                <RotateCw size={14} className={running === c.id ? "spin" : undefined} />
-                              </button>
+                              {c.kind !== "playwright" && (
+                                <button type="button" className="icon-btn" title="Run now" aria-label={`Run ${c.name} now`} disabled={running === c.id} onClick={() => void run(c)}>
+                                  <RotateCw size={14} className={running === c.id ? "spin" : undefined} />
+                                </button>
+                              )}
                               <button type="button" className="icon-btn" title={c.enabled ? "Pause" : "Resume"} aria-label={c.enabled ? `Pause ${c.name}` : `Resume ${c.name}`} onClick={() => void toggle(c)}>
                                 {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                               </button>

@@ -266,7 +266,7 @@ never let two environments share one name.
 | Metrics | Your counters, gauges and histograms, OTLP metrics and Prometheus remote_write; PromQL; a Prometheus API for Grafana at `/api/prom`. |
 | Errors | Exceptions and panics grouped into issues, with stacks, versions and the request. |
 | Frontend | Web Vitals, page loads, JS and mobile crashes, sessions, and session replay (opt-in, sampled, inputs masked). |
-| Uptime | HTTP checks with timing phases and certificate expiry, [browser checks](#browser-checks), and a public status page at `/status`. |
+| Uptime | HTTP checks with timing phases and certificate expiry, [browser checks](#browser-checks), Playwright tests reported from your CI, runs from CI by tag ([checks in CI](#checks-in-ci)), and a public status page at `/status`. |
 | CI | GitHub Actions runs from a signed webhook, other CI and JUnit results: durations, failing and flaky tests, deploys. |
 | Security | Built-in detectors, your own detection rules with MITRE ATT&CK tags, and signals to triage; see [Security monitoring](#security-monitoring). |
 | Explore | Ask a question in plain words; the AI analyst answers with charts. |
@@ -411,6 +411,18 @@ docker build --target browser -t visionary:browser .
 
 Outside Docker, the server finds the browser from Settings → Server → Other,
 then `VISIONARY_CHROME`, then the usual install locations and `PATH`.
+
+## Checks in CI
+
+Tag checks (`smoke`, `checkout`) and run a tag from your pipeline after a
+deploy with the [`run-checks` action](.github/actions/run-checks/action.yml)
+or the `visionary-checks` CLI (attached to each release); add
+`--url-override https://pr-12.example.com` to aim the same checks at a preview.
+It prints each result, can write JUnit XML and fails the job when a check
+fails; the run shows on the CI page next to its commit. Playwright suites stay
+in your repository: [`visionary-playwright-reporter`](sdks/playwright-reporter)
+reports each test as a check from wherever it runs, and the server never runs
+your code. Both use an API key with the `ci` scope.
 
 ## What the middleware sees
 

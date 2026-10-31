@@ -13,6 +13,8 @@ import { useApp } from "../lib/state";
 import { dateFormat, formatLogTime, formatRelative } from "../lib/time";
 import { formatDuration, formatInterval, formatUptime, getBrowserRuns, getCheckAlert, getIncidents, getPanel, getSummary, runCheck, setEnabled, type UptimeCheck, type Window } from "../lib/uptime";
 import { BrowserRunsPanel, LastRunTile, StepStatsPanel } from "./Uptime.browser";
+import { everyLabel, PlaywrightLastTile, PlaywrightRunsPanel } from "./Uptime.playwright";
+import { getPlaywrightRuns } from "../lib/uptimePlaywright";
 import { BrowserNotice } from "./Uptime.steps";
 import { CheckAlertLine, DefaultRuleModal } from "./Uptime.alerts";
 import { useQuery } from "../lib/useQuery";
@@ -44,12 +46,14 @@ export function UptimeDetail({ id }: { id: number }) {
 
   const summary = useQuery(`up-sum-${key}`, (signal) => getSummary(id, signal));
   const latency = useQuery(`up-lat-${key}`, (signal) => getPanel(id, "latency", resolved.from, resolved.to, signal));
-  const phasesRaw = useQuery(summary.data && summary.data.check.kind !== "browser" ? `up-ph-${key}` : null, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
+  const phasesRaw = useQuery(summary.data && summary.data.check.kind !== "browser" && summary.data.check.kind !== "playwright" ? `up-ph-${key}` : null, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
   const s = summary.data;
   const c = s?.check;
   const st = s?.state;
   const browser = c?.kind === "browser";
-  const results = useQuery(c && !browser ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const playwright = c?.kind === "playwright";
+  const results = useQuery(c && !browser && !playwright ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const pwRuns = useQuery(playwright ? `up-pw-${key}` : null, (signal) => getPlaywrightRuns(id, resolved.from, resolved.to, signal));
   const runs = useQuery(browser ? `up-runs-${key}` : null, (signal) => getBrowserRuns(id, resolved.from, resolved.to, signal));
   const vitalsRaw = useQuery(browser ? `up-vit-${key}` : null, (signal) => getPanel(id, "vitals", resolved.from, resolved.to, signal));
   const vitals = useMemo<Result | undefined>(
@@ -100,10 +104,12 @@ export function UptimeDetail({ id }: { id: number }) {
             <RefreshControl busy={summary.loading || latency.loading} />
             {c && s?.can_edit && (
               <>
-                <button type="button" className="btn" onClick={() => void run()} disabled={running}>
-                  <RotateCw size={14} className={running ? "spin" : undefined} />
-                  Run now
-                </button>
+                {!playwright && (
+                  <button type="button" className="btn" onClick={() => void run()} disabled={running}>
+                    <RotateCw size={14} className={running ? "spin" : undefined} />
+                    Run now
+                  </button>
+                )}
                 <button type="button" className="btn" onClick={() => void toggle(c)}>
                   {c.enabled ? <Pause size={14} /> : <Play size={14} />}
                   {c.enabled ? "Pause" : "Resume"}
@@ -132,12 +138,12 @@ export function UptimeDetail({ id }: { id: number }) {
                 <StateBadge state={st.state} large />
                 <div className="up-head-text">
                   <div className="mono up-url">
-                    {browser ? `Browser · ${c.url}` : `${c.method} ${c.url}`}
+                    {playwright ? `Playwright · ${[c.playwright?.project, c.playwright?.title].filter(Boolean).join(" · ")}` : browser ? `Browser · ${c.url}` : `${c.method} ${c.url}`}
                   </div>
                   <div className="dim">
-                    Every {formatInterval(c.interval_s)} · timeout {c.timeout_ms / 1000}s
-                    {browser ? ` · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
-                    {!browser && c.body_contains && ` and “${c.body_contains}”`}
+                    {playwright ? `A run expected every ${everyLabel(c.interval_s)}, reported by your test runs` : `Every ${formatInterval(c.interval_s)} · timeout ${c.timeout_ms / 1000}s`}
+                    {playwright ? "" : browser ? ` · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
+                    {!browser && !playwright && c.body_contains && ` and “${c.body_contains}”`}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
                   </div>
@@ -197,7 +203,13 @@ export function UptimeDetail({ id }: { id: number }) {
                 footer={s.latency.p50 !== null ? `p50 ${formatMs(s.latency.p50)} · avg ${formatMs(s.latency.avg_ms ?? 0)}` : "No successful checks"}
               />
             </div>
-            {browser ? <LastRunTile run={runs.data?.runs[0]} /> : <CertTile expires={st.cert_expires_at} https={c.url.startsWith("https:")} />}
+            {playwright ? (
+              <PlaywrightLastTile run={pwRuns.data?.runs[0]} intervalS={c.interval_s} />
+            ) : browser ? (
+              <LastRunTile run={runs.data?.runs[0]} />
+            ) : (
+              <CertTile expires={st.cert_expires_at} https={c.url.startsWith("https:")} />
+            )}
 
             <section className="panel span-12">
               <header className="panel-head">
@@ -216,7 +228,7 @@ export function UptimeDetail({ id }: { id: number }) {
             </section>
 
             <Panel
-              className="span-6"
+              className={playwright ? "span-12" : "span-6"}
               title="Response time"
               description={browser ? "Median and 95th percentile of the whole script per interval, for runs that passed." : "Median and 95th percentile of successful checks per interval, including reading the body."}
               result={latency.data}
@@ -250,7 +262,7 @@ export function UptimeDetail({ id }: { id: number }) {
                 }
               />
             )}
-            {!browser && (
+            {!browser && !playwright && (
               <Panel
                 className="span-6"
                 title="Where the time goes"
@@ -273,6 +285,7 @@ export function UptimeDetail({ id }: { id: number }) {
               />
             )}
             {browser && <StepStatsPanel steps={runs.data?.steps} loading={runs.loading} error={runs.error} />}
+            {playwright && <StepStatsPanel steps={pwRuns.data?.steps} loading={pwRuns.loading} error={pwRuns.error} />}
 
             <Panel
               className="span-12"
@@ -285,7 +298,9 @@ export function UptimeDetail({ id }: { id: number }) {
               table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS, incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
             />
 
-            {browser ? (
+            {playwright ? (
+              <PlaywrightRunsPanel checkId={id} runs={pwRuns.data?.runs} loading={pwRuns.loading} error={pwRuns.error} />
+            ) : browser ? (
               <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
             ) : (
               <Panel
