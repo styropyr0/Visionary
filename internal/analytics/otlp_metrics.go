@@ -32,6 +32,8 @@ var otlpSystemCols = []string{
 	"host_procs", "procs_running", "procs_blocked",
 	"proc_cpu_percent", "proc_rss_mb", "proc_threads", "proc_open_fds", "uptime_s",
 	"goroutines", "heap_alloc_mb", "heap_inuse_mb", "gc_count",
+	"minor_faults_ps", "major_faults_ps", "swap_in_ps", "swap_out_ps",
+	"gpu_count", "gpu_util_percent", "gpu_mem_percent",
 }
 
 var otlpSystemTable = &otlpTable{"system_metrics", otlpSystemCols}
@@ -40,6 +42,7 @@ var otlpSystemTable = &otlpTable{"system_metrics", otlpSystemCols}
 var otlpIntCols = map[string]bool{
 	"cpu_count": true, "net_errors": true, "net_drops": true, "host_procs": true, "procs_running": true,
 	"procs_blocked": true, "proc_threads": true, "proc_open_fds": true, "uptime_s": true, "goroutines": true, "gc_count": true,
+	"gpu_count": true,
 }
 
 // otlpRates are cumulative counters read as per-second rates; otlpDeltas as
@@ -48,6 +51,7 @@ var (
 	otlpRates = map[string]bool{
 		"system.cpu.time": true, "process.cpu.time": true, "system.disk.io": true, "system.disk.operations": true,
 		"system.network.io": true, "system.network.packets": true, otlpLegacy + "process.cpu.time": true,
+		"system.paging.faults": true, "system.paging.operations": true,
 	}
 	otlpDeltas = map[string]bool{"system.network.errors": true, "system.network.dropped": true, "runtime.gc.count": true}
 )
@@ -270,7 +274,9 @@ func otlpMetricName(name string) (string, func(map[string]string) bool) {
 		"system.network.io", "system.network.packets", "system.network.errors", "system.network.dropped",
 		"system.process.count", "system.processes.count",
 		"process.cpu.time", "process.cpu.utilization", "process.memory.usage", "process.thread.count",
-		"process.open_file_descriptor.count", "process.uptime", "go.goroutine.count", "jvm.thread.count":
+		"process.open_file_descriptor.count", "process.uptime", "go.goroutine.count", "jvm.thread.count",
+		"system.paging.faults", "system.paging.operations",
+		"hw.gpu.utilization", "hw.gpu.memory.utilization", "hw.gpu.memory.usage", "hw.gpu.memory.limit":
 		return name, nil
 	case "system.swap.usage": // opentelemetry-instrumentation-system-metrics
 		return "system.paging.usage", nil
@@ -552,5 +558,68 @@ func (r *otlpMetricRow) columns() map[string]float64 {
 		out["heap_inuse_mb"] = v / otlpMiB
 	}
 	setSum("gc_count", "runtime.gc.count", nil)
+
+	// Paging: swap is the major page_in and page_out operations
+	pagingType := func(want string) func(map[string]string) bool {
+		return func(a map[string]string) bool { return otlpAttr(a, "system.paging.type", "type") == want }
+	}
+	setSum("minor_faults_ps", "system.paging.faults", pagingType("minor"))
+	setSum("major_faults_ps", "system.paging.faults", pagingType("major"))
+	swap := func(dirs ...string) func(map[string]string) bool {
+		major := pagingType("major")
+		return func(a map[string]string) bool {
+			d := otlpAttr(a, "system.paging.direction", "direction")
+			return major(a) && (d == dirs[0] || d == dirs[1])
+		}
+	}
+	setSum("swap_in_ps", "system.paging.operations", swap("in", "page_in"))
+	setSum("swap_out_ps", "system.paging.operations", swap("out", "page_out"))
+
+	r.gpuColumns(out)
 	return out
+}
+
+// gpuColumns reads the hw.gpu.* hardware conventions: the busiest GPU's
+// general utilization and the fullest one's memory, by hw.id
+func (r *otlpMetricRow) gpuColumns(out map[string]float64) {
+	ids := map[string]bool{}
+	byID := func(name string, keep func(map[string]string) bool) map[string]float64 {
+		m := map[string]float64{}
+		for _, ob := range r.obs[name] {
+			if keep != nil && !keep(ob.attrs) {
+				continue
+			}
+			id := ob.attrs["hw.id"]
+			ids[id] = true
+			m[id] += ob.v
+		}
+		return m
+	}
+	general := func(a map[string]string) bool { t := a["hw.gpu.task"]; return t == "" || t == "general" }
+	util := byID("hw.gpu.utilization", general)
+	memUtil := byID("hw.gpu.memory.utilization", nil)
+	used, limit := byID("hw.gpu.memory.usage", nil), byID("hw.gpu.memory.limit", nil)
+	if len(ids) == 0 {
+		return
+	}
+	out["gpu_count"] = float64(len(ids))
+	peak := func(col string, m map[string]float64, scale float64) {
+		for _, v := range m {
+			if cur, ok := out[col]; !ok || v*scale > cur {
+				out[col] = v * scale
+			}
+		}
+	}
+	peak("gpu_util_percent", util, 100)
+	if len(memUtil) > 0 {
+		peak("gpu_mem_percent", memUtil, 100)
+		return
+	}
+	share := map[string]float64{}
+	for id, u := range used {
+		if l := limit[id]; l > 0 {
+			share[id] = u / l
+		}
+	}
+	peak("gpu_mem_percent", share, 100)
 }

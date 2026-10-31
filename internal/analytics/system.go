@@ -61,7 +61,12 @@ SELECT
   (SELECT container_mem_used_mb FROM latest) AS ctr_mem_now,
   (SELECT container_mem_limit_mb FROM latest) AS ctr_mem_limit,
   (SELECT container_cpu_cores FROM latest) AS ctr_cpu_now,
-  (SELECT container_cpu_limit FROM latest) AS ctr_cpu_limit`,
+  (SELECT container_cpu_limit FROM latest) AS ctr_cpu_limit,
+  (SELECT psi_mem_some_avg10 FROM latest) AS psi_mem_now,
+  (SELECT psi_io_some_avg10 FROM latest) AS psi_io_now,
+  (SELECT cpu_temp_c FROM latest) AS cpu_temp_now,
+  (SELECT gpu_count FROM latest) AS gpu_count,
+  (SELECT gpu_util_percent FROM latest) AS gpu_util_now`,
 
 		"cpu": `
 SELECT {{t}} AS t,
@@ -312,6 +317,132 @@ SELECT {{t}} AS t,
   MAX(proc_open_fds) AS open_files,
   MAX(proc_max_fds) AS limit_files
 FROM system_metrics WHERE ` + sysWindow + ` AND proc_open_fds IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		// Linux pressure, virtual memory, kernel limits, thermals and GPUs
+		"pressure": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(psi_cpu_some_avg10)", 2) + ` AS cpu_some,
+  ` + q.round("AVG(psi_mem_some_avg10)", 2) + ` AS memory_some,
+  ` + q.round("AVG(psi_mem_full_avg10)", 2) + ` AS memory_full,
+  ` + q.round("AVG(psi_io_some_avg10)", 2) + ` AS io_some,
+  ` + q.round("AVG(psi_io_full_avg10)", 2) + ` AS io_full
+FROM system_metrics WHERE ` + sysWindow + ` AND psi_cpu_some_avg10 IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"page_faults": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(minor_faults_ps)", 1) + ` AS minor,
+  ` + q.round("AVG(major_faults_ps)", 1) + ` AS major
+FROM system_metrics WHERE ` + sysWindow + ` AND minor_faults_ps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"swap_activity": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(swap_in_ps)", 1) + ` AS swapped_in,
+  ` + q.round("AVG(swap_out_ps)", 1) + ` AS swapped_out
+FROM system_metrics WHERE ` + sysWindow + ` AND swap_in_ps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"reclaim": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(pages_scanned_ps)", 1) + ` AS scanned,
+  ` + q.round("AVG(pages_stolen_ps)", 1) + ` AS reclaimed,
+  SUM(host_oom_kills) AS processes_killed
+FROM system_metrics WHERE ` + sysWindow + ` AND pages_scanned_ps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"dirty_memory": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(mem_dirty_mb) * 1048576.0", 0) + ` AS dirty,
+  ` + q.round("AVG(mem_writeback_mb) * 1048576.0", 0) + ` AS writeback,
+  ` + q.round("AVG(mem_slab_mb) * 1048576.0", 0) + ` AS slab,
+  ` + q.round("AVG(mem_shmem_mb) * 1048576.0", 0) + ` AS shared
+FROM system_metrics WHERE ` + sysWindow + ` AND mem_dirty_mb IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"commit": `
+SELECT {{t}} AS t,
+  ` + q.round("MAX(mem_committed_mb) * 1048576.0", 0) + ` AS committed,
+  ` + q.round("MAX(mem_commit_limit_mb) * 1048576.0", 0) + ` AS commit_limit
+FROM system_metrics WHERE ` + sysWindow + ` AND mem_committed_mb IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"file_handles": `
+SELECT {{t}} AS t,
+  MAX(files_open) AS open_files,
+  MAX(files_max) AS limit_files
+FROM system_metrics WHERE ` + sysWindow + ` AND files_open IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"conntrack": `
+SELECT {{t}} AS t,
+  MAX(conntrack_count) AS tracked,
+  MAX(conntrack_max) AS table_limit
+FROM system_metrics WHERE ` + sysWindow + ` AND conntrack_count IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"sockets": `
+SELECT {{t}} AS t,
+  MAX(sockets_used) AS sockets,
+  MAX(tcp_time_wait) AS time_wait,
+  MAX(tcp_close_wait) AS close_wait,
+  MAX(tcp_orphans) AS orphans
+FROM system_metrics WHERE ` + sysWindow + ` AND sockets_used IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"udp_errors": `
+SELECT {{t}} AS t,
+  SUM(udp_in_errors) AS undeliverable,
+  SUM(udp_buf_errors) AS buffer_full
+FROM system_metrics WHERE ` + sysWindow + ` AND udp_in_errors IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"cpu_temp": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(cpu_temp_c)", 1) + ` AS avg_temp,
+  MAX(cpu_temp_c) AS peak_temp
+FROM system_metrics WHERE ` + sysWindow + ` AND cpu_temp_c IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"cpu_clock": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(cpu_mhz)", 0) + ` AS current_clock,
+  MAX(cpu_max_mhz) AS max_clock
+FROM system_metrics WHERE ` + sysWindow + ` AND cpu_mhz IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"cpu_throttling": `
+SELECT {{t}} AS t,
+  SUM(cpu_throttle_events) AS throttle_events
+FROM system_metrics WHERE ` + sysWindow + ` AND cpu_throttle_events IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"gpu": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(gpu_util_percent)", 1) + ` AS gpu_busy,
+  ` + q.round("AVG(gpu_mem_percent)", 1) + ` AS gpu_memory
+FROM system_metrics WHERE ` + sysWindow + ` AND gpu_count IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"gpu_temp": `
+SELECT {{t}} AS t,
+  MAX(gpu_temp_c) AS peak_temp
+FROM system_metrics WHERE ` + sysWindow + ` AND gpu_temp_c IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"container_faults": `
+SELECT {{t}} AS t,
+  ` + q.round("AVG(container_minor_faults_ps)", 1) + ` AS minor,
+  ` + q.round("AVG(container_major_faults_ps)", 1) + ` AS major
+FROM system_metrics WHERE ` + sysWindow + ` AND container_minor_faults_ps IS NOT NULL
+GROUP BY t ORDER BY t`,
+
+		"container_memory_events": `
+SELECT {{t}} AS t,
+  SUM(container_mem_high_events) AS over_high,
+  SUM(container_mem_max_events) AS hit_max
+FROM system_metrics WHERE ` + sysWindow + ` AND container_mem_high_events IS NOT NULL
 GROUP BY t ORDER BY t`,
 
 		// sdk and runtime say which language wrote the rows, so runtime

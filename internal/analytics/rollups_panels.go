@@ -2,9 +2,12 @@ package analytics
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
+
+	sdk "github.com/styropyr0/visionary/sdks/go"
 )
 
 // Rollup variants of the fixed panels. Each returns the same columns as the
@@ -340,6 +343,15 @@ var rawSystemColumn = func() *regexp.Regexp {
 	for _, m := range sysMetrics {
 		if m.expr == "" {
 			names = append(names, m.name)
+		}
+	}
+	rolled := map[string]bool{}
+	for _, m := range sysMetrics {
+		rolled[m.name] = true
+	}
+	for _, c := range sdk.AddedSystemColumns {
+		if c.Kind != "text" && !rolled[c.Name] && !strings.HasPrefix(c.Name, "container_") && !slices.Contains(names, c.Name) {
+			names = append(names, c.Name)
 		}
 	}
 	return regexp.MustCompile(`\b(` + strings.Join(names, "|") + `)\b`)

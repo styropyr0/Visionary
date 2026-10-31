@@ -81,7 +81,7 @@ func (h *hostsState) noteInterval(host string, sec float64) {
 func init() {
 	// The analyst may read the host tables. security_events is shared with
 	// the server's own detectors.
-	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS", "HOST_CONTAINERS", "CONTAINER_METRICS", "CONTAINER_EVENTS"} {
+	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS", "HOST_CONTAINERS", "CONTAINER_METRICS", "CONTAINER_EVENTS", "HOST_GPUS", "HOST_GPU_PROCESSES", "HOST_SENSORS"} {
 		allowedTables[t] = true
 	}
 }
@@ -91,6 +91,7 @@ func (s *Server) hostsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+agentapi.Path, s.handleAgentReport)
 	mux.Handle("GET /api/system/machines", s.authed(s.handleMachines))
 	mux.Handle("GET /api/system/machines/{host}", s.authed(s.handleMachine))
+	mux.Handle("GET /api/system/machines/{host}/gpus", s.authed(s.handleMachineGPUs))
 	s.containerRoutes(mux)
 }
 
@@ -108,6 +109,9 @@ Snapshot tables, one set of rows per host per report (about a minute); for the c
 - host_processes: created_at, host, pid, name, username, cpu_percent (percent of one core), rss_mb, cmdline. The top processes by CPU and by memory.
 - host_mounts: created_at, host, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent.
 - host_units: created_at, host, unit, state ('active', 'inactive', 'failed', ...), sub. Failed systemd services plus the watched ones.
+- host_gpu_processes: created_at, host, gpu_index, gpu_uuid, pid, name, used_mem_mb. Processes holding GPU memory (NVIDIA).
+- host_sensors: created_at, host, name (e.g. 'coretemp Package id 0'), kind ('temperature' or 'fan'), value, unit ('C' or 'rpm').
+Table host_gpus: one row per GPU per sample (every ~15 s): created_at, host, gpu_index, uuid, name, vendor ('nvidia' or 'amd'), util_percent, mem_util_percent (memory controller busy), mem_used_mb, mem_total_mb, temp_c, power_w, power_limit_w, fan_percent, clock_mhz, max_clock_mhz. NULL where the driver does not report it.
 Table security_events: created_at, source ('host' from the agent), kind, severity ('info', 'warning', 'critical'), host, service, actor, ip, target, detail, count (occurrences one row stands for). Host kinds: ssh_failed (actor = user tried, ip), ssh_login, sudo (target = command), port_opened / port_closed (target like 'tcp 0.0.0.0:5432 postgres'), updates_pending (count = updates, detail = 'N security'), reboot, ssh_key_added / ssh_key_removed (actor = account, target = key type, fingerprint and comment, detail = file), file_changed (target = path, detail = created, modified, deleted or permissions changed), suspicious_process (actor = user, target = pid, exe and command line, detail = why), container_privileged / container_root / container_new_image (target = container, detail = image and reasons). Sum count, not rows, for attempt totals.`
 
 // hostsRetention forgets hosts silent for 30 days, 90 s after start and

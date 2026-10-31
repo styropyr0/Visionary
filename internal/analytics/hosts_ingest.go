@@ -31,6 +31,8 @@ const (
 	// A container sample per running container per host sample.
 	hostMaxContainers       = 500
 	hostMaxContainerSamples = 20000
+	hostMaxGPUs             = 64
+	hostMaxSensors          = 500
 )
 
 var (
@@ -38,7 +40,11 @@ var (
 	hostProcTable   = &otlpTable{"host_processes", []string{"created_at", "host", "pid", "name", "username", "cpu_percent", "rss_mb", "cmdline"}}
 	hostMountTable  = &otlpTable{"host_mounts", []string{"created_at", "host", "mount", "device", "fstype", "used_percent", "free_gb", "total_gb", "inodes_percent"}}
 	hostUnitTable   = &otlpTable{"host_units", []string{"created_at", "host", "unit", "state", "sub"}}
-	securityTable   = &otlpTable{"security_events", []string{"created_at", "source", "kind", "severity", "host", "service", "actor", "ip", "target", "detail", "count"}}
+	hostGPUTable    = &otlpTable{"host_gpus", []string{"created_at", "host", "gpu_index", "uuid", "name", "vendor", "util_percent", "mem_util_percent",
+		"mem_used_mb", "mem_total_mb", "temp_c", "power_w", "power_limit_w", "fan_percent", "clock_mhz", "max_clock_mhz"}}
+	hostGPUProcTable = &otlpTable{"host_gpu_processes", []string{"created_at", "host", "gpu_index", "gpu_uuid", "pid", "name", "used_mem_mb"}}
+	hostSensorTable  = &otlpTable{"host_sensors", []string{"created_at", "host", "name", "kind", "value", "unit"}}
+	securityTable    = &otlpTable{"security_events", []string{"created_at", "source", "kind", "severity", "host", "service", "actor", "ip", "target", "detail", "count"}}
 )
 
 // hostIntCols are the HostColumns stored as integers.
@@ -148,7 +154,7 @@ func reportTime(v string, now time.Time) (string, bool) {
 // counts what it kept per kind.
 func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 	rows := &otlpRows{}
-	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0}
+	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0, "gpus": 0, "gpu_processes": 0, "sensors": 0}
 	host, service := rep.Host, otlpNullStr(clip(rep.Service, 128))
 	runtime := otlpNullStr(clip(rep.Runtime, 128))
 	now := time.Now()
@@ -167,6 +173,29 @@ func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 		}
 		rows.add(hostSystemTable, row)
 		n["samples"]++
+		for _, g := range capped(smp.GPUs, hostMaxGPUs) {
+			rows.add(hostGPUTable, []any{ts, host, int64(max(g.Index, 0)), otlpNullStr(clip(g.UUID, 128)), otlpNullStr(clip(g.Name, 128)),
+				otlpNullStr(clip(g.Vendor, 32)), finitePtr(g.UtilPercent, 1), finitePtr(g.MemUtilPercent, 1), finitePtr(g.MemUsedMB, 1),
+				finitePtr(g.MemTotalMB, 1), finitePtr(g.TempC, 1), finitePtr(g.PowerW, 1), finitePtr(g.PowerLimitW, 1),
+				finitePtr(g.FanPercent, 1), finitePtr(g.ClockMHz, 0), finitePtr(g.MaxClockMHz, 0)})
+			n["gpus"]++
+		}
+	}
+	for _, p := range capped(rep.GPUProcesses, hostMaxProcesses) {
+		if p.PID <= 0 {
+			continue
+		}
+		rows.add(hostGPUProcTable, []any{at, host, int64(max(p.GPUIndex, 0)), otlpNullStr(clip(p.GPUUUID, 128)), p.PID,
+			otlpNullStr(clip(p.Name, 256)), finite(p.UsedMemMB, 1)})
+		n["gpu_processes"]++
+	}
+	for _, sn := range capped(rep.Sensors, hostMaxSensors) {
+		name, kind := clip(sn.Name, 128), clip(sn.Kind, 32)
+		if name == "" || kind == "" {
+			continue
+		}
+		rows.add(hostSensorTable, []any{at, host, name, kind, finite(sn.Value, 1), otlpNullStr(clip(sn.Unit, 16))})
+		n["sensors"]++
 	}
 	for _, p := range capped(rep.Processes, hostMaxProcesses) {
 		name := clip(p.Name, 256)
@@ -258,6 +287,14 @@ func hostValue(col string, values map[string]float64) any {
 		return int64(math.Round(v))
 	}
 	return v
+}
+
+// finitePtr is finite for a value the agent may leave out
+func finitePtr(v *float64, prec int) any {
+	if v == nil {
+		return nil
+	}
+	return finite(*v, prec)
 }
 
 func finite(v float64, prec int) any {

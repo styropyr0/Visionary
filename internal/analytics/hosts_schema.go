@@ -21,6 +21,9 @@ import (
 //   - host_containers: snapshots of the host's containers, one set per report.
 //   - container_metrics: one row per running container per sample.
 //   - container_events: restarts, OOM kills, exits and health changes.
+//   - host_gpus: one row per GPU per sample
+//   - host_gpu_processes, host_sensors: snapshots per report of the
+//     processes holding GPU memory and of every temperature and fan
 func (s *Server) hostsSchema() []string {
 	return []string{s.q.hostsTables()}
 }
@@ -158,6 +161,50 @@ CREATE TABLE IF NOT EXISTS container_events (
     count      INTEGER NOT NULL DEFAULT 1
 ){tail};
 {index} idx_container_events_created ON container_events (created_at);
-{index} idx_container_events_container_created ON container_events (container, created_at)`
+{index} idx_container_events_container_created ON container_events (container, created_at);
+CREATE TABLE IF NOT EXISTS host_gpus (
+    id               {id},
+    created_at       {ts} NOT NULL,
+    host             {key} NOT NULL,
+    gpu_index        INTEGER NOT NULL,
+    uuid             TEXT,
+    name             TEXT,
+    vendor           TEXT,
+    util_percent     {real},
+    mem_util_percent {real},
+    mem_used_mb      {real},
+    mem_total_mb     {real},
+    temp_c           {real},
+    power_w          {real},
+    power_limit_w    {real},
+    fan_percent      {real},
+    clock_mhz        {real},
+    max_clock_mhz    {real}
+){tail};
+{index} idx_host_gpus_host_created ON host_gpus (host, created_at);
+{index} idx_host_gpus_created ON host_gpus (created_at);
+CREATE TABLE IF NOT EXISTS host_gpu_processes (
+    id          {id},
+    created_at  {ts} NOT NULL,
+    host        {key} NOT NULL,
+    gpu_index   INTEGER,
+    gpu_uuid    TEXT,
+    pid         INTEGER NOT NULL,
+    name        TEXT,
+    used_mem_mb {real}
+){tail};
+{index} idx_host_gpu_processes_host_created ON host_gpu_processes (host, created_at);
+{index} idx_host_gpu_processes_created ON host_gpu_processes (created_at);
+CREATE TABLE IF NOT EXISTS host_sensors (
+    id         {id},
+    created_at {ts} NOT NULL,
+    host       {key} NOT NULL,
+    name       TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    value      {real},
+    unit       TEXT
+){tail};
+{index} idx_host_sensors_host_created ON host_sensors (host, created_at);
+{index} idx_host_sensors_created ON host_sensors (created_at)`
 	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{real}", real, "{tail}", tail, "{index}", index).Replace(ddl)
 }

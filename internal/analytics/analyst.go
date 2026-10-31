@@ -430,6 +430,11 @@ Table system_metrics: one row per server instance every ~15 seconds. May be empt
 - host processes: host_procs, procs_running, procs_blocked (waiting on I/O), ctx_switches_ps
 - process: proc_cpu_percent (percent of one core), proc_rss_mb, proc_threads, proc_open_fds, proc_max_fds, proc_read_kbps, proc_write_kbps
 - the service's own container (its cgroup; NULL outside a container without limits): container_cpu_cores (cores used), container_cpu_limit (cores; NULL is no limit), container_cpu_throttled_percent, container_mem_used_mb, container_mem_limit_mb (NULL is no limit), container_oom_kills (per sample). In a container the host_* columns describe the machine underneath, not the container.
+- pressure (Linux PSI, percent of time tasks stalled; the container's own cgroup inside a container): psi_cpu_some_avg10, psi_cpu_some_avg60, psi_mem_some_avg10, psi_mem_some_avg60, psi_mem_full_avg10, psi_io_some_avg10, psi_io_some_avg60, psi_io_full_avg10
+- virtual memory (Linux, per second over the sample): minor_faults_ps, major_faults_ps, swap_in_ps, swap_out_ps (pages), pages_scanned_ps, pages_stolen_ps (reclaim), host_oom_kills (per sample); mem_dirty_mb, mem_writeback_mb, mem_slab_mb, mem_shmem_mb, mem_committed_mb, mem_commit_limit_mb; in a container container_minor_faults_ps, container_major_faults_ps, container_mem_high_events, container_mem_max_events (per sample)
+- kernel limits (Linux): files_open, files_max (NULL is no limit), sockets_used, tcp_time_wait, tcp_orphans, tcp_close_wait (NULL on busy hosts), conntrack_count, conntrack_max, udp_in_errors, udp_buf_errors (per sample)
+- thermals (Linux): cpu_temp_c (hottest CPU sensor), cpu_mhz (average current clock), cpu_max_mhz, cpu_throttle_events (per sample)
+- GPUs (NVIDIA through nvidia-smi on Linux and Windows, AMD on Linux): gpu_count, gpu_util_percent, gpu_mem_percent (memory in use), gpu_temp_c, each the highest across GPUs
 - Columns a platform cannot report are NULL (iowait, steal, TCP and disk busy are Linux-only).
 - service, version: the service and release that sent the sample
 - sdk TEXT (go, python, java, node, ruby, dotnet, otlp, or agent for the host agent) and runtime TEXT (e.g. go1.26.2, CPython 3.13.1, OpenJDK 21.0.4): the language that wrote the row, NULL from older SDKs. Name runtime columns in that language's words.

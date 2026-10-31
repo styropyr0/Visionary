@@ -91,6 +91,7 @@ var scopedTables = map[string]scopeRule{
 	"ROLLUP_SYSTEM":  {by: byInstance},
 	"HOST_PROCESSES": {by: byHost}, "HOST_MOUNTS": {by: byHost}, "HOST_UNITS": {by: byHost},
 	"HOST_CONTAINERS": {by: byHost}, "CONTAINER_METRICS": {by: byHost}, "CONTAINER_EVENTS": {by: byHost},
+	"HOST_GPUS": {by: byHost}, "HOST_GPU_PROCESSES": {by: byHost}, "HOST_SENSORS": {by: byHost},
 	"INCIDENTS":      {by: affected},
 	"INCIDENT_ROLES": {by: byIncident}, "INCIDENT_TIMELINE": {by: byIncident}, "INCIDENT_LINKS": {by: byIncident},
 	"INCIDENT_ACTIONS": {by: byIncident},

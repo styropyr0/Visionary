@@ -92,7 +92,7 @@ GROUP BY c.host`, recent)
 			}
 			return nil
 		}
-		failed := cell(units[host], 0)               // NULL when systemd is not readable
+		failed := cell(units[host], 0)       // NULL when systemd is not readable
 		running := cell(containers[host], 0) // NULL without a container engine
 		out.Rows = append(out.Rows, []any{
 			host, row[1], row[2], status,
@@ -172,11 +172,49 @@ func (s *Server) handleMachine(w http.ResponseWriter, r *http.Request) {
 		return dbResult(rows, q)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"host":      info,
-		"processes": snapshot("host_processes", "created_at, pid, name, username, cpu_percent, rss_mb, cmdline", "cpu_percent DESC, rss_mb DESC"),
-		"mounts":    snapshot("host_mounts", "created_at, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent", "mount"),
-		"units":     snapshot("host_units", "created_at, unit, state, sub", "unit"),
+		"host":          info,
+		"processes":     snapshot("host_processes", "created_at, pid, name, username, cpu_percent, rss_mb, cmdline", "cpu_percent DESC, rss_mb DESC"),
+		"mounts":        snapshot("host_mounts", "created_at, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent", "mount"),
+		"units":         snapshot("host_units", "created_at, unit, state, sub", "unit"),
+		"gpus":          snapshot("host_gpus", "created_at, gpu_index, uuid, name, vendor, util_percent, mem_util_percent, mem_used_mb, mem_total_mb, temp_c, power_w, power_limit_w, fan_percent, clock_mhz, max_clock_mhz", "gpu_index"),
+		"gpu_processes": snapshot("host_gpu_processes", "created_at, gpu_index, gpu_uuid, pid, name, used_mem_mb", "used_mem_mb DESC"),
+		"sensors":       snapshot("host_sensors", "created_at, name, kind, value, unit", "kind DESC, name"),
 	})
+}
+
+// GET /api/system/machines/{host}/gpus?from=&to=: each GPU's use over time,
+// one row per bucket and GPU
+func (s *Server) handleMachineGPUs(w http.ResponseWriter, r *http.Request) {
+	host := r.PathValue("host")
+	if !instanceName.MatchString(host) {
+		writeError(w, http.StatusBadRequest, "invalid host name")
+		return
+	}
+	tr, err := parseRange(r.URL.Query(), s.maxRangeDays())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	q := `SELECT {{t}} AS t, gpu_index,
+  ` + s.q.round("AVG(util_percent)", 1) + ` AS busy,
+  ` + s.q.round("AVG(100.0 * mem_used_mb / NULLIF(mem_total_mb, 0))", 1) + ` AS memory_used,
+  ` + s.q.round("AVG(mem_util_percent)", 1) + ` AS memory_busy,
+  MAX(temp_c) AS temperature,
+  ` + s.q.round("AVG(power_w)", 1) + ` AS power,
+  MAX(power_limit_w) AS power_limit
+FROM host_gpus WHERE created_at >= {{from}} AND created_at < {{to}} AND host = '` + host + `'
+GROUP BY {{t}}, gpu_index ORDER BY t, gpu_index`
+	res, err := s.execTemplate(r.Context(), q, tr, true)
+	if err != nil {
+		if missingTable(err, "host_gpus") {
+			writeJSON(w, http.StatusOK, emptyResult([]string{"t", "gpu_index"}))
+			return
+		}
+		s.fail(w, err)
+		return
+	}
+	res.SQL = ""
+	writeJSON(w, http.StatusOK, res)
 }
 
 func emptyResult(cols []string) *Result { return &Result{Columns: cols, Rows: [][]any{}} }
