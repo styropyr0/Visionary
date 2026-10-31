@@ -60,7 +60,6 @@
   white-space: nowrap;
 }
 
-/* The list and the map scroll inside their panel, not the page. */
 .content.tr-fill {
   display: flex;
   flex-direction: column;

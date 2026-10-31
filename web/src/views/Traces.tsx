@@ -45,7 +45,6 @@ const TABS: { key: Tab; label: string }[] = [
 
 const TAB_KEY = "va.traces.tab";
 
-/** "#/traces/<id>" is one trace; "#/traces?tab=search&service=…" the list. */
 function readHash(): { traceId: string | null; tab: Tab | null; filters: TraceFilters } {
   const [path, qs = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
   const id = path.split("/")[1];
@@ -56,10 +55,6 @@ function readHash(): { traceId: string | null; tab: Tab | null; filters: TraceFi
   return { traceId: id ? decodeURIComponent(id) : null, tab: tab === "search" || tab === "map" ? tab : null, filters };
 }
 
-/**
- * Distributed traces: one trace across every service it touched, the search
- * that finds them, and the map of which service calls which.
- */
 export function Traces() {
   const [where, setWhere] = useState(readHash);
   useEffect(() => {
@@ -346,7 +341,6 @@ function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
   );
 }
 
-/** One trace on its own page: summary, timeline, errors and log lines. */
 function TracePage({ id }: { id: string }) {
   const q = useQuery(`trace-${id}`, (signal) => tracesApi.trace(id, signal));
   const [openLog, setOpenLog] = useState<number | null>(null);

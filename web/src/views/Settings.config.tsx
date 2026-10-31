@@ -61,7 +61,6 @@ interface Replica {
 interface ReplicasView {
   replicas: Replica[];
   self: string;
-  /** Leases nobody holds right now. */
   unheld: string[];
   lease_ttl_s: number;
 }
@@ -109,7 +108,6 @@ export function ServerTab() {
   );
 }
 
-/** The servers running on this database and the background jobs each holds. */
 function ReplicasCard() {
   const [run, setRun] = useState(0);
   const q = useQuery(`replicas#${run}`, getReplicas);
@@ -827,7 +825,6 @@ export interface Account {
   id: string;
   username: string;
   name: string;
-  /** Empty for someone SCIM added whose groups give no access yet. */
   role: "viewer" | "editor" | "admin" | "";
   disabled: boolean;
   created_by: string;
@@ -835,7 +832,6 @@ export interface Account {
   last_sign_in_at?: string;
   password_changed_at: string;
   two_step: boolean;
-  /** Empty for an account with a password; oidc, saml or scim for single sign-on. */
   source?: string;
   email?: string;
 }

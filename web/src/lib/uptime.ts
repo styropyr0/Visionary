@@ -23,32 +23,23 @@ export interface UptimeCheck {
   status_show_url: boolean;
   created_at: string;
   updated_at: string;
-  /** Browser checks only. */
   steps?: BrowserStep[];
-  /** Browser and API checks; values always come back as MASK. */
+  /** Values always come back as MASK */
   secrets?: Record<string, string>;
   final_screenshot?: boolean;
-  /** Lower case, sorted. */
   tags?: string[];
-  /** Playwright checks only: the test its reported runs come from. */
   playwright?: { project: string; title: string };
-  /** Where it runs from: "server" and uptime location names. */
   locations: string[];
-  /** With several locations: down when any, a majority or all fail. */
   location_rule: LocationRule;
-  /** Break it down by location on the status page. */
   status_show_locations: boolean;
-  /** The settings of the other kinds, one per kind (lib/uptimeKinds.ts). */
   api?: ApiConfig;
   tcp?: TcpConfig;
   dns?: DnsConfig;
   ping?: PingConfig;
   ssl?: SslConfig;
   heartbeat?: HeartbeatConfig;
-  /** Origins that get the run's traceparent; empty means the first page's. */
   trace_origins?: string[];
   no_trace?: boolean;
-  /** Performance limits of browser runs; 0 or absent is none. Over max_* fails, over warn_* is degraded. */
   max_lcp_ms?: number;
   max_cls?: number;
   max_ttfb_ms?: number;
@@ -56,11 +47,9 @@ export interface UptimeCheck {
   warn_lcp_ms?: number;
   warn_cls?: number;
   warn_ttfb_ms?: number;
-  /** The screen a browser check runs at; custom uses viewport_w × viewport_h. */
   device?: Device;
   viewport_w?: number;
   viewport_h?: number;
-  /** Keep a small screenshot after every step. */
   step_screenshots?: boolean;
   files?: BrowserFile[];
 }
@@ -75,7 +64,6 @@ export const DEVICES: { value: Device; label: string; size: string }[] = [
   { value: "custom", label: "Custom", size: "" },
 ];
 
-/** "Phone" or "Custom 1000 × 700", for lists. */
 export function deviceLabel(c: Pick<UptimeCheck, "device" | "viewport_w" | "viewport_h">): string {
   if (c.device === "custom") return `${c.viewport_w} × ${c.viewport_h}`;
   return DEVICES.find((d) => d.value === (c.device || "desktop"))?.label ?? "Desktop";
@@ -87,7 +75,6 @@ export const RULE_LABEL: Record<LocationRule, string> = { any: "any location fai
 
 export type LocationStateName = "up" | "degraded" | "down" | "stale" | "pending" | "no_browser" | "paused";
 
-/** How one location sees a check now. */
 export interface LocationState {
   name: string;
   state: LocationStateName;
@@ -107,7 +94,6 @@ export const LOCATION_STATE_LABEL: Record<LocationStateName, string> = {
   paused: "Paused",
 };
 
-/** A place checks run from: the server itself, or a host agent elsewhere. */
 export interface UptimeLocation {
   id: number;
   name: string;
@@ -119,9 +105,7 @@ export interface UptimeLocation {
   host?: string;
   browser: boolean;
   browser_version?: string;
-  /** Check kinds its runner can run; absent for the server, which runs them all. */
   kinds?: string[];
-  /** new: never polled. */
   state: "online" | "offline" | "new";
   checks: number;
 }
@@ -141,12 +125,10 @@ export const newLocationKey = (name: string) => api<{ secret: string; key_prefix
 
 export const deleteLocation = (name: string) => api<void>(`/api/uptime/locations/${encodeURIComponent(name)}`, { method: "DELETE" });
 
-/** Locations in one order everywhere: the server first, then by name. */
 export function locationOrder(names: string[]): string[] {
   return [...names].sort((a, b) => (a === "server" ? -1 : b === "server" ? 1 : a.localeCompare(b)));
 }
 
-/** A location's color: its slot in the order of every location, so it is the same on every check. */
 export function locationColor(name: string, all: string[], series: string[]): string {
   const i = Math.max(0, locationOrder(all.includes(name) ? all : [...all, name]).indexOf(name));
   return series[i % series.length] ?? "var(--accent)";
@@ -187,23 +169,18 @@ export interface BrowserStep {
   op?: "eq" | "gte" | "lte";
   ms?: number;
   label?: string;
-  /** Fails the step when it takes longer. */
   max_ms?: number;
-  /** The variable of extract, the cookie of set_cookie, the key of set_storage, the file of upload. */
   name?: string;
-  /** What extract reads: text, value or an attribute. */
   attr?: string;
   regex?: string;
-  /** Where drag drops. */
   target?: string;
-  /** set_cookie: URL or domain; set_storage: local or session; grant_permission: origin. */
   scope?: string;
   permission?: "geolocation" | "notifications" | "clipboard";
   lat?: number;
   lon?: number;
 }
 
-/** A file upload steps send; data (base64) comes back empty, and sending it empty keeps the stored file. */
+/** data (base64) comes back empty, and sending it empty keeps the stored file */
 export interface BrowserFile {
   name: string;
   type?: string;
@@ -231,9 +208,7 @@ export interface CheckState {
   last_error?: string;
   cert_expires_at?: string;
   incident_since?: string;
-  /** A browser check waiting for a browser on the server. */
   no_browser?: boolean;
-  /** Why a ping check cannot run on this server. */
   unavailable?: string;
   uptime_24h: number | null;
   days: DayBar[];
@@ -263,7 +238,6 @@ export interface CheckAlertInput {
 }
 
 export interface CheckList {
-  /** locations is null for checks that run from the server alone. */
   checks: { check: UptimeCheck; state: CheckState; alert: CheckAlert; locations?: LocationState[] | null }[];
   can_edit: boolean;
 }
@@ -296,7 +270,6 @@ export interface Incident {
   status: number;
   error?: string;
   ongoing: boolean;
-  /** Locations that failed during it, for checks that run from more than the server. */
   locations?: string[];
 }
 
@@ -328,7 +301,6 @@ export interface StepResult {
   status: "passed" | "failed" | "skipped";
   duration_ms: number;
   error?: string;
-  /** What the step found, such as an extracted value. */
   detail?: string;
 }
 
@@ -348,7 +320,6 @@ export interface BrowserRunSummary {
   final_screenshot: boolean;
   steps: number;
   degraded: boolean;
-  /** Which "warn above" values a degraded run went over. */
   warning: string;
 }
 
@@ -368,7 +339,6 @@ export interface BrowserRunDetail {
   steps: StepResult[];
   console: string[];
   network: { url: string; status?: number; error?: string; type?: string }[];
-  /** data: URLs, empty when none was taken. */
   screenshot: string;
   final_screenshot: string;
   duration_ms: number | null;
@@ -378,14 +348,11 @@ export interface BrowserRunDetail {
   ttfb_ms: number | null;
   status: number;
   retried: boolean;
-  /** The run's trace id, and whether a backend recorded anything under it. */
   trace_id: string;
   trace_found: boolean;
   degraded: boolean;
   warning: string;
-  /** Every request of the run, timed from its start; empty for older runs. */
   requests: NetRequest[];
-  /** data: URLs after each step, aligned with steps; "" where none was kept. */
   step_shots: string[];
 }
 
@@ -404,7 +371,6 @@ export interface NetRequest {
 
 export const getBrowserStatus = (signal?: AbortSignal) => api<BrowserStatus>("/api/uptime/browser", { signal });
 
-/** Steps converted from a Chrome DevTools Recorder export, and the recorded steps that have no equivalent. */
 export interface RecorderImport {
   title: string;
   steps: BrowserStep[];

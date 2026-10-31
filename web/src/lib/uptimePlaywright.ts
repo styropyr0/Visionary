@@ -5,9 +5,7 @@ export interface PlaywrightRunSummary {
   id: number;
   created_at: string;
   ok: boolean;
-  /** passed, failed, timedOut, interrupted, as Playwright reports it. */
   status: string;
-  /** expected, unexpected or flaky. */
   outcome: string;
   retry: number;
   duration_ms: number | null;
@@ -35,7 +33,6 @@ export interface PlaywrightAttachment {
   name: string;
   content_type: string;
   size: number;
-  /** Kept on the server: a small screenshot or trace. */
   stored?: boolean;
 }
 
@@ -43,7 +40,6 @@ export interface PlaywrightRunDetail extends Omit<PlaywrightRunSummary, "failed_
   started_at: string;
   steps: PlaywrightStep[];
   attachments: PlaywrightAttachment[];
-  /** A data: URL, empty when none was kept. */
   screenshot: string;
 }
 
@@ -54,12 +50,10 @@ export const getPlaywrightRun = (id: number, run: number, signal?: AbortSignal) 
 
 export const traceURL = (id: number, run: number) => `/api/uptime/checks/${id}/playwright/${run}/trace`;
 
-/** The watcher's message when no run arrived within the expected interval. */
 const STALE_PREFIX = "No run reported in ";
 
 export function isStale(c: UptimeCheck, s: CheckState | undefined): boolean {
   return c.kind === "playwright" && s?.state === "down" && !!s.last_error?.startsWith(STALE_PREFIX);
 }
 
-/** Intervals a Playwright run may be expected at. */
 export const PLAYWRIGHT_INTERVALS = [300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400, 604800];

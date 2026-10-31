@@ -36,7 +36,6 @@ function errMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** How each filter shows in the editor. */
 const FILTERS: Record<string, { label: string; placeholder?: string; options?: { value: string; label: string }[]; hint?: string }> = {
   status: { label: "Status", placeholder: "401,403 or 4xx or >=500" },
   method: { label: "Method", placeholder: "POST" },
@@ -97,7 +96,6 @@ const BLANK: Partial<DetectionRule> = {
   filter: {},
 };
 
-/** The Rules tab: the team's rules, then the library to start from. */
 export function RulesTab({ openRule }: { openRule?: number }) {
   const { tick } = useApp();
   const { can } = useSession();
@@ -339,7 +337,6 @@ function FilterFields({ source, keys, value, onChange }: { source: RuleSource; k
   );
 }
 
-/** Create or edit a rule, with a test over the last 24 hours. */
 function RuleEditor({ rule, list, onClose, onSaved }: { rule: Partial<DetectionRule>; list: RulesList; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const { can } = useSession();
@@ -699,10 +696,8 @@ function RuleEditor({ rule, list, onClose, onSaved }: { rule: Partial<DetectionR
   );
 }
 
-/** Detail keys a signal shows in its own section rather than as plain rows. */
 export const RULE_DETAIL = new Set(["samples", "group", "rule", "rule_id", "tactic", "technique", "logic", "first", "last", "new_value", "field"]);
 
-/** A signal's rule, MITRE tags, group with pivots and suppress, and the matched events. */
 export function SignalDetail({ finding, detail, onTimeline }: { finding: Finding; detail: FindingDetail | undefined; onTimeline: (account: string) => void }) {
   const { can } = useSession();
   const toast = useToast();

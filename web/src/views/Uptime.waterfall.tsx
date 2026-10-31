@@ -20,7 +20,6 @@ const pathOf = (url: string) => {
   }
 };
 
-/** A run's requests on one time axis, from the run's start. */
 export function Waterfall({ requests }: { requests: NetRequest[] }) {
   const end = Math.max(1, ...requests.map((r) => r.start_ms + r.duration_ms));
   return (

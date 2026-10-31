@@ -2,10 +2,6 @@ import { Layers } from "lucide-react";
 import { Select } from "./Select";
 import { switchWorkspace, useSession } from "../lib/team";
 
-/**
- * The workspace picker under the logo, for admins and for people in more
- * than one workspace. Picking one narrows every page to its services.
- */
 export function WorkspaceSwitcher() {
   const { session } = useSession();
   const list = session?.workspaces ?? [];

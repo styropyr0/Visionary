@@ -22,7 +22,6 @@ const time = (v: unknown) => <span className="mono">{formatLogTime(String(v))}</
 const errCell = (v: unknown) => (v ? <span className="up-err">{String(v)}</span> : <span className="dim">—</span>);
 const resultCell = (v: unknown, row: unknown[]) => <StateBadge state={v ? (row[2] ? "degraded" : "up") : "down"} />;
 
-/** What "response time" means for each kind, in the detail page's tile and chart. */
 export const LATENCY_TEXT: Record<CheckKind, { label: string; title: string; text: string }> = {
   http: { label: "Response", title: "Response time", text: "Median and 95th percentile of successful checks per interval, including reading the body." },
   browser: { label: "Response", title: "Response time", text: "Median and 95th percentile of the whole script per interval, for runs that passed." },
@@ -35,7 +34,6 @@ export const LATENCY_TEXT: Record<CheckKind, { label: string; title: string; tex
   heartbeat: { label: "Job run time", title: "Job run time", text: "Median and 95th percentile of the time between each start ping and its success ping, for jobs that send /start." },
 };
 
-/** The detail header's sixth tile for kinds without a certificate or browser run. */
 export function KindTile({ check, runs, heartbeat }: { check: UptimeCheck; runs?: DetailRun[]; heartbeat?: HeartbeatView }) {
   const last = runs?.[0];
   let label = "Last run";
@@ -96,7 +94,6 @@ export function KindTile({ check, runs, heartbeat }: { check: UptimeCheck; runs?
   );
 }
 
-/** Adds a Location column to a runs table when runs came from more than the server. */
 export function withLocation(result: Result, cols: Column[], runs?: DetailRun[]): { result: Result; columns: Column[] } {
   if (!runs?.some((r) => r.location && r.location !== "server")) return { result, columns: cols };
   const at = Math.max(1, cols.findIndex((c) => c.key === "ok") + 1);
@@ -106,7 +103,6 @@ export function withLocation(result: Result, cols: Column[], runs?: DetailRun[])
   };
 }
 
-/** A panel that shows its own content rather than a chart or table. */
 function Box({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <section className="panel span-12">
@@ -122,7 +118,6 @@ function Box({ title, description, children }: { title: string; description: str
 const RTT: Viz = { type: "timeseries", x: "t", y: ["Average", "Max"], unit: "ms" };
 const LOSS: Viz = { type: "timeseries", x: "t", y: ["Loss"], unit: "percent" };
 
-/** Ping round trips and loss per run, oldest first for the charts. */
 export function PingPanels({ runs, loading, error }: { runs?: DetailRun[]; loading: boolean; error?: Error | null }) {
   const tokens = useChartTokens();
   const { rtt, loss, table } = useMemo(() => {
@@ -179,7 +174,6 @@ export function PingPanels({ runs, loading, error }: { runs?: DetailRun[]; loadi
   );
 }
 
-/** DNS answers of each run, and what the latest run got. */
 export function DnsPanels({ runs, loading, error }: { runs?: DetailRun[]; loading: boolean; error?: Error | null }) {
   const latest = runs?.[0];
   const table = runs && asResult(["created_at", "ok", "degraded", "server", "resolve", "answers", "error"], runs.map((r) => [r.created_at, r.ok, r.degraded, r.detail.server ?? "", r.detail.resolve_ms ?? null, (r.detail.answers ?? []).join(", "), r.error]));
@@ -210,7 +204,6 @@ export function DnsPanels({ runs, loading, error }: { runs?: DetailRun[]; loadin
   );
 }
 
-/** TCP connect times and the banner each run read. */
 export function TcpPanels({ runs, loading, error }: { runs?: DetailRun[]; loading: boolean; error?: Error | null }) {
   const table = runs && asResult(["created_at", "ok", "degraded", "address", "connect", "banner", "error"], runs.map((r) => [r.created_at, r.ok, r.degraded, r.detail.address ?? "", r.detail.connect_ms ?? null, r.detail.banner ?? "", r.error]));
   const cols: Column[] = [
@@ -224,7 +217,6 @@ export function TcpPanels({ runs, loading, error }: { runs?: DetailRun[]; loadin
   return <Panel className="span-12" title="Recent runs" description="The latest 500 runs in this range, newest first, with the start of what the server sent." result={table} loading={loading} error={error ?? undefined} bodyHeight={120} table={table && <DataTable {...withLocation(table, cols, runs)} maxHeight={440} sortable={false} />} />;
 }
 
-/** The certificate the last run saw, and each run's verdict. */
 export function CertPanels({ check, runs, loading, error }: { check: UptimeCheck; runs?: DetailRun[]; loading: boolean; error?: Error | null }) {
   const d = runs?.[0]?.detail;
   const day = (s?: string) => (s ? dateFormat({ year: "numeric", month: "short", day: "numeric" }).format(new Date(s)) : "—");
@@ -278,7 +270,6 @@ export function CertPanels({ check, runs, loading, error }: { check: UptimeCheck
   );
 }
 
-/** A heartbeat's URL, when the next ping is due, and the pings in range. */
 export function HeartbeatPanels({ check, view, loading, error, canEdit, onChanged }: { check: UptimeCheck; view?: HeartbeatView; loading: boolean; error?: Error | null; canEdit: boolean; onChanged: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);

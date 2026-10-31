@@ -8,12 +8,10 @@ import { SqlView } from "./SqlView";
 import { QueryViewerLink } from "./QueryViewerLink";
 import "./telemetry.css";
 
-/** A request (server span) or a call, placed on the trace's time axis. */
 export interface TraceNode {
   key: string;
   spanId: string;
   parentId: string;
-  /** "request", or the call's kind. */
   kind: string;
   service: string;
   name: string;
@@ -25,7 +23,6 @@ export interface TraceNode {
   target: string;
   detail: string;
   instance: string;
-  /** api_logs id, for opening the request. */
   logId: number | null;
   requestId: string;
   depth: number;
@@ -36,11 +33,7 @@ function ms(iso: unknown): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-/**
- * The trace's requests and calls as one tree in start order: each under the
- * span it was made in, across services. Spans whose parent was not stored
- * (an untraced caller, a call past the span cap) start their own branch.
- */
+/** Spans whose parent was not stored start their own branch */
 export function traceTree(t: TraceResponse | undefined): { nodes: TraceNode[]; start: number; end: number } {
   if (!t) return { nodes: [], start: 0, end: 0 };
   const all: TraceNode[] = [];
@@ -112,14 +105,8 @@ export function traceTree(t: TraceResponse | undefined): { nodes: TraceNode[]; s
   return { nodes, start, end };
 }
 
-/** Indentation stops growing past this depth, so deep traces stay readable. */
 const MAX_INDENT = 8;
 
-/**
- * Every request and call of a trace on one time axis, nested by parent and
- * coloured by kind with the same colours as every other page; failures are
- * outlined.
- */
 export function TraceTimeline({ trace, onOpenRequest }: { trace: TraceResponse; onOpenRequest?: (logId: number) => void }) {
   const { nodes, start, end } = useMemo(() => traceTree(trace), [trace]);
   const kinds = useMemo(() => {

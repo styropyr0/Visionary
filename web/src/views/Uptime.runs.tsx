@@ -11,7 +11,6 @@ import { getRun, listRuns, runOutcome, startRun, type RunBatch, type RunItem } f
 import { useQuery } from "../lib/useQuery";
 import { Outcome } from "./CI.parts";
 
-/** Recent runs from CI (and the dashboard), newest first. */
 export function RunsPanel({ checks, tick, canEdit }: { checks: UptimeCheck[]; tick: number; canEdit: boolean }) {
   const [version, setVersion] = useState(0);
   const q = useQuery(`uptime-runs#${tick}#${version}`, (signal) => listRuns(signal));
@@ -257,7 +256,6 @@ function StartModal({ tags, onClose, onStarted }: { tags: string[]; onClose: () 
   );
 }
 
-/** The runs that tested one commit, for the CI page. */
 export function CommitChecks({ batches }: { batches: RunBatch[] }) {
   if (batches.length === 0) return null;
   return (

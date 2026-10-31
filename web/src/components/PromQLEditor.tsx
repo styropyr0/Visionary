@@ -7,18 +7,12 @@ import "./PromQLEditor.css";
 
 interface Suggestion {
   text: string;
-  /** What is inserted; a function gets its opening parenthesis. */
   insert: string;
   hint: string;
 }
 
 const MAX_SHOWN = 40;
 
-/**
- * A PromQL text box that completes metric names, functions, label names and
- * label values from the server, runs on Ctrl+Enter, and points at the
- * character an error names.
- */
 export function PromQLEditor({
   value,
   onChange,
@@ -44,7 +38,7 @@ export function PromQLEditor({
   const [active, setActive] = useState(0);
   const typed = useRef(value);
 
-  // A value set from outside (an example, a link) closes the suggestions.
+  // A value set from outside (an example, a link) closes the suggestions
   useEffect(() => {
     if (value !== typed.current) {
       typed.current = value;
@@ -98,7 +92,7 @@ export function PromQLEditor({
     const el = area.current;
     if (!el || !comp) return;
     const cursor = el.selectionStart;
-    // A value's closing quote may already be there.
+    // A value's closing quote may already be there
     let end = cursor;
     if (comp.kind === "value" && value[end] === '"') end++;
     const next = value.slice(0, comp.from) + sg.insert + value.slice(end);

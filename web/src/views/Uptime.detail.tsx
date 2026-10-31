@@ -453,7 +453,6 @@ const INCIDENT_LOCATIONS: Column = {
   render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>),
 };
 
-/** The incidents table with the locations each one failed in. */
 function withIncidentLocations(res: Result, list: { locations?: string[] }[]): Result {
   return { ...res, columns: [...res.columns, "locations"], rows: res.rows.map((r, i) => [...r, (list[i]?.locations ?? []).join(", ")]) };
 }

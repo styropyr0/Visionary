@@ -22,7 +22,6 @@ const asResult = (columns: string[], rows: unknown[][]): Result => ({ columns, r
 const RUN_KEYS = ["created_at", "ok", "duration_ms", "lcp_ms", "cls", "ttfb_ms", "failed_label", "error", "screenshot", "id", "degraded", "warning"] as const;
 const runState = (ok: unknown, degraded: unknown) => (ok ? (degraded ? "degraded" : "up") : "down");
 
-/** Runs of a browser check, newest first; a row opens the run. */
 export function BrowserRunsPanel({ checkId, checkName, runs, loading, error }: { checkId: number; checkName: string; runs?: BrowserRunSummary[]; loading: boolean; error?: Error | null }) {
   const [open, setOpen] = useState<number | null>(null);
   const result = runs && asResult([...RUN_KEYS], runs.map((r) => RUN_KEYS.map((k) => r[k])));
@@ -54,7 +53,6 @@ export function BrowserRunsPanel({ checkId, checkName, runs, loading, error }: {
   );
 }
 
-/** How each step did across the runs in range. */
 export function StepStatsPanel({ steps, loading, error }: { steps?: StepStat[]; loading: boolean; error?: Error | null }) {
   const result = steps && asResult(["n", "label", "runs", "failed", "avg_ms", "p95_ms"], steps.map((s, i) => [i + 1, s.label, s.runs, s.failed, s.runs > s.failed ? s.avg_ms : null, s.runs > s.failed ? s.p95_ms : null]));
   return (
@@ -90,7 +88,6 @@ export function StepStatsPanel({ steps, loading, error }: { steps?: StepStat[]; 
   );
 }
 
-/** The latest run at a glance, in place of the certificate tile. */
 export function LastRunTile({ run }: { run?: BrowserRunSummary }) {
   return (
     <section className="panel span-2">
@@ -112,7 +109,6 @@ export function LastRunTile({ run }: { run?: BrowserRunSummary }) {
 
 const STEP_ICON = { passed: CheckCircle2, failed: XCircle, skipped: CircleDashed };
 
-/** One run: which step failed and why, what the page looked like, and what it logged. */
 export function RunDrawer({ checkId, checkName, runId, onClose }: { checkId: number; checkName: string; runId: number; onClose: () => void }) {
   const q = useQuery(`up-run-${checkId}-${runId}`, (signal) => getBrowserRun(checkId, runId, signal));
   const r = q.data;

@@ -277,7 +277,6 @@ function UptimeList({ tab }: { tab: "checks" | "locations" }) {
   );
 }
 
-/** The checks with tag, or all of them when no check has it. */
 function tagged(checks: CheckList["checks"], tag: string) {
   const hits = checks.filter((c) => c.check.tags?.includes(tag));
   return hits.length ? hits : checks;
@@ -289,7 +288,7 @@ function Tiles({ data, loading }: { data: CheckList; loading: boolean }) {
     const count = (s: string) => states.filter((x) => x.state === s).length;
     const live = states.filter((s) => s.uptime_24h !== null);
     const avg = live.length ? live.reduce((a, s) => a + (s.uptime_24h ?? 0), 0) / live.length : null;
-    // A heartbeat's duration is its job's run time, not a response.
+    // A heartbeat's duration is its job's run time, not a response
     const ms = data.checks.filter((c) => c.check.kind !== "heartbeat").map((c) => c.state).filter((s) => s.last_at && (s.state === "up" || s.state === "degraded")).map((s) => s.last_duration_ms);
     return {
       up: count("up") + count("degraded"),

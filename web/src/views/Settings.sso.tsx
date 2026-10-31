@@ -10,7 +10,7 @@ import { useToast } from "../components/Toast";
 import { Card, Switch } from "./Settings.profiling";
 import { Row, type Account } from "./Settings.config";
 
-// ---------- Single sign-on and SCIM (Settings → Sign-in) ----------
+// ---------- Single sign-on and SCIM ----------
 
 type Kind = "oidc" | "saml";
 
@@ -45,7 +45,6 @@ interface SsoView {
   sign_in_type: string;
 }
 
-/** Where each identity provider's issuer lives and what it calls groups. */
 const PRESETS: { value: string; label: string; issuer: string; groups: string; hint: string }[] = [
   { value: "google", label: "Google", issuer: "https://accounts.google.com", groups: "", hint: "Google sends no groups; use a default role and allowed domains." },
   {
@@ -95,7 +94,6 @@ const newID = (name: string, taken: string[]) => {
   return id;
 };
 
-/** Providers people can sign in with, next to the way in above, and SCIM provisioning. */
 export function SsoSettings() {
   const toast = useToast();
   const [run, setRun] = useState(0);
@@ -433,7 +431,6 @@ function CopyRow({ label, hint, value }: { label: string; hint: string; value?: 
 const SOURCES: Record<string, string> = { oidc: "OpenID Connect", saml: "SAML", scim: "SCIM" };
 const ROLE_PICKS = DEFAULT_ROLES.slice(1);
 
-/** People who sign in through single sign-on; their accounts have no password. */
 function SsoPeopleCard() {
   const toast = useToast();
   const [run, setRun] = useState(0);

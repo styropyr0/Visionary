@@ -18,7 +18,6 @@ import { IncidentDetail } from "./Incidents.detail";
 import { SevTag, StatusBadge, openIncident } from "./Incidents.parts";
 import "./Incidents.css";
 
-/** The page's state in the address: #/incidents?id=4, or ?declare=alert&ref=12 to open the form. */
 function readHash(): { id: number | null; declare: { kind: string; ref: string } | null } {
   const p = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
   const n = Number(p.get("id"));
@@ -190,7 +189,6 @@ function severityLine(by: Partial<Record<Severity, number>>): string {
   return parts.length ? parts.join(", ") : "in this range";
 }
 
-/** The stats' buckets as a long-format result for the chart and its table. */
 function severityResult(buckets: { at: string; counts: Partial<Record<Severity, number>> }[], step: number, from: string, to: string): Result {
   const rows: unknown[][] = [];
   for (const b of buckets) for (const s of SEVERITIES) rows.push([b.at, s.label, b.counts[s.key] ?? 0]);

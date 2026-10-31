@@ -26,10 +26,8 @@ import { PromQLEditor } from "../components/PromQLEditor";
 import { usePromChart } from "../lib/promql";
 import "./Metrics.css";
 
-/** The chart's state lives in the hash (#/metrics?name=…&agg=…) so it can be linked. */
 interface MetricsState extends MetricQuery {
   service: string;
-  /** "query" shows the PromQL editor instead of the metric list. */
   mode: string;
   query: string;
 }
@@ -311,7 +309,6 @@ const EXAMPLES: { label: string; query: string }[] = [
   { label: "CPU by instance", query: "max by (instance) (visionary_system_host_cpu_percent)" },
 ];
 
-/** The PromQL editor over the time range: a chart and table of what it returns. */
 function QueryMode({ query, onRun }: { query: string; onRun: (q: string) => void }) {
   const tokens = useChartTokens();
   const [draft, setDraft] = useState(query);

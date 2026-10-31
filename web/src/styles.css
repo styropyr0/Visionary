@@ -62,7 +62,6 @@
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
-  /* Requests in timelines: outside the series, so no call kind shares it. */
   --kind-request: #8b9bb3;
   /* Sequential ramp (heatmaps): one hue, dim to bright on dark surfaces. */
   --seq-1: #1f324d;
@@ -682,7 +681,6 @@ pre,
 
 .workspace-switch {
   flex-shrink: 0;
-  /* The nav below scrolls; this gap keeps its items off the selector. */
   padding: 8px 8px 8px;
 }
 
@@ -1985,17 +1983,14 @@ pre.code {
 
 .tabs {
   display: flex;
-  /* Scrolling would otherwise let it shrink to nothing in a flex column. */
   flex-shrink: 0;
   gap: 4px;
   margin-bottom: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  /* A scrolling background, so the scrollbar sits below it and the underline isn't clipped. */
   background: linear-gradient(var(--border), var(--border)) 0 33px / 100% 1px no-repeat local;
 }
 
-/* Room between the tabs and their scrollbar: a 6px thumb under a 6px gap. */
 .tabs::-webkit-scrollbar {
   height: 14px;
 }

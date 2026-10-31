@@ -21,7 +21,6 @@ export const KIND_INFO: Record<CheckKind, { label: string; icon: LucideIcon; tex
 
 export const KIND_ORDER: CheckKind[] = ["http", "api", "browser", "playwright", "tcp", "dns", "ping", "ssl", "heartbeat"];
 
-/** Kinds whose settings live in their own field of the check. */
 export const SETTINGS_KINDS: CheckKind[] = ["api", "tcp", "dns", "ping", "ssl", "heartbeat"];
 
 export function KindIcon({ kind, size = 14 }: { kind: CheckKind; size?: number }) {
@@ -29,7 +28,6 @@ export function KindIcon({ kind, size = 14 }: { kind: CheckKind; size?: number }
   return <Icon size={size} aria-label={KIND_INFO[kind]?.label} className="up-kind-icon" />;
 }
 
-/** The kind chooser of a new check, with what each kind does. */
 export function KindPicker({ value, onChange }: { value: CheckKind; onChange: (k: CheckKind) => void }) {
   return (
     <div className="field">
@@ -51,7 +49,6 @@ export function KindPicker({ value, onChange }: { value: CheckKind; onChange: (k
   );
 }
 
-/** Defaults a new check of each kind starts from. */
 export function kindDefaults(k: CheckKind): Partial<CheckInput> {
   switch (k) {
     case "api":
@@ -70,7 +67,6 @@ export function kindDefaults(k: CheckKind): Partial<CheckInput> {
   return {};
 }
 
-/** One line naming what a check watches, for the list and the detail header. */
 export function describeTarget(c: UptimeCheck): string {
   switch (c.kind) {
     case "browser":
@@ -95,7 +91,6 @@ export function describeTarget(c: UptimeCheck): string {
   return `${c.method} ${c.url}`;
 }
 
-/** What the check expects, for the detail header's second line. */
 export function describeExpect(c: UptimeCheck): string {
   switch (c.kind) {
     case "browser":
@@ -127,7 +122,6 @@ export function heartbeatSchedule(h?: HeartbeatConfig): string {
   return `every ${formatInterval(h.period_s ?? 0)}${grace}`;
 }
 
-/** Says when ping checks cannot run on this server. */
 export function PingNotice({ always }: { always?: boolean }) {
   const { tick } = useApp();
   const st = useQuery(`uptime-ping#${tick}`, (signal) => getPingStatus(signal));
@@ -360,7 +354,6 @@ export function HeartbeatFields({ value, onChange }: { value: HeartbeatConfig; o
   );
 }
 
-/** Rows of names and values, such as request headers. */
 export function KeyValueRows({ rows, onChange, keyLabel, valueLabel, max, mask }: { rows: { k: string; v: string }[]; onChange: (r: { k: string; v: string }[]) => void; keyLabel: string; valueLabel: string; max: number; mask?: (k: string, v: string) => boolean }) {
   return (
     <>

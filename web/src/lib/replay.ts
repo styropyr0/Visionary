@@ -1,7 +1,4 @@
-/**
- * Plays back the browser SDK's recordings in a sandboxed iframe. They come from
- * browsers with a public key, so scripts, frames and meta refreshes are never built.
- */
+/** Recordings come from browsers with a public key, so scripts, frames and meta refreshes are never built */
 
 export type ReplayEvent = [number, number, unknown];
 
@@ -13,7 +10,6 @@ export const SCROLL = 5;
 export const INPUT = 6;
 export const VIEWPORT = 7;
 
-/** Events a person caused; long gaps between them are what skipping jumps over. */
 export const USER_EVENTS = new Set([FULL, MOVE, CLICK, SCROLL, INPUT, VIEWPORT]);
 
 interface SNode {
@@ -56,7 +52,6 @@ function safeAttr(name: string, value: string): boolean {
 export class ReplayEngine {
   private nodes = new Map<number, Node>();
   private pos = 0;
-  /** Recorded viewport, in CSS pixels. */
   width = 1280;
   height = 800;
   onViewport: (w: number, h: number) => void = () => {};
@@ -75,7 +70,6 @@ export class ReplayEngine {
     return this.events[this.events.length - 1]?.[0] ?? 0;
   }
 
-  /** Draws the page as it was at t: the last snapshot before it, then what followed. */
   seek(t: number) {
     let from = this.events.findIndex((e) => e[1] === FULL);
     if (from < 0) return;
@@ -84,13 +78,12 @@ export class ReplayEngine {
     this.advance(t);
   }
 
-  /** Applies the events up to t; going backwards needs seek. */
   advance(t: number) {
     while (this.pos < this.events.length && this.events[this.pos][0] <= t) {
       try {
         this.apply(this.events[this.pos]);
       } catch {
-        // One damaged event should not stop the rest.
+        // One damaged event should not stop the rest
       }
       this.pos++;
     }
@@ -107,7 +100,7 @@ export class ReplayEngine {
       case FULL: {
         const d = data as Snapshot;
         this.nodes.clear();
-        // Frame nodes are not instances of this window's Element, so check nodeType.
+        // Frame nodes are not instances of this window's Element, so check nodeType
         const root = this.build(doc, d.node) as Element;
         if (root.nodeType !== 1) return;
         let head = root.querySelector("head");
@@ -194,7 +187,7 @@ export class ReplayEngine {
     try {
       el.setAttribute(k, v);
     } catch {
-      // Not a valid attribute name here.
+      // Not a valid attribute name here
     }
     if (k === "value" && "value" in el) (el as HTMLInputElement).value = v;
   }
@@ -227,7 +220,6 @@ export class ReplayEngine {
   }
 }
 
-/** Splits [start, end] into the stretches with something to watch, for skipping the rest. */
 export function idleGaps(events: ReplayEvent[], minGap = 5000): [number, number][] {
   const out: [number, number][] = [];
   let last = events[0]?.[0] ?? 0;

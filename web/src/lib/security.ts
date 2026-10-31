@@ -45,7 +45,6 @@ export interface FindingDetail {
   statuses?: Result;
   /** The audit entries behind a finding from Visionary's own audit log. */
   audit?: Result;
-  /** A rule's signal: the rule, and its group's matched events around it. */
   rule?: DetectionRule;
   events?: Result;
 }
@@ -283,7 +282,6 @@ export function useSecurityPanel(name: string, from?: Date, to?: Date) {
   return useQuery<Result>(`sec-${name}?${f.toISOString()}-${t.toISOString()}#${tick}`, (signal) => securityApi.panel(name, f, t, signal));
 }
 
-/** The label a finding shows: a rule's name for its signals, else its kind's. */
 export function findingLabel(f: Pick<Finding, "source" | "kind" | "detail">): string {
   const name = f.source === "rule" ? f.detail?.rule : undefined;
   return typeof name === "string" && name ? name : kindLabel(f.kind);
@@ -356,7 +354,6 @@ export interface RuleTemplate {
   then?: Record<string, string>;
   factor?: number;
   needs?: string;
-  /** The rule made from it, when there is one. */
   rule_id?: number;
 }
 
@@ -421,14 +418,12 @@ export const LOGIC_LABELS: Record<RuleLogic, string> = {
   anomaly: "Anomaly",
 };
 
-/** "TA0006 Credential Access" from the catalog, or the id alone. */
 export function mitreLabel(id: string | undefined, list: MitreEntry[] | undefined): string {
   if (!id) return "";
   const e = list?.find((m) => m.id === id);
   return e ? `${e.id} ${e.name}` : id;
 }
 
-/** The ATT&CK page for a tactic or technique id. */
 export function mitreHref(id: string): string {
   if (id.startsWith("TA")) return `https://attack.mitre.org/tactics/${id}/`;
   return `https://attack.mitre.org/techniques/${id.replace(".", "/")}/`;

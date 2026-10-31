@@ -55,7 +55,6 @@ export interface IssueDetail {
 
 export interface RequestTelemetry {
   log_id: number | null;
-  /** The distributed trace the request belongs to, when its SDK records one. */
   trace_id?: string | null;
   spans: Result;
   errors: Result;

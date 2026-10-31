@@ -38,7 +38,7 @@ import { CI } from "./views/CI";
 function readRoute(): Route {
   // "#/dashboards/12?from=..." is the dashboards view; the rest is the view's own.
   const r = window.location.hash.replace(/^#\/?/, "").split(/[?/]/)[0] as Route;
-  // "#/trace/<id>" is short for "#/traces/<id>".
+  // "#/trace/<id>" is short for "#/traces/<id>"
   if ((r as string) === "trace") {
     history.replaceState(null, "", window.location.hash.replace(/^#\/?trace\b/, "#/traces"));
     return "traces";

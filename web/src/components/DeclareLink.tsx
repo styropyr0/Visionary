@@ -2,7 +2,6 @@ import { Siren } from "lucide-react";
 import { useSession } from "../lib/team";
 import { declareHref } from "../lib/incidents";
 
-/** Opens the declare form on the Incidents page, filled from this alert, check, error or log line. Editors only. */
 export function DeclareLink({ kind, target, icon }: { kind: "alert" | "uptime" | "error" | "log"; target: string | number; icon?: boolean }) {
   const { can } = useSession();
   if (!can("edit")) return null;

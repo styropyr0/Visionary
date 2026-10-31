@@ -1,6 +1,5 @@
 import type { BrowserRunDetail, NetRequest } from "./uptime";
 
-/** HAR 1.2 from a run's recorded requests. Headers and bodies are not kept, so they are empty. */
 export function runHar(run: BrowserRunDetail, checkName: string) {
   const t0 = new Date(run.created_at).getTime();
   const query = (url: string) => {

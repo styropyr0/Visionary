@@ -1,7 +1,5 @@
 import { api, rangeQuery } from "./api";
 
-/** Declared incidents (Incidents page), on top of alerts, uptime, errors and logs. */
-
 export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
 export type IncidentStatus = "investigating" | "identified" | "monitoring" | "resolved";
 export type RoleName = "commander" | "communications" | "operations" | "scribe" | "responder";
@@ -139,7 +137,6 @@ export interface IncidentDetail {
 export interface IncidentStats {
   total: number;
   active: number;
-  /** Not yet resolved, whenever declared; unassigned of those have no commander. */
   open: number;
   unassigned: number;
   by_severity: Partial<Record<Severity, number>>;
@@ -204,14 +201,12 @@ export const incidentsApi = {
   removeAction: (id: number, actionID: number) => api<{ actions: ActionItem[] }>(`${base(id)}/actions/${actionID}`, { method: "DELETE" }),
 };
 
-/** A link to the declare form, filled from a source. */
 export function declareHref(kind: "alert" | "uptime" | "error" | "log", ref: string | number): string {
   return `#/incidents?${new URLSearchParams({ declare: kind, ref: String(ref) })}`;
 }
 
 export const incidentHref = (id: number) => `#/incidents?id=${id}`;
 
-/** Where a linked item lives in the dashboard, or its own address. */
 export function linkHref(l: Pick<IncidentLink, "kind" | "ref">): string {
   const [id] = l.ref.split("|");
   switch (l.kind) {
@@ -231,7 +226,6 @@ export function linkHref(l: Pick<IncidentLink, "kind" | "ref">): string {
   return l.ref;
 }
 
-/** "4m", "1h 12m", "2d 3h"; a dash until reached. */
 export function formatSpan(s: number | null | undefined): string {
   if (s === null || s === undefined) return "—";
   if (s < 60) return `${Math.round(s)}s`;

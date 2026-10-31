@@ -7,7 +7,6 @@ export function openIncident(id: number | null) {
 
 const STATUS_ICON: Record<IncidentStatus, typeof Search> = { investigating: Search, identified: Crosshair, monitoring: Eye, resolved: CheckCircle2 };
 
-/** Status with icon and label, so meaning never rests on color alone. */
 export function StatusBadge({ status }: { status: IncidentStatus }) {
   const Icon = STATUS_ICON[status] ?? Search;
   return (

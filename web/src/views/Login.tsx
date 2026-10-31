@@ -86,7 +86,6 @@ export function Login({ notice, onSignedIn }: Props) {
   );
 }
 
-/** The screen when single sign-on is the only way in: a button per provider. */
 function SsoOnly({ cfg, notice, error }: { cfg: AuthConfig; notice?: string; error: string }) {
   return (
     <div className="auth-form">
@@ -116,7 +115,6 @@ function SsoOnly({ cfg, notice, error }: { cfg: AuthConfig; notice?: string; err
   );
 }
 
-/** Links that start single sign-on; the server sends the browser on. */
 function SsoButtons({ cfg, primary }: { cfg: AuthConfig; primary?: boolean }) {
   const list = cfg.sso ?? [];
   if (list.length === 0) return primary ? <div className="auth-alert error">No identity provider is turned on. An admin can set one up in Settings → Sign-in.</div> : null;

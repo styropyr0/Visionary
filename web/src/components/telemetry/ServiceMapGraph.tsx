@@ -13,7 +13,7 @@ const PAD = 16;
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
 const FIT_MARGIN = 32;
-// Pointer travel below this is a click, not a drag.
+// Pointer travel below this is a click, not a drag
 const CLICK_SLOP = 4;
 
 const KIND_NAME: Record<string, string> = { db: "database", http: "HTTP host", cache: "cache", queue: "queue" };
@@ -33,11 +33,6 @@ type Drag =
   | { mode: "pan"; startX: number; startY: number; view: View; moved: boolean }
   | { mode: "node"; id: string; startX: number; startY: number; nodeX: number; nodeY: number; moved: boolean };
 
-/**
- * Columns from left to right: services nothing traced calls, then the
- * services they call, and so on; the databases, hosts and queues they use
- * last. A cycle keeps each service where it was first reached.
- */
 function layout(map: ServiceMap): { nodes: Placed[]; width: number; height: number } {
   const services = map.nodes.filter((n) => n.kind === "service");
   const deps = map.nodes.filter((n) => n.kind !== "service");
@@ -83,7 +78,6 @@ function edgeColor(e: MapEdge): string {
   return "var(--border-strong)";
 }
 
-/** Calls per minute, or per hour when fewer than one a minute. */
 function rate(perMin: number): string {
   if (perMin >= 1) return `${formatCount(perMin)}/min`;
   const perHour = Math.round(perMin * 60);
@@ -94,7 +88,7 @@ export function edgeSummary(e: MapEdge): string {
   return `${rate(e.per_min)} · ${formatPercent(e.error_rate)} failed${e.p95 !== null ? ` · p95 ${formatMs(e.p95)}` : ""}`;
 }
 
-// Roughly the cursor's height, so the tip opens just below the pointer, not under it.
+// Roughly the cursor's height, so the tip opens below the pointer
 const CURSOR_H = 18;
 
 const pointerAnchor = (p: { x: number; y: number }) => ({ getBoundingClientRect: () => new DOMRect(p.x, p.y, 0, CURSOR_H) });
@@ -110,17 +104,12 @@ function bounds(nodes: Placed[]): { x: number; y: number; w: number; h: number }
   return { x, y, w: Math.max(...xs) + NODE_W - x, h: Math.max(...ys) + NODE_H - y };
 }
 
-/** Whole map in view, never enlarged past 100%. */
 function fitView(nodes: Placed[], width: number, height: number): View {
   const b = bounds(nodes);
   const k = clampZoom(Math.min(1, (width - FIT_MARGIN * 2) / b.w, (height - FIT_MARGIN * 2) / b.h));
   return { k, x: (width - b.w * k) / 2 - b.x * k, y: (height - b.h * k) / 2 - b.y * k };
 }
 
-/**
- * Drag to pan, scroll or pinch to zoom, drag a box to move it. Arrows thicken
- * with traffic, turn amber or red with failures, and list their traces on click.
- */
 export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEdge: (e: MapEdge) => void; onNode: (n: MapNode) => void }) {
   const laid = useMemo(() => layout(map), [map]);
   const [moved, setMoved] = useState<Map<string, { x: number; y: number }>>(new Map());
@@ -137,12 +126,12 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
   const drag = useRef<Drag | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ dist: number; view: View } | null>(null);
-  // A drag that ends over a box or arrow must not count as a click on it.
+  // A drag that ends over a box or arrow must not count as a click on it
   const suppressClick = useRef(false);
 
   const tipId = useId();
   const tipTimer = useRef<number>();
-  // Tips follow the pointer, since an arrow's bounding box spans its whole curve.
+  // Tips follow the pointer, since an arrow's bounding box spans its whole curve
   const mouse = useRef({ x: 0, y: 0 });
   const [tip, setTip] = useState<{ el: Element; anchor: Pick<Element, "getBoundingClientRect">; follow: boolean; body: ReactNode } | null>(null);
   const hideTip = useCallback(() => {
@@ -208,7 +197,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
 
   const zoomCenter = (factor: number) => zoomAt(factor, size.w / 2, size.h / 2);
 
-  // Wheel needs a non-passive listener so the page doesn't scroll instead.
+  // Wheel needs a non-passive listener so the page doesn't scroll instead
   useEffect(() => {
     const el = box.current;
     if (!el) return;

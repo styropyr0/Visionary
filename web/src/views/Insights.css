@@ -91,7 +91,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  /* Same inset as the table cells below, so the text lines up. */
   padding: 8px 10px;
   font-size: 12px;
 }

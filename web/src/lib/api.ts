@@ -89,7 +89,6 @@ export interface AuthConfig {
   open?: "disabled" | "unconfigured";
   /** A saved setup that can't be used: nobody can sign in until it is fixed. */
   error?: string;
-  /** Single sign-on providers, shown as buttons next to the form. */
   sso?: { id: string; name: string; kind: "oidc" | "saml" }[];
 }
 

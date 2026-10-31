@@ -47,7 +47,6 @@ const KIND_LABEL: Record<string, string> = {
   server_log: "Server log",
 };
 
-/** Timeline kinds marked on the replay's scrubber. */
 const MARKED: Record<string, string> = {
   page_load: "Page",
   api: "API call",

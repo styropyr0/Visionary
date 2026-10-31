@@ -28,7 +28,6 @@ import {
   type UptimeLocation,
 } from "../lib/uptime";
 
-/** Uptime → Locations: where checks can run from, and the keys their runners use. */
 export function LocationsTab() {
   const { tick } = useApp();
   const toast = useToast();
@@ -283,7 +282,6 @@ function KeyModal({ name, secret, onClose }: { name: string; secret: string; onC
   );
 }
 
-/** Where a check runs from, and how its locations combine. Part of the check form. */
 export function LocationsField({
   kind,
   value,
@@ -366,7 +364,6 @@ export function LocationsField({
   );
 }
 
-/** One dot per location with its state, for the checks list. */
 export function LocationDots({ locations }: { locations: LocationState[] }) {
   return (
     <span className="up-loc-dots" aria-label="Locations">
@@ -385,13 +382,10 @@ interface LocationSeries {
   checks: number;
   failed: number;
   avgMs: number | null;
-  /** Response time per bucket, null where nothing passed. */
   points: (number | null)[];
-  /** Failed share per bucket, null where nothing ran. */
   fails: (number | null)[];
 }
 
-/** Rows of [t, location, ...values] turned into one series per location over the same buckets. */
 function byLocation(res: Result | undefined, value: (row: unknown[]) => number | null, names: string[]) {
   const ts = [...new Set((res?.rows ?? []).map((r) => String(r[0])))].sort();
   const at = new Map(ts.map((t, i) => [t, i]));
@@ -403,10 +397,6 @@ function byLocation(res: Result | undefined, value: (row: unknown[]) => number |
   return out;
 }
 
-/**
- * Per location: its state now, uptime and response time over the range, and
- * a small chart of each, colored by location the same way on every check.
- */
 export function LocationsPanel({ id, names, states, from, to, refresh }: { id: number; names: string[]; states: LocationState[]; from: Date; to: Date; refresh: string }) {
   const tokens = useChartTokens();
   const all = useQuery("up-locations-colors", (signal) => listLocations(signal));
@@ -506,7 +496,7 @@ function MiniLine({ points, color, label, format, max, empty }: { points: (numbe
       return;
     }
     d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(p).toFixed(1)}`;
-    // A lone point is drawn as a dot by the round cap.
+    // A lone point is drawn as a dot by the round cap
     if (!pen && (points[i + 1] ?? null) === null) d += "h0.1";
     pen = true;
   });

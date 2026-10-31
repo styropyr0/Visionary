@@ -2,7 +2,6 @@ import { api, rangeQuery, type Result } from "./api";
 import { useApp } from "./state";
 import { useQuery, type QueryState } from "./useQuery";
 
-/** One trace: its requests and calls in every service, its log lines and errors. */
 export interface TraceResponse {
   trace_id: string;
   requests: Result;
@@ -13,7 +12,6 @@ export interface TraceResponse {
 
 export interface MapNode {
   id: string;
-  /** "service", or the dependency's kind: db, http, cache, queue. */
   kind: string;
   name: string;
   requests: number;
@@ -37,7 +35,6 @@ export interface ServiceMap {
   edges: MapEdge[];
 }
 
-/** What Search narrows traces by; empty strings are unset. */
 export interface TraceFilters {
   service: string;
   route: string;
@@ -56,14 +53,12 @@ export function traceHref(id: string): string {
   return `#/traces/${encodeURIComponent(id)}`;
 }
 
-/** The trace search with filters, from the service map or elsewhere. */
 export function traceSearchHref(f: Partial<TraceFilters>): string {
   const p = new URLSearchParams({ tab: "search" });
   for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
   return `#/traces?${p}`;
 }
 
-/** Trace search over the dashboard range. */
 export function useTraceSearch(f: TraceFilters): QueryState<Result> {
   const { resolved, tick } = useApp();
   const extra: Record<string, string> = {};

@@ -21,7 +21,6 @@ export interface GuideSection {
   title: string;
   /** The page it describes; its HELP text fills "What it shows" and "Good to know". */
   route?: Route;
-  /** For a section with no page of its own; a page's section takes the page's icon. */
   icon?: LucideIcon;
   intro: string;
   shot?: string;

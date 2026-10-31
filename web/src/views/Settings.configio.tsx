@@ -35,7 +35,6 @@ const TYPE_LABEL: Record<string, string> = {
 
 const ACTION_LABEL: Record<Action, string> = { create: "Create", update: "Update", unchanged: "Unchanged", skip: "Skip" };
 
-/** Settings → Configuration: the team's setup as one file, to move between installs or keep in git. */
 export function ConfigIOTab() {
   const toast = useToast();
   const [doc, setDoc] = useState("");

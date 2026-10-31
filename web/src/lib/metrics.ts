@@ -10,10 +10,8 @@ export interface MetricName {
   unit: string;
   series: number;
   rows: number;
-  /** Counters: the total in range; gauges: the latest reading; histograms: the mean. */
   value: number | null;
   last_seen: string;
-  /** New series dropped over the per-name cap since the server started. */
   dropped?: number;
 }
 
@@ -31,11 +29,9 @@ export interface MetricLabels {
   truncated: boolean;
 }
 
-/** What to chart; the same fields are a dashboard panel's params and a custom_metric rule's query. */
 export interface MetricQuery {
   name: string;
   agg?: string;
-  /** A label key, or ":service" / ":instance". */
   group?: string;
   labels?: Record<string, string>;
 }
@@ -52,7 +48,6 @@ export const AGG_LABEL: Record<string, string> = {
   p99: "p99",
 };
 
-/** The aggregations that make sense for a kind, the default first. */
 export function aggsFor(kind: MetricKind | ""): string[] {
   switch (kind) {
     case "counter":
@@ -63,7 +58,6 @@ export function aggsFor(kind: MetricKind | ""): string[] {
   return ["avg", "sum", "max", "min"];
 }
 
-/** A metric's unit as a chart unit; anything else is drawn as a plain number. */
 export function chartUnit(unit: string, agg: string): Unit {
   if (agg === "count" || agg === "rate") return agg === "count" ? "count" : "none";
   const u = unit.toLowerCase();
@@ -73,7 +67,6 @@ export function chartUnit(unit: string, agg: string): Unit {
   return "none";
 }
 
-/** The URL params of /api/metrics/series and of a dashboard panel. */
 export function queryParams(q: MetricQuery, service: string): Record<string, string> {
   const p: Record<string, string> = { name: q.name };
   if (q.agg) p.agg = q.agg;
@@ -101,7 +94,6 @@ export function useMetricSeries(q: MetricQuery | null, service: string) {
   return useQuery<Result>(q ? `metric-series?${qs}#${tick}` : null, (signal) => api<Result>(`/api/metrics/series?${qs}`, { signal }));
 }
 
-/** Labels as typed in a filter box: region=eu, status=200. */
 export function parseLabelText(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of text.split(",")) {

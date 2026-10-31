@@ -44,7 +44,7 @@ function isAdditive(viz: Viz): boolean {
 function colorize(names: string[], t: ChartTokens): Map<string, string> {
   const out = new Map<string, string>();
   const anyStatus = names.some((n) => statusColor(n, t) !== null);
-  // Next to status series, the rest skip green, amber and red so they don't read as status.
+  // Non-status series skip green, amber and red so they don't read as status
   const slots = anyStatus ? [0, 6, 4, 1].map((i) => t.series[i]) : t.series.slice(0, MAX_SERIES);
   let slot = 0;
   for (const n of names) {

@@ -2,7 +2,6 @@ import { ApiError, api, rangeQuery, type Result } from "./api";
 import { useApp } from "./state";
 import { useQuery } from "./useQuery";
 
-/** The Prometheus API's base path; Grafana's data source URL is the server's origin followed by /api/prom. */
 export const PROM_API = "/api/prom/api/v1";
 
 export interface PromMeta {
@@ -16,13 +15,11 @@ interface PromEnvelope<T> {
   data: T;
 }
 
-/** Where a query error points, from the server's 400 answer. */
 export function errorPosition(err: Error | undefined): number | null {
   if (err instanceof ApiError && typeof err.data?.position === "number") return err.data.position;
   return null;
 }
 
-/** A PromQL query charted over the app's time range, one point per bucket. */
 export function usePromChart(query: string) {
   const { resolved, tick } = useApp();
   const qs = rangeQuery(resolved.from, resolved.to, { query });
@@ -36,9 +33,8 @@ function metaRange(): string {
   return `start=${Math.floor((now - DAY) / 1000)}&end=${Math.floor(now / 1000)}`;
 }
 
-/** Metric names over the last day with their type and help, for completion. */
 export function usePromNames() {
-  // Names change slowly: refetch by the hour.
+  // Names change slowly, so refetch hourly
   const hour = Math.floor(Date.now() / 3_600_000);
   return useQuery<Record<string, PromMeta[]>>(`prom-meta-${hour}`, async (signal) => {
     const res = await api<PromEnvelope<Record<string, PromMeta[]>>>(`${PROM_API}/metadata?${metaRange()}`, { signal });
@@ -48,7 +44,6 @@ export function usePromNames() {
 
 const labelCache = new Map<string, Promise<string[]>>();
 
-/** Label names of a metric, or the values of one label; cached for the page's life. */
 export function promLabels(metric: string, label?: string): Promise<string[]> {
   const key = `${metric}\n${label ?? ""}`;
   let p = labelCache.get(key);
@@ -98,7 +93,6 @@ export const PROM_AGGREGATIONS = ["sum", "avg", "min", "max", "count", "topk", "
 
 export const PROM_KEYWORDS = ["by", "without", "on", "ignoring", "group_left", "group_right", "bool", "offset", "and", "or", "unless"];
 
-/** What the cursor is completing: a name, a label inside {…}, or a label's value. */
 export type Completion =
   | { kind: "name"; prefix: string; from: number }
   | { kind: "label"; metric: string; prefix: string; from: number }
@@ -125,7 +119,6 @@ export function completionAt(text: string, cursor: number): Completion | null {
   return { kind: "name", prefix: word[0], from: cursor - word[0].length };
 }
 
-/** The line holding a character position, and the column within it. */
 export function lineAt(text: string, pos: number): { line: string; col: number; number: number } {
   const start = text.lastIndexOf("\n", Math.max(pos - 1, 0)) + 1;
   const end = text.indexOf("\n", pos);

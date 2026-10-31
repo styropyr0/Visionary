@@ -297,7 +297,6 @@ interface VersionRow {
 }
 
 /** Two versions side by side: overall and per route, over the dashboard range. */
-/** The CI runs that built the two versions, found by the commit each version names. */
 function VersionBuilds({ a, b }: { a: string; b: string }) {
   const q = useQuery(`ci-builds?${a}|${b}`, (signal) => ciApi.builds([a, b], signal).catch(() => ({ builds: {} as Record<string, CIRun> })));
   const builds = q.data?.builds ?? {};

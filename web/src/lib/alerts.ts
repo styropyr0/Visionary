@@ -83,9 +83,7 @@ export interface RuleSpec {
   sql?: string;
   /** The Logs search of log_matches and log_absent rules. */
   query?: string;
-  /** The metric of custom_metric rules. */
   metric_query?: MetricQuery;
-  /** The expression of promql rules. */
   promql?: string;
   scope: Scope;
   op?: string;
@@ -398,7 +396,6 @@ export interface AlertsSummary {
   unacked: number;
   checks_down: number;
   down: string[];
-  /** Declared incidents not yet resolved. */
   incidents_active?: number;
 }
 

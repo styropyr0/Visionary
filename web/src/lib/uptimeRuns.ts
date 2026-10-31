@@ -1,6 +1,5 @@
 import { api } from "./api";
 
-/** One check of a run from CI. */
 export interface RunItem {
   check_id: number;
   check_name: string;
@@ -12,11 +11,9 @@ export interface RunItem {
   duration_ms: number | null;
   http_status?: number;
   error?: string;
-  /** Browser checks: the steps of the run. */
   detail?: { steps?: { label: string; status: string; duration_ms: number; error?: string }[]; failed_step?: number };
 }
 
-/** Checks run once, now, from CI or the dashboard. */
 export interface RunBatch {
   id: number;
   created_at: string;
@@ -25,7 +22,6 @@ export interface RunBatch {
   done: boolean;
   release?: string;
   commit?: string;
-  /** The origin the checks ran against instead of their own. */
   environment_url?: string;
   tags: string[];
   created_by?: string;
@@ -52,7 +48,6 @@ export const getRun = (id: number, signal?: AbortSignal) => api<{ batch: RunBatc
 
 export const startRun = (input: RunInput) => api<{ batch: RunBatch }>("/api/uptime/runs", { method: "POST", json: input });
 
-/** The word and icon key the CI outcome badge uses. */
 export function runOutcome(status: string): string {
   return status === "running" ? "in_progress" : status;
 }

@@ -34,7 +34,6 @@ import { useSession, type DashSource } from "../lib/team";
 interface Step {
   id: number;
   purpose: string;
-  /** The SQL, or the PromQL when lang says so. */
   sql: string;
   lang?: "sql" | "promql";
   status: "running" | "done" | "error";
@@ -52,7 +51,6 @@ interface AnalystPanel {
   query: string;
   viz: Viz;
   result: Result;
-  /** The query is PromQL: the panel goes on a dashboard as a PromQL panel. */
   promql?: boolean;
 }
 
@@ -524,7 +522,7 @@ function AnswerPanel({ panel, question }: { panel: AnalystPanel; question: strin
         table={<DataTable result={panel.result} maxHeight={height} defaultUnit={panel.viz.unit} />}
         dashboard={toDashboard}
         extraActions={
-          // Saved panels hold SQL only.
+          // Saved panels hold SQL only
           canEdit && !panel.promql ? (
             <button type="button" className="icon-btn" title="Save to Saved panels" aria-label="Save panel" onClick={() => setSaving(true)}>
               <BookmarkPlus size={15} />

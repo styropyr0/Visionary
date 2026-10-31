@@ -2,8 +2,6 @@ import { api, rangeQuery, type Result } from "./api";
 import type { Release } from "./telemetry";
 import type { RunBatch } from "./uptimeRuns";
 
-/** CI pipelines, jobs and tests (CI page), from the GitHub webhook and the ingest endpoints. */
-
 export interface CIFilters {
   service: string;
   repo: string;
@@ -119,7 +117,6 @@ export interface CIRunDetail {
   failed: CITest[];
   slowest: CITest[];
   deploys: CIDeploy[];
-  /** Uptime checks run from CI for this commit. */
   checks?: RunBatch[];
 }
 
@@ -186,7 +183,6 @@ export const ciApi = {
 
 export const runHref = (id: number) => `#/ci?run=${id}`;
 
-/** A run's outcome as one word: its conclusion when finished, else its status. */
 export function outcomeOf(r: { status: string; conclusion: string }): string {
   return r.status === "completed" ? r.conclusion || "completed" : r.status;
 }
@@ -206,7 +202,6 @@ export const OUTCOME_LABEL: Record<string, string> = {
   error: "Error",
 };
 
-/** Minutes and seconds for CI durations, which run from seconds to hours. */
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -219,7 +214,6 @@ export function formatDuration(ms: number | null | undefined): string {
 
 export const shortSha = (sha: string) => sha.slice(0, 7);
 
-/** The GitHub Actions step that uploads JUnit results, for Help and the empty page. */
 export function junitStep(origin: string): string {
   return `- name: Upload test results to Visionary
   if: \${{ !cancelled() }}

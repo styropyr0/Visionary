@@ -97,7 +97,6 @@ function RunHead({ run }: { run: CIRun }) {
 
 const ts = (v: string | undefined) => (v ? Date.parse(v) : NaN);
 
-/** Jobs on one time axis from the run's queue time: the wait for a runner, then the work. */
 function JobTimeline({ run, jobs }: { run: CIRun; jobs: CIJob[] }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = Date.now();

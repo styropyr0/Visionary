@@ -11,7 +11,6 @@ interface ReplayMeta {
   chunks: { seq: number; started: string; ended: string; events: number; bytes: number }[];
 }
 
-/** A timeline event shown on the scrubber. */
 export interface ReplayMarker {
   at: string;
   kind: string;

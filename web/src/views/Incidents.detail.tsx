@@ -68,7 +68,7 @@ export function IncidentDetail({ id }: { id: number }) {
   const d = q.data;
   const inc = d?.incident;
 
-  // An open incident changes while it is watched: alerts fire, others post.
+  // An open incident changes while it is watched, as alerts fire and others post
   useEffect(() => {
     if (!inc || inc.resolved_at) return;
     const t = window.setInterval(() => document.visibilityState === "visible" && setVersion((v) => v + 1), 20_000);
@@ -197,7 +197,6 @@ export function IncidentDetail({ id }: { id: number }) {
   );
 }
 
-/** The four stages with when each was first reached; editors move it on. */
 function StatusSteps({ incident: inc, canEdit, onSet }: { incident: Incident; canEdit: boolean; onSet: (s: IncidentStatus) => void }) {
   const at: Record<IncidentStatus, string | undefined> = { investigating: inc.declared_at, identified: inc.identified_at, monitoring: inc.mitigated_at, resolved: inc.resolved_at };
   const current = STATUSES.findIndex((s) => s.key === inc.status);
@@ -296,7 +295,6 @@ function Deliveries({ entry }: { entry: TimelineEntry }) {
   );
 }
 
-/** A note for the team, or a status update for the channels and the status page. */
 function Composer({ detail, onDone }: { detail: Detail; onDone: () => void }) {
   const toast = useToast();
   const inc = detail.incident;

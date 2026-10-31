@@ -26,7 +26,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "flaky", label: "Flaky" },
 ];
 
-/** The page's state in the address: #/ci?tab=tests, or ?run=12 for one run. */
 function readHash(): { run: number | null; tab: Tab } {
   const p = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
   const n = Number(p.get("run"));
@@ -436,7 +435,6 @@ function TestsTab({ filters, onTest }: { filters: CIFilters; onTest: (hash: stri
   );
 }
 
-/** The last results, oldest first, as marks that each carry their word. */
 function ResultStrip({ results }: { results: string[] }) {
   return (
     <span className="ci-strip" aria-label={results.map((r) => OUTCOME_LABEL[r] ?? r).join(", ")}>

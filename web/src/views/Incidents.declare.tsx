@@ -10,14 +10,12 @@ import { useToast } from "../components/Toast";
 
 const SOURCE_NAMES: Record<string, string> = { alert: "Alert rule", uptime: "Uptime check", error: "Error issue", log: "Log line" };
 
-/** Comma-separated names, for the services fields. */
 export const splitList = (v: string) =>
   v
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-/** Declare an incident from scratch, or from an alert, a check, an error or a log line. */
 export function DeclareModal({ source, onClose, onDeclared }: { source?: { kind: string; ref: string }; onClose: () => void; onDeclared: (i: Incident) => void }) {
   const toast = useToast();
   const [title, setTitle] = useState("");
@@ -35,7 +33,7 @@ export function DeclareModal({ source, onClose, onDeclared }: { source?: { kind:
   const people = useQuery("incident-people", (signal) => incidentsApi.people(signal));
   const chans = useQuery("alerts-channels", (signal) => alertsApi.channels(signal));
 
-  // The source fills the form once it loads; anything typed first is kept.
+  // The source fills the form once it loads, and anything typed first is kept
   useEffect(() => {
     const s = src.data;
     if (!s) return;

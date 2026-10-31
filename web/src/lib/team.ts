@@ -8,11 +8,8 @@ export type Permission = "view" | "edit" | "admin";
 export interface TeamSession extends SessionInfo {
   role: Role;
   permissions: Record<Permission, boolean>;
-  /** Workspaces this person can switch to: all of them for admins. */
   workspaces?: WorkspaceRef[];
-  /** The one picked in the sidebar, 0 for all of them. */
   workspace?: number;
-  /** True when this person sees only some services. */
   scoped?: boolean;
 }
 
@@ -57,7 +54,6 @@ export interface WorkspaceItem {
 
 export type WorkspaceItemKind = "alert" | "check" | "dashboard" | "view";
 
-/** Whether a service name matches a workspace pattern, as the server decides it. */
 export function matchService(pattern: string, name: string): boolean {
   if (!name) return false;
   if (pattern === "*") return true;
@@ -72,7 +68,6 @@ export function matchService(pattern: string, name: string): boolean {
 
 const WORKSPACE_COOKIE = "visionary_workspace";
 
-/** Picks the workspace the pages show (0: all of yours) and reloads them. */
 export function switchWorkspace(id: number) {
   document.cookie = id > 0 ? `${WORKSPACE_COOKIE}=${id}; path=/; max-age=31536000; SameSite=Strict` : `${WORKSPACE_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
   window.location.reload();

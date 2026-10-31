@@ -1,7 +1,5 @@
 import { api, rangeQuery } from "./api";
 
-/** Settings of the check kinds beyond HTTP and browser; each lives in its own field of the check. */
-
 export interface ApiExtract {
   var: string;
   source: "json" | "header" | "regex" | "status";
@@ -22,7 +20,7 @@ export interface ApiRequest {
   name?: string;
   method: string;
   url: string;
-  /** Secret-looking literal values come back as MASK. */
+  /** Secret-looking literal values come back as MASK */
   headers?: Record<string, string>;
   body_type?: "" | "json" | "text" | "form";
   body?: string;
@@ -76,7 +74,6 @@ export interface HeartbeatConfig {
   grace_s: number;
 }
 
-/** What one run of an API, TCP, DNS, ping or SSL check found. */
 export interface ApiRequestResult {
   name: string;
   method: string;
@@ -135,7 +132,6 @@ export interface DetailRun {
   duration_ms: number | null;
   error: string;
   detail: RunDetail;
-  /** "server" or the uptime location that ran it. */
   location: string;
 }
 
@@ -159,7 +155,6 @@ export interface HeartbeatView {
   reason: string;
   last_duration_ms: number | null;
   pings: HeartbeatPing[];
-  /** Editors only. */
   path?: string;
 }
 

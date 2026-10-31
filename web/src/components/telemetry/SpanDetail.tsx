@@ -28,16 +28,13 @@ export interface SpanDetailResponse {
 }
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["p95", "avg_ms"], unit: "ms" };
-// Both "Over time" charts share a time axis and height so they line up side by side.
+// Both "Over time" charts share a time axis and height so they line up
 const CALLS: Viz = { type: "timeseries", x: "t", y: ["calls"], unit: "count" };
 const CALL_RATE: Viz = { type: "timeseries", x: "t", y: ["calls_per_minute"] };
 const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count" };
 const CHART_H = 260;
 
-/**
- * Calls per minute in each bucket, so the scale reads the same whatever the
- * range (a 30 min bucket holds 30 times the calls of a 1 min one).
- */
+/** Calls per minute, so the scale reads the same whatever the bucket size */
 function withCallRate(res: Result): Result | null {
   const i = res.columns.indexOf("calls");
   if (res.bucket <= 0 || i < 0) return null;

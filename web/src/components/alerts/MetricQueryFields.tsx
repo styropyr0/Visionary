@@ -7,7 +7,6 @@ import { Select } from "../Select";
 
 const DAY = 24 * 3600 * 1000;
 
-/** The custom_metric rule's metric, label filters, aggregation and grouping. */
 export function MetricQueryFields({ value, onChange }: { value: MetricQuery | undefined; onChange: (q: MetricQuery) => void }) {
   const q = value ?? { name: "" };
   const [labels, setLabels] = useState(() => labelText(q.labels));

@@ -6,7 +6,6 @@ import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { getBrowserStatus, MASK, type BrowserFile, type BrowserStep, type StepAction } from "../lib/uptime";
 
-/** What each step asks for, in the order the menu lists them. */
 const ACTIONS: { value: StepAction; label: string; fields: ("selector" | "text" | "value" | "count" | "ms")[]; target?: boolean; hint?: string }[] = [
   { value: "goto", label: "Go to URL", fields: ["value"] },
   { value: "click", label: "Click", fields: ["selector", "text"], target: true },
@@ -50,7 +49,6 @@ const EXTRACT_ATTRS = [
   { value: "attr", label: "An attribute" },
 ];
 
-/** The fields of the steps beyond clicking and checking. */
 function MoreFields({ s, set, files }: { s: BrowserStep; set: (patch: Partial<BrowserStep>) => void; files: BrowserFile[] }) {
   const input = (k: "selector" | "name" | "value" | "target" | "scope" | "regex" | "attr", placeholder: string, label: string, mono = true) => (
     <input className={`input ${mono ? "mono" : ""}`} value={(s[k] as string | undefined) ?? ""} placeholder={placeholder} aria-label={label} onChange={(e) => set({ [k]: e.target.value })} />
@@ -272,7 +270,6 @@ export function StepsEditor({ steps, onChange, files = [] }: { steps: BrowserSte
 
 const MAX_FILE = 256 * 1024;
 
-/** Small files upload steps send, kept with the check. */
 export function FilesEditor({ files, onChange }: { files: BrowserFile[]; onChange: (f: BrowserFile[]) => void }) {
   const pick = useRef<HTMLInputElement>(null);
   const [err, setErr] = useState("");
@@ -319,7 +316,6 @@ export function FilesEditor({ files, onChange }: { files: BrowserFile[]; onChang
   );
 }
 
-/** Values steps can use as {{secret.NAME}}; stored on the server, never shown again or recorded in results. */
 export function SecretsEditor({ secrets, onChange, stored }: { secrets: { k: string; v: string }[]; onChange: (s: { k: string; v: string }[]) => void; stored: Record<string, string> }) {
   return (
     <div className="field">
@@ -357,7 +353,6 @@ export function SecretsEditor({ secrets, onChange, stored }: { secrets: { k: str
   );
 }
 
-/** Says when the server has no browser to run browser checks with, and how to get one. */
 export function BrowserNotice({ always }: { always?: boolean }) {
   const { tick } = useApp();
   const st = useQuery(`uptime-browser#${tick}`, (signal) => getBrowserStatus(signal));

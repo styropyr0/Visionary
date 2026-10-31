@@ -3,7 +3,6 @@ import { AlertTriangle, FileUp } from "lucide-react";
 import { Modal } from "../components/Modal";
 import { importRecording, type RecorderImport } from "../lib/uptime";
 
-/** Turns a Chrome DevTools Recorder export into steps; what has no equivalent is listed. */
 export function RecorderDialog({ onClose, onImport }: { onClose: () => void; onImport: (r: RecorderImport) => void }) {
   const [text, setText] = useState("");
   const [err, setErr] = useState("");

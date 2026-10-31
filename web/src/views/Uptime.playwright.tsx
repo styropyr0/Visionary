@@ -32,7 +32,6 @@ export function everyLabel(s: number): string {
   return `${Math.round(s / 60)}m`;
 }
 
-/** The form's fields for a Playwright check, declared before its first run. */
 export function PlaywrightFields({ form, onChange }: { form: CheckInput; onChange: (patch: Partial<CheckInput>) => void }) {
   const pw = form.playwright ?? { project: "", title: "" };
   const options = PLAYWRIGHT_INTERVALS.map((s) => ({ value: String(s), label: `Every ${everyLabel(s)}` }));
@@ -66,7 +65,6 @@ export function PlaywrightFields({ form, onChange }: { form: CheckInput; onChang
 
 const RUN_KEYS = ["created_at", "ok", "duration_ms", "retry", "browser", "failed_step", "error", "commit", "screenshot", "id"] as const;
 
-/** Runs of a Playwright check, newest first; a row opens the run. */
 export function PlaywrightRunsPanel({ checkId, runs, loading, error }: { checkId: number; runs?: PlaywrightRunSummary[]; loading: boolean; error?: Error | null }) {
   const [open, setOpen] = useState<number | null>(null);
   const result = runs && asResult([...RUN_KEYS], runs.map((r) => RUN_KEYS.map((k) => r[k])));
@@ -105,7 +103,6 @@ export function PlaywrightRunsPanel({ checkId, runs, loading, error }: { checkId
   );
 }
 
-/** The latest run at a glance, in place of the certificate tile. */
 export function PlaywrightLastTile({ run, intervalS }: { run?: PlaywrightRunSummary; intervalS: number }) {
   return (
     <section className="panel span-2">

@@ -50,7 +50,6 @@ const valuePlaceholder = (a: ApiAssertion) =>
 
 const rowsOf = (h?: Record<string, string>) => Object.entries(h ?? {}).map(([k, v]) => ({ k, v }));
 
-/** The ordered requests of an API check, with what each extracts and asserts. */
 export function ApiRequestsEditor({ requests, onChange }: { requests: ApiRequest[]; onChange: (r: ApiRequest[]) => void }) {
   const set = (i: number, patch: Partial<ApiRequest>) => onChange(requests.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const move = (i: number, d: number) => {
@@ -214,7 +213,6 @@ const asResult = (columns: string[], rows: unknown[][]): Result => ({ columns, r
 
 const ms = (v: unknown) => (toNumber(v) === null ? <span className="dim">—</span> : formatMs(toNumber(v)!));
 
-/** Runs of an API check; a row opens each request's result. */
 export function ApiRunsPanel({ runs, loading, error }: { runs?: DetailRun[]; loading: boolean; error?: Error | null }) {
   const [open, setOpen] = useState<DetailRun | null>(null);
   const keys = ["created_at", "ok", "duration_ms", "requests", "failed", "error", "i"];
@@ -252,7 +250,6 @@ export function ApiRunsPanel({ runs, loading, error }: { runs?: DetailRun[]; loa
   );
 }
 
-/** Each request of one run. Secrets are masked by the server; bodies are only short excerpts of failures. */
 export function ApiRequestTable({ run }: { run: DetailRun }) {
   const reqs = run.detail.requests ?? [];
   return (

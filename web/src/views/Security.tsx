@@ -322,7 +322,6 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
   );
 }
 
-/** Signals: what the detection rules found, with the findings list's filters and triage. */
 function SignalsTab({ onSelect }: { onSelect: (f: Finding) => void }) {
   const { tick } = useApp();
   const [filters, setFilters] = useState<FindingFilters>({ ...EMPTY, source: "rule" });
@@ -373,9 +372,7 @@ function FindingsTable({
   filters: FindingFilters;
   setFilters: (f: FindingFilters) => void;
   onSelect: (f: Finding) => void;
-  /** Shows one source only, without its filter (the Signals tab). */
   fixedSource?: string;
-  /** The kind filter's choices, when not the built-in kinds. */
   kinds?: { value: string; label: string }[];
 }) {
   const { resolved, tick } = useApp();

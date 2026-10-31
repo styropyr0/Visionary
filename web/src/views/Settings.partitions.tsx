@@ -35,7 +35,6 @@ interface PartitionsView {
 
 const getPartitions = (signal?: AbortSignal) => api<PartitionsView>("/api/settings/partitions", { signal });
 
-/** Settings → Data: daily partitions for the busiest tables, on PostgreSQL. */
 export function PartitionsCard() {
   const toast = useToast();
   const [run, setRun] = useState(0);

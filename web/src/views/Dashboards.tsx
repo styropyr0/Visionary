@@ -587,7 +587,6 @@ function AddPanel({
 
 const PROMQL_VIZ = { type: "timeseries", x: "t", y: ["value"], series: "series", unit: "none" } as const satisfies DashPanel["viz"];
 
-/** A panel that charts a PromQL query; the server checks it when the dashboard is saved and when it runs. */
 function AddPromQL({ onAdd }: { onAdd: (title: string, query: string) => void }) {
   const [title, setTitle] = useState("");
   const [query, setQuery] = useState("");

@@ -34,7 +34,6 @@
   font-size: 12.5px;
 }
 
-/* The icon sits on the first line of the message. */
 .pq-error > svg {
   flex: none;
   margin-top: 2px;

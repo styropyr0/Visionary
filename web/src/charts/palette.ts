@@ -45,7 +45,7 @@ export function statusColor(name: string, t: ChartTokens): string | null {
   if (/^3\d\d$|^3xx$/.test(n)) return t.status.info;
   if (/^4\d\d$|^4xx$|client_error/.test(n)) return t.status.warning;
   if (/^5\d\d$|^5xx$|server_error/.test(n)) return t.status.critical;
-  // Words, so "errors", "failed_calls" and "Failure" match but "terror" doesn't.
+  // Whole words, so "errors" and "Failure" match but "terror" doesn't
   const words = n.split(/[^a-z]+/);
   const has = (re: RegExp) => words.some((w) => re.test(w));
   if (has(/^(errors?|failed|failures?|fails?|fatal|crash(es|ed)?|exceptions?|down|unhealthy|timeouts?)$/)) return t.status.critical;

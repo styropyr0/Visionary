@@ -14,7 +14,6 @@ const originOf = (url: string | undefined) => {
 
 const DEVICE_ICON = { desktop: Monitor, laptop: Laptop, tablet: Tablet, phone: Smartphone, custom: Maximize2 };
 
-/** The screen the check runs at. */
 export function DeviceSettings({ form, set }: { form: CheckInput; set: Set }) {
   const device = form.device || "desktop";
   const pick = (d: Device) => {
@@ -63,7 +62,6 @@ const LIMITS: { label: string; unit: string; max: NumKey; warn: NumKey; step?: n
   { label: "TTFB", unit: "ms", max: "max_ttfb_ms", warn: "warn_ttfb_ms" },
 ];
 
-/** Web Vitals and time limits: over a limit fails the run, over a warning degrades it. */
 export function LimitSettings({ form, set }: { form: CheckInput; set: Set }) {
   const input = (k: NumKey, step?: number) => (
     <input
@@ -100,7 +98,6 @@ export function LimitSettings({ form, set }: { form: CheckInput; set: Set }) {
   );
 }
 
-/** Whether runs carry a traceparent, and to which origins. */
 export function TraceSettings({ form, set, steps }: { form: CheckInput; set: Set; steps: BrowserStep[] }) {
   const [origins, setOrigins] = useState((form.trace_origins ?? []).join(", "));
   const first = originOf(steps[0]?.value) || "the first page's origin";

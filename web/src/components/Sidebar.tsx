@@ -163,7 +163,6 @@ function NavItem({ route, label, icon: Icon, active, badge }: { route: Route; la
   );
 }
 
-/** Firing alerts, down uptime checks and open incidents, refreshed every 30 seconds while the page is open. */
 function useAlertBadges(): Partial<Record<Route, NavBadge>> {
   const [summary, setSummary] = useState<AlertsSummary | null>(null);
   useEffect(() => {

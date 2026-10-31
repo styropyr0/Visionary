@@ -14,7 +14,6 @@ const OUTCOME_ICON: Record<string, typeof CheckCircle2> = {
   queued: Clock,
 };
 
-/** An outcome with icon and word, so it never rests on color alone. */
 export function Outcome({ outcome, compact }: { outcome: string; compact?: boolean }) {
   const Icon = OUTCOME_ICON[outcome] ?? MinusCircle;
   const label = OUTCOME_LABEL[outcome] ?? outcome;

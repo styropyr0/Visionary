@@ -3,7 +3,6 @@ import { Tag } from "lucide-react";
 import { Select } from "../components/Select";
 import type { UptimeCheck } from "../lib/uptime";
 
-/** Picks one tag to narrow the check list to; "" shows every check. */
 export function TagFilter({ checks, value, onChange }: { checks: UptimeCheck[]; value: string; onChange: (tag: string) => void }) {
   const tags = [...new Set(checks.flatMap((c) => c.tags ?? []))].sort();
   if (tags.length === 0) return null;
@@ -24,7 +23,6 @@ export function TagPills({ tags }: { tags?: string[] }) {
   );
 }
 
-/** Tags typed as one line, split on commas and spaces. */
 export function TagsField({ value, onChange }: { value: string[]; onChange: (tags: string[]) => void }) {
   const [text, setText] = useState(value.join(", "));
   return (
@@ -49,7 +47,6 @@ export function TagsField({ value, onChange }: { value: string[]; onChange: (tag
   );
 }
 
-/** The tag in the hash (#/uptime?tag=smoke), so a filtered list can be linked. */
 export function readTagParam(): string {
   const q = window.location.hash.split("?")[1] ?? "";
   return new URLSearchParams(q).get("tag") ?? "";
