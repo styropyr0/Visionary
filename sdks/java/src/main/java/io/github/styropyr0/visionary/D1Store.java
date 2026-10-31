@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 final class D1Store implements Store {
 
     private static final int MAX_STATEMENTS_PER_BATCH = 50;
+    static final int MAX_PARAMS = 100;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final ObjectMapper json;
@@ -78,19 +80,50 @@ final class D1Store implements Store {
     public void insert(Map<Table, List<Object[]>> rows) throws IOException, InterruptedException {
         List<Map<String, Object>> stmts = new ArrayList<>();
         for (Map.Entry<Table, List<Object[]>> e : rows.entrySet()) {
-            String sql = e.getKey().insertSql("NULLIF(?, '')");
+            Table t = e.getKey();
+            String[] sql = rowSql(t);
             for (Object[] row : e.getValue()) {
-                List<String> params = new ArrayList<>(row.length);
-                for (Object v : row) {
-                    params.add(param(v));
+                if (stmts.size() + sql.length > MAX_STATEMENTS_PER_BATCH) {
+                    post(queryUri, Map.of("batch", List.copyOf(stmts)));
+                    stmts.clear();
                 }
-                stmts.add(Map.of("sql", sql, "params", params));
+                int split = Math.min(row.length, MAX_PARAMS);
+                stmts.add(Map.of("sql", sql[0], "params", params(row, 0, split)));
+                if (sql.length > 1) {
+                    stmts.add(Map.of("sql", sql[1], "params", params(row, split, row.length)));
+                }
             }
         }
-        for (int from = 0; from < stmts.size(); from += MAX_STATEMENTS_PER_BATCH) {
-            int to = Math.min(stmts.size(), from + MAX_STATEMENTS_PER_BATCH);
-            post(queryUri, Map.of("batch", stmts.subList(from, to)));
+        if (!stmts.isEmpty()) {
+            post(queryUri, Map.of("batch", stmts));
         }
+    }
+
+    /**
+     * The row's INSERT. D1 binds at most 100 params, so a wider row inserts the first
+     * 100 columns and sets the rest with an UPDATE of the row just inserted, kept in
+     * the same batch
+     */
+    static String[] rowSql(Table t) {
+        if (t.columns.size() <= MAX_PARAMS) {
+            return new String[] {t.insertSql("NULLIF(?, '')")};
+        }
+        List<String> head = t.columns.subList(0, MAX_PARAMS);
+        String insert = "INSERT INTO " + t.name + " (" + String.join(", ", head) + ") VALUES ("
+                + String.join(", ", Collections.nCopies(MAX_PARAMS, "NULLIF(?, '')")) + ")";
+        List<String> set = new ArrayList<>();
+        for (String c : t.columns.subList(MAX_PARAMS, t.columns.size())) {
+            set.add(c + " = NULLIF(?, '')");
+        }
+        return new String[] {insert, "UPDATE " + t.name + " SET " + String.join(", ", set) + " WHERE id = last_insert_rowid()"};
+    }
+
+    private static List<String> params(Object[] row, int from, int to) {
+        List<String> out = new ArrayList<>(to - from);
+        for (int i = from; i < to; i++) {
+            out.add(param(row[i]));
+        }
+        return out;
     }
 
     @Override

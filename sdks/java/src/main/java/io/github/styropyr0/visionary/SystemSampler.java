@@ -38,6 +38,7 @@ final class SystemSampler {
     private final File disk = new File(System.getProperty("user.dir", ".")).getAbsoluteFile();
     private final NodeSampler node = new NodeSampler(disk);
     private final CgroupReader cgroup = CgroupReader.open(); // null off Linux
+    private final HostStats hostStats = HostStats.open(cgroup);
     private final ScheduledExecutorService executor;
 
     private final OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
@@ -114,6 +115,9 @@ final class SystemSampler {
         node.prime();
         if (cgroup != null) {
             cgroup.prime();
+        }
+        if (hostStats != null) {
+            hostStats.prime();
         }
         if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
             sun.getCpuLoad();
@@ -252,6 +256,13 @@ final class SystemSampler {
                 cgroup.sample(row);
             } catch (RuntimeException e) {
                 log.debug("visionary: container metrics failed", e);
+            }
+        }
+        if (hostStats != null) {
+            try {
+                hostStats.sample(row, secs);
+            } catch (RuntimeException e) {
+                log.debug("visionary: pressure and memory stats failed", e);
             }
         }
         return row;

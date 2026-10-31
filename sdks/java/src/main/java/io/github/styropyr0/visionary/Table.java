@@ -74,6 +74,15 @@ final class Table {
             .real("container_cpu_cores", "container_cpu_limit", "container_cpu_throttled_percent",
                     "container_mem_used_mb", "container_mem_limit_mb")
             .integer("container_oom_kills")
+            .real("psi_cpu_some_avg10", "psi_cpu_some_avg60", "psi_mem_some_avg10", "psi_mem_some_avg60",
+                    "psi_mem_full_avg10", "psi_io_some_avg10", "psi_io_some_avg60", "psi_io_full_avg10",
+                    "minor_faults_ps", "major_faults_ps", "swap_in_ps", "swap_out_ps",
+                    "pages_scanned_ps", "pages_stolen_ps")
+            .integer("host_oom_kills")
+            .real("mem_dirty_mb", "mem_writeback_mb", "mem_slab_mb", "mem_shmem_mb",
+                    "mem_committed_mb", "mem_commit_limit_mb",
+                    "container_minor_faults_ps", "container_major_faults_ps")
+            .integer("container_mem_high_events", "container_mem_max_events")
             .build();
 
     // The three telemetry tables share one schema file, telemetry.sql.

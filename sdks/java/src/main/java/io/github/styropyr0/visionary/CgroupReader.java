@@ -32,6 +32,8 @@ final class CgroupReader {
     private long throttled;
     private long ooms;
     private boolean primed;
+    private long[] faults;
+    private long[] events;
 
     private CgroupReader(boolean inContainer) {
         this.inContainer = inContainer;
@@ -161,6 +163,41 @@ final class CgroupReader {
         return out;
     }
 
+    boolean inContainer() {
+        return inContainer;
+    }
+
+    /** The cgroup v2 directory, null with v1 */
+    Path v2Dir() {
+        return v2 ? cpuDir : null;
+    }
+
+    private long[] readFaults() {
+        return memDir == null ? null : HostStats.parseCgroupMemStat(HostStats.read(memDir.resolve("memory.stat")));
+    }
+
+    private long[] readEvents() {
+        return memDir == null || !v2 ? null : HostStats.parseCgroupMemEvents(HostStats.read(memDir.resolve("memory.events")));
+    }
+
+    /** The container fault rates and memory limit hits */
+    private void sampleMem(Object[] row, double secs) {
+        long[] f = readFaults();
+        long[] e = readEvents();
+        long[] pf = faults;
+        long[] pe = events;
+        faults = f;
+        events = e;
+        if (f != null && pf != null && f[0] >= f[1] && pf[0] >= pf[1] && f[1] >= pf[1] && f[0] - f[1] >= pf[0] - pf[1]) {
+            set(row, "container_minor_faults_ps", Values.round(((f[0] - f[1]) - (pf[0] - pf[1])) / secs, 1));
+            set(row, "container_major_faults_ps", Values.round((f[1] - pf[1]) / secs, 1));
+        }
+        if (e != null && pe != null && e[0] >= pe[0] && e[1] >= pe[1]) {
+            set(row, "container_mem_high_events", e[0] - pe[0]);
+            set(row, "container_mem_max_events", e[1] - pe[1]);
+        }
+    }
+
     /** The CPU limit in cores, 0 when unlimited. */
     double cpuLimit() {
         if (v2) {
@@ -253,6 +290,8 @@ final class CgroupReader {
         periods = c[1];
         throttled = c[2];
         ooms = c[3];
+        faults = readFaults();
+        events = readEvents();
         last = nowNanos;
         primed = true;
     }
@@ -281,6 +320,7 @@ final class CgroupReader {
             if (c[3] >= ooms) {
                 set(row, "container_oom_kills", c[3] - ooms);
             }
+            sampleMem(row, secs);
         }
         usage = c[0];
         periods = c[1];
