@@ -9,6 +9,7 @@ import { RefreshControl, TopBar } from "../components/Toolbar";
 import { StatTile } from "../components/StatTile";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { Outcome, TestName } from "./CI.parts";
+import { CommitChecks } from "./Uptime.runs";
 
 export function CIRunDetail({ id }: { id: number }) {
   const { tick } = useApp();
@@ -54,6 +55,7 @@ export function CIRunDetail({ id }: { id: number }) {
             </div>
             <JobTimeline run={run} jobs={d.jobs} />
             {d.deploys.length > 0 && <Deploys deploys={d.deploys} />}
+            <CommitChecks batches={d.checks ?? []} />
             <Tests failed={d.failed} slowest={d.slowest} total={d.tests.tests} />
           </>
         )}

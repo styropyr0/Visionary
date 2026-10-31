@@ -21,7 +21,9 @@ import (
 // Scopes: "read" uses the HTTP API with viewer rights, "editor" and "admin"
 // use it with those roles' rights (for tools such as the Terraform provider),
 // "server" sends from SDKs and OTLP, "client" sends from browsers and mobile
-// apps (public), "scim" lets an identity provider manage people (scim.go).
+// apps (public), "scim" lets an identity provider manage people (scim.go),
+// and "ci" only runs uptime checks and reports test runs, so a pipeline holds
+// a key that can change nothing else (uptime_runs.go).
 
 const (
 	keyPrefix     = "vis_"
@@ -32,10 +34,28 @@ const (
 	keyCacheTTL = 30 * time.Second
 )
 
-var keyScopes = []string{"read", "editor", "admin", "server", "client", "scim"}
+var keyScopes = []string{"read", "editor", "admin", "server", "client", "scim", "ci"}
 
 // keyRoles are the scopes that use the HTTP API, with the role each acts as.
-var keyRoles = map[string]role{"read": roleViewer, "editor": roleEditor, "admin": roleAdmin}
+var keyRoles = map[string]role{"read": roleViewer, "editor": roleEditor, "admin": roleAdmin, "ci": roleViewer}
+
+// ciKeyPaths are the only endpoints a CI key may call.
+var ciKeyPaths = []string{"/api/uptime/runs", "/api/uptime/playwright"}
+
+func ciKeyAllowed(r *http.Request) bool {
+	for _, p := range ciKeyPaths {
+		if r.URL.Path == p || strings.HasPrefix(r.URL.Path, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// isCIKey reports a request made with a CI key.
+func isCIKey(r *http.Request) bool {
+	sess := sessionFrom(r)
+	return sess != nil && strings.HasPrefix(sess.UserID, "key:") && slices.Contains(sess.Roles, "ci")
+}
 
 type cachedKey struct {
 	id      int64
@@ -210,9 +230,13 @@ var readPosts = []string{"/api/query", "/api/analyst", "/api/applogs/ask", "/api
 // keys never write, whatever the handler would allow; editor and admin keys
 // are held to the handlers' own role checks.
 func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h http.HandlerFunc) {
-	k, ok := s.lookupKey(r.Context(), raw, "read", "editor", "admin")
+	k, ok := s.lookupKey(r.Context(), raw, "read", "editor", "admin", "ci")
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "invalid, expired or revoked API key")
+		return
+	}
+	if k.scope == "ci" && !ciKeyAllowed(r) {
+		writeError(w, http.StatusForbidden, "CI keys can only run uptime checks and report test runs")
 		return
 	}
 	readOnly := r.Method == http.MethodGet || r.Method == http.MethodHead ||
@@ -225,10 +249,14 @@ func (s *Server) keyAuthed(w http.ResponseWriter, r *http.Request, raw string, h
 		writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
 		return
 	}
+	roles := []string{"api-key"}
+	if k.scope == "ci" {
+		roles = append(roles, "ci")
+	}
 	sess := &session{
 		UserID:  "key:" + strconv.FormatInt(k.id, 10),
 		Name:    "API key " + k.name,
-		Roles:   []string{"api-key"},
+		Roles:   roles,
 		Role:    keyRoles[k.scope].String(),
 		Expires: time.Now().Add(time.Hour).Unix(),
 	}
@@ -315,7 +343,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(keyScopes, body.Scope) {
-		writeError(w, http.StatusBadRequest, "scope must be read, editor, admin, server, client or scim")
+		writeError(w, http.StatusBadRequest, "scope must be read, editor, admin, server, client, scim or ci")
 		return
 	}
 	if body.ExpiresDays < 0 || body.ExpiresDays > 3650 {

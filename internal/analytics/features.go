@@ -41,7 +41,7 @@ import (
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.uptimeTagsSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema(), s.workspacesSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.uptimeTagsSchema(), s.uptimeRunsSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema(), s.workspacesSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -51,6 +51,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.telemetryRoutes(mux)
 	s.alertsRoutes(mux)
 	s.uptimeRoutes(mux)
+	s.uptimeRunsRoutes(mux)
 	s.rollupsRoutes(mux)
 	s.otlpRoutes(mux)
 	s.rumRoutes(mux)

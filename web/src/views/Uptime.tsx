@@ -14,6 +14,7 @@ import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
 import { BrowserNotice } from "./Uptime.steps";
 import { readTagParam, TagFilter, TagPills } from "./Uptime.tags";
+import { RunsPanel } from "./Uptime.runs";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -204,6 +205,7 @@ function UptimeList() {
                 </table>
               </div>
             </section>
+            <RunsPanel checks={data.checks.map((c) => c.check)} tick={tick} canEdit={canEdit} />
           </div>
         )}
       </div>

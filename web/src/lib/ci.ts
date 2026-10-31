@@ -1,5 +1,6 @@
 import { api, rangeQuery, type Result } from "./api";
 import type { Release } from "./telemetry";
+import type { RunBatch } from "./uptimeRuns";
 
 /** CI pipelines, jobs and tests (CI page), from the GitHub webhook and the ingest endpoints. */
 
@@ -118,6 +119,8 @@ export interface CIRunDetail {
   failed: CITest[];
   slowest: CITest[];
   deploys: CIDeploy[];
+  /** Uptime checks run from CI for this commit. */
+  checks?: RunBatch[];
 }
 
 export interface CITests {

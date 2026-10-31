@@ -56,9 +56,9 @@ func (r *apiKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"id":   idAttribute(),
 			"name": schema.StringAttribute{Description: "Name.", Required: true, PlanModifiers: replace, Validators: []validator.String{stringvalidator.LengthBetween(1, 80)}},
 			"scope": schema.StringAttribute{
-				Description: "read (the HTTP API as a viewer), editor or admin (the HTTP API with that role), server (SDKs, OTLP, the host agent), client (browsers and apps) or scim.",
+				Description: "read (the HTTP API as a viewer), editor or admin (the HTTP API with that role), server (SDKs, OTLP, the host agent), client (browsers and apps), scim, or ci (runs uptime checks and reports Playwright tests only).",
 				Required:    true, PlanModifiers: replace,
-				Validators: []validator.String{stringvalidator.OneOf("read", "editor", "admin", "server", "client", "scim")},
+				Validators: []validator.String{stringvalidator.OneOf("read", "editor", "admin", "server", "client", "scim", "ci")},
 			},
 			"expires_days": schema.Int64Attribute{
 				Description: "Days until it expires; leave out for never.", Optional: true,

@@ -195,6 +195,11 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO uptime_browser_checks (check_id, steps, secrets) VALUES (?, ?, '{}')`, svc.num, `[{"action":"goto","url":"https://`+m+`.example/login","label":"`+m+` step"}]`)
 		exec(`INSERT INTO uptime_browser_results (created_at, check_id, ok, failed_step, steps, console, network) VALUES (?, ?, 0, 0, ?, ?, '[]')`,
 			ts, svc.num, `[{"label":"`+m+` step","ok":false,"error":"`+m+` timeout"}]`, `["`+m+` console"]`)
+		exec(`INSERT INTO uptime_check_tags (check_id, tag) VALUES (?, ?)`, svc.num, m+"-tag")
+		exec(`INSERT INTO uptime_run_batches (id, created_at, deadline_at, status, workspace_id, release_name, commit_sha, tags, created_by, total)
+VALUES (?, ?, ?, 'failed', ?, ?, ?, '[]', ?, 1)`, svc.num, ts, ts, svc.num, m+"-release", "abcdef"+svc.num, m+"-ci")
+		exec(`INSERT INTO uptime_run_items (batch_id, created_at, check_id, check_name, kind, status, error) VALUES (?, ?, ?, ?, 'http', 'failed', ?)`,
+			svc.num, ts, svc.num, m+" check", m+" failed")
 		exec(`INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count) VALUES (?, 'rule', ?, 'high', ?, ?, ?, ?, ?, ?, 3)`,
 			ts, "rule_"+svc.num, svc.host, svc.name, m+"-attacker", "10.3.0."+svc.num, "/"+m+"/admin", `{"rule":"`+m+` rule"}`)
 		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,
