@@ -86,6 +86,12 @@ type configCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	API             *APIConfig        `json:"api,omitempty"`
+	TCP             *TCPConfig        `json:"tcp,omitempty"`
+	DNS             *DNSConfig        `json:"dns,omitempty"`
+	Ping            *PingConfig       `json:"ping,omitempty"`
+	SSL             *SSLConfig        `json:"ssl,omitempty"`
+	Heartbeat       *HeartbeatConfig  `json:"heartbeat,omitempty"`
 	Alert           *configCheckAlert `json:"alert,omitempty"`
 }
 
@@ -259,7 +265,15 @@ func (st *configState) checkConfig(c UptimeCheck) configCheck {
 	out := configCheck{Name: m.Name, Kind: m.Kind, URL: m.URL, Method: m.Method, ExpectStatus: m.ExpectStatus, BodyContains: m.BodyContains,
 		Headers: m.Headers, IntervalS: m.IntervalS, TimeoutMs: m.TimeoutMs, DegradedMs: m.DegradedMs, FollowRedirects: &follow,
 		Enabled: &enabled, OnStatusPage: m.OnStatusPage, StatusShowURL: m.StatusShowURL, Steps: m.Steps, Secrets: m.Secrets,
-		FinalScreenshot: m.FinalScreenshot}
+		FinalScreenshot: m.FinalScreenshot, API: m.API, TCP: m.TCP, DNS: m.DNS, Ping: m.Ping, SSL: m.SSL, Heartbeat: m.Heartbeat}
+	if settingsKinds[m.Kind] {
+		// The address comes from the kind's settings; a heartbeat's URL
+		// (its token) stays behind and a new one is made on import.
+		out.URL, out.Method, out.ExpectStatus = "", "", ""
+		if m.Kind != "api" {
+			out.FollowRedirects = nil
+		}
+	}
 	if len(out.Headers) == 0 {
 		out.Headers = nil
 	}

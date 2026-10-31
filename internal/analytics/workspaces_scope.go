@@ -103,6 +103,7 @@ var scopedTables = map[string]scopeRule{
 	"ALERT_STATE": {by: byRule}, "ALERT_EVENTS": {by: byRule}, "ALERT_INCIDENTS": {by: byRule},
 	"ALERT_DELIVERIES": {by: byRule}, "ALERT_RULE_HISTORY": {by: byRule},
 	"UPTIME_RESULTS": {by: byCheck}, "UPTIME_BROWSER_CHECKS": {by: byCheck}, "UPTIME_BROWSER_RESULTS": {by: byCheck},
+	"UPTIME_CHECK_SETTINGS": {by: byCheck}, "UPTIME_RUN_DETAILS": {by: byCheck}, "UPTIME_HEARTBEAT_PINGS": {by: byCheck},
 	"DASHBOARDS": {by: ownedShared}, "LOG_VIEWS": {by: ownedShared},
 	"EXPLAIN_REQUESTS": {by: byTarget},
 	"LOG_ARCHIVES":     {by: hidden}, "SECURITY_KNOWN": {by: hidden},

@@ -27,6 +27,73 @@ resource "visionary_uptime_check" "sign_in" {
   ]
 }
 
+# A multi-step API check: sign in, then read with the token.
+resource "visionary_uptime_check" "orders_api" {
+  name    = "Sign in and list orders"
+  kind    = "api"
+  secrets = { PASSWORD = var.probe_password }
+
+  api = {
+    requests = [
+      {
+        name      = "Sign in"
+        method    = "POST"
+        url       = "https://api.example.com/v1/login"
+        body_type = "json"
+        body      = jsonencode({ user = "probe", password = "{{secret.PASSWORD}}" })
+        extract   = [{ var = "token", source = "json", path = "$.data.token" }]
+        assert    = [{ source = "status", op = "in", value = "200" }]
+      },
+      {
+        name    = "Orders"
+        url     = "https://api.example.com/v1/orders"
+        headers = { Authorization = "Bearer {{var.token}}" }
+        assert = [
+          { source = "json", path = "$.items", op = "exists" },
+          { source = "time", op = "lte", value = "800" },
+        ]
+      },
+    ]
+  }
+}
+
+resource "visionary_uptime_check" "postgres" {
+  name = "Postgres primary"
+  kind = "tcp"
+  tcp  = { host = "db.example.com", port = 5432 }
+}
+
+resource "visionary_uptime_check" "mx" {
+  name = "Mail exchangers"
+  kind = "dns"
+  dns  = { name = "example.com", record_type = "MX", match = "contains", values = ["mx1.example.com"] }
+}
+
+resource "visionary_uptime_check" "gateway" {
+  name = "Office gateway"
+  kind = "ping"
+  ping = { host = "203.0.113.1", packets = 5, max_loss_pct = 40 }
+}
+
+resource "visionary_uptime_check" "certificate" {
+  name       = "example.com certificate"
+  kind       = "ssl"
+  interval_s = 3600
+  ssl        = { host = "example.com", warn_days = 21, fail_days = 7, min_tls = "1.2" }
+}
+
+# A heartbeat: the job calls heartbeat_path on the server when it runs.
+resource "visionary_uptime_check" "backup" {
+  name      = "Nightly backup"
+  kind      = "heartbeat"
+  heartbeat = { cron = "0 3 * * *", timezone = "Europe/Berlin", grace_s = 1800 }
+}
+
+output "backup_heartbeat_path" {
+  value     = visionary_uptime_check.backup.heartbeat_path
+  sensitive = true
+}
+
 variable "health_token" {
   type      = string
   sensitive = true

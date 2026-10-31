@@ -149,6 +149,7 @@ func (s *Server) uptimeRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/uptime/checks/{id}/runs", s.authed(s.handleBrowserRuns))
 	mux.Handle("GET /api/uptime/checks/{id}/runs/{run}", s.authed(s.handleBrowserRun))
 	mux.Handle("GET /api/uptime/browser", s.authed(s.handleUptimeBrowser))
+	s.uptimeKindsRoutes(mux)
 	mux.Handle("GET /api/uptime/checks/{id}/{panel}", s.authed(s.handleUptimePanel))
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	mux.HandleFunc("GET /status.json", s.handleStatusJSON)
@@ -169,7 +170,8 @@ func (s *Server) uptimePrompt() string {
 - duration_ms: total time including reading the body. Phases of the last request: dns_ms, connect_ms, tls_ms (NULL for plain HTTP), ttfb_ms (request sent to first response byte).
 - degraded: 1 when ok but slower than the check's latency threshold. retried: 1 when the first attempt failed. cert_expires_at: expiry of the TLS certificate (text, NULL for HTTP).
 - Uptime % is 100.0 * SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) / COUNT(*). An incident is a run of consecutive ok = 0 rows of one check_id ordered by created_at.
-- Browser checks (scripted steps in a headless browser) write the same rows: url is the first page, status the HTTP status of the last page opened, duration_ms the whole script, ttfb_ms the last page's time to first byte, error names the step that failed. They also fill lcp_ms (Largest Contentful Paint, ms) and cls (Cumulative Layout Shift, unitless), NULL for HTTP checks; dns_ms, connect_ms, tls_ms and cert_expires_at are NULL for them.`
+- Browser checks (scripted steps in a headless browser) write the same rows: url is the first page, status the HTTP status of the last page opened, duration_ms the whole script, ttfb_ms the last page's time to first byte, error names the step that failed. They also fill lcp_ms (Largest Contentful Paint, ms) and cls (Cumulative Layout Shift, unitless), NULL for HTTP checks; dns_ms, connect_ms, tls_ms and cert_expires_at are NULL for them.
+- Other kinds write the same rows too (url is a pseudo address such as tcp://host:port, dns://name?type=MX, ping://host, ssl://host:port; empty for heartbeats): api checks run several requests (status is the last one's, error names the request and assertion that failed); tcp fills connect_ms; dns fills dns_ms (resolution time); ping sets duration_ms to the average round trip; ssl fills connect_ms, tls_ms and cert_expires_at; heartbeat rows are written by the server each minute (ok = 0 when a ping is overdue or the job reported a failure) and duration_ms is the job's last run time.`
 }
 
 // uptimeSettings are the runner's environment knobs.

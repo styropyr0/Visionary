@@ -13,6 +13,7 @@ import { CheckDrawer } from "./Uptime.form";
 import { BarsLegend, DayBars, Spark, StateBadge } from "./Uptime.parts";
 import { CheckAlertLine, CoverageBanner, DefaultRuleModal } from "./Uptime.alerts";
 import { BrowserNotice } from "./Uptime.steps";
+import { describeTarget, KindIcon, PingNotice } from "./Uptime.kinds";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { SetupCard, SetupOption } from "../components/SetupCard";
 import "./Uptime.css";
@@ -103,7 +104,7 @@ function UptimeList() {
             text="This server calls your URLs on a schedule and records whether they answered as expected, and how fast."
             topic="checks"
           >
-            <SetupOption title="Watch an endpoint" text="A health route, your home page, or a third-party API you rely on; or, with browser steps, a sign-in or checkout played in a headless browser. Failures open incidents and alert your channels.">
+            <SetupOption title="Watch an endpoint" text="A health route, your home page, or a third-party API you rely on; a sign-in played as API requests or in a headless browser; a TCP port, DNS name, ping or certificate; or a heartbeat your cron jobs call. Failures open incidents and alert your channels.">
               {canEdit ? (
                 <button type="button" className="btn primary sm" onClick={() => setEditing("new")}>
                   <Plus size={14} />
@@ -125,6 +126,7 @@ function UptimeList() {
             <Tiles data={data} loading={list.loading} />
             <CoverageBanner data={data} onDone={reload} />
             {data.checks.some((c) => c.check.kind === "browser" && c.check.enabled) && <BrowserNotice />}
+            {data.checks.some((c) => c.state.unavailable) && <PingNotice />}
             <section className="panel span-12" aria-busy={list.loading || undefined}>
               {list.loading && <div className="progress" aria-hidden />}
               <header className="panel-head">
@@ -152,7 +154,7 @@ function UptimeList() {
                     {data.checks.map(({ check: c, state: s, alert }) => (
                       <tr key={c.id} className="clickable" onClick={() => openCheck(c.id)}>
                         <td>
-                          <span title={s.no_browser ? "Waiting for a browser on the server" : undefined}>
+                          <span title={s.no_browser ? "Waiting for a browser on the server" : s.unavailable}>
                             <StateBadge state={s.state} />
                           </span>
                         </td>
@@ -160,8 +162,9 @@ function UptimeList() {
                           <a href={`#/uptime?check=${c.id}`} title={c.name} onClick={(e) => e.stopPropagation()}>
                             {c.name}
                           </a>
-                          <span className="mono dim" title={c.url}>
-                            {c.kind === "browser" ? `Browser · ${c.steps?.length ?? 0} steps · ${c.url}` : `${c.method} ${c.url}`}
+                          <span className="mono dim up-target" title={describeTarget(c)}>
+                            <KindIcon kind={c.kind} size={12} />
+                            {describeTarget(c)}
                           </span>
                           {c.enabled && <CheckAlertLine alert={alert} canEdit={canEdit} onFix={() => setFixing({ check: c, state: s, alert })} />}
                         </td>
@@ -171,8 +174,8 @@ function UptimeList() {
                         <td className="num">{formatUptime(s.uptime_24h)}</td>
                         <td>
                           <div className="up-spark-cell">
-                            <Spark points={s.spark} />
-                            <span className="num">{s.last_at && s.state !== "down" ? formatMs(s.last_duration_ms) : ""}</span>
+                            {c.kind === "heartbeat" ? <span className="dim">—</span> : <Spark points={s.spark} />}
+                            <span className="num">{s.last_at && s.state !== "down" && c.kind !== "heartbeat" ? formatMs(s.last_duration_ms) : ""}</span>
                           </div>
                         </td>
                         <td className="dim" title={s.last_at}>
@@ -237,7 +240,8 @@ function Tiles({ data, loading }: { data: CheckList; loading: boolean }) {
     const count = (s: string) => states.filter((x) => x.state === s).length;
     const live = states.filter((s) => s.uptime_24h !== null);
     const avg = live.length ? live.reduce((a, s) => a + (s.uptime_24h ?? 0), 0) / live.length : null;
-    const ms = states.filter((s) => s.last_at && (s.state === "up" || s.state === "degraded")).map((s) => s.last_duration_ms);
+    // A heartbeat's duration is its job's run time, not a response.
+    const ms = data.checks.filter((c) => c.check.kind !== "heartbeat").map((c) => c.state).filter((s) => s.last_at && (s.state === "up" || s.state === "degraded")).map((s) => s.last_duration_ms);
     return {
       up: count("up") + count("degraded"),
       down: count("down"),

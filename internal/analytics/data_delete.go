@@ -51,7 +51,7 @@ var dataKinds = []dataKind{
 	{Key: "replay", Label: "Session replays", Description: "Recorded page activity from the browser SDK.",
 		tables: []dataTable{{"replay_chunks", false}, {"replay_sessions", false}}},
 	{Key: "uptime", Label: "Uptime results", Description: "Check results and their timings. The checks themselves stay.",
-		tables: []dataTable{{"uptime_results", false}, {"uptime_browser_results", false}}},
+		tables: []dataTable{{"uptime_results", false}, {"uptime_browser_results", false}, {"uptime_run_details", false}, {"uptime_heartbeat_pings", false}}},
 	{Key: "alerts", Label: "Alert history", Description: "Past alert firings. The rules stay.",
 		tables: []dataTable{{"alert_events", false}, {"alert_deliveries", false}}},
 	{Key: "security", Label: "Security findings", Description: "Findings from the detectors and host events.", Service: true,

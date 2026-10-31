@@ -266,7 +266,7 @@ never let two environments share one name.
 | Metrics | Your counters, gauges and histograms, OTLP metrics and Prometheus remote_write; PromQL; a Prometheus API for Grafana at `/api/prom`. |
 | Errors | Exceptions and panics grouped into issues, with stacks, versions and the request. |
 | Frontend | Web Vitals, page loads, JS and mobile crashes, sessions, and session replay (opt-in, sampled, inputs masked). |
-| Uptime | HTTP checks with timing phases and certificate expiry, [browser checks](#browser-checks), and a public status page at `/status`. |
+| Uptime | HTTP checks with timing phases and certificate expiry, multi-step API checks with variables and assertions, [browser checks](#browser-checks), TCP, DNS, ping and TLS certificate checks, heartbeats for cron jobs, and a public status page at `/status`. |
 | CI | GitHub Actions runs from a signed webhook, other CI and JUnit results: durations, failing and flaky tests, deploys. |
 | Security | Built-in detectors, your own detection rules with MITRE ATT&CK tags, and signals to triage; see [Security monitoring](#security-monitoring). |
 | Explore | Ask a question in plain words; the AI analyst answers with charts. |
@@ -301,8 +301,10 @@ All optional. Your SDK's README and the Help drawer show the exact code.
 - **CPU profiles:** no code; Settings → Profiling.
 - **Alerts:** add a channel and a rule under Alerts. Email needs SMTP in
   Settings → Server → Email.
-- **Uptime and status page:** add a check under Uptime; turn the page on in
-  Settings → Status page and mark checks public.
+- **Uptime and status page:** add a check under Uptime (HTTP, API steps,
+  browser, TCP, DNS, ping, certificate, or a heartbeat your cron job calls at
+  `/api/heartbeat/<token>`); turn the page on in Settings → Status page and
+  mark checks public.
 - **Deploy markers:** set `VISIONARY_RELEASE`, or let the SDK read the
   platform's commit (Railway, Render, Vercel, Heroku, GitHub Actions and more).
 

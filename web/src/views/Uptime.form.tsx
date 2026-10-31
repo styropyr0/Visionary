@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Network, Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
@@ -7,6 +7,8 @@ import { alertGap, deleteCheck, formatInterval, getCheckAlert, INTERVALS, MASK, 
 import { useQuery } from "../lib/useQuery";
 import { CheckAlertSection, draftOf, type CheckAlertDraft } from "./Uptime.alerts";
 import { BrowserNotice, SecretsEditor, StepsEditor } from "./Uptime.steps";
+import { ApiRequestsEditor } from "./Uptime.api";
+import { DnsFields, HeartbeatFields, KindPicker, kindDefaults, PingFields, PingNotice, SETTINGS_KINDS, SslFields, TcpFields } from "./Uptime.kinds";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 
@@ -34,6 +36,17 @@ const BLANK_BROWSER: Partial<CheckInput> = {
   final_screenshot: false,
 };
 
+const NAME_HINT: Record<CheckKind, string> = {
+  http: "Checkout API",
+  browser: "Sign in and open the dashboard",
+  api: "Sign in and list orders",
+  tcp: "Postgres primary",
+  dns: "example.com resolves",
+  ping: "Office gateway",
+  ssl: "example.com certificate",
+  heartbeat: "Nightly backup",
+};
+
 const FIRST_STEPS: BrowserStep[] = [
   { action: "goto", value: "https://" },
   { action: "assert_text", text: "" },
@@ -54,7 +67,11 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const [steps, setSteps] = useState<BrowserStep[]>(() => (check?.steps?.length ? check.steps : FIRST_STEPS));
   const [secrets, setSecrets] = useState<{ k: string; v: string }[]>(() => Object.entries(check?.secrets ?? {}).map(([k, v]) => ({ k, v })));
   const browser = form.kind === "browser";
-  const setKind = (k: CheckKind) => setForm((f) => (k === "browser" ? { ...f, ...BLANK_BROWSER } : { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms }));
+  const http = form.kind === "http";
+  const setKind = (k: CheckKind) =>
+    setForm((f) => (k === "browser" ? { ...f, ...BLANK_BROWSER } : k === "http" ? { ...f, kind: "http", interval_s: BLANK.interval_s, timeout_ms: BLANK.timeout_ms } : { ...f, kind: k, ...kindDefaults(k) }));
+  const settingsKind = SETTINGS_KINDS.includes(form.kind);
+  const maxTimeoutS = browser || form.kind === "api" ? 120 : form.kind === "ping" ? 10 : 60;
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -75,7 +92,11 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
     for (const { k, v } of secrets) {
       if (k.trim()) sec[k.trim()] = v;
     }
-    const body = browser ? { ...form, headers: {}, steps, secrets: sec } : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined };
+    const body = browser
+      ? { ...form, headers: {}, steps, secrets: sec }
+      : settingsKind
+        ? { ...form, headers: {}, steps: undefined, final_screenshot: undefined, secrets: form.kind === "api" ? sec : undefined }
+        : { ...form, headers: h, steps: undefined, secrets: undefined, final_screenshot: undefined };
     setBusy(true);
     try {
       const { touched, ...alert } = alertDraft;
@@ -110,7 +131,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
   const intervalOptions = INTERVALS.map((s) => ({ value: String(s), label: `Every ${formatInterval(s)}` }));
 
   return (
-    <Drawer title={check ? `Edit ${check.name}` : "New uptime check"} onClose={onClose} className={browser ? "up-drawer-wide" : ""}>
+    <Drawer title={check ? `Edit ${check.name}` : "New uptime check"} onClose={onClose} className={browser || form.kind === "api" ? "up-drawer-wide" : ""}>
       <form
         className="up-form"
         onSubmit={(e) => {
@@ -118,30 +139,23 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           void submit();
         }}
       >
-        {!check && (
-          <div className="field">
-            <span>Kind</span>
-            <div className="segmented" role="radiogroup" aria-label="Kind of check">
-              <button type="button" role="radio" aria-checked={!browser} className={!browser ? "on" : ""} onClick={() => setKind("http")}>
-                <Network size={13} />
-                HTTP request
-              </button>
-              <button type="button" role="radio" aria-checked={browser} className={browser ? "on" : ""} onClick={() => setKind("browser")}>
-                <Globe size={13} />
-                Browser steps
-              </button>
-            </div>
-            <small>{browser ? "Opens your pages in a headless browser and plays steps: sign in, click through, check what is shown." : "One request to a URL, checked for status, body text and response time."}</small>
-          </div>
-        )}
+        {!check && <KindPicker value={form.kind} onChange={setKind} />}
         {browser && <BrowserNotice always />}
+        {form.kind === "ping" && <PingNotice always />}
         <label className="field">
           <span>Name</span>
-          <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={browser ? "Sign in and open the dashboard" : "Checkout API"} maxLength={120} required autoFocus />
+          <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={NAME_HINT[form.kind]} maxLength={120} required autoFocus />
         </label>
         {browser && <StepsEditor steps={steps} onChange={setSteps} />}
         {browser && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
-        {!browser && (
+        {form.kind === "api" && form.api && <ApiRequestsEditor requests={form.api.requests} onChange={(requests) => set("api", { requests })} />}
+        {form.kind === "api" && <SecretsEditor secrets={secrets} onChange={setSecrets} stored={check?.secrets ?? {}} />}
+        {form.kind === "tcp" && form.tcp && <TcpFields value={form.tcp} onChange={(v) => set("tcp", v)} />}
+        {form.kind === "dns" && form.dns && <DnsFields value={form.dns} onChange={(v) => set("dns", v)} />}
+        {form.kind === "ping" && form.ping && <PingFields value={form.ping} onChange={(v) => set("ping", v)} />}
+        {form.kind === "ssl" && form.ssl && <SslFields value={form.ssl} onChange={(v) => set("ssl", v)} />}
+        {form.kind === "heartbeat" && form.heartbeat && <HeartbeatFields value={form.heartbeat} onChange={(v) => set("heartbeat", v)} />}
+        {http && (
           <>
             <div className="up-row">
               <div className="field" style={{ width: 120 }}>
@@ -169,14 +183,14 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </>
         )}
 
-        <div className="up-row">
+        <div className="up-row" style={form.kind === "heartbeat" ? { display: "none" } : undefined}>
           <div className="field" style={{ flex: 1 }}>
             <span>Check every</span>
             <Select label="Interval" value={String(form.interval_s)} align="left" onChange={(v) => set("interval_s", Number(v))} options={intervalOptions} />
           </div>
           <label className="field" style={{ flex: 1 }}>
-            <span>Timeout (seconds)</span>
-            <input className="input" type="number" min={1} max={browser ? 120 : 60} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
+            <span>{form.kind === "ping" ? "Wait per reply (seconds)" : "Timeout (seconds)"}</span>
+            <input className="input" type="number" min={form.kind === "ping" ? 0.1 : 1} step={form.kind === "ping" ? 0.1 : 1} max={maxTimeoutS} value={form.timeout_ms / 1000} onChange={(e) => set("timeout_ms", Math.round(Number(e.target.value) * 1000))} />
           </label>
           <label className="field" style={{ flex: 1 }}>
             <span>Degraded above (ms)</span>
@@ -184,7 +198,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
               className="input"
               type="number"
               min={0}
-              max={browser ? 120000 : 60000}
+              max={browser || settingsKind ? 120000 : 60000}
               value={form.degraded_ms || ""}
               placeholder="Off"
               onChange={(e) => set("degraded_ms", Number(e.target.value) || 0)}
@@ -192,7 +206,7 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
           </label>
         </div>
 
-        {!browser && (
+        {http && (
           <div className="field">
             <span>Request headers</span>
             {headers.map((h, i) => (
@@ -234,10 +248,12 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
               Keep a screenshot of the last page when it passes too
             </label>
           ) : (
-            <label>
-              <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
-              Follow redirects (up to 5)
-            </label>
+            (http || form.kind === "api") && (
+              <label>
+                <input type="checkbox" checked={form.follow_redirects} onChange={(e) => set("follow_redirects", e.target.checked)} />
+                Follow redirects (up to 5)
+              </label>
+            )
           )}
           <label>
             <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
@@ -247,10 +263,12 @@ export function CheckDrawer({ check, onClose, onSaved, onDeleted }: Props) {
             <input type="checkbox" checked={form.on_status_page} onChange={(e) => setForm((f) => ({ ...f, on_status_page: e.target.checked, status_show_url: e.target.checked && f.status_show_url }))} />
             Show on the public status page
           </label>
-          <label className={form.on_status_page ? "" : "off"}>
-            <input type="checkbox" disabled={!form.on_status_page} checked={form.status_show_url} onChange={(e) => set("status_show_url", e.target.checked)} />
-            Show the URL there too
-          </label>
+          {form.kind !== "heartbeat" && (
+            <label className={form.on_status_page ? "" : "off"}>
+              <input type="checkbox" disabled={!form.on_status_page} checked={form.status_show_url} onChange={(e) => set("status_show_url", e.target.checked)} />
+              {http || browser || form.kind === "api" ? "Show the URL there too" : "Show the address there too"}
+            </label>
+          )}
         </fieldset>
 
         {(!check || current.data) && <CheckAlertSection current={current.data?.alert} draft={alertDraft} onChange={setDraft} />}

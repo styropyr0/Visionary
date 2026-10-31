@@ -521,15 +521,24 @@ WHERE created_at >= ? ORDER BY created_at DESC LIMIT 5000`, now.Add(-w).UTC().Fo
 			Breach: compare(r.Spec.Op, v, r.Spec.Threshold)}
 		detail := ""
 		if c.fails > 0 {
-			detail = "status " + fallback(c.status, "none")
-			if c.errText != "" {
-				detail += ", " + truncate(c.errText, 160)
+			// Checks other than HTTP ones (and heartbeats, which have no URL) record no status.
+			var parts []string
+			if c.status != "" && c.status != "0" {
+				parts = append(parts, "status "+c.status)
 			}
+			if c.errText != "" {
+				parts = append(parts, truncate(c.errText, 160))
+			}
+			detail = fallback(strings.Join(parts, ", "), "status none")
+		}
+		name := ob.Label
+		if c.url != "" {
+			name += " (" + c.url + ")"
 		}
 		if c.fails == 0 {
-			ob.Message = fmt.Sprintf("%s (%s) is passing.", ob.Label, c.url)
+			ob.Message = fmt.Sprintf("%s is passing.", name)
 		} else {
-			ob.Message = fmt.Sprintf("%s (%s) failed its last %d check(s): %s.", ob.Label, c.url, c.fails, detail)
+			ob.Message = fmt.Sprintf("%s failed its last %d check(s): %s.", name, c.fails, detail)
 		}
 		out = append(out, ob)
 	}

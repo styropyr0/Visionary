@@ -342,6 +342,35 @@ agent, err := visionary.New(cfg)`,
       label: "Docker",
     },
   },
+  apicheck: {
+    id: "apicheck",
+    title: "Chain API requests in one check",
+    intro:
+      "An API check runs requests in order, such as sign in, then read an order with the token it returned. Each request has a method, URL, headers, a JSON, text or form body and its own timeout. Save values from a response for later requests (a JSON path like $.data.token, a header, a regular expression on the body, or the status) and use them as {{var.NAME}} in later URLs, headers and bodies. Assert on the status (a code, range or list), a JSON path (equals, contains, exists, compared as a number, matches), a header, the body text or the response time. The first request that fails stops the run and names the assertion. Keep passwords and keys under Secrets and use them as {{secret.NAME}}: they are masked in every result, and only a short excerpt of a failed response is kept.",
+    any: { note: "Requests go through the same guard as HTTP checks, so private and loopback addresses are refused unless an admin allows them in Settings → Server → Other." },
+  },
+  netcheck: {
+    id: "netcheck",
+    title: "Check a port, a DNS name, a ping or a certificate",
+    intro:
+      "TCP checks connect to host:port within the timeout; optionally they send text first and look for text in the reply, such as SSH-2.0 or +PONG. DNS checks resolve a name (A, AAAA, CNAME, MX, TXT or NS) with the system resolver or a server you name, and can require that the answers contain or equal your values; the resolution time is the response time. Ping checks send 1 to 20 ICMP echoes and record loss and round trip times; they fail above the loss you allow. Certificate checks connect with TLS, without an HTTP request, and fail when the certificate is expired, untrusted, for another name, below a minimum TLS version, or closer to expiry than your fail threshold; under the warn threshold the check is degraded.",
+    any: {
+      note: "Ping needs no root: Windows uses its ICMP helper, Linux and macOS use unprivileged ICMP sockets, which Linux allows for groups in the sysctl below (Docker allows them by default), or the CAP_NET_RAW capability. Without either, ping checks are paused and the page says why.",
+      code: `sysctl -w net.ipv4.ping_group_range="0 2147483647"`,
+      label: "Linux",
+    },
+  },
+  heartbeat: {
+    id: "heartbeat",
+    title: "Watch a cron job with a heartbeat",
+    intro:
+      "A heartbeat check is called by your job instead of calling it. Choose how often the job runs, every N minutes or hours or a cron expression in its time zone, and a grace time. After saving, the check shows its secret URL; call it with GET, POST or HEAD when the job succeeds. Add /start before the job to measure how long it runs, and /fail, or the exit code as /0 to /255, to report how it ended; a POST body up to 500 characters is kept as the message. The check is down when a ping is later than the schedule plus the grace time, when a job reports a failure, or when a started job does not finish within the grace time. New URL makes another one and stops the old.",
+    any: {
+      note: "The URL needs no sign-in, so keep it like a password; unknown URLs get a plain 404, and pings are rate limited. It stays open when Settings → Security limits the dashboard to some addresses.",
+      code: `0 3 * * * curl -fsS -m 10 --retry 3 ${origin}/api/heartbeat/<token>/start && /usr/local/bin/backup.sh; curl -fsS -m 10 --retry 3 ${origin}/api/heartbeat/<token>/$?`,
+      label: "crontab",
+    },
+  },
   statuspage: {
     id: "statuspage",
     title: "Publish a status page",
@@ -658,7 +687,7 @@ curl -H "Authorization: Bearer <read key>" \\
     id: "terraform",
     title: "Configuration as code",
     intro:
-      "Keep alert rules, channels, silences, uptime checks (HTTP and browser), dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
+      "Keep alert rules, channels, silences, uptime checks of every kind, dashboards and API keys in Terraform with the styropyr0/visionary provider. Create a key with the Editor scope in Settings → API keys (Admin to manage API keys too). Bring in what already exists with terraform import and its id, e.g. `terraform import visionary_alert_rule.slow 12`. To copy everything between installs without Terraform, use Settings → Configuration.",
     any: {
       label: "main.tf",
       code: `terraform {
@@ -950,13 +979,15 @@ export const HELP: Record<Route, PageHelp> = {
   uptime: {
     title: "Uptime",
     tip: "Checks that call your endpoints from outside on a schedule, with response times, incidents and an optional public status page.",
-    what: "HTTP checks and scripted browser checks this server runs on a schedule, independent of any SDK. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
+    what: "Checks this server runs on a schedule, independent of any SDK: HTTP requests, chained API requests, scripted browser steps, TCP ports, DNS names, pings and TLS certificates, plus heartbeats your cron jobs call. Each check shows its availability, response time and incidents; the list says when a check would go down without anyone hearing.",
     read: [
       "A check fails after its retries, so a single slow answer does not open an incident.",
       "A browser check's runs show each step, Web Vitals, console and network errors, and a screenshot of the page when a step failed. It is paused while the server has no browser.",
+      "An API check's runs show each request's status, time and size and the assertion that failed. Ping checks chart round trips and loss, DNS checks list their answers, certificate checks show the certificate and its chain.",
+      "A heartbeat is not retried: it is down as soon as a ping is overdue past its grace time, or a job reports a failure, and up again with the next successful ping.",
       "The public status page shows the checks you mark as public, once it is turned on in Settings → Status page.",
     ],
-    setup: ["checks", "browsercheck", "statuspage"],
+    setup: ["checks", "apicheck", "browsercheck", "netcheck", "heartbeat", "statuspage"],
   },
   ci: {
     title: "CI",

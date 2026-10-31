@@ -21,6 +21,10 @@ import { BarsLegend, DayBars, StateBadge } from "./Uptime.parts";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { DeclareLink } from "../components/DeclareLink";
 import { InfoTip } from "../components/InfoTip";
+import { getDetails, getHeartbeat } from "../lib/uptimeKinds";
+import { ApiRunsPanel } from "./Uptime.api";
+import { describeExpect, describeTarget, PingNotice, SETTINGS_KINDS } from "./Uptime.kinds";
+import { CertPanels, DnsPanels, HeartbeatPanels, KindTile, LATENCY_TEXT, PingPanels, TcpPanels } from "./Uptime.results";
 
 const LATENCY: Viz = { type: "timeseries", x: "t", y: ["p50", "p95"], unit: "ms" };
 const PHASES: Viz = { type: "timeseries", x: "t", y: ["DNS", "Connect", "TLS", "TTFB"], unit: "ms", stack: true };
@@ -44,12 +48,16 @@ export function UptimeDetail({ id }: { id: number }) {
 
   const summary = useQuery(`up-sum-${key}`, (signal) => getSummary(id, signal));
   const latency = useQuery(`up-lat-${key}`, (signal) => getPanel(id, "latency", resolved.from, resolved.to, signal));
-  const phasesRaw = useQuery(summary.data && summary.data.check.kind !== "browser" ? `up-ph-${key}` : null, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
+  const phasesRaw = useQuery(summary.data && summary.data.check.kind === "http" ? `up-ph-${key}` : null, (signal) => getPanel(id, "phases", resolved.from, resolved.to, signal));
   const s = summary.data;
   const c = s?.check;
   const st = s?.state;
   const browser = c?.kind === "browser";
-  const results = useQuery(c && !browser ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const results = useQuery(c?.kind === "http" ? `up-res-${key}` : null, (signal) => getPanel(id, "results", resolved.from, resolved.to, signal));
+  const kind = c?.kind ?? "http";
+  const details = useQuery(c && SETTINGS_KINDS.includes(kind) && kind !== "heartbeat" ? `up-det-${key}` : null, (signal) => getDetails(id, resolved.from, resolved.to, signal));
+  const beats = useQuery(kind === "heartbeat" ? `up-hb-${key}` : null, (signal) => getHeartbeat(id, resolved.from, resolved.to, signal));
+  const wideLatency = kind !== "http" && kind !== "browser";
   const runs = useQuery(browser ? `up-runs-${key}` : null, (signal) => getBrowserRuns(id, resolved.from, resolved.to, signal));
   const vitalsRaw = useQuery(browser ? `up-vit-${key}` : null, (signal) => getPanel(id, "vitals", resolved.from, resolved.to, signal));
   const vitals = useMemo<Result | undefined>(
@@ -131,13 +139,10 @@ export function UptimeDetail({ id }: { id: number }) {
               <div className="up-head-main">
                 <StateBadge state={st.state} large />
                 <div className="up-head-text">
-                  <div className="mono up-url">
-                    {browser ? `Browser · ${c.url}` : `${c.method} ${c.url}`}
-                  </div>
+                  <div className="mono up-url">{describeTarget(c)}</div>
                   <div className="dim">
-                    Every {formatInterval(c.interval_s)} · timeout {c.timeout_ms / 1000}s
-                    {browser ? ` · ${c.steps?.length ?? 0} steps` : ` · expects ${c.expect_status}`}
-                    {!browser && c.body_contains && ` and “${c.body_contains}”`}
+                    {kind === "heartbeat" ? "Looked for every minute" : `Every ${formatInterval(c.interval_s)} · ${kind === "ping" ? "waits" : "timeout"} ${c.timeout_ms / 1000}s`}
+                    {describeExpect(c)}
                     {c.degraded_ms > 0 && ` · degraded above ${formatMs(c.degraded_ms)}`}
                     {c.on_status_page && " · on the status page"}
                   </div>
@@ -148,7 +153,7 @@ export function UptimeDetail({ id }: { id: number }) {
                     <>
                       Last checked {formatRelative(st.last_at)}
                       {st.last_status > 0 && ` · HTTP ${st.last_status}`}
-                      {st.state !== "down" && ` · ${formatMs(st.last_duration_ms)}`}
+                      {st.state !== "down" && kind !== "heartbeat" && ` · ${formatMs(st.last_duration_ms)}`}
                     </>
                   ) : (
                     "Not checked yet"
@@ -173,6 +178,7 @@ export function UptimeDetail({ id }: { id: number }) {
             </section>
 
             {st.no_browser && <BrowserNotice />}
+            {st.unavailable && <PingNotice />}
             {(["24h", "7d", "30d", "90d"] as Window[]).map((w) => (
               <div className="span-2 up-tile" key={w}>
                 <StatTile
@@ -187,17 +193,35 @@ export function UptimeDetail({ id }: { id: number }) {
               </div>
             ))}
             <div className="span-2 up-tile">
-              <StatTile
-                label="Response p95 (24h)"
-                value={s.latency.p95 === null ? "—" : formatMs(s.latency.p95)}
-                delta={null}
-                deltaLabel=""
-                upIs="bad"
-                loading={summary.loading}
-                footer={s.latency.p50 !== null ? `p50 ${formatMs(s.latency.p50)} · avg ${formatMs(s.latency.avg_ms ?? 0)}` : "No successful checks"}
-              />
+              {kind === "heartbeat" ? (
+                <StatTile
+                  label="Last run time"
+                  value={beats.data?.last_duration_ms == null ? "—" : formatDuration(beats.data.last_duration_ms / 1000)}
+                  delta={null}
+                  deltaLabel=""
+                  upIs="neutral"
+                  loading={beats.loading}
+                  footer={beats.data?.last_duration_ms == null ? "Ping /start before the job to measure it" : "From its start ping to its success"}
+                />
+              ) : (
+                <StatTile
+                  label={`${LATENCY_TEXT[kind].label} p95 (24h)`}
+                  value={s.latency.p95 === null ? "—" : formatMs(s.latency.p95)}
+                  delta={null}
+                  deltaLabel=""
+                  upIs="bad"
+                  loading={summary.loading}
+                  footer={s.latency.p50 !== null ? `p50 ${formatMs(s.latency.p50)} · avg ${formatMs(s.latency.avg_ms ?? 0)}` : "No successful checks"}
+                />
+              )}
             </div>
-            {browser ? <LastRunTile run={runs.data?.runs[0]} /> : <CertTile expires={st.cert_expires_at} https={c.url.startsWith("https:")} />}
+            {browser ? (
+              <LastRunTile run={runs.data?.runs[0]} />
+            ) : kind === "http" || kind === "ssl" ? (
+              <CertTile expires={st.cert_expires_at} https={kind === "ssl" || c.url.startsWith("https:")} />
+            ) : (
+              <KindTile check={c} runs={details.data?.runs} heartbeat={beats.data} />
+            )}
 
             <section className="panel span-12">
               <header className="panel-head">
@@ -215,10 +239,11 @@ export function UptimeDetail({ id }: { id: number }) {
               </div>
             </section>
 
+            {kind !== "ping" && kind !== "heartbeat" && (
             <Panel
-              className="span-6"
-              title="Response time"
-              description={browser ? "Median and 95th percentile of the whole script per interval, for runs that passed." : "Median and 95th percentile of successful checks per interval, including reading the body."}
+              className={wideLatency ? "span-12" : "span-6"}
+              title={LATENCY_TEXT[kind].title}
+              description={browser ? "Median and 95th percentile of the whole script per interval, for runs that passed." : LATENCY_TEXT[kind].text}
               result={latency.data}
               loading={latency.loading}
               error={latency.error}
@@ -226,8 +251,13 @@ export function UptimeDetail({ id }: { id: number }) {
               note={vizNote(latency.data, LATENCY, tokens)}
               chart={latency.data && <VizView result={latency.data} viz={LATENCY} height={240} title="Response time" empty="No successful checks in this range." />}
               table={latency.data && <DataTable result={latency.data} maxHeight={240} defaultUnit="ms" />}
-              dashboard={{ kind: "builtin", ref: `uptime/checks/${id}/latency`, viz: LATENCY, title: s ? `${s.check.name} · Response time` : undefined }}
+              dashboard={{ kind: "builtin", ref: `uptime/checks/${id}/latency`, viz: LATENCY, title: s ? `${s.check.name} · ${LATENCY_TEXT[kind].title}` : undefined }}
             />
+            )}
+            {kind === "ping" && <PingPanels runs={details.data?.runs} loading={details.loading} error={details.error} />}
+            {kind === "heartbeat" && <HeartbeatPanels check={c} view={beats.data} loading={beats.loading} error={beats.error} canEdit={!!s.can_edit} onChanged={reload} />}
+            {kind === "dns" && <DnsPanels runs={details.data?.runs} loading={details.loading} error={details.error} />}
+            {kind === "ssl" && <CertPanels check={c} runs={details.data?.runs} loading={details.loading} error={details.error} />}
             {browser && (
               <Panel
                 className="span-6"
@@ -250,7 +280,7 @@ export function UptimeDetail({ id }: { id: number }) {
                 }
               />
             )}
-            {!browser && (
+            {kind === "http" && (
               <Panel
                 className="span-6"
                 title="Where the time goes"
@@ -282,12 +312,14 @@ export function UptimeDetail({ id }: { id: number }) {
               loading={incidents.loading}
               error={incidents.error}
               bodyHeight={80}
-              table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS, incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
+              table={incidents.data && (incidents.data.incidents.length === 0 ? <div className="panel-state">No incidents in this range.</div> : <DataTable result={incidents.data.result} columns={[...INCIDENT_COLS.filter((col) => col.key !== "status" || ["http", "api", "browser"].includes(kind)), incidentLogsColumn(incidents.data.result.columns.indexOf("started_at"))]} maxHeight={320} sortable={false} />)}
             />
 
+            {kind === "api" && <ApiRunsPanel runs={details.data?.runs} loading={details.loading} error={details.error} />}
+            {kind === "tcp" && <TcpPanels runs={details.data?.runs} loading={details.loading} error={details.error} />}
             {browser ? (
               <BrowserRunsPanel checkId={id} runs={runs.data?.runs} loading={runs.loading} error={runs.error} />
-            ) : (
+            ) : kind !== "http" ? null : (
               <Panel
                 className="span-12"
                 title="Recent results"

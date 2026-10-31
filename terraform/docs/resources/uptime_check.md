@@ -3,12 +3,12 @@
 page_title: "visionary_uptime_check Resource - visionary"
 subcategory: ""
 description: |-
-  An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+  An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 ---
 
 # visionary_uptime_check (Resource)
 
-An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
+An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).
 
 ## Example Usage
 
@@ -42,6 +42,73 @@ resource "visionary_uptime_check" "sign_in" {
   ]
 }
 
+# A multi-step API check: sign in, then read with the token.
+resource "visionary_uptime_check" "orders_api" {
+  name    = "Sign in and list orders"
+  kind    = "api"
+  secrets = { PASSWORD = var.probe_password }
+
+  api = {
+    requests = [
+      {
+        name      = "Sign in"
+        method    = "POST"
+        url       = "https://api.example.com/v1/login"
+        body_type = "json"
+        body      = jsonencode({ user = "probe", password = "{{secret.PASSWORD}}" })
+        extract   = [{ var = "token", source = "json", path = "$.data.token" }]
+        assert    = [{ source = "status", op = "in", value = "200" }]
+      },
+      {
+        name    = "Orders"
+        url     = "https://api.example.com/v1/orders"
+        headers = { Authorization = "Bearer {{var.token}}" }
+        assert = [
+          { source = "json", path = "$.items", op = "exists" },
+          { source = "time", op = "lte", value = "800" },
+        ]
+      },
+    ]
+  }
+}
+
+resource "visionary_uptime_check" "postgres" {
+  name = "Postgres primary"
+  kind = "tcp"
+  tcp  = { host = "db.example.com", port = 5432 }
+}
+
+resource "visionary_uptime_check" "mx" {
+  name = "Mail exchangers"
+  kind = "dns"
+  dns  = { name = "example.com", record_type = "MX", match = "contains", values = ["mx1.example.com"] }
+}
+
+resource "visionary_uptime_check" "gateway" {
+  name = "Office gateway"
+  kind = "ping"
+  ping = { host = "203.0.113.1", packets = 5, max_loss_pct = 40 }
+}
+
+resource "visionary_uptime_check" "certificate" {
+  name       = "example.com certificate"
+  kind       = "ssl"
+  interval_s = 3600
+  ssl        = { host = "example.com", warn_days = 21, fail_days = 7, min_tls = "1.2" }
+}
+
+# A heartbeat: the job calls heartbeat_path on the server when it runs.
+resource "visionary_uptime_check" "backup" {
+  name      = "Nightly backup"
+  kind      = "heartbeat"
+  heartbeat = { cron = "0 3 * * *", timezone = "Europe/Berlin", grace_s = 1800 }
+}
+
+output "backup_heartbeat_path" {
+  value     = visionary_uptime_check.backup.heartbeat_path
+  sensitive = true
+}
+
 variable "health_token" {
   type      = string
   sensitive = true
@@ -62,26 +129,116 @@ variable "probe_password" {
 
 ### Optional
 
+- `api` (Attributes) Multi-step API check (kind api): requests run in order and share variables. (see [below for nested schema](#nestedatt--api))
 - `body_contains` (String) Text the body must contain.
 - `degraded_ms` (Number) Slower than this counts as degraded.
+- `dns` (Attributes) DNS check (kind dns): the name resolves, optionally to given values. (see [below for nested schema](#nestedatt--dns))
 - `enabled` (Boolean) Default true.
 - `expect_status` (String) Accepted statuses: 200, 200-299, 2xx, comma separated (default 200-299).
 - `final_screenshot` (Boolean) Keep a screenshot of every browser run, not only failed ones.
 - `follow_redirects` (Boolean) Default true.
 - `headers` (Map of String, Sensitive) Request headers.
+- `heartbeat` (Attributes) Heartbeat check (kind heartbeat): a job calls its URL; it is down when no ping arrives in time or the job reports a failure. (see [below for nested schema](#nestedatt--heartbeat))
 - `interval_s` (Number) Seconds between runs, 30 to 3600 (default 60; 300 for browser checks).
-- `kind` (String) http (default) or browser.
+- `kind` (String) http (default), browser, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.
 - `method` (String) HTTP method (default GET).
 - `on_status_page` (Boolean) Show on the public status page.
-- `secrets` (Map of String, Sensitive) Browser check secrets, used in steps as {{secret.NAME}}.
+- `ping` (Attributes) Ping check (kind ping): ICMP echo, reporting loss and round trip time. timeout_ms is each reply's wait (default 2000). (see [below for nested schema](#nestedatt--ping))
+- `secrets` (Map of String, Sensitive) Browser and api check secrets, used as {{secret.NAME}}.
+- `ssl` (Attributes) Certificate check (kind ssl): validity, days to expiry, hostname, chain and TLS version, without an HTTP request. (see [below for nested schema](#nestedatt--ssl))
 - `status_show_url` (Boolean) Show the URL on the status page.
 - `steps` (Attributes List) Browser check steps; the first must be goto. (see [below for nested schema](#nestedatt--steps))
-- `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser checks).
-- `url` (String) Address probed (http checks). For browser checks it is the first step's URL.
+- `tcp` (Attributes) TCP check (kind tcp): the port accepts a connection, and optionally answers what is sent. (see [below for nested schema](#nestedatt--tcp))
+- `timeout_ms` (Number) Timeout in ms (default 10000; 30000 for browser and api checks; for ping checks each reply's wait, default 2000).
+- `url` (String) Address probed (http checks). For other kinds it is derived: the first step's or request's URL, or tcp://, dns://, ping:// or ssl:// with the target.
 
 ### Read-Only
 
+- `heartbeat_path` (String, Sensitive) Path the job calls (heartbeat checks), such as /api/heartbeat/<token>; append /start, /fail or an exit code. Prefix the server's address.
 - `id` (String) The id Visionary gave it.
+
+<a id="nestedatt--api"></a>
+### Nested Schema for `api`
+
+Required:
+
+- `requests` (Attributes List) The requests, 1 to 10. (see [below for nested schema](#nestedatt--api--requests))
+
+<a id="nestedatt--api--requests"></a>
+### Nested Schema for `api.requests`
+
+Required:
+
+- `url` (String) Absolute http(s) URL; may use {{var.NAME}} and {{secret.NAME}}.
+
+Optional:
+
+- `assert` (Attributes List) Conditions on the response: `source` (status, json, header, body or time), `path` (JSON path or header name), `op` (in, equals, not_equals, contains, not_contains, exists, not_exists, lt, lte, gt, gte or matches) and `value`. Without a status assertion, a status of 400 or more fails.
+- `body` (String) Request body; may use {{var.NAME}} and {{secret.NAME}}.
+- `body_type` (String) json, text or form.
+- `extract` (Attributes List) Values saved from the response for later requests: `var`, `source` (json, header, regex or status) and `path` (JSON path such as $.data.token, header name or regular expression).
+- `headers` (Map of String, Sensitive) Request headers; values may use {{var.NAME}} and {{secret.NAME}}.
+- `method` (String) HTTP method (default GET).
+- `name` (String) Name shown in results.
+- `timeout_ms` (Number) Timeout of this request in ms (default: the check's).
+
+
+<a id="nestedatt--dns"></a>
+### Nested Schema for `dns`
+
+Required:
+
+- `name` (String) Name to resolve.
+
+Optional:
+
+- `match` (String) contains (every value is an answer) or equals (the answers are exactly the values).
+- `record_type` (String) A (default), AAAA, CNAME, MX, TXT or NS.
+- `server` (String) DNS server (IP or host, optional :port); the system resolver when unset.
+- `values` (List of String) Expected answers.
+
+
+<a id="nestedatt--heartbeat"></a>
+### Nested Schema for `heartbeat`
+
+Optional:
+
+- `cron` (String) Cron schedule of the job, five fields (or @hourly, @daily...).
+- `grace_s` (Number) Seconds a ping may be late, 0 to 604800 (default 300).
+- `period_s` (Number) Seconds between pings, 60 to 2678400. Give this or cron.
+- `timezone` (String) Time zone of cron, such as Europe/Berlin (default UTC).
+
+
+<a id="nestedatt--ping"></a>
+### Nested Schema for `ping`
+
+Required:
+
+- `host` (String) Host name or IP address.
+
+Optional:
+
+- `max_loss_pct` (Number) Fails above this packet loss in percent, 0 to 99 (default 50).
+- `packets` (Number) Packets per run, 1 to 20 (default 4).
+
+
+<a id="nestedatt--ssl"></a>
+### Nested Schema for `ssl`
+
+Required:
+
+- `host` (String) Host name or IP address.
+
+Optional:
+
+- `fail_days` (Number) Fails below this many days left (default 0: only once expired).
+- `ignore_chain` (Boolean) Pass even when the chain is not trusted (self-signed).
+- `ignore_hostname` (Boolean) Pass even when the certificate does not name the host.
+- `min_tls` (String) Minimum TLS version: 1.0, 1.1, 1.2 or 1.3.
+- `port` (Number) Port (default 443).
+- `server_name` (String) Name sent as SNI and checked against the certificate (default: host).
+- `warn_days` (Number) Degraded below this many days left (default 14).
+
 
 <a id="nestedatt--steps"></a>
 ### Nested Schema for `steps`
@@ -99,6 +256,20 @@ Optional:
 - `selector` (String) CSS selector.
 - `text` (String) Text to find.
 - `value` (String) URL, text to type, key, option, script; {{secret.NAME}} uses a secret.
+
+<a id="nestedatt--tcp"></a>
+### Nested Schema for `tcp`
+
+Required:
+
+- `host` (String) Host name or IP address.
+- `port` (Number) Port.
+
+Optional:
+
+- `expect` (String) Text the reply must contain, such as SSH-2.0.
+- `send` (String) Text sent after connecting; \r, \n and \t are read as escapes.
+
 
 ## Import
 

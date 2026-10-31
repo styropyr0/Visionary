@@ -217,7 +217,7 @@ func (u *uptimeRunner) execute(ctx context.Context, c UptimeCheck) {
 		return
 	}
 	res := u.probeWithRetry(ctx, c)
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || res.skip != "" {
 		return
 	}
 	if err := u.record(ctx, c, res); err != nil && ctx.Err() == nil {
@@ -259,15 +259,22 @@ type uptimeResult struct {
 	CertExpiresAt string   `json:"cert_expires_at,omitempty"`
 	LCPMs         *float64 `json:"lcp_ms,omitempty"`
 	CLS           *float64 `json:"cls,omitempty"`
+	// Detail is what a run of the kinds in uptime_kinds.go found beyond this row.
+	Detail any `json:"detail,omitempty"`
 
-	blocked bool // refused by the address guard; retrying cannot help
+	blocked bool   // refused by the address guard; retrying cannot help
+	skip    string // why nothing ran or there is nothing to record yet
 }
 
 // probeWithRetry tries again once, shortly, before calling a check failed,
 // so one dropped packet does not open an incident.
 func (u *uptimeRunner) probeWithRetry(ctx context.Context, c UptimeCheck) uptimeResult {
-	res := u.probe(ctx, c)
-	if res.OK || ctx.Err() != nil || res.blocked {
+	probe := u.probe
+	if settingsKinds[c.Kind] {
+		probe = u.probeKind
+	}
+	res := probe(ctx, c)
+	if res.OK || ctx.Err() != nil || res.blocked || res.skip != "" || c.Kind == "heartbeat" {
 		return res
 	}
 	select {
@@ -275,7 +282,7 @@ func (u *uptimeRunner) probeWithRetry(ctx context.Context, c UptimeCheck) uptime
 		return res
 	case <-time.After(uptimeRetryDelay):
 	}
-	res = u.probe(ctx, c)
+	res = probe(ctx, c)
 	res.Retried = true
 	return res
 }
@@ -496,7 +503,10 @@ func (u *uptimeRunner) record(ctx context.Context, c UptimeCheck, r uptimeResult
 		marks[i] = "?"
 		args = append(args, v)
 	}
-	return u.s.db.Exec(ctx, "INSERT INTO uptime_results ("+strings.Join(cols, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...)
+	if err := u.s.db.Exec(ctx, "INSERT INTO uptime_results ("+strings.Join(cols, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...); err != nil {
+		return err
+	}
+	return u.recordDetail(ctx, c, r)
 }
 
 // redactURL drops credentials and secret-looking query values, for tables

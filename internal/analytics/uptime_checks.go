@@ -21,7 +21,8 @@ type checkWithAlert struct {
 	Alert *checkAlertInput `json:"alert"`
 }
 
-// UptimeCheck is one HTTP probe, or a scripted browser check (kind browser).
+// UptimeCheck is one HTTP probe, a scripted browser check (kind browser), or
+// one of the kinds in uptime_kinds.go, whose settings are in their own field.
 // Header values with secret-looking names, and every browser secret, are
 // masked in API responses; sending the mask back keeps the stored value.
 type UptimeCheck struct {
@@ -45,6 +46,12 @@ type UptimeCheck struct {
 	Steps           []BrowserStep     `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	API             *APIConfig        `json:"api,omitempty"`
+	TCP             *TCPConfig        `json:"tcp,omitempty"`
+	DNS             *DNSConfig        `json:"dns,omitempty"`
+	Ping            *PingConfig       `json:"ping,omitempty"`
+	SSL             *SSLConfig        `json:"ssl,omitempty"`
+	Heartbeat       *HeartbeatConfig  `json:"heartbeat,omitempty"`
 }
 
 const (
@@ -108,6 +115,9 @@ func (s *Server) listUptimeChecks(ctx context.Context) ([]UptimeCheck, error) {
 	if err := s.loadBrowserConfigs(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.loadKindSettings(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -122,7 +132,9 @@ func (s *Server) getUptimeCheck(ctx context.Context, id int64) (UptimeCheck, err
 		return UptimeCheck{}, errCheckNotFound
 	}
 	checks := []UptimeCheck{scanUptimeCheck(rows.Rows[0])}
-	err = s.loadBrowserConfigs(ctx, checks)
+	if err = s.loadBrowserConfigs(ctx, checks); err == nil {
+		err = s.loadKindSettings(ctx, checks)
+	}
 	return checks[0], err
 }
 
@@ -136,8 +148,12 @@ func (c *UptimeCheck) normalize(prev *UptimeCheck) error {
 	switch c.Kind {
 	case "", "http":
 		c.Kind, c.Steps, c.Secrets, c.FinalScreenshot = "http", nil, nil, false
+		c.API, c.TCP, c.DNS, c.Ping, c.SSL, c.Heartbeat = nil, nil, nil, nil, nil, nil
 	case "browser":
+		c.API, c.TCP, c.DNS, c.Ping, c.SSL, c.Heartbeat = nil, nil, nil, nil, nil, nil
 		return c.normalizeBrowser(prev)
+	case "api", "tcp", "dns", "ping", "ssl", "heartbeat":
+		return c.normalizeKind(prev)
 	default:
 		return fmt.Errorf("unknown check kind %q", c.Kind)
 	}
@@ -241,6 +257,7 @@ func (c UptimeCheck) masked() UptimeCheck {
 		}
 		c.Secrets = sec
 	}
+	c.maskKind()
 	return c
 }
 
@@ -313,7 +330,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)
 	if err != nil {
 		return err
 	}
-	return s.saveBrowserConfig(ctx, *c)
+	if err := s.saveBrowserConfig(ctx, *c); err != nil {
+		return err
+	}
+	return s.saveKindSettings(ctx, *c)
 }
 
 // --- handlers ---
@@ -483,6 +503,9 @@ func checkChanges(a, b UptimeCheck) []string {
 	ka, _ := json.Marshal(a.Secrets)
 	kb, _ := json.Marshal(b.Secrets)
 	add("kind", a.Kind != b.Kind)
+	ga, _ := json.Marshal(a.kindSettingsOrNil())
+	gb, _ := json.Marshal(b.kindSettingsOrNil())
+	add("settings", string(ga) != string(gb))
 	add("steps", string(sa) != string(sb))
 	add("secrets", string(ka) != string(kb))
 	add("final_screenshot", a.FinalScreenshot != b.FinalScreenshot)
@@ -551,6 +574,7 @@ func (s *Server) handleUptimeDelete(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("uptime results not deleted", "check_id", c.ID, "err", err)
 	}
 	s.deleteBrowserData(r.Context(), c.ID)
+	s.deleteKindData(r.Context(), c.ID)
 	s.dropCheckRules(r, c.ID)
 	s.audit(r, "uptime.delete", c.Name, map[string]any{"id": c.ID})
 	wakeUptime(s)
@@ -572,9 +596,13 @@ func (s *Server) handleUptimeRun(w http.ResponseWriter, r *http.Request) {
 		s.handleBrowserRunNow(w, r, run, c)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Duration(c.TimeoutMs)*time.Millisecond+5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*c.attemptTimeout()+5*time.Second)
 	defer cancel()
 	res := run.probeWithRetry(ctx, c)
+	if res.skip != "" {
+		writeError(w, http.StatusConflict, res.skip)
+		return
+	}
 	if err := run.record(ctx, c, res); err != nil {
 		s.fail(w, err)
 		return

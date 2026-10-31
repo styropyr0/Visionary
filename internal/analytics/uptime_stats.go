@@ -19,7 +19,8 @@ type checkState struct {
 	LastError      string     `json:"last_error,omitempty"`
 	CertExpiresAt  string     `json:"cert_expires_at,omitempty"`
 	IncidentSince  string     `json:"incident_since,omitempty"`
-	NoBrowser      bool       `json:"no_browser,omitempty"` // a browser check waiting for a browser on the server
+	NoBrowser      bool       `json:"no_browser,omitempty"`  // a browser check waiting for a browser on the server
+	Unavailable    string     `json:"unavailable,omitempty"` // why a ping check cannot run on this server
 	Uptime24h      *float64   `json:"uptime_24h"`
 	Days           []dayBar   `json:"days"`
 	Spark          []*float64 `json:"spark"` // hourly average response time, last 24h
@@ -100,6 +101,15 @@ FROM uptime_results r JOIN (
 			break
 		}
 	}
+	pingMissing := ""
+	for _, c := range checks {
+		if c.Kind == "ping" && c.Enabled {
+			if ps := pingStatus(); !ps.Available {
+				pingMissing = ps.Error
+			}
+			break
+		}
+	}
 	for _, c := range checks {
 		st := &checkState{State: "pending", Days: make([]dayBar, days), Spark: make([]*float64, 24)}
 		for d, i := range dayIndex {
@@ -110,6 +120,9 @@ FROM uptime_results r JOIN (
 		}
 		if c.Kind == "browser" && c.Enabled && browserMissing {
 			st.State, st.NoBrowser = "paused", true
+		}
+		if c.Kind == "ping" && c.Enabled && pingMissing != "" {
+			st.State, st.Unavailable = "paused", pingMissing
 		}
 		out[c.ID] = st
 	}

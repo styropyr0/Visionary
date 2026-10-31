@@ -36,24 +36,31 @@ var (
 )
 
 type checkModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	Kind            types.String `tfsdk:"kind"`
-	URL             types.String `tfsdk:"url"`
-	Method          types.String `tfsdk:"method"`
-	ExpectStatus    types.String `tfsdk:"expect_status"`
-	BodyContains    types.String `tfsdk:"body_contains"`
-	Headers         types.Map    `tfsdk:"headers"`
-	IntervalS       types.Int64  `tfsdk:"interval_s"`
-	TimeoutMs       types.Int64  `tfsdk:"timeout_ms"`
-	DegradedMs      types.Int64  `tfsdk:"degraded_ms"`
-	FollowRedirects types.Bool   `tfsdk:"follow_redirects"`
-	Enabled         types.Bool   `tfsdk:"enabled"`
-	OnStatusPage    types.Bool   `tfsdk:"on_status_page"`
-	StatusShowURL   types.Bool   `tfsdk:"status_show_url"`
-	Steps           []stepModel  `tfsdk:"steps"`
-	Secrets         types.Map    `tfsdk:"secrets"`
-	FinalScreenshot types.Bool   `tfsdk:"final_screenshot"`
+	ID              types.String    `tfsdk:"id"`
+	Name            types.String    `tfsdk:"name"`
+	Kind            types.String    `tfsdk:"kind"`
+	URL             types.String    `tfsdk:"url"`
+	Method          types.String    `tfsdk:"method"`
+	ExpectStatus    types.String    `tfsdk:"expect_status"`
+	BodyContains    types.String    `tfsdk:"body_contains"`
+	Headers         types.Map       `tfsdk:"headers"`
+	IntervalS       types.Int64     `tfsdk:"interval_s"`
+	TimeoutMs       types.Int64     `tfsdk:"timeout_ms"`
+	DegradedMs      types.Int64     `tfsdk:"degraded_ms"`
+	FollowRedirects types.Bool      `tfsdk:"follow_redirects"`
+	Enabled         types.Bool      `tfsdk:"enabled"`
+	OnStatusPage    types.Bool      `tfsdk:"on_status_page"`
+	StatusShowURL   types.Bool      `tfsdk:"status_show_url"`
+	Steps           []stepModel     `tfsdk:"steps"`
+	Secrets         types.Map       `tfsdk:"secrets"`
+	FinalScreenshot types.Bool      `tfsdk:"final_screenshot"`
+	API             *apiModel       `tfsdk:"api"`
+	TCP             *tcpModel       `tfsdk:"tcp"`
+	DNS             *dnsModel       `tfsdk:"dns"`
+	Ping            *pingModel      `tfsdk:"ping"`
+	SSL             *sslModel       `tfsdk:"ssl"`
+	Heartbeat       *heartbeatModel `tfsdk:"heartbeat"`
+	HeartbeatPath   types.String    `tfsdk:"heartbeat_path"`
 }
 
 type stepModel struct {
@@ -86,6 +93,12 @@ type apiCheck struct {
 	Steps           []apiStepB        `json:"steps,omitempty"`
 	Secrets         map[string]string `json:"secrets,omitempty"`
 	FinalScreenshot bool              `json:"final_screenshot,omitempty"`
+	API             *apiAPI           `json:"api,omitempty"`
+	TCP             *apiTCP           `json:"tcp,omitempty"`
+	DNS             *apiDNS           `json:"dns,omitempty"`
+	Ping            *apiPing          `json:"ping,omitempty"`
+	SSL             *apiSSL           `json:"ssl,omitempty"`
+	Heartbeat       *apiHeartbeat     `json:"heartbeat,omitempty"`
 }
 
 type apiStepB struct {
@@ -115,19 +128,21 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 		"label":    optStr("Name shown in results."),
 	}
 	resp.Schema = schema.Schema{
-		Description: "An uptime check: an HTTP probe, or a browser check that plays steps in a headless browser. " +
+		Description: "An uptime check: an HTTP probe, a browser check that plays steps in a headless browser, a multi-step API check, " +
+			"a TCP, DNS, ping or certificate check, or a heartbeat that a job pings. " +
 			"Like a check made in the dashboard, a new check is alerted on by the rule for every check (made if there is none).",
 		Attributes: map[string]schema.Attribute{
 			"id":   idAttribute(),
 			"name": schema.StringAttribute{Description: "Name.", Required: true, Validators: []validator.String{stringvalidator.LengthBetween(1, 120)}},
 			"kind": schema.StringAttribute{
-				Description: "http (default) or browser.", Optional: true, Computed: true, Default: stringdefault.StaticString("http"),
-				Validators: []validator.String{stringvalidator.OneOf("http", "browser")},
+				Description: "http (default), browser, api, tcp, dns, ping, ssl or heartbeat; each kind but http and browser has a block of the same name.",
+				Optional:    true, Computed: true, Default: stringdefault.StaticString("http"),
+				Validators: []validator.String{stringvalidator.OneOf(checkKinds...)},
 			},
 			"url": schema.StringAttribute{
-				Description: "Address probed (http checks). For browser checks it is the first step's URL.",
+				Description: "Address probed (http checks). For other kinds it is derived: the first step's or request's URL, or tcp://, dns://, ping:// or ssl:// with the target.",
 				Optional:    true, Computed: true, Validators: []validator.String{httpURLValidator{}},
-				PlanModifiers: []planmodifier.String{keepIf("kind", "steps")},
+				PlanModifiers: []planmodifier.String{keepIf("kind", "steps", "api", "tcp", "dns", "ping", "ssl")},
 			},
 			"method": schema.StringAttribute{
 				Description: "HTTP method (default GET).", Optional: true, Computed: true, PlanModifiers: []planmodifier.String{keepIf("kind")},
@@ -143,9 +158,9 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Validators:    []validator.Int64{int64validator.Between(30, 3600)},
 			},
 			"timeout_ms": schema.Int64Attribute{
-				Description: "Timeout in ms (default 10000; 30000 for browser checks).", Optional: true, Computed: true,
+				Description: "Timeout in ms (default 10000; 30000 for browser and api checks; for ping checks each reply's wait, default 2000).", Optional: true, Computed: true,
 				PlanModifiers: []planmodifier.Int64{keepIf("kind")},
-				Validators:    []validator.Int64{int64validator.Between(1000, 120000)},
+				Validators:    []validator.Int64{int64validator.Between(100, 120000)},
 			},
 			"degraded_ms":      schema.Int64Attribute{Description: "Slower than this counts as degraded.", Optional: true, Validators: []validator.Int64{int64validator.Between(1, 120000)}},
 			"follow_redirects": schema.BoolAttribute{Description: "Default true.", Optional: true, Computed: true, Default: booldefault.StaticBool(true)},
@@ -158,9 +173,12 @@ func (r *uptimeCheckResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Validators:   []validator.List{listvalidator.SizeBetween(1, 50)},
 				NestedObject: schema.NestedAttributeObject{Attributes: step},
 			},
-			"secrets":          schema.MapAttribute{Description: "Browser check secrets, used in steps as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
+			"secrets":          schema.MapAttribute{Description: "Browser and api check secrets, used as {{secret.NAME}}.", Optional: true, Sensitive: true, ElementType: types.StringType},
 			"final_screenshot": schema.BoolAttribute{Description: "Keep a screenshot of every browser run, not only failed ones.", Optional: true, Computed: true, Default: booldefault.StaticBool(false)},
 		},
+	}
+	for k, v := range kindAttributes() {
+		resp.Schema.Attributes[k] = v
 	}
 }
 
@@ -175,24 +193,17 @@ func (r *uptimeCheckResource) ValidateConfig(ctx context.Context, req resource.V
 		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root(name), &v)...)
 		return v != nil && !v.IsNull()
 	}
-	if kind.ValueString() == "browser" {
-		if !set("steps") {
-			resp.Diagnostics.AddAttributeError(path.Root("steps"), "Missing steps", "Browser checks need steps, starting with goto.")
-		}
-		for _, n := range []string{"url", "method", "expect_status", "body_contains", "headers"} {
-			if set(n) {
-				resp.Diagnostics.AddAttributeError(path.Root(n), "Not for browser checks", n+" applies to http checks; a browser check starts at its first goto step.")
-			}
-		}
-	} else {
-		if !set("url") {
-			resp.Diagnostics.AddAttributeError(path.Root("url"), "Missing url", "HTTP checks need a url.")
-		}
-		for _, n := range []string{"steps", "secrets"} {
-			if set(n) {
-				resp.Diagnostics.AddAttributeError(path.Root(n), "Only for browser checks", `Set kind = "browser" to use `+n+".")
-			}
-		}
+	k := kind.ValueString()
+	if k == "" {
+		k = "http"
+	}
+	for n, why := range kindProblems(k, set) {
+		resp.Diagnostics.AddAttributeError(path.Root(n), "Invalid for "+k+" checks", why)
+	}
+	var hb *heartbeatModel
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("heartbeat"), &hb)...)
+	if hb != nil && !hb.PeriodS.IsUnknown() && !hb.Cron.IsUnknown() && hb.PeriodS.IsNull() == hb.Cron.IsNull() {
+		resp.Diagnostics.AddAttributeError(path.Root("heartbeat"), "Period or cron", "Give heartbeat.period_s or heartbeat.cron, not both.")
 	}
 	var onPage, showURL types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("on_status_page"), &onPage)...)
@@ -217,6 +228,7 @@ func (m *checkModel) input(ctx context.Context, diags *diag.Diagnostics) apiChec
 		in.Steps = append(in.Steps, apiStepB{Action: s.Action.ValueString(), Selector: s.Selector.ValueString(), Text: s.Text.ValueString(),
 			Value: s.Value.ValueString(), Count: s.Count.ValueInt64(), Op: s.Op.ValueString(), Ms: s.Ms.ValueInt64(), Label: s.Label.ValueString()})
 	}
+	m.kindInput(ctx, &in, diags)
 	return in
 }
 
@@ -247,6 +259,10 @@ func (m *checkModel) fill(c apiCheck) {
 	m.IntervalS, m.TimeoutMs, m.DegradedMs = types.Int64Value(c.IntervalS), types.Int64Value(c.TimeoutMs), optInt(c.DegradedMs, m.DegradedMs)
 	m.FollowRedirects, m.Enabled = types.BoolValue(c.FollowRedirects), types.BoolValue(c.Enabled)
 	m.OnStatusPage, m.StatusShowURL, m.FinalScreenshot = types.BoolValue(c.OnStatusPage), types.BoolValue(c.StatusShowURL), types.BoolValue(c.FinalScreenshot)
+	m.kindFill(c)
+	if c.Kind != "heartbeat" {
+		m.HeartbeatPath = types.StringNull()
+	}
 	if len(c.Steps) == 0 && m.Steps == nil {
 		m.Steps = nil
 		return
@@ -289,6 +305,7 @@ func (r *uptimeCheckResource) Create(ctx context.Context, req resource.CreateReq
 		resp.Diagnostics.AddWarning("Uptime check alert", out.AlertError)
 	}
 	plan.fill(out.Check)
+	r.readHeartbeatPath(ctx, &plan, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -309,6 +326,7 @@ func (r *uptimeCheckResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 	state.fill(out.Check)
+	r.readHeartbeatPath(ctx, &state, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -329,6 +347,7 @@ func (r *uptimeCheckResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	plan.fill(out.Check)
+	r.readHeartbeatPath(ctx, &plan, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

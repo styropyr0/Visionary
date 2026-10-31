@@ -1,6 +1,7 @@
 import { api, rangeQuery, type Result } from "./api";
+import type { ApiConfig, DnsConfig, HeartbeatConfig, PingConfig, SslConfig, TcpConfig } from "./uptimeKinds";
 
-export type CheckKind = "http" | "browser";
+export type CheckKind = "http" | "browser" | "api" | "tcp" | "dns" | "ping" | "ssl" | "heartbeat";
 
 export interface UptimeCheck {
   id: number;
@@ -24,9 +25,16 @@ export interface UptimeCheck {
   updated_at: string;
   /** Browser checks only. */
   steps?: BrowserStep[];
-  /** Browser checks only; values always come back as MASK. */
+  /** Browser and API checks; values always come back as MASK. */
   secrets?: Record<string, string>;
   final_screenshot?: boolean;
+  /** The settings of the other kinds, one per kind (lib/uptimeKinds.ts). */
+  api?: ApiConfig;
+  tcp?: TcpConfig;
+  dns?: DnsConfig;
+  ping?: PingConfig;
+  ssl?: SslConfig;
+  heartbeat?: HeartbeatConfig;
 }
 
 export type StepAction =
@@ -78,6 +86,8 @@ export interface CheckState {
   incident_since?: string;
   /** A browser check waiting for a browser on the server. */
   no_browser?: boolean;
+  /** Why a ping check cannot run on this server. */
+  unavailable?: string;
   uptime_24h: number | null;
   days: DayBar[];
   /** Hourly average response time over the last 24h; null where no check passed. */

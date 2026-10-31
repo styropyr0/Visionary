@@ -366,12 +366,12 @@ export const GUIDE: GuideSection[] = [
     group: "Monitor",
     title: "Uptime",
     route: "uptime",
-    intro: "Checks this server runs against your endpoints, or through your pages in a headless browser, on a schedule, with incidents and a public status page.",
+    intro: "Checks this server runs on a schedule against your endpoints, APIs, ports, DNS names, hosts and certificates, or through your pages in a headless browser, and heartbeats your jobs send, with incidents and a public status page.",
     shot: "uptime",
     steps: [
       {
         title: "Add a check",
-        text: "Click **New check**. Give it a name and URL; set the expected status, text the body must contain, how often to check, the timeout and **Degraded above** for slow answers. Under **Alerts when it goes down**, keep **The rule for every check** or give it its own settings.",
+        text: "Click **New check** and pick its kind; each says what it does. For **HTTP**, give it a name and URL; set the expected status, text the body must contain, how often to check, the timeout and **Degraded above** for slow answers. Under **Alerts when it goes down**, keep **The rule for every check** or give it its own settings.",
         shot: "uptime-form",
         caption: "A new check: what to call, what counts as up, and who hears when it is down.",
       },
@@ -382,12 +382,24 @@ export const GUIDE: GuideSection[] = [
         caption: "A browser check: each step's result, timings and Web Vitals.",
       },
       {
+        title: "Chain API requests",
+        text: "Pick **API steps** to run requests in order. In each, set the method, URL, headers and body, add **Assertions** on the status, a JSON path, a header, the body or the response time, and **Save a value** (such as `$.data.token`) to use later as `{{var.token}}`. Secrets go under **Secrets** as `{{secret.NAME}}`.",
+      },
+      {
+        title: "Watch ports, DNS, pings and certificates",
+        text: "Pick **TCP port** for a host and port, optionally with text to send and expect; **DNS** for a name and record type, optionally the answers it must contain or equal and the server to ask; **Ping** for a host, the packets to send and the loss allowed; **Certificate** for a host whose TLS certificate must be valid and trusted, with the days left under which it is degraded or down.",
+      },
+      {
+        title: "Add a heartbeat for a job",
+        text: "Pick **Heartbeat**, then how often the job runs (a period, or a cron expression and time zone) and a grace time. Save, open the check and copy its URL into the job: call it when the job succeeds, add `/start` before it to time it and `/fail` or the exit code after it to report failures. The check shows the last ping, when the next is due and each ping.",
+      },
+      {
         title: "Watch the list",
-        text: "Each row shows its state, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it.",
+        text: "Each row shows its state, its kind and target, the last 90 days, uptime and response time over 24 hours. The row buttons run a check now, pause it or edit it.",
       },
       {
         title: "Open a check",
-        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests.",
+        text: "Click a check for uptime over 24 hours to 90 days, response time, where the time goes (DNS, connect, TLS, first byte), its certificate, incidents and recent results. A browser check shows Web Vitals, each step's time and failures, and its runs; click a run for its steps, the screenshot of a failure, console errors and failed requests. An API check lists its runs; click one for each request. Ping checks chart round trips and loss, DNS checks show their answers, certificate checks the certificate, and heartbeats their URL and pings.",
         shot: "uptime-detail",
         caption: "One check: response time split into its phases, and its incidents.",
       },

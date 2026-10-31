@@ -195,6 +195,9 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO uptime_browser_checks (check_id, steps, secrets) VALUES (?, ?, '{}')`, svc.num, `[{"action":"goto","url":"https://`+m+`.example/login","label":"`+m+` step"}]`)
 		exec(`INSERT INTO uptime_browser_results (created_at, check_id, ok, failed_step, steps, console, network) VALUES (?, ?, 0, 0, ?, ?, '[]')`,
 			ts, svc.num, `[{"label":"`+m+` step","ok":false,"error":"`+m+` timeout"}]`, `["`+m+` console"]`)
+		exec(`INSERT INTO uptime_check_settings (check_id, settings, secrets, token) VALUES (?, ?, '{}', ?)`, svc.num, `{"host":"`+m+`.example","port":5432}`, m+"token")
+		exec(`INSERT INTO uptime_run_details (created_at, check_id, ok, detail) VALUES (?, ?, 0, ?)`, ts, svc.num, `{"requests":[{"name":"`+m+` request"}]}`)
+		exec(`INSERT INTO uptime_heartbeat_pings (created_at, check_id, kind, message) VALUES (?, ?, 'fail', ?)`, ts, svc.num, m+" backup failed")
 		exec(`INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count) VALUES (?, 'rule', ?, 'high', ?, ?, ?, ?, ?, ?, 3)`,
 			ts, "rule_"+svc.num, svc.host, svc.name, m+"-attacker", "10.3.0."+svc.num, "/"+m+"/admin", `{"rule":"`+m+` rule"}`)
 		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,
