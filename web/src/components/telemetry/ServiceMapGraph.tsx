@@ -94,6 +94,11 @@ export function edgeSummary(e: MapEdge): string {
   return `${rate(e.per_min)} · ${formatPercent(e.error_rate)} failed${e.p95 !== null ? ` · p95 ${formatMs(e.p95)}` : ""}`;
 }
 
+// Roughly the cursor's height, so the tip opens just below the pointer, not under it.
+const CURSOR_H = 18;
+
+const pointerAnchor = (p: { x: number; y: number }) => ({ getBoundingClientRect: () => new DOMRect(p.x, p.y, 0, CURSOR_H) });
+
 const clampZoom = (k: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));
 
 function bounds(nodes: Placed[]): { x: number; y: number; w: number; h: number } {
@@ -140,27 +145,38 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
 
   const tipId = useId();
   const tipTimer = useRef<number>();
-  const [tip, setTip] = useState<{ el: Element; body: ReactNode } | null>(null);
+  // A hovered tip sits at the pointer: an arrow's bounding box spans its whole
+  // curve, so anchoring to the element would put the tip far from the mouse.
+  const mouse = useRef({ x: 0, y: 0 });
+  const [tip, setTip] = useState<{ el: Element; anchor: Pick<Element, "getBoundingClientRect">; follow: boolean; body: ReactNode } | null>(null);
   const hideTip = useCallback(() => {
     window.clearTimeout(tipTimer.current);
     setTip(null);
   }, []);
-  const showTip = (el: Element, body: ReactNode) => {
+  const showTip = (el: Element, body: ReactNode, atPointer: boolean) => {
     window.clearTimeout(tipTimer.current);
     if (pointers.current.size > 0) return;
-    tipTimer.current = window.setTimeout(() => setTip({ el, body }), TIP_DELAY);
+    tipTimer.current = window.setTimeout(
+      () => setTip({ el, anchor: atPointer ? pointerAnchor(mouse.current) : el, follow: atPointer, body }),
+      TIP_DELAY,
+    );
+  };
+  const onMouseMove = (e: { clientX: number; clientY: number }) => {
+    mouse.current = { x: e.clientX, y: e.clientY };
+    setTip((t) => (t?.follow ? { ...t, anchor: pointerAnchor(mouse.current) } : t));
   };
   const tipProps = (body: () => ReactNode, hoverKey?: string) => ({
     "aria-describedby": tip ? tipId : undefined,
-    onMouseEnter: (ev: { currentTarget: Element }) => {
+    onMouseEnter: (ev: { currentTarget: Element; clientX: number; clientY: number }) => {
       if (hoverKey) setHover(hoverKey);
-      showTip(ev.currentTarget, body());
+      mouse.current = { x: ev.clientX, y: ev.clientY };
+      showTip(ev.currentTarget, body(), true);
     },
     onMouseLeave: () => {
       if (hoverKey) setHover(null);
       hideTip();
     },
-    onFocus: (ev: ReactFocusEvent<SVGGElement>) => ev.currentTarget.matches(":focus-visible") && showTip(ev.currentTarget, body()),
+    onFocus: (ev: ReactFocusEvent<SVGGElement>) => ev.currentTarget.matches(":focus-visible") && showTip(ev.currentTarget, body(), false),
     onBlur: hideTip,
   });
   useEffect(() => () => window.clearTimeout(tipTimer.current), []);
@@ -311,6 +327,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
       aria-label="Service map. Drag to pan, scroll to zoom, plus and minus keys zoom, 0 fits the map."
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onMouseMove={onMouseMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onDoubleClick={(e) => {
@@ -457,7 +474,7 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
         )}
       </div>
       {tip && tip.el.isConnected && (
-        <TipBubble anchor={tip.el} id={tipId} className="rich">
+        <TipBubble anchor={tip.anchor} id={tipId} className="rich">
           {tip.body}
         </TipBubble>
       )}

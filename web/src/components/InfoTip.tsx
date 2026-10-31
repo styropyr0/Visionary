@@ -14,7 +14,7 @@ const DELAY = TIP_DELAY;
  * with overflow: hidden never clip it, and flips above the anchor when there
  * is no room below.
  */
-export function TipBubble({ anchor, id, side, className = "", children }: { anchor: Element; id: string; side?: "right"; className?: string; children: ReactNode }) {
+export function TipBubble({ anchor, id, side, className = "", children }: { anchor: Pick<Element, "getBoundingClientRect">; id: string; side?: "right"; className?: string; children: ReactNode }) {
   const tip = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; place: "below" | "above" | "right"; arrow: number } | null>(null);
 
