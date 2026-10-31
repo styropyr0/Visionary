@@ -1,0 +1,55 @@
+# Visionary and a PostgreSQL database for it, built from this repository.
+#
+#   docker compose up -d --build
+#
+# Then open http://localhost:8090 and point your services' SDKs at the same
+# database (VISIONARY_DATABASE_URL below, with "db" replaced by this machine's
+# address and the port published). Set a real password before going public:
+#
+#   POSTGRES_PASSWORD=something-long docker compose up -d --build
+#
+# Browser uptime checks need Chromium in the image:
+#
+#   VISIONARY_TARGET=browser docker compose up -d --build
+#
+# Two replicas behind a proxy: see deploy/replicas/compose.yaml.
+name: visionary
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: visionary
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-visionary}
+      POSTGRES_DB: visionary
+    volumes:
+      - db:/var/lib/postgresql/data
+    # Published so services running outside Docker can write to it; remove the
+    # line if only containers on this network should reach the database.
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U visionary -d visionary"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  visionary:
+    build:
+      context: .
+      target: ${VISIONARY_TARGET:-runtime}
+    image: visionary:local
+    environment:
+      VISIONARY_DATABASE_URL: postgres://visionary:${POSTGRES_PASSWORD:-visionary}@db:5432/visionary?sslmode=disable
+    ports:
+      - "8090:8090"
+      # OpenTelemetry over gRPC, once Settings → Server → Ingest turns it on.
+      # - "4317:4317"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db:

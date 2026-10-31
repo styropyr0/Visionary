@@ -69,7 +69,21 @@ columns on upgrade. They can also live in your application's database; see
 The server needs one thing: the database. Set `VISIONARY_DATABASE_URL` (or the
 three `D1_*` variables). It listens on `:8090`.
 
-**Docker** (`linux/amd64` and `linux/arm64`):
+**Docker Compose** (the quickest way: Visionary and a PostgreSQL database for
+it, built from this repository):
+
+```sh
+git clone https://github.com/styropyr0/Visionary.git && cd Visionary
+POSTGRES_PASSWORD=something-long docker compose up -d --build
+```
+
+Open http://localhost:8090. Your services' SDKs write to the same database:
+`postgres://visionary:<password>@<this machine>:5432/visionary?sslmode=disable`.
+For browser uptime checks, start it with `VISIONARY_TARGET=browser` to build
+the image that includes Chromium. [`compose.yaml`](compose.yaml) explains each
+line; [`deploy/replicas`](deploy/replicas) runs two replicas behind a proxy.
+
+**Docker** (`linux/amd64` and `linux/arm64`), with a database you already have:
 
 ```sh
 docker run -d -p 8090:8090 \

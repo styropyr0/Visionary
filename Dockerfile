@@ -41,7 +41,7 @@ USER nonroot:nonroot
 ENTRYPOINT ["/visionary"]
 
 # 3. Runtime: no shell, no package manager, non-root. The default target.
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=server /out/visionary /visionary
 ENV VISIONARY_ADDR=:8090
 # 4317 is OTLP/gRPC, served once Settings → Server → Ingest turns it on.

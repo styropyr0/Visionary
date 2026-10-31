@@ -1,4 +1,5 @@
 .git
+.claude
 .github
 .env
 .env.*
