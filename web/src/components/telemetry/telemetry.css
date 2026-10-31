@@ -312,6 +312,11 @@
   overflow: auto;
 }
 
+/* Past the max height the list scrolls instead of squashing rows */
+.wf-rows > * {
+  flex-shrink: 0;
+}
+
 .wf-row {
   width: 100%;
   height: 24px;
