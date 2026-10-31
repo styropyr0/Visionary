@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import type { Result, Viz } from "../../lib/api";
-import { formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
+import { bucketLabel, formatCount, formatMs, formatPercent, toNumber } from "../../lib/format";
 import { formatLogTime } from "../../lib/time";
 import { N_PLUS_ONE, records, useTelemetry } from "../../lib/telemetry";
 import { DataTable, type Column } from "../DataTable";
@@ -28,8 +28,9 @@ export interface SpanDetailResponse {
 }
 
 const TIMELINE: Viz = { type: "timeseries", x: "t", y: ["p95", "avg_ms"], unit: "ms" };
-const CALLS: Viz = { type: "bar", x: "t", y: ["calls"], unit: "count" };
-const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count" };
+const CALLS: Viz = { type: "bar", x: "t", y: ["calls"], unit: "count", axisSuffix: "calls" };
+const BANDS: Viz = { type: "bar", x: "band", y: ["calls"], unit: "count", axisSuffix: "calls" };
+const CHART_H = 240;
 
 function ms(v: unknown) {
   const n = toNumber(v);
@@ -89,12 +90,12 @@ export function SpanDetailDrawer({
             <h3 className="rt-title">Over time</h3>
             <div className="sd-charts">
               <div>
-                <div className="sd-chart-label">p95 and average</div>
-                <VizView result={d.timeline} viz={TIMELINE} height={170} title={`${name} latency`} />
+                <div className="sd-chart-label">How long a call took: p95 and average</div>
+                <VizView result={d.timeline} viz={TIMELINE} height={CHART_H} title={`${name} latency`} />
               </div>
               <div>
-                <div className="sd-chart-label">Calls</div>
-                <VizView result={d.timeline} viz={CALLS} height={170} title={`${name} calls`} />
+                <div className="sd-chart-label">{d.timeline.bucket > 0 ? `Calls per ${bucketLabel(d.timeline.bucket)}` : "Calls"}</div>
+                <VizView result={d.timeline} viz={CALLS} height={CHART_H} title={`${name} calls`} />
               </div>
             </div>
           </section>
@@ -104,7 +105,7 @@ export function SpanDetailDrawer({
               Distribution{" "}
               <InfoTip text="How many calls fell in each latency band. Two humps usually mean two paths: a cache hit and a miss, an indexed and an unindexed lookup, or a warm and a cold connection." size={12} />
             </h3>
-            <VizView result={d.bands} viz={BANDS} height={150} title={`${name} latency distribution`} />
+            <VizView result={d.bands} viz={BANDS} height={200} title={`${name} latency distribution`} />
           </section>
 
           <section className="sd-section">

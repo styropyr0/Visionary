@@ -3,7 +3,7 @@ import { ConnectCard } from "../components/ConnectCard";
 import { useConnected } from "../lib/meta";
 import { ArrowLeft, Search, Sparkles } from "lucide-react";
 import type { Result, Viz } from "../lib/api";
-import { formatCount, formatPercent, toNumber } from "../lib/format";
+import { bucketLabel, formatCount, formatPercent, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { formatDateTime, formatLogTime, formatRelative, previousLabel } from "../lib/time";
 import { askAnalyst, records, shortVersion, useTelemetry, type Issue, type IssueDetail, type IssuesResponse, type IssueStatus } from "../lib/telemetry";
@@ -237,10 +237,6 @@ function IssueCell({ issue }: { issue: Issue }) {
       <div className="issue-msg">{issue.message || <span className="dim">No message</span>}</div>
     </div>
   );
-}
-
-function bucketLabel(seconds: number): string {
-  return seconds >= 3600 ? `${seconds / 3600} h` : `${seconds / 60} min`;
 }
 
 function issueColumns(bucket: number): Column[] {

@@ -86,6 +86,13 @@ export function formatAxis(n: number, unit: Unit = "none"): string {
   }
 }
 
+/** A chart bucket's length, e.g. "30 min", for "calls per 30 min". */
+export function bucketLabel(seconds: number): string {
+  if (seconds >= 3600) return `${+(seconds / 3600).toFixed(1)} h`;
+  if (seconds >= 60) return `${+(seconds / 60).toFixed(1)} min`;
+  return `${seconds} s`;
+}
+
 /** Split a formatted value into number and unit so tiles can style the unit. */
 export function splitUnit(text: string): [string, string] {
   const m = text.match(/^(-?[\d.,]+[KMBT]?)\s*(.*)$/);
