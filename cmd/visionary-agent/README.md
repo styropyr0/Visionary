@@ -7,7 +7,7 @@ does nothing without a server to send to.
 
 | You want | Use |
 |---|---|
-| The Visionary server and dashboard | the Docker image `ghcr.io/styropyr0/visionary` ([Run the server](../../Readme.md#run-the-server)) |
+| The Visionary server and dashboard | the Docker image `ghcr.io/styropyr0/visionary` ([Run the server](../../Readme.md#2-run-the-server)) |
 | To watch a whole machine: its drives, processes, services, Docker containers and SSH logins | this agent, installed on that machine |
 | To watch your app (requests, errors, its own CPU and memory) | an SDK in the app ([SDKs](../../Readme.md)) |
 
