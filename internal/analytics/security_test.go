@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,11 +15,7 @@ import (
 // before the detectors read their settings.
 func securityTestServer(t *testing.T, config map[string]string) *Server {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "security.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "security.db", nil)
 	if err := s.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}

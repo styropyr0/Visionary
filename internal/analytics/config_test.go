@@ -45,7 +45,7 @@ func importDoc(t *testing.T, h http.Handler, doc string, dry bool) (counts map[s
 }
 
 func TestConfigExportImport(t *testing.T) {
-	src, dst := logsTestServer(t, nil), logsTestServer(t, nil)
+	src := logsTestServer(t, nil)
 	a := configMux(src, "admin")
 	incidentDo(t, configMux(src, "editor"), "GET", "/api/config/export", "", http.StatusForbidden)
 
@@ -68,6 +68,8 @@ func TestConfigExportImport(t *testing.T) {
 		t.Fatalf("unexpected export:\n%s", doc)
 	}
 
+	// created after the export: on a shared test database it wipes the source
+	dst := logsTestServer(t, nil)
 	b := configMux(dst, "admin")
 	counts, changes := importDoc(t, b, doc, true)
 	if counts["create"] == 0 || counts["update"] != 0 {

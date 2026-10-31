@@ -14,10 +14,14 @@ import (
 func TestRouteDetail(t *testing.T) {
 	s := openTestDB(t)
 	ctx := context.Background()
-	if err := s.db.ExecScript(ctx, `CREATE TABLE IF NOT EXISTS spans (
+	spans := `CREATE TABLE IF NOT EXISTS spans (
     id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, request_id TEXT, service TEXT, instance TEXT NOT NULL,
     kind TEXT NOT NULL, name TEXT NOT NULL, target TEXT, detail TEXT, offset_ms REAL, duration_ms REAL NOT NULL,
-    status TEXT NOT NULL, error TEXT, row_count INTEGER)`); err != nil {
+    status TEXT NOT NULL, error TEXT, row_count INTEGER)`
+	if onSharedTestDatabase() {
+		spans = ""
+	}
+	if err := s.db.ExecScript(ctx, spans); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Add(-time.Minute)

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,11 +106,7 @@ type wsFixture struct {
 
 func newWSFixture(t *testing.T) *wsFixture {
 	t.Helper()
-	path := filepath.ToSlash(filepath.Join(t.TempDir(), "ws.db"))
-	s, err := New(Config{DatabaseURL: "sqlite:///" + path}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newTestServer(t, "ws.db", nil)
 	t.Cleanup(func() { _ = s.db.Close() })
 	ctx := context.Background()
 	if err := s.Init(ctx); err != nil {
@@ -205,7 +200,7 @@ VALUES (?, 'sev1', 'investigating', ?, ?, '', '', ?, ?, ?, ?)`, m+" outage", `["
 		exec(`INSERT INTO security_rules (name, kind, enabled, spec, created_at, created_by, updated_at) VALUES (?, ?, 1, ?, ?, 'x', ?)`,
 			m+" detection", "rule_"+svc.num, `{"logic":"threshold","source":"api","threshold":5,"window":"5m","where":"path LIKE '/`+m+`%'"}`, ts, ts)
 	}
-	exec(`INSERT INTO dashboards (name, layout, created_at, updated_at) VALUES ('Shared board', '{"panels":[],"variables":[]}', ?, ?)`, ts, ts)
+	exec(`INSERT INTO dashboards (name, description, layout, created_by, created_at, updated_at) VALUES ('Shared board', '', '{"panels":[],"variables":[]}', '', ?, ?)`, ts, ts)
 	// Rows without a service are seen only by people who see everything.
 	exec(`INSERT INTO api_logs (request_id, created_at, method, path, route, status, duration_ms) VALUES ('reqnull', ?, 'GET', ?, ?, 503, 10)`, ts, "/"+leak+"-null", "/"+leak+"-null")
 
@@ -591,12 +586,8 @@ func TestEveryTableClassified(t *testing.T) {
 		"ROLLUP_STATE": true, "SECURITY_SUPPRESSIONS": true, "WORKSPACES": true, "SQLITE_SEQUENCE": true,
 		"VISIONARY_LEASES": true, "VISIONARY_REPLICAS": true, "VISIONARY_CHANGES": true, "VISIONARY_ONCE": true,
 	}
-	res, err := f.s.db.Query(context.Background(), `SELECT name FROM sqlite_master WHERE type = 'table'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, row := range res.Rows {
-		name := strings.ToUpper(toString(row[0]))
+	for _, table := range testTables(t, f.s) {
+		name := strings.ToUpper(table)
 		if _, ok := scopedTables[name]; !ok && !shared[name] {
 			t.Errorf("table %s is neither filtered by workspaces nor listed as shared", name)
 		}
