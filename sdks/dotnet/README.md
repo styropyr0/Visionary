@@ -633,6 +633,7 @@ Options only available in code:
 | `Route` | null | `ctx => "/files/{id}"`, route pattern when endpoint routing has none |
 | `LookupUser` | null | Fills in handle and role for a user id |
 | `DbStats` | null | `() => VisionaryDbStats`, pool metrics |
+| `BatchSize` | 500 (50 on D1) | Rows per write, up to 2000; D1 always takes 50 |
 | `DiskPath` | working directory's filesystem | Filesystem whose usage is reported |
 
 ## Troubleshooting
@@ -659,9 +660,13 @@ Options only available in code:
 ## How it works
 
 Everything is queued without blocking the request (5000 entries at most;
-beyond that entries are dropped and counted) and written by one background
-service every 50 entries or 3 seconds. A failed batch is retried twice (after
-1 s, then 2 s). Shutdown drains the queue. A database that goes down never
+beyond that entries are dropped and counted) and written by a background
+service when a batch is full or every 3 seconds. A batch is 50 entries on D1
+and 500 on PostgreSQL, MySQL and SQLite (`BatchSize`, up to 2000), sent as one
+multi-row INSERT per table; PostgreSQL and MySQL write up to 4 batches at once.
+A failed batch is retried twice (after 1 s, then 2 s). Shutdown drains the
+queue. `Visionary.WriterStats()` returns the rows queued, written and dropped,
+for load tests and health checks. A database that goes down never
 affects requests: writes fail on the background services and are logged.
 Every Visionary SDK follows the same contract, [`sdks/SPEC.md`](../SPEC.md);
 the Go SDK in [`sdks/go`](../go) is the reference implementation.

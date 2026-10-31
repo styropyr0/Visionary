@@ -154,6 +154,11 @@ public sealed class VisionaryOptions
     /// </summary>
     public Func<string, CancellationToken, ValueTask<VisionaryUser?>>? LookupUser { get; set; }
 
+    /// <summary>
+    /// Rows per write: 500 by default on PostgreSQL, MySQL and SQLite (up to 2000), always 50 on D1.
+    /// </summary>
+    public int BatchSize { get; set; }
+
     /// <summary>Database pool statistics for the db_* columns of system_metrics; optional.</summary>
     public Func<VisionaryDbStats?>? DbStats { get; set; }
 
