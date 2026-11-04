@@ -46,7 +46,7 @@ func (s *Server) rollupPlan(sql string) (*rollupPanel, string) {
 	return nil, ""
 }
 
-var instanceFilter = regexp.MustCompile(` AND instance = '[A-Za-z0-9._:-]{1,128}'`)
+var instanceFilter = regexp.MustCompile(` AND instance (= '[A-Za-z0-9._:-]{1,128}'|IN \('[A-Za-z0-9._:-]{1,128}'(,'[A-Za-z0-9._:-]{1,128}')*\))`)
 
 // segment is a part of a range and where it is read from (grain 0 is raw).
 type segment struct {

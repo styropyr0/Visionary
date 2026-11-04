@@ -520,9 +520,16 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	clause, err := instanceClause(r.URL.Query().Get("instance"))
-	if err != nil {
+	clause, err := s.systemClause(r.Context(), tr, r.URL.Query().Get("instance"))
+	switch {
+	case errors.Is(err, errInvalidInstance):
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case err != nil && missingTable(err, "system_metrics"):
+		writeError(w, http.StatusNotFound, errNoSystemMetrics)
+		return
+	case err != nil:
+		s.fail(w, err)
 		return
 	}
 	res, err := s.runTemplate(r.Context(), strings.ReplaceAll(sql, "{{instance}}", clause), tr, true)

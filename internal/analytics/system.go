@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"strings"
@@ -448,13 +449,16 @@ GROUP BY t ORDER BY t`,
 		// sdk and runtime say which language wrote the rows, so runtime
 		// charts can use its words (goroutines, threads, heap).
 		"instances": `
-SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples, MAX(sdk) AS sdk, MAX(runtime) AS runtime
+SELECT instance, MAX(created_at) AS last_seen, COUNT(*) AS samples, MAX(sdk) AS sdk, MAX(runtime) AS runtime, MAX(service) AS service
 FROM system_metrics WHERE created_at >= {{from}} AND created_at < {{to}}
 GROUP BY instance ORDER BY last_seen DESC`,
 	}
 }
 
-var instanceName = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+var (
+	instanceName       = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+	errInvalidInstance = errors.New("invalid instance name")
+)
 
 // instanceClause filters to one instance. The name is validated against a
 // strict character set before it is inlined.
@@ -464,7 +468,40 @@ func instanceClause(name string) (string, error) {
 		return "", nil
 	}
 	if !instanceName.MatchString(name) {
-		return "", errors.New("invalid instance name")
+		return "", errInvalidInstance
 	}
 	return " AND instance = '" + name + "'", nil
+}
+
+// servicePrefix picks every instance an SDK service had in the range, as one:
+// in a container the instance is the hostname, which each deploy changes.
+const servicePrefix = "service:"
+
+func (s *Server) systemClause(ctx context.Context, tr timeRange, name string) (string, error) {
+	svc, ok := strings.CutPrefix(strings.TrimSpace(name), servicePrefix)
+	if !ok {
+		return instanceClause(name)
+	}
+	if !instanceName.MatchString(svc) {
+		return "", errInvalidInstance
+	}
+	res, err := s.db.Query(ctx, `SELECT DISTINCT instance FROM system_metrics
+WHERE created_at >= ? AND created_at < ? AND service = ? AND COALESCE(sdk, '') <> 'agent' LIMIT 1000`,
+		tr.From.Format(tsLayout), tr.To.Format(tsLayout), svc)
+	if err != nil {
+		return "", err
+	}
+	var names []string
+	for _, row := range res.Rows {
+		if n := toString(row[0]); instanceName.MatchString(n) {
+			names = append(names, "'"+n+"'")
+		}
+	}
+	switch len(names) {
+	case 0:
+		return " AND 1 = 0", nil
+	case 1:
+		return " AND instance = " + names[0], nil
+	}
+	return " AND instance IN (" + strings.Join(names, ",") + ")", nil
 }

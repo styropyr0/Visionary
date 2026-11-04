@@ -212,9 +212,59 @@ function readInstance(): string {
   return new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("instance") ?? "";
 }
 
+/** Who wrote an instance's rows, as the dropdown names it. */
+function reporterName(sdk: unknown, runtime: unknown): string {
+  if (sdk === "agent") return "Host agent";
+  if (sdk === "otlp") return "OpenTelemetry";
+  const lang = langOf(sdk, runtime);
+  return lang ? `${wordsFor(lang).name} SDK` : "";
+}
+
+interface Source {
+  value: string;
+  label: string;
+  lang: ReturnType<typeof langOf>;
+  members: string[];
+}
+
+/**
+ * One entry per agent host, and one per SDK service: a service in a container
+ * reports under its hostname, which changes on every deploy, so its instances
+ * are picked together as "service:<name>".
+ */
+function systemSources(r: Result | undefined): Source[] {
+  if (!r) return [];
+  const col = (name: string) => r.columns.indexOf(name);
+  const [si, ri, vi] = [col("sdk"), col("runtime"), col("service")];
+  const out = new Map<string, Source>();
+  for (const row of r.rows) {
+    const inst = String(row[0]);
+    const sdk = si >= 0 ? row[si] : null;
+    const runtime = ri >= 0 && row[ri] ? String(row[ri]) : "";
+    const service = vi >= 0 && row[vi] ? String(row[vi]) : "";
+    const value = service && sdk !== "agent" ? `service:${service}` : inst;
+    const have = out.get(value);
+    if (have) {
+      have.members.push(inst);
+      continue;
+    }
+    const by = reporterName(sdk, runtime);
+    out.set(value, {
+      value,
+      label: [value === inst ? inst : service, by, runtime].filter(Boolean).join(" · "),
+      lang: langOf(sdk, runtime),
+      members: [inst],
+    });
+  }
+  return [...out.values()];
+}
+
 export function System() {
-  const [instance, setInstance] = useState(readInstance);
+  const [picked, setInstance] = useState(readInstance);
   const instances = useSystem("instances", "");
+  const sources = useMemo(() => systemSources(instances.data), [instances.data]);
+  // A link to one SDK instance opens its whole service
+  const instance = sources.find((x) => x.members.includes(picked))?.value ?? picked;
   const stats = useSystem("stats", instance);
   const cpu = useSystem("cpu", instance);
   const memory = useSystem("process_memory", instance);
@@ -228,25 +278,13 @@ export function System() {
 
   const connected = useConnected("system");
   const missing = !connected || (instances.error instanceof ApiError && instances.error.status === 404);
-  const rows = useMemo(() => instances.data?.rows ?? [], [instances.data]);
-  const names = rows.map((r) => String(r[0]));
-  // The language of the shown instances: one instance's, or the one they all
+  // The language of the shown instances: one source's, or the one they all
   // share. Mixed or unknown falls back to neutral words.
-  const runtimes = useMemo(() => {
-    const cols = instances.data?.columns ?? [];
-    const si = cols.indexOf("sdk");
-    const ri = cols.indexOf("runtime");
-    return new Map(rows.map((r) => [String(r[0]), { lang: langOf(r[si], r[ri]), runtime: ri >= 0 && r[ri] ? String(r[ri]) : "" }]));
-  }, [instances.data, rows]);
   const words = useMemo(() => {
-    const shown = instance ? [runtimes.get(instance)] : [...runtimes.values()];
-    const langs = new Set(shown.map((x) => x?.lang ?? null));
+    const shown = sources.filter((x) => !instance || x.value === instance);
+    const langs = new Set(shown.map((x) => x.lang));
     return wordsFor(langs.size === 1 ? [...langs][0] : null);
-  }, [runtimes, instance]);
-  const instanceLabel = (n: string) => {
-    const r = runtimes.get(n)?.runtime;
-    return r ? `${n} · ${r}` : n;
-  };
+  }, [sources, instance]);
   const s = useMemo(() => {
     const r = stats.data;
     if (!r || r.rows.length === 0) return null;
@@ -275,13 +313,13 @@ export function System() {
         title="System"
         actions={
           <>
-            {names.length > 1 && (
+            {sources.length > 0 && (
               <Select
                 label="Instance"
                 icon={<Server size={14} />}
-                value={instance}
+                value={sources.length > 1 ? instance : sources[0].value}
                 onChange={setInstance}
-                options={[{ value: "", label: "All instances" }, ...names.map((n) => ({ value: n, label: instanceLabel(n) }))]}
+                options={[...(sources.length > 1 ? [{ value: "", label: "All instances" }] : []), ...sources.map((x) => ({ value: x.value, label: x.label }))]}
                 maxWidth={240}
               />
             )}
