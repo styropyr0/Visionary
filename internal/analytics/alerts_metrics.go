@@ -116,7 +116,7 @@ func alertMetrics(rule apdexRule) []metricDef {
 		sys("db_wait_ms", "DB pool wait time", "ms", "Total time spent waiting for a database connection over the window.", "SUM(db_acquire_wait_ms)", ">", 1000),
 		sys("in_flight", "Requests in flight", "count", "Most requests in progress at once.", "MAX(http_in_flight)", ">", 100),
 		{ID: "instance_silent", Label: "Instance stopped reporting", Group: "liveness", Unit: "minutes",
-			Description: "Minutes since an instance (or a host agent) last wrote a system_metrics row. Fires per instance.",
+			Description: "Minutes since an instance (or a host agent) last wrote a system_metrics row. Fires per instance; an SDK instance that a newer one of its service replaced (a redeploy) does not fire.",
 			Scopes:      systemScopes, Op: ">", Threshold: 5, UpIsBad: true},
 		{ID: "uptime_failing", Label: "Uptime check failing", Group: "uptime", Unit: "count",
 			Description: "Consecutive failed results of an uptime check, newest first. Fires per check.",
@@ -458,6 +458,13 @@ func (s *Server) observeLiveness(ctx context.Context, r alertRule, now time.Time
 				ob.Breach = compare(r.Spec.Op, mins, r.Spec.Threshold)
 				ob.Message = fmt.Sprintf("%s last reported %s ago (at %s UTC); threshold %s %s.", inst,
 					humanDuration(now.Sub(last)), last.Format("Jan 2 15:04"), r.Spec.Op, formatUnit(r.Spec.Threshold, "minutes"))
+				if ob.Breach {
+					if by := s.replacedBy(ctx, inst, last); by != "" {
+						ob.Breach = false
+						ob.Message = fmt.Sprintf("%s last reported %s ago; %s of the same service started after it, so this was a redeploy, not an outage.",
+							inst, humanDuration(now.Sub(last)), by)
+					}
+				}
 			}
 		}
 		if ob.Message == "" {
@@ -667,4 +674,27 @@ func specWindow(sp ruleSpec) time.Duration {
 		return d
 	}
 	return 5 * time.Minute
+}
+
+// replacedBy names an SDK instance of the same service that first reported
+// after inst's last sample: in a container each deploy gets a new hostname,
+// so the old instance stops without anything being down. A replica that ran
+// alongside it does not count.
+func (s *Server) replacedBy(ctx context.Context, inst string, last time.Time) string {
+	res, err := s.db.Query(ctx, `SELECT service, sdk FROM system_metrics WHERE instance = ? ORDER BY created_at DESC LIMIT 1`, inst)
+	if err != nil || len(res.Rows) != 1 {
+		return ""
+	}
+	svc, sdk := toString(res.Rows[0][0]), toString(res.Rows[0][1])
+	if svc == "" || sdk == "agent" {
+		return ""
+	}
+	res, err = s.db.Query(ctx, `SELECT instance FROM system_metrics
+WHERE service = ? AND instance <> ? AND COALESCE(sdk, '') <> 'agent' AND created_at >= ?
+GROUP BY instance HAVING MIN(created_at) > ? LIMIT 1`,
+		svc, inst, last.Add(-time.Hour).Format(tsLayout), last.Format(tsLayout))
+	if err != nil || len(res.Rows) != 1 {
+		return ""
+	}
+	return toString(res.Rows[0][0])
 }
