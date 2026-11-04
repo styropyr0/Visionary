@@ -359,7 +359,8 @@ function RuleEditor({ rule, list, onClose, onSaved }: { rule: Partial<DetectionR
   const saved = !!form.id;
 
   const body = (): Partial<DetectionRule> => {
-    const b: Partial<DetectionRule> = { ...form, threshold: Number(form.threshold) || 0, factor: Number(form.factor) || 0 };
+    const { signals, last_signal, last_run, error, every, ...rest } = form as Partial<RuleView>;
+    const b: Partial<DetectionRule> = { ...rest, threshold: Number(form.threshold) || 0, factor: Number(form.factor) || 0 };
     if (logic !== "sequence") delete b.then;
     return b;
   };
