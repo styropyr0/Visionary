@@ -15,7 +15,7 @@
 [![License: VSAL v2.0](https://img.shields.io/badge/license-VSAL%20v2.0-blue)](LICENSE)
 
 Self-hosted monitoring for your APIs, servers and frontends: requests, traces,
-logs, errors, metrics, uptime, alerts and an AI analyst that answers *why*.
+logs, errors, metrics, uptime, alerts and an AI analyst that that converts your queries in natural language to analysis reports.
 
 Visionary is one Go server with a React dashboard. It reads one SQL database
 that you choose: PostgreSQL, MySQL 8, SQLite or Cloudflare D1. There is no
