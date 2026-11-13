@@ -569,6 +569,7 @@ Counters are deltas or per-second rates since the previous sample.
 | | `proc_rss_mb`, `proc_read_kbps`, `proc_write_kbps` | `/proc/self/status`, `/proc/self/io` | Linux |
 | Container | `container_cpu_cores`, `container_cpu_limit`, `container_cpu_throttled_percent`, `container_mem_used_mb`, `container_mem_limit_mb`, `container_oom_kills` (only in a container or when the cgroup sets a limit) | `/sys/fs/cgroup` (v2 or v1) | Linux |
 | | `container_minor_faults_ps`, `container_major_faults_ps`, `container_mem_high_events`, `container_mem_max_events` (with the other container columns) | cgroup `memory.stat`, `memory.events` (v2) | Linux |
+| | `container_pids`, `container_pids_max`, `container_read_kbps`, `container_write_kbps` (with the other container columns) | cgroup `pids.current`, `pids.max`, `io.stat` (v2) or `blkio.throttle.io_service_bytes` (v1) | Linux |
 | Pressure | `psi_cpu_some_avg10`, `psi_cpu_some_avg60`, `psi_mem_some_avg10`, `psi_mem_some_avg60`, `psi_mem_full_avg10`, `psi_io_some_avg10`, `psi_io_some_avg60`, `psi_io_full_avg10` | the cgroup's `*.pressure` in a container (v2 only), else `/proc/pressure` | Linux |
 | Virtual memory | `minor_faults_ps`, `major_faults_ps`, `swap_in_ps`, `swap_out_ps`, `pages_scanned_ps`, `pages_stolen_ps`, `host_oom_kills` | `/proc/vmstat` | Linux |
 | | `mem_dirty_mb`, `mem_writeback_mb`, `mem_slab_mb`, `mem_shmem_mb`, `mem_committed_mb`, `mem_commit_limit_mb` | `/proc/meminfo` | Linux |

@@ -70,6 +70,8 @@ ADDED_SYSTEM_COLUMNS = [
     ("mem_shmem_mb", "real"), ("mem_committed_mb", "real"), ("mem_commit_limit_mb", "real"),
     ("container_minor_faults_ps", "real"), ("container_major_faults_ps", "real"),
     ("container_mem_high_events", "int"), ("container_mem_max_events", "int"),
+    ("container_pids", "int"), ("container_pids_max", "int"),
+    ("container_read_kbps", "real"), ("container_write_kbps", "real"),
 ]
 SYSTEM_COLUMNS = SYSTEM_COLUMNS + [name for name, _ in ADDED_SYSTEM_COLUMNS]
 

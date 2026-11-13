@@ -23,7 +23,7 @@ module Visionary
         c.cpu_dir || c.mem_dir ? c : nil
       end
 
-      attr_reader :cpu_dir, :mem_dir
+      attr_reader :cpu_dir, :mem_dir, :pids_dir, :io_dir
 
       def v2? = @v2
 
@@ -33,7 +33,7 @@ module Visionary
         @root = root
         @in_ctr = container?(text, env)
         @v2 = false
-        @cpu_dir = @cpu_acct = @mem_dir = nil
+        @cpu_dir = @cpu_acct = @mem_dir = @pids_dir = @io_dir = nil
         text.strip.each_line do |line|
           id, ctrls, path = line.chomp.split(":", 3)
           next if path.nil?
@@ -42,11 +42,15 @@ module Visionary
             dir = dir_for("sys/fs/cgroup", path)
             if File.exist?(File.join(dir, "cpu.stat"))
               @v2 = true
-              @cpu_dir = @mem_dir = dir
+              @cpu_dir = @mem_dir = @pids_dir = @io_dir = dir
               break
             end
           elsif list.include?("memory")
             @mem_dir = dir_for("sys/fs/cgroup/memory", path)
+          elsif list.include?("pids")
+            @pids_dir = dir_for("sys/fs/cgroup/pids", path)
+          elsif list.include?("blkio")
+            @io_dir = dir_for("sys/fs/cgroup/#{ctrls}", path)
           elsif list.include?("cpu") || list.include?("cpuacct")
             dir = dir_for("sys/fs/cgroup/#{ctrls}", path)
             @cpu_dir = dir if list.include?("cpu")
@@ -60,6 +64,7 @@ module Visionary
       def prime
         @usage, @periods, @throttled, @ooms = counters
         @mem = read_mem
+        @io = read_io
         @last = mono
         @primed = true
       end
@@ -80,7 +85,13 @@ module Visionary
           end
           v["container_oom_kills"] = ooms - @ooms if ooms && @ooms && ooms >= @ooms
           sample_mem(v, secs)
+          io = read_io
+          if io && @io && io[0] >= @io[0] && io[1] >= @io[1]
+            v["container_read_kbps"] = ((io[0] - @io[0]) / 1024.0 / secs).round(1)
+            v["container_write_kbps"] = ((io[1] - @io[1]) / 1024.0 / secs).round(1)
+          end
         end
+        @io = read_io
         @usage, @periods, @throttled, @ooms = usage, periods, throttled, ooms
         @last = now
         @primed = true
@@ -89,6 +100,13 @@ module Visionary
           v["container_mem_used_mb"] = (used / MB).round(1)
         end
         v["container_mem_limit_mb"] = (mem_limit / MB).round(1) if mem_limit.positive?
+        return unless @pids_dir
+        if (n = read_int(File.join(@pids_dir, "pids.current")))
+          v["container_pids"] = n
+        end
+        if (n = read_int(File.join(@pids_dir, "pids.max"))) # "max" is not a number
+          v["container_pids_max"] = n
+        end
       end
 
       private
@@ -113,6 +131,12 @@ module Visionary
         m[:faults] = HostStats.parse_cgroup_mem_stat(Sources.read(File.join(@mem_dir, "memory.stat")))
         m[:events] = HostStats.parse_cgroup_mem_events(Sources.read(File.join(@mem_dir, "memory.events"))) if @v2
         m
+      end
+
+      # Bytes read from and written to block devices: [read, write], or nil
+      def read_io
+        return nil unless @io_dir
+        HostStats.parse_cgroup_io(Sources.read(File.join(@io_dir, @v2 ? "io.stat" : "blkio.throttle.io_service_bytes")))
       end
 
       def sample_mem(v, secs)

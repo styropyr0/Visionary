@@ -83,6 +83,8 @@ final class Table {
                     "mem_committed_mb", "mem_commit_limit_mb",
                     "container_minor_faults_ps", "container_major_faults_ps")
             .integer("container_mem_high_events", "container_mem_max_events")
+            .integer("container_pids", "container_pids_max")
+            .real("container_read_kbps", "container_write_kbps")
             .build();
 
     // The three telemetry tables share one schema file, telemetry.sql.

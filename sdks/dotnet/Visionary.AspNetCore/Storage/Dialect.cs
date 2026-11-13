@@ -132,6 +132,10 @@ internal static class Schema
         new("container_major_faults_ps", "real"),
         new("container_mem_high_events", "int"),
         new("container_mem_max_events", "int"),
+        new("container_pids", "int"),
+        new("container_pids_max", "int"),
+        new("container_read_kbps", "real"),
+        new("container_write_kbps", "real"),
     };
 
     public static readonly string[] SystemColumns = SystemBaseColumns.Concat(AddedSystemColumns.Select(c => c.Name)).ToArray();

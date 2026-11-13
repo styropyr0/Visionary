@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from visionary._cgroup import CgroupReader  # noqa: E402
 from visionary._hoststats import (  # noqa: E402
-    HostStats, VMStat, parse_cgroup_mem_events, parse_cgroup_mem_stat, parse_meminfo, parse_pressure, parse_vmstat,
+    HostStats, VMStat, parse_cgroup_io, parse_cgroup_mem_events, parse_cgroup_mem_stat, parse_meminfo, parse_pressure, parse_vmstat,
 )
 from visionary._storage import SYSTEM_COLUMNS, D1Backend, schema_statements  # noqa: E402
 
@@ -88,6 +88,9 @@ class ParserTest(FixtureRoot):
         self.assertEqual(parse_cgroup_mem_stat("cache 1\npgfault 5\ntotal_pgfault 800\ntotal_pgmajfault 7\n"), (800, 7))
         self.assertEqual(parse_cgroup_mem_events("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n"), (14, 3))
         self.assertIsNone(parse_cgroup_mem_events("low 0\nhigh 14\n"))
+        self.assertEqual(parse_cgroup_io("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n"), (1024, 256))
+        self.assertEqual(parse_cgroup_io("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n"), (4096, 512))
+        self.assertIsNone(parse_cgroup_io(""))
 
 
 class HostStatsTest(FixtureRoot):
@@ -154,6 +157,9 @@ class CgroupMemTest(FixtureRoot):
         write(self.root, "sys/fs/cgroup/memory.current", "1048576\n")
         write(self.root, "sys/fs/cgroup/memory.stat", "anon 123\npgfault 900\npgmajfault 12\n")
         write(self.root, "sys/fs/cgroup/memory.events", "low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n")
+        write(self.root, "sys/fs/cgroup/pids.current", "12\n")
+        write(self.root, "sys/fs/cgroup/pids.max", "max\n")
+        write(self.root, "sys/fs/cgroup/io.stat", "8:0 rbytes=1000 wbytes=200 rios=3 wios=4\n")
         c = CgroupReader.find(self.root)
         self.assertTrue(c.v2 and c.in_container)
         self.assertEqual(c.cpu_dir, cg)
@@ -161,11 +167,16 @@ class CgroupMemTest(FixtureRoot):
         c._last -= 10
         write(self.root, "sys/fs/cgroup/memory.stat", "anon 123\npgfault 1920\npgmajfault 32\n")
         write(self.root, "sys/fs/cgroup/memory.events", "low 0\nhigh 20\nmax 4\noom 1\noom_kill 1\n")
+        write(self.root, "sys/fs/cgroup/io.stat", "8:0 rbytes=11240 wbytes=2248 rios=3 wios=4\n")
         v = {}
         c.sample(v)
         self.assertAlmostEqual(v["container_minor_faults_ps"], 100.0, delta=1)
         self.assertAlmostEqual(v["container_major_faults_ps"], 2.0, delta=0.1)
         self.assertEqual((v["container_mem_high_events"], v["container_mem_max_events"]), (6, 1))
+        self.assertEqual(v["container_pids"], 12)
+        self.assertNotIn("container_pids_max", v)
+        self.assertAlmostEqual(v["container_read_kbps"], 1.0, delta=0.1)
+        self.assertAlmostEqual(v["container_write_kbps"], 0.2, delta=0.05)
 
         write(self.root, "sys/fs/cgroup/memory.events", "low 0\nhigh 1\nmax 4\n")
         v = {}

@@ -23,6 +23,8 @@ final class CgroupReader {
     private Path cpuDir; // v2: the cgroup; v1: the cpu controller's directory
     private Path cpuAcct; // v1: the cpuacct controller's directory
     private Path memDir;
+    private Path pidsDir;
+    private Path ioDir;
     private final boolean inContainer;
 
     // Previous readings, touched only on the sampler thread.
@@ -34,6 +36,7 @@ final class CgroupReader {
     private boolean primed;
     private long[] faults;
     private long[] events;
+    private long[] io;
 
     private CgroupReader(boolean inContainer) {
         this.inContainer = inContainer;
@@ -92,10 +95,16 @@ final class CgroupReader {
                     c.v2 = true;
                     c.cpuDir = dir;
                     c.memDir = dir;
+                    c.pidsDir = dir;
+                    c.ioDir = dir;
                     break;
                 }
             } else if (hasController(ctrls, "memory")) {
                 c.memDir = cgroupDir(mount.resolve("memory"), path);
+            } else if (hasController(ctrls, "pids")) {
+                c.pidsDir = cgroupDir(mount.resolve("pids"), path);
+            } else if (hasController(ctrls, "blkio")) {
+                c.ioDir = cgroupDir(mount.resolve(ctrls), path);
             } else if (hasController(ctrls, "cpu") || hasController(ctrls, "cpuacct")) {
                 Path dir = cgroupDir(mount.resolve(ctrls), path);
                 if (hasController(ctrls, "cpu")) {
@@ -178,6 +187,14 @@ final class CgroupReader {
 
     private long[] readEvents() {
         return memDir == null || !v2 ? null : HostStats.parseCgroupMemEvents(HostStats.read(memDir.resolve("memory.events")));
+    }
+
+    /** The bytes the cgroup read from and wrote to its block devices; null when unreadable */
+    private long[] readIo() {
+        if (ioDir == null) {
+            return null;
+        }
+        return HostStats.parseCgroupIO(HostStats.read(ioDir.resolve(v2 ? "io.stat" : "blkio.throttle.io_service_bytes")));
     }
 
     /** The container fault rates and memory limit hits */
@@ -292,6 +309,7 @@ final class CgroupReader {
         ooms = c[3];
         faults = readFaults();
         events = readEvents();
+        io = readIo();
         last = nowNanos;
         primed = true;
     }
@@ -321,7 +339,13 @@ final class CgroupReader {
                 set(row, "container_oom_kills", c[3] - ooms);
             }
             sampleMem(row, secs);
+            long[] now = readIo();
+            if (now != null && io != null && now[0] >= io[0] && now[1] >= io[1]) {
+                set(row, "container_read_kbps", Values.round((now[0] - io[0]) / 1024.0 / secs, 1));
+                set(row, "container_write_kbps", Values.round((now[1] - io[1]) / 1024.0 / secs, 1));
+            }
         }
+        io = readIo();
         usage = c[0];
         periods = c[1];
         throttled = c[2];
@@ -337,6 +361,16 @@ final class CgroupReader {
         }
         if (memLimit > 0) {
             set(row, "container_mem_limit_mb", Values.round(memLimit / MB, 1));
+        }
+        if (pidsDir != null) {
+            Long n = readLong(pidsDir.resolve("pids.current"));
+            if (n != null) {
+                set(row, "container_pids", n);
+            }
+            Long max = readLong(pidsDir.resolve("pids.max")); // "max" doesn't parse
+            if (max != null) {
+                set(row, "container_pids_max", max);
+            }
         }
     }
 

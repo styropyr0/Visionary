@@ -60,7 +60,9 @@ module Visionary
       %w[mem_dirty_mb real], %w[mem_writeback_mb real], %w[mem_slab_mb real],
       %w[mem_shmem_mb real], %w[mem_committed_mb real], %w[mem_commit_limit_mb real],
       %w[container_minor_faults_ps real], %w[container_major_faults_ps real],
-      %w[container_mem_high_events int], %w[container_mem_max_events int]
+      %w[container_mem_high_events int], %w[container_mem_max_events int],
+      %w[container_pids int], %w[container_pids_max int],
+      %w[container_read_kbps real], %w[container_write_kbps real]
     ].freeze
 
     SPAN_COLUMNS = %w[

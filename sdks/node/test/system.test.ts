@@ -7,6 +7,7 @@ import { SYSTEM_COLUMNS, type Value } from "../src/store/sql.js";
 import { CgroupReader } from "../src/system/cgroup.js";
 import {
   HostStats,
+  parseCgroupIO,
   parseCgroupMemEvents,
   parseCgroupMemStat,
   parseMemInfo,
@@ -56,6 +57,9 @@ test("parsers read the Go fixtures", () => {
   assert.deepEqual(parseCgroupMemStat("anon 123\npgfault 900\npgmajfault 12\n"), { faults: 900, major: 12 });
   assert.deepEqual(parseCgroupMemStat("cache 1\npgfault 5\ntotal_pgfault 800\ntotal_pgmajfault 7\n"), { faults: 800, major: 7 });
   assert.deepEqual(parseCgroupMemEvents("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n"), { high: 14, max: 3 });
+  assert.deepEqual(parseCgroupIO("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n"), { read: 1024, write: 256 });
+  assert.deepEqual(parseCgroupIO("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n"), { read: 4096, write: 512 });
+  assert.equal(parseCgroupIO(""), undefined);
 });
 
 test("host pressure and virtual memory from a fake /proc", () => {
@@ -98,18 +102,26 @@ test("a container reads its cgroup's pressure, faults and memory events", () => 
   writeFileSync(path.join(cg, "memory.current"), "104857600\n");
   writeFileSync(path.join(cg, "memory.stat"), "anon 123\ninactive_file 0\npgfault 900\npgmajfault 12\n");
   writeFileSync(path.join(cg, "memory.events"), "low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n");
+  writeFileSync(path.join(cg, "pids.current"), "12\n");
+  writeFileSync(path.join(cg, "pids.max"), "max\n");
+  writeFileSync(path.join(cg, "io.stat"), "8:0 rbytes=1000 wbytes=200 rios=3 wios=4\n");
 
   const c = CgroupReader.open(root)!;
   assert.equal(path.resolve(c.pressureDir()!), cg);
   c.prime();
   replace(path.join(cg, "memory.stat"), "pgfault 900\npgmajfault 12", "pgfault 1900\npgmajfault 112");
   replace(path.join(cg, "memory.events"), "high 14", "high 20");
+  replace(path.join(cg, "io.stat"), "rbytes=1000 wbytes=200", "rbytes=11240 wbytes=2248");
   const v: Record<string, Value | undefined> = {};
   c.sample(v);
   assert.equal(typeof v.container_minor_faults_ps, "number");
   assert.ok((v.container_major_faults_ps as number) > 0);
   assert.equal(v.container_mem_high_events, 6);
   assert.equal(v.container_mem_max_events, 0);
+  assert.equal(v.container_pids, 12);
+  assert.equal(v.container_pids_max, undefined);
+  assert.ok((v.container_read_kbps as number) > 0);
+  assert.ok((v.container_write_kbps as number) > 0);
 
   const h = new HostStats(c.pressureDir(), root);
   h.prime();

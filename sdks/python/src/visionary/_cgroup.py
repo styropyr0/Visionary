@@ -12,7 +12,7 @@ import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from ._hoststats import parse_cgroup_mem_events, parse_cgroup_mem_stat
+from ._hoststats import parse_cgroup_io, parse_cgroup_mem_events, parse_cgroup_mem_stat
 from ._node import IS_LINUX
 
 _MB = float(1 << 20)
@@ -30,6 +30,8 @@ class CgroupReader:
         self.cpu_dir = ""  # v2: the cgroup; v1: the cpu controller's directory
         self.cpuacct_dir = ""  # v1: the cpuacct controller's directory
         self.mem_dir = ""
+        self.pids_dir = ""
+        self.io_dir = ""
         self.in_container = False
         self._last = 0.0
         self._usage = 0  # CPU time, ns
@@ -37,6 +39,7 @@ class CgroupReader:
         self._throttled = 0
         self._ooms = 0
         self._mem: Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]] = (None, None)
+        self._io: Optional[Tuple[int, int]] = None
         self._primed = False
 
     @classmethod
@@ -58,10 +61,14 @@ class CgroupReader:
             if f[0] == "0" and f[1] == "":
                 d = c._cgroup_dir("/sys/fs/cgroup", path)
                 if os.path.exists(_join(d, "cpu.stat")):
-                    c.v2, c.cpu_dir, c.mem_dir = True, d, d
+                    c.v2, c.cpu_dir, c.mem_dir, c.pids_dir, c.io_dir = True, d, d, d, d
                     break
             elif "memory" in ctrls:
                 c.mem_dir = c._cgroup_dir("/sys/fs/cgroup/memory", path)
+            elif "pids" in ctrls:
+                c.pids_dir = c._cgroup_dir("/sys/fs/cgroup/pids", path)
+            elif "blkio" in ctrls:
+                c.io_dir = c._cgroup_dir("/sys/fs/cgroup/" + f[1], path)
             elif "cpu" in ctrls or "cpuacct" in ctrls:
                 d = c._cgroup_dir("/sys/fs/cgroup/" + f[1], path)
                 if "cpu" in ctrls:
@@ -76,6 +83,7 @@ class CgroupReader:
         """The baseline the first sample's deltas start from."""
         self._usage, self._periods, self._throttled, self._ooms = self._counters()
         self._mem = self._read_mem()
+        self._io = self._read_io()
         self._last, self._primed = time.monotonic(), True
 
     def sample(self, v: Dict[str, Any]) -> None:
@@ -96,6 +104,11 @@ class CgroupReader:
             if ooms >= self._ooms:
                 v["container_oom_kills"] = ooms - self._ooms
             self._sample_mem(v, secs)
+            io = self._read_io()
+            if io is not None and self._io is not None and io[0] >= self._io[0] and io[1] >= self._io[1]:
+                v["container_read_kbps"] = round((io[0] - self._io[0]) / 1024 / secs, 1)
+                v["container_write_kbps"] = round((io[1] - self._io[1]) / 1024 / secs, 1)
+        self._io = self._read_io()
         self._usage, self._periods, self._throttled, self._ooms = usage, periods, throttled, ooms
         self._last, self._primed = now, True
         if cpus > 0:
@@ -105,6 +118,13 @@ class CgroupReader:
             v["container_mem_used_mb"] = round(used / _MB, 1)
         if mem_limit > 0:
             v["container_mem_limit_mb"] = round(mem_limit / _MB, 1)
+        if self.pids_dir:
+            n = _uint(_join(self.pids_dir, "pids.current"))
+            if n is not None:
+                v["container_pids"] = n
+            n = _uint(_join(self.pids_dir, "pids.max"))  # "max" is not a number
+            if n is not None:
+                v["container_pids_max"] = n
 
     def _sample_mem(self, v: Dict[str, Any], secs: float) -> None:
         """The cgroup's fault rates and memory limit hits"""
@@ -131,6 +151,13 @@ class CgroupReader:
             ev = _read(_join(self.mem_dir, "memory.events"))
             events = parse_cgroup_mem_events(ev) if ev is not None else None
         return faults, events
+
+    def _read_io(self) -> Optional[Tuple[int, int]]:
+        """The bytes the cgroup read from and wrote to its block devices"""
+        if not self.io_dir:
+            return None
+        text = _read(_join(self.io_dir, "io.stat" if self.v2 else "blkio.throttle.io_service_bytes"))
+        return parse_cgroup_io(text) if text is not None else None
 
     def _limits(self) -> Tuple[float, int]:
         """The CPU limit in cores and the memory limit in bytes, 0 when unlimited."""

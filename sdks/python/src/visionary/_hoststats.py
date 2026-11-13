@@ -104,6 +104,32 @@ def parse_cgroup_mem_events(text: str) -> Optional[Tuple[int, int]]:
     return (ev["high"], ev["max"]) if len(ev) == 2 else None
 
 
+def parse_cgroup_io(text: str) -> Optional[Tuple[int, int]]:
+    """Bytes read and written, summed over a cgroup's devices: v2 io.stat
+    ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+    ("8:0 Read 1", "8:0 Write 2")"""
+    read = write = 0
+    ok = False
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) == 3 and f[1] in ("Read", "Write") and f[2].isdigit():
+            if f[1] == "Read":
+                read += int(f[2])
+            else:
+                write += int(f[2])
+            ok = True
+            continue
+        for kv in f[1:]:
+            k, _, n = kv.partition("=")
+            if k in ("rbytes", "wbytes") and n.isdigit():
+                if k == "rbytes":
+                    read += int(n)
+                else:
+                    write += int(n)
+                ok = True
+    return (read, write) if ok else None
+
+
 class HostStats:
     """Keeps the /proc/vmstat counters the per-second columns are deltas of.
     In a container pressure comes from cgroup_dir, the cgroup v2 directory,

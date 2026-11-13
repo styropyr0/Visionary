@@ -87,6 +87,30 @@ module Visionary
         ev.size == 2 ? [ev["high"], ev["max"]] : nil
       end
 
+      # Bytes read and written, summed over a cgroup's devices: v2 io.stat
+      # ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+      # ("8:0 Read 1", "8:0 Write 2"); nil when neither is there
+      def self.parse_cgroup_io(text)
+        read = write = 0
+        ok = false
+        text.to_s.each_line do |line|
+          f = line.split
+          if f.size == 3 && %w[Read Write].include?(f[1])
+            next unless f[2].match?(/\A\d+\z/)
+            f[1] == "Read" ? read += f[2].to_i : write += f[2].to_i
+            ok = true
+            next
+          end
+          f.drop(1).each do |kv|
+            k, n = kv.split("=", 2)
+            next unless %w[rbytes wbytes].include?(k) && n&.match?(/\A\d+\z/)
+            k == "rbytes" ? read += n.to_i : write += n.to_i
+            ok = true
+          end
+        end
+        ok ? [read, write] : nil
+      end
+
       # "key<sep> value [unit]" lines with an unsigned value
       def self.each_kv(text, sep)
         text.to_s.each_line do |line|

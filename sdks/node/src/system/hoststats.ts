@@ -117,6 +117,32 @@ export function parseCgroupMemEvents(text: string): { high: number; max: number 
   return high === undefined || max === undefined ? undefined : { high, max };
 }
 
+/** Bytes read and written summed over a cgroup's devices: v2 io.stat
+ * ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+ * ("8:0 Read 1", "8:0 Write 2") */
+export function parseCgroupIO(text: string): { read: number; write: number } | undefined {
+  let read = 0;
+  let write = 0;
+  let ok = false;
+  for (const line of text.split("\n")) {
+    const f = line.trim().split(/\s+/);
+    if (f.length === 3 && (f[1] === "Read" || f[1] === "Write") && /^\d+$/.test(f[2]!)) {
+      if (f[1] === "Read") read += Number(f[2]);
+      else write += Number(f[2]);
+      ok = true;
+      continue;
+    }
+    for (const kv of f.slice(1)) {
+      const m = /^(rbytes|wbytes)=(\d+)$/.exec(kv);
+      if (!m) continue;
+      if (m[1] === "rbytes") read += Number(m[2]);
+      else write += Number(m[2]);
+      ok = true;
+    }
+  }
+  return ok ? { read, write } : undefined;
+}
+
 /** Calls fn for "key<sep> value [unit]" lines with an unsigned value */
 function eachKV(text: string, sep: string, fn: (k: string, v: number) => void): void {
   for (const line of text.split("\n")) {

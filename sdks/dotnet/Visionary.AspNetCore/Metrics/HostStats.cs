@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 
 namespace Styropyr0.Visionary;
 
@@ -249,6 +250,57 @@ internal sealed class HostStats
             }
         }
         return high is { } h && max is { } m ? (h, m) : null;
+    }
+
+    /// <summary>
+    /// Bytes read and written, summed over a cgroup's devices: v2 io.stat
+    /// ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+    /// ("8:0 Read 1", "8:0 Write 2")
+    /// </summary>
+    public static (ulong Read, ulong Write)? ParseCgroupIo(string? text)
+    {
+        ulong read = 0, write = 0;
+        var ok = false;
+        foreach (var line in (text ?? "").Split('\n'))
+        {
+            var f = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (f.Length == 3 && (f[1] == "Read" || f[1] == "Write"))
+            {
+                if (ulong.TryParse(f[2], NumberStyles.None, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (f[1] == "Read")
+                    {
+                        read += b;
+                    }
+                    else
+                    {
+                        write += b;
+                    }
+                    ok = true;
+                }
+                continue;
+            }
+            foreach (var kv in f.Skip(1))
+            {
+                var eq = kv.IndexOf('=');
+                if (eq <= 0 || !ulong.TryParse(kv.AsSpan(eq + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var n))
+                {
+                    continue;
+                }
+                switch (kv[..eq])
+                {
+                    case "rbytes":
+                        read += n;
+                        ok = true;
+                        break;
+                    case "wbytes":
+                        write += n;
+                        ok = true;
+                        break;
+                }
+            }
+        }
+        return ok ? (read, write) : null;
     }
 
     internal static string? Read(string file)

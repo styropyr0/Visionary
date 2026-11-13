@@ -94,6 +94,10 @@ class SystemStatsTest < Minitest::Test
     assert_equal [10_240, 2048, 819_200, 524_288, 20_971_520, 12_345_678], mi.values_at("Dirty", "Writeback", "Slab", "Shmem", "Committed_AS", "CommitLimit")
     assert_nil HostStats.parse_meminfo("MemTotal: 1 kB\n")
 
+    assert_equal [1024, 256], HostStats.parse_cgroup_io("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n")
+    assert_equal [4096, 512], HostStats.parse_cgroup_io("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n")
+    assert_nil HostStats.parse_cgroup_io("")
+
     assert_equal [900, 12], HostStats.parse_cgroup_mem_stat("anon 123\npgfault 900\npgmajfault 12\n")
     assert_equal [800, 7], HostStats.parse_cgroup_mem_stat("cache 1\npgfault 5\ntotal_pgfault 800\ntotal_pgmajfault 7\n")
     assert_equal [14, 3], HostStats.parse_cgroup_mem_events("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n")
@@ -151,6 +155,9 @@ class SystemStatsTest < Minitest::Test
     write("sys/fs/cgroup/memory.current", "1048576\n")
     write("sys/fs/cgroup/memory.stat", "anon 123\npgfault 900\npgmajfault 12\n")
     write("sys/fs/cgroup/memory.events", "low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n")
+    write("sys/fs/cgroup/pids.current", "12\n")
+    write("sys/fs/cgroup/pids.max", "max\n")
+    write("sys/fs/cgroup/io.stat", "8:0 rbytes=1000 wbytes=200 rios=3 wios=4\n")
     c = Visionary::System::Cgroup.detect(root: @root, env: { "KUBERNETES_SERVICE_HOST" => "10.0.0.1" })
     assert c.v2?
     assert c.in_container?
@@ -158,12 +165,17 @@ class SystemStatsTest < Minitest::Test
     c.instance_variable_set(:@last, c.instance_variable_get(:@last) - 10)
     write("sys/fs/cgroup/memory.stat", "anon 123\npgfault 1900\npgmajfault 112\n")
     write("sys/fs/cgroup/memory.events", "low 0\nhigh 20\nmax 4\noom 1\noom_kill 1\n")
+    write("sys/fs/cgroup/io.stat", "8:0 rbytes=11240 wbytes=2248 rios=3 wios=4\n")
     v = {}
     c.sample(v)
     assert_in_delta 90.0, v["container_minor_faults_ps"], 0.5
     assert_in_delta 10.0, v["container_major_faults_ps"], 0.1
     assert_equal 6, v["container_mem_high_events"]
     assert_equal 1, v["container_mem_max_events"]
+    assert_equal 12, v["container_pids"]
+    refute v.key?("container_pids_max")
+    assert_in_delta 1.0, v["container_read_kbps"], 0.05
+    assert_in_delta 0.2, v["container_write_kbps"], 0.05
   end
 
   class D1Store

@@ -113,6 +113,9 @@ public sealed class HostStatsTests : IDisposable
         Assert.Equal((800UL, 7UL), HostStats.ParseCgroupMemStat("cache 1\npgfault 5\ntotal_pgfault 800\ntotal_pgmajfault 7\n"));
         Assert.Equal((14UL, 3UL), HostStats.ParseCgroupMemEvents("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n"));
         Assert.Null(HostStats.ParseCgroupMemEvents("low 0\nhigh 14\n"));
+        Assert.Equal((1024UL, 256UL), HostStats.ParseCgroupIo("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n"));
+        Assert.Equal((4096UL, 512UL), HostStats.ParseCgroupIo("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n"));
+        Assert.Null(HostStats.ParseCgroupIo(""));
     }
 
     [Fact]
@@ -182,6 +185,9 @@ public sealed class HostStatsTests : IDisposable
         Put("sys/fs/cgroup/app/memory.current", "1048576\n");
         Put("sys/fs/cgroup/app/memory.stat", "anon 123\npgfault 900\npgmajfault 12\n");
         Put("sys/fs/cgroup/app/memory.events", "low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n");
+        Put("sys/fs/cgroup/app/pids.current", "12\n");
+        Put("sys/fs/cgroup/app/pids.max", "max\n");
+        Put("sys/fs/cgroup/app/io.stat", "8:0 rbytes=1000 wbytes=200 rios=3 wios=4\n");
         Put(".dockerenv", "");
 
         var c = CgroupReader.Open(_root)!;
@@ -191,12 +197,17 @@ public sealed class HostStatsTests : IDisposable
         Replace("sys/fs/cgroup/app/memory.stat", "pgfault 900", "pgfault 1900");
         Replace("sys/fs/cgroup/app/memory.stat", "pgmajfault 12", "pgmajfault 22");
         Replace("sys/fs/cgroup/app/memory.events", "high 14", "high 20");
+        Replace("sys/fs/cgroup/app/io.stat", "rbytes=1000 wbytes=200", "rbytes=11240 wbytes=2248");
         System.Threading.Thread.Sleep(20);
 
         var v = new Dictionary<string, object?>();
         c.Sample(v);
         Assert.Equal(6L, v["container_mem_high_events"]);
         Assert.Equal(0L, v["container_mem_max_events"]);
+        Assert.Equal(12L, v["container_pids"]);
+        Assert.False(v.ContainsKey("container_pids_max"));
+        Assert.True((double)v["container_read_kbps"]! > 0);
+        Assert.True((double)v["container_write_kbps"]! > 0);
         Assert.True((double)v["container_major_faults_ps"]! > 0);
         Assert.True((double)v["container_minor_faults_ps"]! > (double)v["container_major_faults_ps"]!);
     }

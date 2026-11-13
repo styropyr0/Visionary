@@ -274,6 +274,48 @@ final class HostStats {
         return found[0] == 2 ? out : null;
     }
 
+    /**
+     * Bytes read and written, summed over a cgroup's devices: v2 io.stat
+     * ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+     * ("8:0 Read 1", "8:0 Write 2"); null when neither is there
+     */
+    static long[] parseCgroupIO(String text) {
+        if (text == null) {
+            return null;
+        }
+        long[] out = new long[2];
+        boolean ok = false;
+        for (String line : text.split("\n")) {
+            String[] f = line.strip().split("\\s+");
+            if (f.length == 3 && (f[1].equals("Read") || f[1].equals("Write"))) {
+                try {
+                    out[f[1].equals("Read") ? 0 : 1] += Long.parseUnsignedLong(f[2]);
+                    ok = true;
+                } catch (NumberFormatException e) {
+                    // not a counter
+                }
+                continue;
+            }
+            for (int i = 1; i < f.length; i++) {
+                int eq = f[i].indexOf('=');
+                if (eq <= 0) {
+                    continue;
+                }
+                String k = f[i].substring(0, eq);
+                if (!k.equals("rbytes") && !k.equals("wbytes")) {
+                    continue;
+                }
+                try {
+                    out[k.equals("rbytes") ? 0 : 1] += Long.parseUnsignedLong(f[i].substring(eq + 1));
+                    ok = true;
+                } catch (NumberFormatException e) {
+                    // not a counter
+                }
+            }
+        }
+        return ok ? out : null;
+    }
+
     /** Calls fn for "key: value kB" style lines with an unsigned value */
     private static void eachKv(String text, char sep, BiConsumer<String, Long> fn) {
         if (text == null) {

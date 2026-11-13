@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Value } from "../store/sql.js";
 import { round } from "../util.js";
-import { parseCgroupMemEvents, parseCgroupMemStat } from "./hoststats.js";
+import { parseCgroupIO, parseCgroupMemEvents, parseCgroupMemStat } from "./hoststats.js";
 import { IS_LINUX } from "./linux.js";
 
 /** Reads the CPU and memory limits and use of the process's own cgroup
@@ -18,11 +18,14 @@ export class CgroupReader {
   /** v1: the cpuacct controller's directory */
   private cpuAcct = "";
   private memDir = "";
+  private pidsDir = "";
+  private ioDir = "";
   private inCtr = false;
   private last = 0;
   /** The previous sample's counters; usage is CPU time in ns. */
   private prev: Counters = {};
   private prevMem: MemCounters = {};
+  private prevIO: IOCounters | undefined;
   private primed = false;
 
   /** root is "/" but for tests, which point it at a fake filesystem. */
@@ -45,11 +48,15 @@ export class CgroupReader {
         const dir = c.cgroupDir("/sys/fs/cgroup", p);
         if (existsSync(path.join(dir, "cpu.stat"))) {
           c.v2 = true;
-          c.cpuDir = c.memDir = dir;
+          c.cpuDir = c.memDir = c.pidsDir = c.ioDir = dir;
           break;
         }
       } else if (list.includes("memory")) {
         c.memDir = c.cgroupDir("/sys/fs/cgroup/memory", p);
+      } else if (list.includes("pids")) {
+        c.pidsDir = c.cgroupDir("/sys/fs/cgroup/pids", p);
+      } else if (list.includes("blkio")) {
+        c.ioDir = c.cgroupDir("/sys/fs/cgroup/" + ctrls, p);
       } else if (list.includes("cpu") || list.includes("cpuacct")) {
         const dir = c.cgroupDir("/sys/fs/cgroup/" + ctrls, p);
         if (list.includes("cpu")) c.cpuDir = dir;
@@ -154,6 +161,13 @@ export class CgroupReader {
     };
   }
 
+  /** The bytes the cgroup read from and wrote to its block devices */
+  private readIO(): IOCounters | undefined {
+    if (!this.ioDir) return undefined;
+    const text = read(path.join(this.ioDir, this.v2 ? "io.stat" : "blkio.throttle.io_service_bytes"));
+    return text === undefined ? undefined : parseCgroupIO(text);
+  }
+
   private sampleMem(v: Record<string, Value | undefined>, secs: number): void {
     const now = this.memCounters();
     const { faults: f, events: e } = now;
@@ -173,6 +187,7 @@ export class CgroupReader {
   prime(): void {
     this.prev = this.counters();
     this.prevMem = this.memCounters();
+    this.prevIO = this.readIO();
     this.last = performance.now();
     this.primed = true;
   }
@@ -199,7 +214,14 @@ export class CgroupReader {
       }
       if (c.ooms !== undefined && p.ooms !== undefined && c.ooms >= p.ooms) v.container_oom_kills = c.ooms - p.ooms;
       this.sampleMem(v, secs);
+      const io = this.readIO();
+      const pio = this.prevIO;
+      if (io && pio && io.read >= pio.read && io.write >= pio.write) {
+        v.container_read_kbps = round((io.read - pio.read) / 1024 / secs, 1);
+        v.container_write_kbps = round((io.write - pio.write) / 1024 / secs, 1);
+      }
     }
+    this.prevIO = this.readIO();
     this.prev = c;
     this.last = now;
     this.primed = true;
@@ -207,12 +229,23 @@ export class CgroupReader {
     const used = this.memUsed();
     if (used !== undefined) v.container_mem_used_mb = round(used / MB, 1);
     if (mem > 0) v.container_mem_limit_mb = round(mem / MB, 1);
+    if (this.pidsDir) {
+      const n = readUint(path.join(this.pidsDir, "pids.current"));
+      if (n !== undefined) v.container_pids = n;
+      const max = readUint(path.join(this.pidsDir, "pids.max")); // "max" fails to parse
+      if (max !== undefined) v.container_pids_max = max;
+    }
   }
 }
 
 interface MemCounters {
   faults?: { faults: number; major: number };
   events?: { high: number; max: number };
+}
+
+interface IOCounters {
+  read: number;
+  write: number;
 }
 
 interface Counters {

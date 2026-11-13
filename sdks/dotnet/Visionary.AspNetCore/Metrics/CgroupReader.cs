@@ -27,6 +27,8 @@ internal sealed class CgroupReader
     private readonly string? _cpuDir; // v2: the cgroup; v1: the cpu controller's directory
     private readonly string? _cpuAcct; // v1: the cpuacct controller's directory
     private readonly string? _memDir;
+    private readonly string? _pidsDir;
+    private readonly string? _ioDir;
     private readonly bool _inContainer;
 
     // Previous readings, touched only on the sampler loop.
@@ -38,13 +40,16 @@ internal sealed class CgroupReader
     private bool _primed;
     private (ulong Faults, ulong Major)? _faults;
     private (ulong High, ulong Max)? _events;
+    private (ulong Read, ulong Write)? _io;
 
-    private CgroupReader(bool v2, string? cpuDir, string? cpuAcct, string? memDir, bool inContainer)
+    private CgroupReader(bool v2, string? cpuDir, string? cpuAcct, string? memDir, string? pidsDir, string? ioDir, bool inContainer)
     {
         _v2 = v2;
         _cpuDir = cpuDir;
         _cpuAcct = cpuAcct;
         _memDir = memDir;
+        _pidsDir = pidsDir;
+        _ioDir = ioDir;
         _inContainer = inContainer;
     }
 
@@ -72,7 +77,7 @@ internal sealed class CgroupReader
             return null;
         }
         bool v2 = false;
-        string? cpuDir = null, cpuAcct = null, memDir = null;
+        string? cpuDir = null, cpuAcct = null, memDir = null, pidsDir = null, ioDir = null;
         foreach (var line in text.Trim().Split('\n'))
         {
             var f = line.TrimEnd('\r').Split(':', 3);
@@ -86,13 +91,21 @@ internal sealed class CgroupReader
                 var dir = CgroupDir(Join(root, "sys/fs/cgroup"), path);
                 if (File.Exists(Join(dir, "cpu.stat")))
                 {
-                    (v2, cpuDir, memDir) = (true, dir, dir);
+                    (v2, cpuDir, memDir, pidsDir, ioDir) = (true, dir, dir, dir, dir);
                     break;
                 }
             }
             else if (HasController(ctrls, "memory"))
             {
                 memDir = CgroupDir(Join(root, "sys/fs/cgroup/memory"), path);
+            }
+            else if (HasController(ctrls, "pids"))
+            {
+                pidsDir = CgroupDir(Join(root, "sys/fs/cgroup/pids"), path);
+            }
+            else if (HasController(ctrls, "blkio"))
+            {
+                ioDir = CgroupDir(Join(root, "sys/fs/cgroup", ctrls), path);
             }
             else if (HasController(ctrls, "cpu") || HasController(ctrls, "cpuacct"))
             {
@@ -111,7 +124,7 @@ internal sealed class CgroupReader
         {
             return null;
         }
-        return new CgroupReader(v2, cpuDir, cpuAcct, memDir, InContainer(root, text));
+        return new CgroupReader(v2, cpuDir, cpuAcct, memDir, pidsDir, ioDir, InContainer(root, text));
     }
 
     /// <summary>Takes the baseline the first sample's deltas start from.</summary>
@@ -119,11 +132,12 @@ internal sealed class CgroupReader
     {
         (_usage, _periods, _throttled, _ooms) = Counters();
         (_faults, _events) = ReadMem();
+        _io = ReadIo();
         _last = Stopwatch.GetTimestamp();
         _primed = true;
     }
 
-    /// <summary>Fills the container_* columns; all six stay NULL outside a container without limits.</summary>
+    /// <summary>Fills the container_* columns; all of them stay NULL outside a container without limits.</summary>
     public void Sample(Dictionary<string, object?> v)
     {
         var (cpus, memLimit) = Limits();
@@ -150,7 +164,13 @@ internal sealed class CgroupReader
                 v["container_oom_kills"] = (long)(ooms - _ooms);
             }
             SampleMem(v, secs);
+            if (ReadIo() is { } io && _io is { } pio && io.Read >= pio.Read && io.Write >= pio.Write)
+            {
+                v["container_read_kbps"] = Math.Round((io.Read - pio.Read) / 1024.0 / secs, 1);
+                v["container_write_kbps"] = Math.Round((io.Write - pio.Write) / 1024.0 / secs, 1);
+            }
         }
+        _io = ReadIo();
         (_usage, _periods, _throttled, _ooms, _last, _primed) = (usage, periods, throttled, ooms, now, true);
         if (cpus > 0)
         {
@@ -164,6 +184,17 @@ internal sealed class CgroupReader
         {
             v["container_mem_limit_mb"] = Math.Round(memLimit / HostSampler.Mb, 1);
         }
+        if (_pidsDir is not null)
+        {
+            if (ReadUInt(Join(_pidsDir, "pids.current")) is { } pids)
+            {
+                v["container_pids"] = (long)pids;
+            }
+            if (ReadUInt(Join(_pidsDir, "pids.max")) is { } pidsMax) // "max" doesn't parse
+            {
+                v["container_pids_max"] = (long)pidsMax;
+            }
+        }
     }
 
     private ((ulong Faults, ulong Major)?, (ulong High, ulong Max)?) ReadMem()
@@ -175,6 +206,10 @@ internal sealed class CgroupReader
         var faults = HostStats.ParseCgroupMemStat(ReadText(Join(_memDir, "memory.stat")));
         return (faults, _v2 ? HostStats.ParseCgroupMemEvents(ReadText(Join(_memDir, "memory.events"))) : null);
     }
+
+    /// <summary>The bytes the cgroup read from and wrote to its block devices</summary>
+    private (ulong Read, ulong Write)? ReadIo() =>
+        _ioDir is null ? null : HostStats.ParseCgroupIo(ReadText(Join(_ioDir, _v2 ? "io.stat" : "blkio.throttle.io_service_bytes")));
 
     /// <summary>The container fault rates and memory limit hits</summary>
     private void SampleMem(Dictionary<string, object?> v, double secs)

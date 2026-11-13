@@ -82,6 +82,9 @@ class HostStatsTest {
         assertArrayEquals(new long[] {900, 12}, HostStats.parseCgroupMemStat("anon 123\npgfault 900\npgmajfault 12\n"));
         assertArrayEquals(new long[] {800, 7}, HostStats.parseCgroupMemStat("cache 1\npgfault 5\ntotal_pgfault 800\ntotal_pgmajfault 7\n"));
         assertArrayEquals(new long[] {14, 3}, HostStats.parseCgroupMemEvents("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n"));
+        assertArrayEquals(new long[] {1024, 256}, HostStats.parseCgroupIO("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n"));
+        assertArrayEquals(new long[] {4096, 512}, HostStats.parseCgroupIO("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n"));
+        assertNull(HostStats.parseCgroupIO(""));
     }
 
     private void write(String rel, String text) throws IOException {
@@ -142,6 +145,9 @@ class HostStatsTest {
         write("sys/fs/cgroup/memory.current", "1048576\n");
         write("sys/fs/cgroup/memory.stat", "anon 123\npgfault 900\npgmajfault 12\n");
         write("sys/fs/cgroup/memory.events", "low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n");
+        write("sys/fs/cgroup/pids.current", "12\n");
+        write("sys/fs/cgroup/pids.max", "max\n");
+        write("sys/fs/cgroup/io.stat", "8:0 rbytes=1000 wbytes=200 rios=3 wios=4\n");
         write("sys/fs/cgroup/cpu.pressure", CGROUP_CPU_PRESSURE);
         write("sys/fs/cgroup/memory.pressure", CGROUP_MEMORY_PRESSURE);
         write("sys/fs/cgroup/io.pressure", CGROUP_IO_PRESSURE);
@@ -152,6 +158,7 @@ class HostStatsTest {
         h.prime();
         write("sys/fs/cgroup/memory.stat", "anon 123\npgfault 1500\npgmajfault 42\n");
         write("sys/fs/cgroup/memory.events", "low 0\nhigh 20\nmax 4\noom 1\noom_kill 1\n");
+        write("sys/fs/cgroup/io.stat", "8:0 rbytes=16360 wbytes=3272 rios=3 wios=4\n");
         Object[] row = new Object[Table.SYSTEM_METRICS.columns.size()];
         cg.sample(row, 15_000_000_000L);
         h.sample(row, 15);
@@ -162,6 +169,10 @@ class HostStatsTest {
         assertEquals(2.0, get(row, "container_major_faults_ps"));
         assertEquals(6L, get(row, "container_mem_high_events"));
         assertEquals(1L, get(row, "container_mem_max_events"));
+        assertEquals(12L, get(row, "container_pids"));
+        assertNull(get(row, "container_pids_max"));
+        assertEquals(1.0, get(row, "container_read_kbps"));
+        assertEquals(0.2, get(row, "container_write_kbps"));
 
         HostStats v1 = new HostStats(root.resolve("proc"), true, null);
         Object[] empty = new Object[Table.SYSTEM_METRICS.columns.size()];

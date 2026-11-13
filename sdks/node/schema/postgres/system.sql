@@ -101,7 +101,11 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     container_minor_faults_ps DOUBLE PRECISION,
     container_major_faults_ps DOUBLE PRECISION,
     container_mem_high_events BIGINT,
-    container_mem_max_events BIGINT
+    container_mem_max_events BIGINT,
+    container_pids BIGINT,
+    container_pids_max BIGINT,
+    container_read_kbps DOUBLE PRECISION,
+    container_write_kbps DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

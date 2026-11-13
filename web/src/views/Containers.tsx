@@ -383,7 +383,7 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
   ];
 }
 
-const SDK_CGROUP_ONLY = "Reported by the Go SDK from the container's cgroup. Update the SDK, or add the host agent where the platform allows it.";
+const SDK_CGROUP_ONLY = "Read from the container's cgroup by recent SDK versions. Update the SDK, or add the host agent where the platform allows it.";
 
 function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk: boolean }) {
   const list = useContainers();
