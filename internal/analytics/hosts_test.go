@@ -52,6 +52,39 @@ func TestAgentReportStoresHardware(t *testing.T) {
 	check(`SELECT name, value, unit FROM host_sensors WHERE host = 'gpu-box'`, "coretemp Package id 0", 61, "C")
 }
 
+func TestAgentReportStoresStorage(t *testing.T) {
+	s := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	rep := &agentapi.Report{Host: "disk-box", At: now.Format(time.RFC3339Nano), Storage: &agentapi.Storage{
+		At: now.Add(-time.Minute).Format(time.RFC3339Nano), Partial: true,
+		Items: []agentapi.StorageItem{
+			{Mount: "/", Kind: "dir", Path: "/var", Bytes: 6 << 30, Files: 120000},
+			{Kind: "docker_container", Path: "web", Bytes: 5 << 30},
+			{Kind: "made_up", Path: "x", Bytes: 1},
+			{Mount: "/", Kind: "dir", Path: "", Bytes: 1},
+		},
+	}}
+	rows, n := hostRows(rep, now.Format(tsLayout))
+	if n["storage"] != 2 {
+		t.Fatalf("counts: %v", n)
+	}
+	for _, tb := range rows.order {
+		for _, st := range otlpInserts(tb, rows.tables[tb], otlpSQLMaxParams, false) {
+			if err := s.db.Exec(ctx, st.SQL, st.args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	res, err := s.db.Query(ctx, `SELECT kind, path, bytes, files, partial FROM host_storage WHERE host = 'disk-box' ORDER BY bytes DESC`)
+	if err != nil || len(res.Rows) != 2 {
+		t.Fatalf("%v %v", res, err)
+	}
+	if toString(res.Rows[0][1]) != "/var" || toString(res.Rows[0][2]) != "6442450944" || toString(res.Rows[0][4]) != "1" || res.Rows[1][3] != nil {
+		t.Fatalf("rows %v", res.Rows)
+	}
+}
+
 func TestOTLPPagingAndGPU(t *testing.T) {
 	r := &otlpMetricRow{obs: map[string]map[string]otlpObs{
 		"system.paging.faults": {

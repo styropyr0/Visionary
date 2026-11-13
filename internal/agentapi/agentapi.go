@@ -43,6 +43,32 @@ type Report struct {
 	// GPUProcesses and Sensors are snapshots at report time
 	GPUProcesses []GPUProcess `json:"gpu_processes,omitempty"`
 	Sensors      []Sensor     `json:"sensors,omitempty"`
+	// Storage is what fills the disks, sent once after each scan (every few
+	// hours); nil in the reports between.
+	Storage *Storage `json:"storage,omitempty"`
+}
+
+// Storage is one scan of what uses the disks.
+type Storage struct {
+	At    string  `json:"at"`
+	TookS float64 `json:"took_s"`
+	// Partial is set when the scan stopped at its time or file budget, so the
+	// sizes are at least what they say.
+	Partial bool          `json:"partial,omitempty"`
+	Items   []StorageItem `json:"items"`
+}
+
+// StorageItem is one thing taking space. Kind is "dir" (Path is a directory
+// on Mount, its size with everything under it on the same filesystem),
+// "docker_images", "docker_build_cache" (totals), "docker_image",
+// "docker_container" (a container's writable layer, Path its name) or
+// "docker_volume".
+type StorageItem struct {
+	Mount string `json:"mount,omitempty"`
+	Kind  string `json:"kind"`
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
+	Files int64  `json:"files,omitempty"`
 }
 
 // Inventory describes the machine.

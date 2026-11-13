@@ -179,6 +179,7 @@ func (s *Server) handleMachine(w http.ResponseWriter, r *http.Request) {
 		"gpus":          snapshot("host_gpus", "created_at, gpu_index, uuid, name, vendor, util_percent, mem_util_percent, mem_used_mb, mem_total_mb, temp_c, power_w, power_limit_w, fan_percent, clock_mhz, max_clock_mhz", "gpu_index"),
 		"gpu_processes": snapshot("host_gpu_processes", "created_at, gpu_index, gpu_uuid, pid, name, used_mem_mb", "used_mem_mb DESC"),
 		"sensors":       snapshot("host_sensors", "created_at, name, kind, value, unit", "kind DESC, name"),
+		"storage":       snapshot("host_storage", "created_at, mount, kind, path, bytes, files, partial", "bytes DESC"),
 	})
 }
 

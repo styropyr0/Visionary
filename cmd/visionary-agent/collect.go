@@ -45,6 +45,7 @@ type agent struct {
 	files   *fileCollector
 	suspect *procCollector
 	docker  *dockerCollector // nil when VISIONARY_AGENT_DOCKER is off
+	storage *storageScanner  // nil when VISIONARY_AGENT_STORAGE_SCAN is off
 	sampler *visionary.HostSampler
 }
 
@@ -59,6 +60,9 @@ func newAgent(cfg config, logger *slog.Logger) *agent {
 	a := &agent{cfg: cfg, log: logger}
 	if cfg.docker != "off" {
 		a.docker = newDockerCollector(a, cfg.docker)
+	}
+	if cfg.storageEvery > 0 {
+		a.storage = &storageScanner{a: a, every: cfg.storageEvery}
 	}
 	if cfg.security {
 		a.auth = newAuthCollector(a, cfg.authLog)
@@ -108,6 +112,9 @@ func (a *agent) report(ctx context.Context, samples []agentapi.Sample) *agentapi
 		rep.ContainerSamples = a.docker.takeSamples()
 	}
 	a.hardware(ctx, rep)
+	if a.storage != nil {
+		rep.Storage = a.storage.take()
+	}
 	if a.cfg.security {
 		rep.Events = append(rep.Events, a.auth.collect(ctx)...)
 		rep.Events = append(rep.Events, a.ports.collect()...)

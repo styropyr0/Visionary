@@ -118,7 +118,11 @@ func socketCandidates(setting string) []string {
 }
 
 func (d *dockerCollector) get(ctx context.Context, path string, out any) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	return d.getWithin(ctx, 10*time.Second, path, out)
+}
+
+func (d *dockerCollector) getWithin(ctx context.Context, limit time.Duration, path string, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://engine"+path, nil)
 	if err != nil {

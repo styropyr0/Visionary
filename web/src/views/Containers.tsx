@@ -18,6 +18,7 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import "./Containers.css";
 import { AgentSteps, SetupCard, SetupHelpButton, SetupOption } from "../components/SetupCard";
+import { useMachine } from "./System.machine";
 
 /**
  * The container lives in the hash (#/containers/db-1/postgres) so it can be linked.
@@ -324,7 +325,7 @@ function ContainerChart({ path, params, title, description, viz, span, empty }: 
 }
 
 /** The facts of the container's head card. */
-function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, memLimit: number | null, sys?: Record<string, unknown>): Fact[] {
+function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, memLimit: number | null, sys?: Record<string, unknown>, layer?: Record<string, unknown>): Fact[] {
   const running = c.state === "running";
   const started = c.started_at ? new Date(String(c.started_at)) : null;
   const finished = c.finished_at ? new Date(String(c.finished_at)) : null;
@@ -379,6 +380,12 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
     },
     ...limits,
     { label: "Processes", value: toNumber(c.pids) === null ? "—" : formatCount(toNumber(c.pids)!) },
+    {
+      label: "Writable layer",
+      value: layer ? formatBytes(toNumber(layer.bytes) ?? 0) : "—",
+      sub: layer ? `scanned ${formatRelative(String(layer.created_at))}` : undefined,
+      title: "What the container wrote outside its volumes, from the agent's storage scan. Volumes are on the machine's System page.",
+    },
     { label: "Ports", value: c.ports ? String(c.ports) : "None", mono: !!c.ports, title: c.ports ? String(c.ports) : undefined },
   ];
 }
@@ -392,6 +399,8 @@ function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk:
   const events = useContainerData("events", params);
   const sysStats = useInstanceStats(sdk ? host : null);
   const sys = records(sysStats.data)[0];
+  const machine = useMachine(sdk ? "" : host);
+  const layer = records(machine.data?.storage).find((r) => r.kind === "docker_container" && r.path === name);
   const cpuLimit = toNumber(c?.cpu_limit_cores);
   const memLimit = toNumber(c?.mem_limit_mb);
 
@@ -442,7 +451,7 @@ function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk:
               }
               badge={<StateBadge state={c.state} health={c.health} />}
               meta={`Reported ${formatRelative(String(c.last_seen))}`}
-              facts={containerFacts(c, cpuLimit, memLimit, sys)}
+              facts={containerFacts(c, cpuLimit, memLimit, sys, layer)}
             />
           )}
 

@@ -80,7 +80,7 @@ var retentionKinds = []retentionKind{
 	{Key: "system", Label: "System metrics", Description: "CPU, memory, GPU and runtime samples from SDKs and host agents.", DefaultDays: 30, tables: []string{"system_metrics", "host_gpus"}},
 	{Key: "metrics", Label: "Custom metrics", Description: "Counters, gauges and histograms your services define, from the SDKs, OpenTelemetry and Prometheus.", DefaultDays: 30, tables: []string{"metrics"}},
 	{Key: "containers", Label: "Container metrics", Description: "Per-container samples, restarts, kills and health changes.", DefaultDays: 30, tables: []string{"container_metrics", "container_events"}},
-	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services, containers, GPU processes and sensors the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers", "host_gpu_processes", "host_sensors"}},
+	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services, containers, GPU processes, sensors and storage scans the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers", "host_gpu_processes", "host_sensors", "host_storage"}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled flame graphs.", DefaultDays: 30, tables: []string{"profiles"}},
 	{Key: "logs", Label: "Logs: trace to info", Description: "Application log lines below warn.", DefaultDays: 7, tables: []string{"app_logs"}, where: "severity <= 3"},
 	{Key: "logs_important", Label: "Logs: warn and above", Description: "Application log lines at warn, error and fatal.", DefaultDays: 30, tables: []string{"app_logs"}, where: "severity >= 4"},

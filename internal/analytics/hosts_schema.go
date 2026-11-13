@@ -24,19 +24,21 @@ import (
 //   - host_gpus: one row per GPU per sample
 //   - host_gpu_processes, host_sensors: snapshots per report of the
 //     processes holding GPU memory and of every temperature and fan
+//   - host_storage: what fills the disks, one set of rows per storage scan
+//     (every few hours)
 func (s *Server) hostsSchema() []string {
 	return []string{s.q.hostsTables()}
 }
 
 func (q sqlDialect) hostsTables() string {
 	// The dialects differ only in the id column and indexed text types.
-	id, key, ts, real := "INTEGER PRIMARY KEY AUTOINCREMENT", "TEXT", "TEXT", "REAL"
+	id, key, ts, real, big := "INTEGER PRIMARY KEY AUTOINCREMENT", "TEXT", "TEXT", "REAL", "INTEGER"
 	tail, index := "", "CREATE INDEX IF NOT EXISTS"
 	switch q.d {
 	case sdk.Postgres:
-		id, real = "BIGSERIAL PRIMARY KEY", "DOUBLE PRECISION"
+		id, real, big = "BIGSERIAL PRIMARY KEY", "DOUBLE PRECISION", "BIGINT"
 	case sdk.MySQL:
-		id, key, ts, real = "BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", "VARCHAR(255)", "VARCHAR(32)", "DOUBLE"
+		id, key, ts, real, big = "BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", "VARCHAR(255)", "VARCHAR(32)", "DOUBLE", "BIGINT"
 		tail, index = " CHARACTER SET utf8mb4", "CREATE INDEX" // duplicate-index errors are ignored
 	}
 	ddl := `CREATE TABLE IF NOT EXISTS host_inventory (
@@ -205,6 +207,19 @@ CREATE TABLE IF NOT EXISTS host_sensors (
     unit       TEXT
 ){tail};
 {index} idx_host_sensors_host_created ON host_sensors (host, created_at);
-{index} idx_host_sensors_created ON host_sensors (created_at)`
-	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{real}", real, "{tail}", tail, "{index}", index).Replace(ddl)
+{index} idx_host_sensors_created ON host_sensors (created_at);
+CREATE TABLE IF NOT EXISTS host_storage (
+    id         {id},
+    created_at {ts} NOT NULL,
+    host       {key} NOT NULL,
+    mount      TEXT,
+    kind       {key} NOT NULL,
+    path       TEXT NOT NULL,
+    bytes      {big} NOT NULL,
+    files      {big},
+    partial    INTEGER
+){tail};
+{index} idx_host_storage_host_created ON host_storage (host, created_at);
+{index} idx_host_storage_created ON host_storage (created_at)`
+	return strings.NewReplacer("{id}", id, "{key}", key, "{ts}", ts, "{real}", real, "{big}", big, "{tail}", tail, "{index}", index).Replace(ddl)
 }

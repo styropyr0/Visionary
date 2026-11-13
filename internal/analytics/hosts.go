@@ -81,7 +81,7 @@ func (h *hostsState) noteInterval(host string, sec float64) {
 func init() {
 	// The analyst may read the host tables. security_events is shared with
 	// the server's own detectors.
-	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS", "HOST_CONTAINERS", "CONTAINER_METRICS", "CONTAINER_EVENTS", "HOST_GPUS", "HOST_GPU_PROCESSES", "HOST_SENSORS"} {
+	for _, t := range []string{"HOST_INVENTORY", "HOST_PROCESSES", "HOST_MOUNTS", "HOST_UNITS", "SECURITY_EVENTS", "HOST_CONTAINERS", "CONTAINER_METRICS", "CONTAINER_EVENTS", "HOST_GPUS", "HOST_GPU_PROCESSES", "HOST_SENSORS", "HOST_STORAGE"} {
 		allowedTables[t] = true
 	}
 }
@@ -108,6 +108,7 @@ Table host_inventory: one row per host. host (= system_metrics.instance), servic
 Snapshot tables, one set of rows per host per report (about a minute); for the current state use each host's latest created_at:
 - host_processes: created_at, host, pid, name, username, cpu_percent (percent of one core), rss_mb, cmdline. The top processes by CPU and by memory.
 - host_mounts: created_at, host, mount, device, fstype, used_percent, free_gb, total_gb, inodes_percent.
+- host_storage: created_at, host, mount, kind, path, bytes, files, partial. What fills the disks, one set of rows per scan (every few hours); latest scan = MAX(created_at) per host. kind dir is a directory on mount (two levels deep, a parent's bytes include its children's); docker_images and docker_build_cache are totals; docker_image, docker_container (writable layer, path = container name) and docker_volume are one each. partial = 1 when the scan hit its budget.
 - host_units: created_at, host, unit, state ('active', 'inactive', 'failed', ...), sub. Failed systemd services plus the watched ones.
 - host_gpu_processes: created_at, host, gpu_index, gpu_uuid, pid, name, used_mem_mb. Processes holding GPU memory (NVIDIA).
 - host_sensors: created_at, host, name (e.g. 'coretemp Package id 0'), kind ('temperature' or 'fan'), value, unit ('C' or 'rpm').

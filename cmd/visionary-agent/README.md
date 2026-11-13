@@ -79,6 +79,15 @@ none runs when `VISIONARY_AGENT_SECURITY` is off):
 | `VISIONARY_AGENT_PROCESS_CHECKS=off` | `-process-checks=false` | suspicious processes |
 | `VISIONARY_AGENT_CONTAINER_RISKS=off` | `-container-risks=false` | privileged, root and new-image containers |
 
+Every 6 hours the agent finds what fills each disk: the biggest directories
+two levels deep, and what Docker's images, containers, volumes and build
+cache take (from the engine's `/system/df`). The walk runs on one thread at
+nice 19 in the idle I/O class, paced to about 50,000 files a second, and
+stops after 10 minutes or 2 million files. It skips `/proc`, `/sys`, `/dev`,
+`/run` and the container runtimes' directories, and stays on each mount's own
+filesystem. `VISIONARY_AGENT_STORAGE_SCAN=12h` (`-storage-scan=12h`) changes
+how often, `off` stops it.
+
 `VISIONARY_AGENT_GPU=off` (`-gpu=false`) stops GPU readings, so nvidia-smi
 never runs. Counting sockets in CLOSE_WAIT walks `/proc/net/tcp`, so it is
 skipped on hosts with more than 20,000 sockets in use.

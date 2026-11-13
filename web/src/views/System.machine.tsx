@@ -12,6 +12,7 @@ import { Panel } from "../components/Panel";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { Section } from "../components/Section";
 import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
+import { MachineStorage } from "./System.storage";
 
 /**
  * What the host agent adds to System: the machine's details, every mount,
@@ -45,6 +46,7 @@ interface MachineData {
   gpus?: Result;
   gpu_processes?: Result;
   sensors?: Result;
+  storage?: Result;
 }
 
 /** The agent's machines; an error (an older server) reads as none. */
@@ -206,6 +208,8 @@ export function MachineSnapshots({ host }: { host: string }) {
           />
         }
       />
+
+      <MachineStorage storage={d.storage} mounts={d.mounts} />
 
       {d.sensors && d.sensors.rows.length > 0 && <Section title="Sensors" text="Every temperature and fan the kernel exposes, from the latest agent report. The CPU temperature chart above uses the hottest CPU package or core sensor." />}
       {d.sensors && d.sensors.rows.length > 0 && (

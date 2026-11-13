@@ -374,6 +374,10 @@ export const GUIDE: GuideSection[] = [
         text: "With NVIDIA (nvidia-smi, Linux and Windows) or AMD (amdgpu, Linux) GPUs, a **GPUs** section appears. With the host agent each GPU gets a card with its use, memory, temperature and power over time, and a table lists the processes holding GPU memory. `VISIONARY_AGENT_GPU=off` or `VISIONARY_SYSTEM_GPU=false` turns it off.",
       },
       {
+        title: "See what fills a disk",
+        text: "With the host agent, **Storage** shows each disk's biggest directories as a bar, with what is inside the largest of them, and what Docker's images, containers, volumes and build cache take. The agent scans every 6 hours on one thread at the lowest CPU and disk priority, so it does not slow the machine; `VISIONARY_AGENT_STORAGE_SCAN=12h` changes how often, `off` stops it. A container's own writable layer shows on its page in Containers.",
+      },
+      {
         title: "Investigate a spike",
         text: "**Notable moments** lists the busiest intervals. **Investigate** opens Explore with the question asked for you.",
       },

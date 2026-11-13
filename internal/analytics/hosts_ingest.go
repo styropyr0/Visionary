@@ -33,6 +33,7 @@ const (
 	hostMaxContainerSamples = 20000
 	hostMaxGPUs             = 64
 	hostMaxSensors          = 500
+	hostMaxStorage          = 400
 )
 
 var (
@@ -44,6 +45,7 @@ var (
 		"mem_used_mb", "mem_total_mb", "temp_c", "power_w", "power_limit_w", "fan_percent", "clock_mhz", "max_clock_mhz"}}
 	hostGPUProcTable = &otlpTable{"host_gpu_processes", []string{"created_at", "host", "gpu_index", "gpu_uuid", "pid", "name", "used_mem_mb"}}
 	hostSensorTable  = &otlpTable{"host_sensors", []string{"created_at", "host", "name", "kind", "value", "unit"}}
+	hostStorageTable = &otlpTable{"host_storage", []string{"created_at", "host", "mount", "kind", "path", "bytes", "files", "partial"}}
 	securityTable    = &otlpTable{"security_events", []string{"created_at", "source", "kind", "severity", "host", "service", "actor", "ip", "target", "detail", "count"}}
 )
 
@@ -154,7 +156,7 @@ func reportTime(v string, now time.Time) (string, bool) {
 // counts what it kept per kind.
 func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 	rows := &otlpRows{}
-	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0, "gpus": 0, "gpu_processes": 0, "sensors": 0}
+	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0, "gpus": 0, "gpu_processes": 0, "sensors": 0, "storage": 0}
 	host, service := rep.Host, otlpNullStr(clip(rep.Service, 128))
 	runtime := otlpNullStr(clip(rep.Runtime, 128))
 	now := time.Now()
@@ -241,8 +243,39 @@ func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 			otlpNullStr(detail), int64(count)})
 		n["events"]++
 	}
+	storageRows(rep, at, rows, n)
 	containerRows(rep, at, rows, n)
 	return rows, n
+}
+
+// storageKinds are the StorageItem kinds an agent may report.
+var storageKinds = map[string]bool{"dir": true, "docker_images": true, "docker_image": true, "docker_container": true, "docker_volume": true, "docker_build_cache": true}
+
+func storageRows(rep *agentapi.Report, at string, rows *otlpRows, n map[string]int) {
+	st := rep.Storage
+	if st == nil {
+		return
+	}
+	ts, ok := reportTime(st.At, time.Now())
+	if !ok {
+		ts = at
+	}
+	partial := int64(0)
+	if st.Partial {
+		partial = 1
+	}
+	for _, it := range capped(st.Items, hostMaxStorage) {
+		path := clip(it.Path, 512)
+		if !storageKinds[it.Kind] || path == "" || it.Bytes < 0 {
+			continue
+		}
+		var files any
+		if it.Files > 0 {
+			files = it.Files
+		}
+		rows.add(hostStorageTable, []any{ts, rep.Host, otlpNullStr(clip(it.Mount, 512)), it.Kind, path, it.Bytes, files, partial})
+		n["storage"]++
+	}
 }
 
 // hostSeverity grades an agent finding.

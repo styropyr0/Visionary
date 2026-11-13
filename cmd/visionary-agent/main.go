@@ -69,6 +69,8 @@ type config struct {
 	containerRisks bool
 
 	gpu bool
+	// how often to scan what fills the disks; 0 is off
+	storageEvery time.Duration
 }
 
 func main() {
@@ -114,6 +116,7 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&c.location, "location", os.Getenv("VISIONARY_AGENT_LOCATION"), "run the uptime checks of this location instead of reporting the host; VISIONARY_KEY is then the location's key (VISIONARY_AGENT_LOCATION)")
 	fs.StringVar(&c.allowPrivate, "allow-private", os.Getenv("VISIONARY_AGENT_ALLOW_PRIVATE"), "true or false: may this location's checks reach private and loopback addresses; unset follows the server's setting (VISIONARY_AGENT_ALLOW_PRIVATE)")
 	fs.IntVar(&c.browserWorkers, "browser-workers", envInt("VISIONARY_AGENT_BROWSER_WORKERS", 1), "browser checks run at once in location mode (VISIONARY_AGENT_BROWSER_WORKERS)")
+	storage := fs.String("storage-scan", os.Getenv("VISIONARY_AGENT_STORAGE_SCAN"), `how often to find what fills the disks, at the lowest priority: a duration such as 6h, or "off" (VISIONARY_AGENT_STORAGE_SCAN, default 6h)`)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -123,6 +126,11 @@ func loadConfig(args []string) (config, error) {
 		return c, flag.ErrHelp
 	}
 	c.units, c.disks, c.logs = splitList(*units), splitList(*disks), splitList(*logs)
+	every, err := parseScanEvery(*storage)
+	if err != nil {
+		return c, err
+	}
+	c.storageEvery = every
 	c.url = strings.TrimRight(strings.TrimSpace(c.url), "/")
 	u, err := url.Parse(c.url)
 	if c.url == "" || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -183,9 +191,12 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if cfg.security {
 		go a.updates.run(ctx)
 	}
+	if a.storage != nil {
+		go a.storage.run(ctx)
+	}
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
 		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"), "gpu", cfg.gpu,
-		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"))
+		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"), "storage_scan", scanEveryText(cfg.storageEvery))
 
 	sampleT := time.NewTicker(cfg.interval)
 	defer sampleT.Stop()
