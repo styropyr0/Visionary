@@ -132,6 +132,16 @@ type ruleSignal struct {
 	summary string
 }
 
+// An empty group value is traffic nobody is known for, such as signed-out requests by user
+func hasEmpty(values map[string]string) bool {
+	for _, v := range values {
+		if v == "" {
+			return true
+		}
+	}
+	return false
+}
+
 func groupKey(fields []string, values map[string]string) string {
 	parts := make([]string, 0, len(fields))
 	for _, f := range fields {
@@ -236,7 +246,7 @@ func (s *Server) evalCounts(ctx context.Context, r *detectionRule, run *ruleRun,
 			values[g] = toString(row[i])
 		}
 		n, nNew, m := toInt(row[ng]), toInt(row[ng+1]), toInt(row[ng+2])
-		if n == 0 || m < int64(r.Threshold) {
+		if n == 0 || m < int64(r.Threshold) || hasEmpty(values) {
 			continue
 		}
 		key := groupKey(r.GroupBy, values)
@@ -500,6 +510,9 @@ func (s *Server) evalSequence(ctx context.Context, r *detectionRule, cursor, to 
 		values := map[string]string{}
 		for i, g := range r.GroupBy {
 			values[g] = toString(row[i])
+		}
+		if hasEmpty(values) {
+			continue
 		}
 		cands = append(cands, values)
 	}

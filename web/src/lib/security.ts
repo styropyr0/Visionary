@@ -335,8 +335,20 @@ export interface RuleView extends DetectionRule {
   every: string;
 }
 
+/** The rule library's groups, in the order the page shows them. */
+export const RULE_CATEGORIES = [
+  { key: "signin", label: "Sign-in" },
+  { key: "web", label: "Web attacks" },
+  { key: "data", label: "Abuse and data" },
+  { key: "hosts", label: "Hosts" },
+  { key: "containers", label: "Containers" },
+  { key: "logs", label: "App logs" },
+  { key: "visionary", label: "Visionary" },
+];
+
 export interface RuleTemplate {
   id: string;
+  category: string;
   name: string;
   description: string;
   severity: FindingSeverity;

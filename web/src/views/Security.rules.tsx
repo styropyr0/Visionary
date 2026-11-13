@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { EyeOff, FlaskConical, Pencil, Plus, Power, Trash2, UserRound, X } from "lucide-react";
+import { EyeOff, FlaskConical, Pencil, Plus, Power, Search, Trash2, UserRound, X } from "lucide-react";
 import { alertsApi } from "../lib/alerts";
 import { logsHref } from "../lib/applogs";
 import { traceHref } from "../lib/traces";
@@ -10,6 +10,7 @@ import { useSession } from "../lib/team";
 import { formatLogTime } from "../lib/time";
 import {
   LOGIC_LABELS,
+  RULE_CATEGORIES,
   SOURCE_LABELS,
   mitreHref,
   mitreLabel,
@@ -104,8 +105,19 @@ export function RulesTab({ openRule }: { openRule?: number }) {
   const q = useQuery(`sec-rules#${tick}-${run}`, (signal) => rulesApi.list(signal));
   const [editing, setEditing] = useState<Partial<DetectionRule> | null>(null);
   const [busy, setBusy] = useState("");
+  const [category, setCategory] = useState("");
+  const [find, setFind] = useState("");
   const reload = () => setRun((n) => n + 1);
   const data = q.data;
+  const templates = useMemo(() => {
+    const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return (data?.templates ?? []).filter((t) => {
+      if (category && t.category !== category) return false;
+      const text = `${t.name} ${t.description} ${t.technique}`.toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
+  }, [data, category, find]);
+  const addable = templates.filter((t) => !t.rule_id);
 
   useEffect(() => {
     if (!openRule || !data) return;
@@ -134,6 +146,23 @@ export function RulesTab({ openRule }: { openRule?: number }) {
       toast("err", errMessage(e));
     } finally {
       setBusy("");
+    }
+  };
+
+  const turnOnAll = async () => {
+    setBusy("all");
+    let done = 0;
+    try {
+      for (const t of addable) {
+        await rulesApi.fromTemplate(t.id);
+        done++;
+      }
+      toast("ok", `Turned on ${done} rule${done === 1 ? "" : "s"}.`);
+    } catch (e) {
+      toast("err", `${done ? `Turned on ${done}, then: ` : ""}${errMessage(e)}`);
+    } finally {
+      setBusy("");
+      reload();
     }
   };
 
@@ -232,9 +261,36 @@ export function RulesTab({ openRule }: { openRule?: number }) {
         {rules.length > 0 && <DataTable result={result} columns={columns} sortable={false} maxHeight={520} rowKey={(r) => r[0]} onRowClick={(row) => setEditing(byId.get(Number(row[0]))!)} />}
       </section>
 
-      <Section title="Rule library" text="Ready-made rules, each tagged with its MITRE ATT&CK tactic and technique. Turn one on as it is, or open it to change it first." />
+      <Section
+        title="Rule library"
+        text="Ready-made rules, each tagged with its MITRE ATT&CK tactic and technique. Turn one on as it is, open it to change it first, or turn on a whole group. Each rule on is one small query per run."
+      />
+      <div className="span-12 filter-row sec-library-filters">
+        <div className="segmented" role="radiogroup" aria-label="Group">
+          {[{ key: "", label: "All" }, ...RULE_CATEGORIES].map((c) => {
+            const n = c.key ? (data?.templates ?? []).filter((t) => t.category === c.key).length : (data?.templates.length ?? 0);
+            return (
+              <button type="button" key={c.key} role="radio" aria-checked={category === c.key} className={category === c.key ? "on" : ""} onClick={() => setCategory(c.key)}>
+                {c.label}
+                <span className="dim">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="search">
+          <Search size={14} />
+          <input className="input" value={find} placeholder="Search rules and techniques" onChange={(e) => setFind(e.target.value)} aria-label="Search the rule library" />
+        </div>
+        {can("edit") && category && addable.length > 0 && (
+          <button type="button" className="btn sm" disabled={busy !== ""} onClick={() => void turnOnAll()}>
+            <Power size={14} />
+            {busy === "all" ? "Turning on…" : `Turn on all ${addable.length}`}
+          </button>
+        )}
+      </div>
+      {data && templates.length === 0 && <div className="span-12 panel-state">No rules match.</div>}
       <div className="span-12 sec-library">
-        {(data?.templates ?? []).map((t) => (
+        {templates.map((t) => (
           <article key={t.id} className="sec-template">
             <div className="sec-template-head">
               <span className={`sec-sev ${t.severity}`}>{titleCase(t.severity)}</span>
