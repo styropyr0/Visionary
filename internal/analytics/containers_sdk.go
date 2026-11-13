@@ -95,7 +95,7 @@ func (s *Server) sdkContainers(ctx context.Context, tr timeRange) [][]any {
 	covered := s.agentCovers(ctx)
 	snap, err := s.db.Query(ctx, `
 SELECT m.instance, COALESCE(m.service, m.instance), m.created_at, m.interval_s, m.uptime_s, m.container_cpu_cores, m.container_cpu_limit, m.cpu_count,
-  m.container_mem_used_mb, m.container_mem_limit_mb, m.host_mem_total_mb
+  m.container_mem_used_mb, m.container_mem_limit_mb, m.host_mem_total_mb, m.container_pids
 FROM system_metrics AS m
 JOIN (SELECT instance, MAX(created_at) AS at FROM system_metrics WHERE created_at >= ? AND container_mem_used_mb IS NOT NULL GROUP BY instance) AS l
   ON l.instance = m.instance AND l.at = m.created_at
@@ -150,7 +150,7 @@ WHERE created_at >= ? AND created_at < ? AND container_oom_kills > 0 GROUP BY in
 		events := ooms[inst]
 		row := []any{
 			inst, r[1], nil, nil, state, nil, nil, nil, nil, started, finished,
-			cpuPct, cores, limit, r[8], memLimit, percentOf(r[8], memLimit, nil), nil, nil,
+			cpuPct, cores, limit, r[8], memLimit, percentOf(r[8], memLimit, nil), r[11], nil,
 			events, events, toString(r[2]), "sdk",
 		}
 		svc := toString(r[1])
@@ -215,6 +215,9 @@ GROUP BY {{t}}, ` + sdkSeries + ` ORDER BY t`
 FROM system_metrics WHERE ` + sdkWindow + ` AND ` + col + ` IS NOT NULL
 GROUP BY t ORDER BY t`
 	}
+	// The SDK reads the network inside the container's own namespace, so it
+	// is the container's; outside a container it is the machine's.
+	const inCtr = "container_mem_used_mb IS NOT NULL AND net_rx_kbps"
 	return map[string]containerPanel{
 		"cpu": {perContainer(q.round("AVG("+sdkCPUPercent+")", 1), "container_cpu_cores"),
 			one(q.round("AVG("+sdkCPUPercent+")", 1)+` AS avg_cpu, `+q.round("MAX("+sdkCPUPercent+")", 1)+` AS peak_cpu`, "container_cpu_cores")},
@@ -225,6 +228,11 @@ GROUP BY t ORDER BY t`
 			one(q.round("AVG("+sdkMemPercent+")", 1)+` AS avg_used, `+q.round("MAX("+sdkMemPercent+")", 1)+` AS peak_used`, "container_mem_used_mb")},
 		"throttled": {perContainer(q.round("AVG(container_cpu_throttled_percent)", 1), "container_cpu_throttled_percent"),
 			one(q.round("AVG(container_cpu_throttled_percent)", 1)+` AS throttled`, "container_cpu_throttled_percent")},
+		"network": {perContainer(q.round("AVG(COALESCE(net_rx_kbps, 0) + COALESCE(net_tx_kbps, 0)) * 1024", 0), inCtr),
+			one(q.round("AVG(net_rx_kbps) * 1024", 0)+` AS received, `+q.round("AVG(net_tx_kbps) * 1024", 0)+` AS sent`, inCtr)},
+		"disk": {perContainer(q.round("AVG(COALESCE(container_read_kbps, 0) + COALESCE(container_write_kbps, 0)) * 1024", 0), "container_read_kbps"),
+			one(q.round("AVG(container_read_kbps) * 1024", 0)+` AS read_bytes, `+q.round("AVG(container_write_kbps) * 1024", 0)+` AS written_bytes`, "container_read_kbps")},
+		"pids": {perContainer("MAX(container_pids)", "container_pids"), one(`MAX(container_pids) AS pids`, "container_pids")},
 	}
 }
 

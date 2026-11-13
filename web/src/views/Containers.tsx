@@ -55,6 +55,13 @@ function useContainerData(path: string, params: Record<string, string>) {
   return useQuery<Result>(`ctr-${path}?${qs}#${tick}`, (signal) => api<Result>(`/api/containers/${path}?${qs}`, { signal }));
 }
 
+/** The latest System numbers of an SDK instance: its filesystem, open files and connections. */
+function useInstanceStats(instance: string | null) {
+  const { resolved, tick } = useApp();
+  const qs = rangeQuery(resolved.from, resolved.to, { instance: instance ?? "" });
+  return useQuery<Result>(instance ? `ctr-sys-stats?${qs}#${tick}` : null, (signal) => api<Result>(`/api/system/stats?${qs}`, { signal }));
+}
+
 /** A result's rows as objects. */
 function records(r: Result | undefined): Record<string, unknown>[] {
   if (!r) return [];
@@ -317,7 +324,7 @@ function ContainerChart({ path, params, title, description, viz, span, empty }: 
 }
 
 /** The facts of the container's head card. */
-function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, memLimit: number | null): Fact[] {
+function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, memLimit: number | null, sys?: Record<string, unknown>): Fact[] {
   const running = c.state === "running";
   const started = c.started_at ? new Date(String(c.started_at)) : null;
   const finished = c.finished_at ? new Date(String(c.finished_at)) : null;
@@ -338,7 +345,28 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
   if (c.source === "sdk") {
     // The SDK sees its own process and cgroup, not the engine: no restarts, exits or ports.
     const ooms = toNumber(c.events) ?? 0;
-    return [{ ...up, label: running ? "Process up for" : "Stopped reporting" }, ...limits, { label: "Out-of-memory kills", value: formatCount(ooms), tone: ooms > 0 ? "bad" : undefined }];
+    const n = (k: string) => toNumber(sys?.[k]);
+    const [diskUsed, diskFree, fds, fdsMax, tcp] = [n("disk_now"), n("disk_free_gb"), n("fds_now"), n("fds_limit"), n("tcp_now")];
+    return [
+      { ...up, label: running ? "Process up for" : "Stopped reporting" },
+      ...limits,
+      { label: "Out-of-memory kills", value: formatCount(ooms), tone: ooms > 0 ? "bad" : undefined },
+      { label: "Processes", value: toNumber(c.pids) === null ? "—" : formatCount(toNumber(c.pids)!), title: "Processes and threads in the container's cgroup" },
+      {
+        label: "Filesystem",
+        value: diskUsed === null ? "—" : `${diskUsed.toFixed(0)}% used`,
+        sub: diskFree === null ? undefined : `${formatBytes(diskFree * 1073741824)} free`,
+        tone: diskUsed !== null && diskUsed >= 90 ? "bad" : diskUsed !== null && diskUsed >= 80 ? "warn" : undefined,
+        title: "The filesystem the service writes to. In a container it usually sits on the machine's disk.",
+      },
+      {
+        label: "Open files",
+        value: fds === null ? "—" : formatCount(fds),
+        sub: fdsMax ? `of ${formatCount(fdsMax)}` : undefined,
+        tone: fds !== null && fdsMax ? (fds / fdsMax >= 0.9 ? "bad" : fds / fdsMax >= 0.75 ? "warn" : undefined) : undefined,
+      },
+      { label: "TCP connections", value: tcp === null ? "—" : formatCount(tcp) },
+    ];
   }
   return [
     up,
@@ -355,11 +383,15 @@ function containerFacts(c: Record<string, unknown>, cpuLimit: number | null, mem
   ];
 }
 
+const SDK_CGROUP_ONLY = "Reported by the Go SDK from the container's cgroup. Update the SDK, or add the host agent where the platform allows it.";
+
 function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk: boolean }) {
   const list = useContainers();
   const c = records(list.data).find((r) => r.host === host && r.name === name && (r.source === "sdk") === sdk);
   const params: Record<string, string> = sdk ? { host, container: name, source: "sdk" } : { host, container: name };
   const events = useContainerData("events", params);
+  const sysStats = useInstanceStats(sdk ? host : null);
+  const sys = records(sysStats.data)[0];
   const cpuLimit = toNumber(c?.cpu_limit_cores);
   const memLimit = toNumber(c?.mem_limit_mb);
 
@@ -410,7 +442,7 @@ function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk:
               }
               badge={<StateBadge state={c.state} health={c.health} />}
               meta={`Reported ${formatRelative(String(c.last_seen))}`}
-              facts={containerFacts(c, cpuLimit, memLimit)}
+              facts={containerFacts(c, cpuLimit, memLimit, sys)}
             />
           )}
 
@@ -421,15 +453,20 @@ function ContainerDetail({ host, name, sdk }: { host: string; name: string; sdk:
           <ContainerChart path="memory_percent" params={params} title="Memory of limit" description="At 100% the kernel kills the container's process (out of memory)." viz={{ type: "timeseries", x: "t", y: ["avg_used", "peak_used"], unit: "percent" }} span="span-6" />
 
           {sdk ? (
-            <Section
-              title="I/O"
-              text={
-                <>
-                  Network, disk and the process's own numbers are on the <a href={`#/system?instance=${encodeURIComponent(host)}`}>System view of {host}</a>. State, health and
-                  restarts need the host agent, which a container platform does not let run.
-                </>
-              }
-            />
+            <>
+              <Section
+                title="I/O and processes"
+                text={
+                  <>
+                    Network is read inside the container, so it is the container's own. Disk and processes come from its cgroup. The runtime and database pool are on the{" "}
+                    <a href={`#/system?instance=${encodeURIComponent(host)}`}>System view of {host}</a>. State, health and restarts need the host agent.
+                  </>
+                }
+              />
+              <ContainerChart path="network" params={params} title="Network" description="Bytes received and sent per second." viz={{ type: "timeseries", x: "t", y: ["received", "sent"], unit: "bytes_per_s" }} span="span-4" />
+              <ContainerChart path="disk" params={params} title="Disk" description="Bytes the container read and wrote per second, over all its devices." viz={{ type: "timeseries", x: "t", y: ["read_bytes", "written_bytes"], unit: "bytes_per_s" }} span="span-4" empty={SDK_CGROUP_ONLY} />
+              <ContainerChart path="pids" params={params} title="Processes" description="Processes and threads in the container." viz={{ type: "timeseries", x: "t", y: ["pids"], unit: "count" }} span="span-4" empty={SDK_CGROUP_ONLY} />
+            </>
           ) : (
             <>
               <Section title="I/O" text="Rates between two samples. Containers on the host network report no network of their own." />

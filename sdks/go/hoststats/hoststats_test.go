@@ -81,6 +81,17 @@ func TestParsers(t *testing.T) {
 	if !ok || f != 800 || m != 7 {
 		t.Errorf("memory.stat v1: %d %d", f, m)
 	}
+	r, w, ok := ParseCgroupIO([]byte("8:0 rbytes=1000 wbytes=200 rios=3 wios=4 dbytes=0 dios=0\n253:1 rbytes=24 wbytes=56 rios=1 wios=1 dbytes=0 dios=0\n"))
+	if !ok || r != 1024 || w != 256 {
+		t.Errorf("io.stat: %d %d", r, w)
+	}
+	r, w, ok = ParseCgroupIO([]byte("8:0 Read 4096\n8:0 Write 512\n8:0 Sync 0\n8:0 Total 4608\nTotal 4608\n"))
+	if !ok || r != 4096 || w != 512 {
+		t.Errorf("blkio: %d %d", r, w)
+	}
+	if _, _, ok := ParseCgroupIO([]byte("")); ok {
+		t.Error("empty io.stat parsed")
+	}
 	h, mx, ok := ParseCgroupMemEvents([]byte("low 0\nhigh 14\nmax 3\noom 1\noom_kill 1\n"))
 	if !ok || h != 14 || mx != 3 {
 		t.Errorf("memory.events: %d %d", h, mx)

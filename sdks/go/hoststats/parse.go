@@ -270,6 +270,47 @@ func ParseCgroupMemEvents(b []byte) (high, max uint64, ok bool) {
 	return high, max, n == 2
 }
 
+// ParseCgroupIO sums the bytes read and written over a cgroup's devices: v2
+// io.stat ("8:0 rbytes=1 wbytes=2 ...") or v1 blkio.throttle.io_service_bytes
+// ("8:0 Read 1", "8:0 Write 2")
+func ParseCgroupIO(b []byte) (read, write uint64, ok bool) {
+	for len(b) > 0 {
+		var line []byte
+		line, b = nextLine(b)
+		f := bytes.Fields(line)
+		if len(f) == 3 && (string(f[1]) == "Read" || string(f[1]) == "Write") {
+			n, err := strconv.ParseUint(string(f[2]), 10, 64)
+			if err != nil {
+				continue
+			}
+			if string(f[1]) == "Read" {
+				read += n
+			} else {
+				write += n
+			}
+			ok = true
+			continue
+		}
+		for _, kv := range f[min(len(f), 1):] {
+			k, v, found := bytes.Cut(kv, []byte("="))
+			if !found {
+				continue
+			}
+			n, err := strconv.ParseUint(string(v), 10, 64)
+			if err != nil {
+				continue
+			}
+			switch string(k) {
+			case "rbytes":
+				read, ok = read+n, true
+			case "wbytes":
+				write, ok = write+n, true
+			}
+		}
+	}
+	return read, write, ok
+}
+
 // ParseCPUInfoMHz averages the "cpu MHz" lines of /proc/cpuinfo
 func ParseCPUInfoMHz(b []byte) (float64, bool) {
 	sum, n := 0.0, 0

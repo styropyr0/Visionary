@@ -20,6 +20,8 @@ type cgroupReader struct {
 	cpuDir   string // v2: the cgroup; v1: the cpu controller's directory
 	cpuAcct  string // v1: the cpuacct controller's directory
 	memDir   string
+	pidsDir  string
+	ioDir    string
 	inCtr    bool
 	last     time.Time
 	usage    uint64 // CPU time, ns
@@ -29,6 +31,29 @@ type cgroupReader struct {
 	oomsOK   bool // the kernel reports OOM kills (v1 only on newer kernels)
 	primed   bool
 	mem      cgroupMem
+	io       cgroupIO
+}
+
+// cgroupIO is the bytes the cgroup read from and wrote to its block devices
+type cgroupIO struct {
+	read, write uint64
+	ok          bool
+}
+
+func (c *cgroupReader) readIO() cgroupIO {
+	file := "io.stat"
+	if !c.v2 {
+		file = "blkio.throttle.io_service_bytes"
+	}
+	if c.ioDir == "" {
+		return cgroupIO{}
+	}
+	b, err := os.ReadFile(filepath.Join(c.ioDir, file))
+	if err != nil {
+		return cgroupIO{}
+	}
+	r, w, ok := hoststats.ParseCgroupIO(b)
+	return cgroupIO{r, w, ok}
 }
 
 // cgroupMem holds the memory.stat faults and memory.events limit hits
@@ -86,10 +111,14 @@ func newCgroupReader() *cgroupReader {
 		switch {
 		case f[0] == "0" && ctrls == "":
 			if dir := cgroupDir("/sys/fs/cgroup", path); exists(filepath.Join(dir, "cpu.stat")) {
-				c.v2, c.cpuDir, c.memDir = true, dir, dir
+				c.v2, c.cpuDir, c.memDir, c.pidsDir, c.ioDir = true, dir, dir, dir, dir
 			}
 		case hasController(ctrls, "memory"):
 			c.memDir = cgroupDir("/sys/fs/cgroup/memory", path)
+		case hasController(ctrls, "pids"):
+			c.pidsDir = cgroupDir("/sys/fs/cgroup/pids", path)
+		case hasController(ctrls, "blkio"):
+			c.ioDir = cgroupDir("/sys/fs/cgroup/"+ctrls, path)
 		case hasController(ctrls, "cpu") || hasController(ctrls, "cpuacct"):
 			dir := cgroupDir("/sys/fs/cgroup/"+ctrls, path)
 			if hasController(ctrls, "cpu") {
@@ -255,6 +284,7 @@ func (c *cgroupReader) memUsed() (uint64, bool) {
 func (c *cgroupReader) prime() {
 	c.usage, c.periods, c.throttle, c.ooms, c.oomsOK = c.counters()
 	c.mem = c.readMem()
+	c.io = c.readIO()
 	c.last, c.primed = time.Now(), true
 }
 
@@ -277,7 +307,12 @@ func (c *cgroupReader) sample(v map[string]any) {
 			v["container_oom_kills"] = int64(ooms - c.ooms)
 		}
 		c.sampleMem(v, secs)
+		if io := c.readIO(); io.ok && c.io.ok && io.read >= c.io.read && io.write >= c.io.write {
+			v["container_read_kbps"] = round(float64(io.read-c.io.read)/1024/secs, 1)
+			v["container_write_kbps"] = round(float64(io.write-c.io.write)/1024/secs, 1)
+		}
 	}
+	c.io = c.readIO()
 	c.usage, c.periods, c.throttle, c.ooms, c.oomsOK, c.last, c.primed = usage, periods, throttled, ooms, oomsOK, now, true
 	if cpus > 0 {
 		v["container_cpu_limit"] = round(cpus, 2)
@@ -287,5 +322,13 @@ func (c *cgroupReader) sample(v map[string]any) {
 	}
 	if memLimit > 0 {
 		v["container_mem_limit_mb"] = round(mb(memLimit), 1)
+	}
+	if c.pidsDir != "" {
+		if n, ok := readUint(filepath.Join(c.pidsDir, "pids.current")); ok {
+			v["container_pids"] = int64(n)
+		}
+		if n, ok := readUint(filepath.Join(c.pidsDir, "pids.max")); ok { // "max" fails to parse
+			v["container_pids_max"] = int64(n)
+		}
 	}
 }

@@ -119,7 +119,11 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     gpu_count INTEGER,
     gpu_util_percent REAL,
     gpu_mem_percent REAL,
-    gpu_temp_c REAL
+    gpu_temp_c REAL,
+    container_pids INTEGER,
+    container_pids_max INTEGER,
+    container_read_kbps REAL,
+    container_write_kbps REAL
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_instance_created ON system_metrics (instance, created_at);

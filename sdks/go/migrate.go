@@ -99,6 +99,10 @@ var AddedSystemColumns = []Column{
 	{"gpu_util_percent", "real"},
 	{"gpu_mem_percent", "real"},
 	{"gpu_temp_c", "real"},
+	{"container_pids", "int"},
+	{"container_pids_max", "int"},
+	{"container_read_kbps", "real"},
+	{"container_write_kbps", "real"},
 }
 
 // AddedRequestColumns are api_logs columns beyond the original set, in insert

@@ -998,7 +998,7 @@ export const HELP: Record<Route, PageHelp> = {
     read: [
       "CPU is a percent of the container's limit, or of all the machine's CPUs when it has none.",
       "Throttling means the container wanted more CPU than its limit allowed.",
-      "Containers reported by an SDK show their own usage only; restarts and exits need the host agent.",
+      "Containers reported by an SDK show their own CPU, memory, network, disk and processes; restarts and exits need the host agent.",
     ],
     setup: ["agent", "sdk"],
   },

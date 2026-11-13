@@ -119,7 +119,11 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     gpu_count BIGINT,
     gpu_util_percent DOUBLE,
     gpu_mem_percent DOUBLE,
-    gpu_temp_c DOUBLE
+    gpu_temp_c DOUBLE,
+    container_pids BIGINT,
+    container_pids_max BIGINT,
+    container_read_kbps DOUBLE,
+    container_write_kbps DOUBLE
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_system_metrics_created_at ON system_metrics (created_at);
 CREATE INDEX idx_system_metrics_instance_created ON system_metrics (instance, created_at);
