@@ -164,6 +164,10 @@ VALUES (?, ?, 'github', ?, ?, 'main', ?, ?, ?, ?, ?, 'failed', 10, ?)`, ts, "run
 		exec(`INSERT INTO host_gpus (created_at, host, gpu_index, uuid, name, vendor, util_percent, mem_used_mb, mem_total_mb, temp_c) VALUES (?, ?, 0, ?, ?, 'nvidia', 50, 100, 1000, 60)`, ts, svc.host, "GPU-"+m, m+" GPU")
 		exec(`INSERT INTO host_gpu_processes (created_at, host, gpu_index, gpu_uuid, pid, name, used_mem_mb) VALUES (?, ?, 0, ?, 7, ?, 100)`, ts, svc.host, "GPU-"+m, m+"-trainer")
 		exec(`INSERT INTO host_sensors (created_at, host, name, kind, value, unit) VALUES (?, ?, ?, 'temperature', 55, 'C')`, ts, svc.host, m+" sensor")
+		exec(`INSERT INTO db_servers (host, server, engine, version, notes, first_seen, last_seen) VALUES (?, ?, 'postgres', '16', ?, ?, ?)`, svc.host, m+"-pg", m+" note", ts, ts)
+		exec(`INSERT INTO db_stats (created_at, host, server, engine, connections, max_connections, waiting, longest_query_s) VALUES (?, ?, ?, 'postgres', 5, 100, 1, 9)`, ts, svc.host, m+"-pg")
+		exec(`INSERT INTO db_sessions (created_at, host, server, pid, username, state, query, elapsed_s, seen_at) VALUES (?, ?, ?, 9, ?, 'active', ?, 9, ?)`, ts, svc.host, m+"-pg", m+"-dbuser", "SELECT "+m, ts)
+		exec(`INSERT INTO db_statements (created_at, host, server, engine, query_id, name, query, calls, total_ms) VALUES (?, ?, ?, 'postgres', ?, ?, ?, 3, 30)`, ts, svc.host, m+"-pg", "q"+svc.num, "SELECT "+m, "SELECT * FROM "+m)
 		exec(`INSERT INTO security_events (created_at, source, kind, severity, host, service, actor, ip, target, detail, count) VALUES (?, 'api', 'brute_force', 'critical', ?, ?, ?, ?, ?, '{}', 9)`,
 			ts, svc.host, svc.name, m+"-actor", "10.2.0."+svc.num, "/"+m+"/login")
 		exec(`INSERT INTO security_known (account, kind, value, first_seen, last_seen) VALUES (?, 'ip', ?, ?, ?)`, "acct"+svc.num, "10.0.0."+svc.num, ts, ts)
@@ -354,6 +358,10 @@ func (f *wsFixture) panels(path string) []string {
 			for k := range t {
 				out = append(out, k)
 			}
+		case map[string]dbPanel:
+			for k := range t {
+				out = append(out, k)
+			}
 		}
 		sort.Strings(out)
 		return out
@@ -371,6 +379,8 @@ func (f *wsFixture) panels(path string) []string {
 		return keys(s.security().panels)
 	case "/api/containers/panels/{panel}":
 		return keys(containerPanels(s.q))
+	case "/api/databases/panels/{panel}":
+		return keys(dbPanels(s.q))
 	case "/api/uptime/checks/{id}/{panel}":
 		return keys(uptimePanels)
 	}

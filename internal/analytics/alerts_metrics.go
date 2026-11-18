@@ -19,8 +19,8 @@ import (
 type metricDef struct {
 	ID          string   `json:"id"`
 	Label       string   `json:"label"`
-	Group       string   `json:"group"` // request, system, liveness, uptime, errors, frontend, dependency, security, container
-	Unit        string   `json:"unit"`  // ms, percent, rpm, score, minutes, count, gb, mb, days, celsius, none
+	Group       string   `json:"group"` // request, system, liveness, uptime, errors, frontend, dependency, security, container, database
+	Unit        string   `json:"unit"`  // ms, percent, rpm, score, minutes, seconds, count, gb, mb, days, celsius, none
 	Description string   `json:"description"`
 	Scopes      []string `json:"scopes"`
 	Anomaly     bool     `json:"anomaly"`
@@ -169,6 +169,7 @@ func scopeClause(m metricDef, sc alertScope) (string, []any) {
 	add("service", "service", sc.Service)
 	add("container", "container", sc.Container)
 	add("host", "host", sc.Host)
+	add("db_server", "server", sc.DBServer)
 	add("app", "app", sc.App)
 	add("check", "check_id", sc.Check)
 	add("callee", "callee", sc.Callee)
@@ -632,6 +633,8 @@ func formatUnit(v float64, unit string) string {
 		return strconv.FormatFloat(v, 'f', 2, 64)
 	case "minutes":
 		return strconv.FormatFloat(v, 'f', 0, 64) + " min"
+	case "seconds":
+		return strconv.FormatFloat(v, 'f', 0, 64) + " s"
 	case "burn":
 		return strconv.FormatFloat(v, 'f', 1, 64) + "×"
 	case "count":

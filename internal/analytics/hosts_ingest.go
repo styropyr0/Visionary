@@ -126,6 +126,9 @@ func (s *Server) handleAgentReport(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = s.upsertHost(ctx, &rep, at)
 	}
+	if err == nil && len(rep.Databases) > 0 {
+		err = s.upsertDBServers(ctx, &rep, at)
+	}
 	if err != nil {
 		s.logger.Warn("agent report write", "host", rep.Host, "err", err)
 		w.Header().Set("Retry-After", "5")
@@ -156,7 +159,7 @@ func reportTime(v string, now time.Time) (string, bool) {
 // counts what it kept per kind.
 func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 	rows := &otlpRows{}
-	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0, "gpus": 0, "gpu_processes": 0, "sensors": 0, "storage": 0}
+	n := map[string]int{"samples": 0, "processes": 0, "mounts": 0, "units": 0, "events": 0, "containers": 0, "container_samples": 0, "container_events": 0, "gpus": 0, "gpu_processes": 0, "sensors": 0, "storage": 0, "db_samples": 0, "db_sessions": 0, "db_statements": 0}
 	host, service := rep.Host, otlpNullStr(clip(rep.Service, 128))
 	runtime := otlpNullStr(clip(rep.Runtime, 128))
 	now := time.Now()
@@ -245,6 +248,7 @@ func hostRows(rep *agentapi.Report, at string) (*otlpRows, map[string]int) {
 	}
 	storageRows(rep, at, rows, n)
 	containerRows(rep, at, rows, n)
+	dbRows(rep, at, rows, n)
 	return rows, n
 }
 

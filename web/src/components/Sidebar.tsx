@@ -8,6 +8,7 @@ import {
   Bug,
   ChartLine,
   Database,
+  DatabaseZap,
   Flame,
   Gauge,
   Network,
@@ -51,6 +52,7 @@ export type Route =
   | "profiles"
   | "system"
   | "containers"
+  | "databases"
   | "metrics"
   | "errors"
   | "frontend"
@@ -68,7 +70,7 @@ export type Route =
   | "settings"
   | "guide";
 
-export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "metrics", "errors", "frontend", "uptime", "ci", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "incidents", "settings", "guide"];
+export const ROUTES: Route[] = ["overview", "performance", "queries", "dependencies", "profiles", "system", "containers", "databases", "metrics", "errors", "frontend", "uptime", "ci", "security", "explore", "applogs", "logs", "traces", "dashboards", "saved", "alerts", "incidents", "settings", "guide"];
 
 export const NAV: { group: string; items: { route: Route; label: string; icon: typeof LayoutDashboard }[] }[] = [
   {
@@ -95,6 +97,7 @@ export const NAV: { group: string; items: { route: Route; label: string; icon: t
     items: [
       { route: "system", label: "System", icon: Server },
       { route: "containers", label: "Containers", icon: Boxes },
+      { route: "databases", label: "Databases", icon: DatabaseZap },
       { route: "metrics", label: "Metrics", icon: ChartLine },
     ],
   },

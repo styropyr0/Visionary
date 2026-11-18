@@ -1,7 +1,9 @@
 // Command visionary-agent watches one machine (a database box, a worker, a
 // bastion) and reports it to a Visionary server over HTTPS, so hosts without
-// an instrumented app show up too. It never touches the database: the server
-// stores what it sends.
+// an instrumented app show up too. It never writes to a database: the server
+// stores what it sends. With VISIONARY_AGENT_DATABASES it also reads the
+// sessions, locks and statement stats of PostgreSQL and MySQL servers with a
+// read-only monitoring user (dbactivity.go).
 //
 // Every 15 s it samples the host's CPU, memory, disk and network with the Go
 // SDK's sampler; once a minute it posts those samples with the inventory, the
@@ -71,6 +73,9 @@ type config struct {
 	gpu bool
 	// how often to scan what fills the disks; 0 is off
 	storageEvery time.Duration
+
+	databases  []dbTarget
+	dbInterval time.Duration
 }
 
 func main() {
@@ -117,6 +122,8 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&c.allowPrivate, "allow-private", os.Getenv("VISIONARY_AGENT_ALLOW_PRIVATE"), "true or false: may this location's checks reach private and loopback addresses; unset follows the server's setting (VISIONARY_AGENT_ALLOW_PRIVATE)")
 	fs.IntVar(&c.browserWorkers, "browser-workers", envInt("VISIONARY_AGENT_BROWSER_WORKERS", 1), "browser checks run at once in location mode (VISIONARY_AGENT_BROWSER_WORKERS)")
 	storage := fs.String("storage-scan", os.Getenv("VISIONARY_AGENT_STORAGE_SCAN"), `how often to find what fills the disks, at the lowest priority: a duration such as 6h, or "off" (VISIONARY_AGENT_STORAGE_SCAN, default 6h)`)
+	databases := fs.String("databases", os.Getenv("VISIONARY_AGENT_DATABASES"), "PostgreSQL and MySQL servers to watch: postgres:// or mysql:// URLs of a read-only monitoring user, separated by spaces or commas; name= labels one (VISIONARY_AGENT_DATABASES)")
+	fs.DurationVar(&c.dbInterval, "db-interval", envDuration("VISIONARY_AGENT_DB_INTERVAL", 15*time.Second), "how often to read the databases' sessions and locks, at least 5s (VISIONARY_AGENT_DB_INTERVAL)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -131,6 +138,12 @@ func loadConfig(args []string) (config, error) {
 		return c, err
 	}
 	c.storageEvery = every
+	if c.databases, err = parseDatabases(*databases); err != nil {
+		return c, err
+	}
+	if c.dbInterval < 5*time.Second {
+		c.dbInterval = 5 * time.Second
+	}
 	c.url = strings.TrimRight(strings.TrimSpace(c.url), "/")
 	u, err := url.Parse(c.url)
 	if c.url == "" || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -194,9 +207,12 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if a.storage != nil {
 		go a.storage.run(ctx)
 	}
+	if a.dbs != nil {
+		a.dbs.run(ctx)
+	}
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
 		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"), "gpu", cfg.gpu,
-		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"), "storage_scan", scanEveryText(cfg.storageEvery))
+		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"), "storage_scan", scanEveryText(cfg.storageEvery), "databases", len(cfg.databases))
 
 	sampleT := time.NewTicker(cfg.interval)
 	defer sampleT.Stop()

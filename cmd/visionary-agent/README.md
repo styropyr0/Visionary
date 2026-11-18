@@ -92,6 +92,56 @@ how often, `off` stops it.
 never runs. Counting sockets in CLOSE_WAIT walks `/proc/net/tcp`, so it is
 skipped on hosts with more than 20,000 sockets in use.
 
+## Databases
+
+The agent can watch PostgreSQL and MySQL or MariaDB servers too: what runs
+in them now, who blocks whom, and which statements take the time. It reads
+only the servers' statistics views, never your tables, and needs a user that
+can do nothing else. Name the servers with URLs:
+
+```sh
+VISIONARY_AGENT_DATABASES="postgres://visionary:<password>@db1:5432/app?sslmode=require&name=main mysql://visionary:<password>@db2:3306/?name=shop"
+```
+
+Separate URLs with spaces or commas. `name=` labels a server on the
+**Databases** page (default `host:port/database`). Connect straight to the
+server, not through PgBouncer or ProxySQL, which would show their own
+connections. The agent can run anywhere that reaches the server, such as a
+bastion next to a managed database.
+
+Every 15 s (`VISIONARY_AGENT_DB_INTERVAL`, `-db-interval`, at least 5 s) it
+reads each server's connections against `max_connections`, the sessions
+running a statement or idle inside a transaction, how long each has run,
+what it waits on and which sessions block it. Once per report it reads
+`pg_stat_statements` or performance_schema's statement digests and sends
+what the 50 busiest statements did since the previous read: calls, time,
+rows. Each server is read on its own over one connection, each query with a
+5 s timeout, so it costs the server a few cheap catalog reads a sample.
+Statement text has every literal replaced with `?` on the agent, before it is
+sent, as the SDKs do for spans; the server checks again.
+
+The smallest grants that show everything:
+
+```sql
+-- PostgreSQL 10 or later
+CREATE ROLE visionary LOGIN PASSWORD '<password>';
+GRANT pg_monitor TO visionary;         -- every session, lock and statement
+-- statement stats, once, in the database the URL names:
+--   shared_preload_libraries = 'pg_stat_statements' in postgresql.conf, restart, then
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- MySQL 5.7 or later, MariaDB 10.3 or later
+CREATE USER 'visionary'@'%' IDENTIFIED BY '<password>';
+GRANT PROCESS ON *.* TO 'visionary'@'%';                  -- every connection, InnoDB transactions and lock waits
+GRANT SELECT ON performance_schema.* TO 'visionary'@'%';  -- statement digests, MySQL 8 lock waits
+```
+
+On PostgreSQL the agent's session is also read-only
+(`default_transaction_read_only`) with a 5 s `statement_timeout`.
+performance_schema is off by default on MariaDB; without it there are no
+statement stats there. What a server does not allow shows as a note on its
+card in Visionary, with the grant that fixes it.
+
 ## Run it in a container
 
 The host install above is still the recommended way. Where a container is

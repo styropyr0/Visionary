@@ -744,6 +744,8 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_AGENT_DOCKER` | auto | A container socket path, or `off`. |
 | `VISIONARY_AGENT_GPU` | `true` | `off` stops GPU readings (nvidia-smi and amdgpu). |
 | `VISIONARY_AGENT_STORAGE_SCAN` | `6h` | How often to find what fills the disks, at the lowest priority (at least `10m`), or `off`. |
+| `VISIONARY_AGENT_DATABASES` | none | PostgreSQL and MySQL servers to watch for sessions, locks and statement stats: `postgres://` or `mysql://` URLs of a read-only monitoring user ([grants](cmd/visionary-agent/README.md#databases)). |
+| `VISIONARY_AGENT_DB_INTERVAL` | `15s` | How often to read the databases' sessions and locks. |
 | `VISIONARY_AGENT_AUTH_LOG` | auto | A log file, `journald` or `off`. |
 | `VISIONARY_AGENT_SECURITY` | `true` | `false` turns off all security findings. |
 | `VISIONARY_AGENT_SSH_KEYS`, `VISIONARY_AGENT_FILE_INTEGRITY`, `VISIONARY_AGENT_PROCESS_CHECKS`, `VISIONARY_AGENT_CONTAINER_RISKS` | `true` | Turn off one kind of security check. |

@@ -93,6 +93,7 @@ func (s *Server) hostsRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/system/machines/{host}", s.authed(s.handleMachine))
 	mux.Handle("GET /api/system/machines/{host}/gpus", s.authed(s.handleMachineGPUs))
 	s.containerRoutes(mux)
+	s.dbActivityRoutes(mux)
 }
 
 func (s *Server) hostsStart(ctx context.Context) {
@@ -100,7 +101,7 @@ func (s *Server) hostsStart(ctx context.Context) {
 }
 
 func (s *Server) hostsPrompt() string {
-	return hostsPromptText + "\n" + containersPrompt
+	return hostsPromptText + "\n" + containersPrompt + "\n" + dbActivityPrompt
 }
 
 const hostsPromptText = `Hosts: machines watched by the standalone host agent (cmd/visionary-agent). Their samples are system_metrics rows with sdk = 'agent', instance = the host name and runtime = the OS (e.g. 'Ubuntu 24.04 (linux 6.8.0)'); process, runtime, database and HTTP columns are NULL there, and uptime_s is the host's uptime.
@@ -115,7 +116,7 @@ Snapshot tables, one set of rows per host per report (about a minute); for the c
 Table host_gpus: one row per GPU per sample (every ~15 s): created_at, host, gpu_index, uuid, name, vendor ('nvidia' or 'amd'), util_percent, mem_util_percent (memory controller busy), mem_used_mb, mem_total_mb, temp_c, power_w, power_limit_w, fan_percent, clock_mhz, max_clock_mhz. NULL where the driver does not report it.
 Table security_events: created_at, source ('host' from the agent), kind, severity ('info', 'warning', 'critical'), host, service, actor, ip, target, detail, count (occurrences one row stands for). Host kinds: ssh_failed (actor = user tried, ip), ssh_login, sudo (target = command), port_opened / port_closed (target like 'tcp 0.0.0.0:5432 postgres'), updates_pending (count = updates, detail = 'N security'), reboot, ssh_key_added / ssh_key_removed (actor = account, target = key type, fingerprint and comment, detail = file), file_changed (target = path, detail = created, modified, deleted or permissions changed), suspicious_process (actor = user, target = pid, exe and command line, detail = why), container_privileged / container_root / container_new_image (target = container, detail = image and reasons). Sum count, not rows, for attempt totals.`
 
-// hostsRetention forgets hosts silent for 30 days, 90 s after start and
+// hostsRetention forgets hosts and database servers silent for 30 days, 90 s after start and
 // then every 6 hours. Their rows follow Settings → Retention (retentionLoop).
 func (s *Server) hostsRetention(ctx context.Context) {
 	timer := time.NewTimer(90 * time.Second)
@@ -130,6 +131,9 @@ func (s *Server) hostsRetention(ctx context.Context) {
 		cctx, cancel := context.WithTimeout(ctx, time.Minute)
 		if err := s.db.Exec(cctx, `DELETE FROM host_inventory WHERE last_seen < ?`, cutoff); err != nil && ctx.Err() == nil && !missingTable(err, "host_inventory") {
 			s.logger.Warn("host_inventory retention", "err", err)
+		}
+		if err := s.db.Exec(cctx, `DELETE FROM db_servers WHERE last_seen < ?`, cutoff); err != nil && ctx.Err() == nil && !missingTable(err, "db_servers") {
+			s.logger.Warn("db_servers retention", "err", err)
 		}
 		cancel()
 		timer.Reset(6 * time.Hour)

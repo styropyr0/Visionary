@@ -61,6 +61,8 @@ var dataKinds = []dataKind{
 	{Key: "hosts", Label: "Host agent data", Description: "Processes, mounts, services, containers, GPUs and sensors, and their metrics and events.",
 		tables: []dataTable{{"host_processes", false}, {"host_mounts", false}, {"host_storage", false}, {"host_units", false}, {"host_containers", false}, {"container_metrics", false}, {"container_events", false},
 			{"host_gpus", false}, {"host_gpu_processes", false}, {"host_sensors", false}}},
+	{Key: "databases", Label: "Database activity", Description: "The databases the agent reads: their sessions, statement stats and connection counts.",
+		tables: []dataTable{{"db_stats", false}, {"db_sessions", false}, {"db_statements", false}, {"db_servers", false}}},
 	{Key: "ci", Label: "CI runs and tests", Description: "Pipelines, jobs, test results and flaky tests.", Service: true,
 		tables: []dataTable{{"ci_pipelines", true}, {"ci_jobs", true}, {"ci_tests", true}, {"ci_flaky_tests", true}}},
 	{Key: "plans", Label: "Query plans", Description: "EXPLAIN plans asked for from the Queries page.",

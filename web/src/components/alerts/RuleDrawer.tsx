@@ -36,7 +36,7 @@ import { useConfirm } from "../Confirm";
 const CONTAINER_KINDS: Record<string, string> = { restarted: "Restarted", oom_killed: "Out-of-memory kill", exited: "Exited", unhealthy: "Health check failing", healthy: "Healthy again" };
 const containerKindLabel = (k: string) => CONTAINER_KINDS[k] ?? titleCase(k);
 const METHODS = ["", "GET", "POST", "PUT", "PATCH", "DELETE"];
-const UNIT_HINT: Record<string, string> = { rpm: "per min", gb: "GB", mb: "MB", days: "days", minutes: "min", celsius: "°C" };
+const UNIT_HINT: Record<string, string> = { seconds: "s", rpm: "per min", gb: "GB", mb: "MB", days: "days", minutes: "min", celsius: "°C" };
 /** Metrics read once per evaluation rather than over a window. */
 const NO_WINDOW = ["instance_silent", "uptime_cert_days", "promql"];
 
@@ -428,9 +428,15 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
                 <input className="input" value={sp.scope.container ?? ""} placeholder="Each container" onChange={(e) => setScope("container", e.target.value)} />
               </label>
             )}
+            {scopes.includes("db_server") && (
+              <label className="field">
+                <span>Database</span>
+                <input className="input" value={sp.scope.db_server ?? ""} placeholder="Each database" onChange={(e) => setScope("db_server", e.target.value)} />
+              </label>
+            )}
             {scopes.includes("host") && (
               <label className="field">
-                <span>{metric?.group === "container" ? "Machine" : "Host"}</span>
+                <span>{metric?.group === "container" ? "Machine" : metric?.group === "database" ? "Agent host" : "Host"}</span>
                 <input className="input" value={sp.scope.host ?? ""} placeholder={metric?.group === "container" ? "Every machine" : "Every host"} onChange={(e) => setScope("host", e.target.value)} />
               </label>
             )}

@@ -81,6 +81,8 @@ var retentionKinds = []retentionKind{
 	{Key: "metrics", Label: "Custom metrics", Description: "Counters, gauges and histograms your services define, from the SDKs, OpenTelemetry and Prometheus.", DefaultDays: 30, tables: []string{"metrics"}},
 	{Key: "containers", Label: "Container metrics", Description: "Per-container samples, restarts, kills and health changes.", DefaultDays: 30, tables: []string{"container_metrics", "container_events"}},
 	{Key: "hosts", Label: "Host snapshots", Description: "Processes, mounts, services, containers, GPU processes, sensors and storage scans the agent lists.", DefaultDays: 14, tables: []string{"host_processes", "host_mounts", "host_units", "host_containers", "host_gpu_processes", "host_sensors", "host_storage"}},
+	{Key: "databases", Label: "Database activity", Description: "Connections, lock waits and statement stats the agent reads from your databases.", DefaultDays: 30, tables: []string{"db_stats", "db_statements"}},
+	{Key: "db_sessions", Label: "Database sessions", Description: "The sessions and statements the agent saw running in your databases.", DefaultDays: 7, tables: []string{"db_sessions"}},
 	{Key: "profiles", Label: "CPU profiles", Description: "Sampled flame graphs.", DefaultDays: 30, tables: []string{"profiles"}},
 	{Key: "logs", Label: "Logs: trace to info", Description: "Application log lines below warn.", DefaultDays: 7, tables: []string{"app_logs"}, where: "severity <= 3"},
 	{Key: "logs_important", Label: "Logs: warn and above", Description: "Application log lines at warn, error and fatal.", DefaultDays: 30, tables: []string{"app_logs"}, where: "severity >= 4"},

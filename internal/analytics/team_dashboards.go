@@ -76,7 +76,7 @@ var (
 	// Chart endpoints outside the overview, performance and system groups
 	// that a dashboard can show.
 	chartRefs = []*regexp.Regexp{
-		regexp.MustCompile(`^(containers|security)/panels/[a-z0-9_]{1,40}$`),
+		regexp.MustCompile(`^(containers|security|databases)/panels/[a-z0-9_]{1,40}$`),
 		regexp.MustCompile(`^rum/[a-z0-9_]{1,40}$`),
 		regexp.MustCompile(`^uptime/checks/[0-9]{1,18}/[a-z_]{1,40}$`),
 		regexp.MustCompile(`^(telemetry/errors|insights/dependencies)$`),

@@ -2,12 +2,12 @@ import { api, rangeQuery, type Result } from "./api";
 import { formatCount, formatMs, formatPercent } from "./format";
 import type { MetricQuery } from "./metrics";
 
-export type AlertUnit = "ms" | "percent" | "rpm" | "score" | "minutes" | "count" | "burn" | "gb" | "mb" | "days" | "celsius" | "none";
+export type AlertUnit = "ms" | "percent" | "rpm" | "score" | "minutes" | "seconds" | "count" | "burn" | "gb" | "mb" | "days" | "celsius" | "none";
 export type Severity = "info" | "warning" | "critical";
 export type RuleKind = "threshold" | "anomaly" | "slo";
 export type SeriesStateName = "ok" | "pending" | "firing" | "resolved" | "";
 
-export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "logs" | "metrics" | "ci";
+export type MetricGroup = "request" | "system" | "liveness" | "uptime" | "errors" | "frontend" | "dependency" | "security" | "container" | "database" | "logs" | "metrics" | "ci";
 
 export const GROUP_LABEL: Record<MetricGroup, string> = {
   request: "Requests",
@@ -19,6 +19,7 @@ export const GROUP_LABEL: Record<MetricGroup, string> = {
   dependency: "Dependencies",
   security: "Security",
   container: "Containers",
+  database: "Databases",
   logs: "Logs",
   metrics: "Custom metrics",
   ci: "CI",
@@ -71,6 +72,8 @@ export interface Scope {
   app?: string;
   /** Service map arrow rules: what the service (the caller) calls. */
   callee?: string;
+  /** Database rules: the server's label from the agent. */
+  db_server?: string;
 }
 
 export type NoDataPolicy = "" | "alerting" | "keep";
@@ -463,6 +466,8 @@ export function formatAlertValue(v: number | null | undefined, unit: AlertUnit):
       return v.toFixed(2);
     case "minutes":
       return `${Math.round(v)} min`;
+    case "seconds":
+      return `${formatCount(Math.round(v))} s`;
     case "burn":
       return `${v.toFixed(1)}×`;
     case "count":
@@ -655,6 +660,13 @@ export const RULE_PRESETS: RulePreset[] = [
   { id: "ctr_unhealthy", group: "Containers", label: "Container health check failing", name: "Container unhealthy", severity: "warning", spec: containerEvent("unhealthy", 1, "5m") },
   { id: "ctr_memory", group: "Containers", label: "Container near its memory limit", name: "Container memory above 90% of its limit", severity: "warning", spec: th("container_memory", ">", 90, "5m", "5m") },
   { id: "ctr_throttle", group: "Containers", label: "Container CPU throttled", name: "Container CPU throttled over 25%", severity: "warning", spec: th("container_throttled", ">", 25, "10m", "10m") },
+
+  // Databases
+  { id: "db_long_query", group: "Databases", label: "Query running over 5 minutes", name: "Database query running over 5 minutes", severity: "warning", spec: th("db_long_query", ">", 300, "2m", "0s", { repeat: "1h" }) },
+  { id: "db_blocking", group: "Databases", label: "Sessions blocked on locks", name: "Database sessions waiting on locks", severity: "warning", spec: th("db_lock_waits", ">=", 1, "2m", "2m") },
+  { id: "db_idle_tx", group: "Databases", label: "Session idle in a transaction over 5 minutes", name: "Database session idle in a transaction", severity: "warning", spec: th("db_idle_in_tx", ">", 300, "2m", "0s", { repeat: "1h" }) },
+  { id: "db_connections", group: "Databases", label: "Connections near max_connections", name: "Database connections above 85% of the limit", severity: "critical", spec: th("db_connections", ">", 85, "5m", "2m") },
+  { id: "db_deadlocks", group: "Databases", label: "Deadlocks", name: "Database deadlocks", severity: "info", spec: th("db_deadlocks", ">", 0, "10m", "0s") },
 
   // CI
   { id: "ci_failing", group: "CI", label: "Pipelines failing often (over 20% in a day)", name: "Pipeline failure rate above 20%", severity: "warning", spec: th("ci_failure_rate", ">", 20, "24h", "0s") },

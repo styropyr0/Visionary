@@ -251,3 +251,10 @@ func isQuote(c byte) bool { return c == '"' || c == '`' || c == '[' }
 func isWordStart(c byte) bool {
 	return c == '_' || c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
+
+// SanitizeSQL is the sanitizer spans use, for callers outside the SDK (the
+// host agent) that store statements the same way.
+func SanitizeSQL(q string) string { return sanitizeSQL(q) }
+
+// SQLName is the span name of a sanitized statement, e.g. "SELECT users".
+func SQLName(q string) string { return sqlName(q) }

@@ -407,6 +407,27 @@ export const GUIDE: GuideSection[] = [
     ],
   },
   {
+    id: "databases",
+    group: "System",
+    title: "Databases",
+    route: "databases",
+    intro: "What runs inside your PostgreSQL and MySQL servers right now, who blocks whom, and which statements take the time.",
+    steps: [
+      {
+        title: "Connect a database",
+        text: "Create a monitoring user (`GRANT pg_monitor` on PostgreSQL; `PROCESS` and `SELECT ON performance_schema.*` on MySQL), then give the host agent its URL in `VISIONARY_AGENT_DATABASES`, for example `postgres://visionary:…@db1:5432/app?name=main`. **Help** has the full grants. The agent only reads statistics views, and replaces values in statements with `?` before sending.",
+      },
+      {
+        title: "Find what is stuck",
+        text: "**Running now** lists every session running a statement or idle in a transaction, longest first. When sessions wait on a lock, **Blocking** shows the chain: the session with the lock icon holds what the ones under it wait for. Alerts has presets for a query running over 5 minutes, sessions blocked on locks, idle transactions and connections near the limit.",
+      },
+      {
+        title: "Find the expensive statements",
+        text: "**Top statements by time** ranks statements by the time they took in the range, with calls, mean, rows and a trend. **Open in Query Viewer** shows the same statement as your services ran it, with its routes, slowest calls and plan.",
+      },
+    ],
+  },
+  {
     id: "metrics",
     group: "System",
     title: "Metrics",

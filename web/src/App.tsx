@@ -28,6 +28,7 @@ import { Frontend } from "./views/Frontend";
 import { Settings } from "./views/Settings";
 import { Uptime } from "./views/Uptime";
 import { Containers } from "./views/Containers";
+import { Databases } from "./views/Databases";
 import { Metrics } from "./views/Metrics";
 import { Security } from "./views/Security";
 import { Guide } from "./views/Guide";
@@ -202,6 +203,7 @@ export function App() {
             {route === "profiles" && <Profiles />}
             {route === "system" && <System />}
             {route === "containers" && <Containers />}
+            {route === "databases" && <Databases />}
             {route === "metrics" && <Metrics />}
             {route === "errors" && <Errors />}
             {route === "frontend" && <Frontend />}

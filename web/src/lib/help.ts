@@ -479,9 +479,31 @@ export default defineConfig({
     id: "agent",
     title: "Install the host agent",
     intro:
-      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports, and for Security new SSH keys, changes to system files (passwd, sudoers, cron, systemd units), suspicious processes and risky containers. It runs as a systemd service and posts here over HTTPS with a Server ingest key from Settings → API keys; it never needs database credentials. The machine shows up in System within a minute, and its containers in Containers.",
+      "The SDKs see the process they run in. The agent watches a whole Linux machine, app or not: CPU, memory, disks, processes, systemd services, Docker or Podman containers, SSH logins and open ports, and for Security new SSH keys, changes to system files (passwd, sudoers, cron, systemd units), suspicious processes and risky containers. It runs as a systemd service and posts here over HTTPS with a Server ingest key from Settings → API keys. It needs no database credentials, unless you also want it to read your databases' activity (Databases). The machine shows up in System within a minute, and its containers in Containers.",
     any: { code: `curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/agent/install.sh \\
   | sudo VISIONARY_URL=${origin} VISIONARY_KEY=<server key> sh` },
+  },
+  dbactivity: {
+    id: "dbactivity",
+    title: "Watch your databases",
+    intro:
+      "The host agent reads what runs inside your PostgreSQL and MySQL or MariaDB servers: sessions and how long each has run, who blocks whom, idle transactions, connections against max_connections, and the time each statement takes from `pg_stat_statements` or performance_schema. It reads only statistics views, with a user that can do nothing else, on one connection with 5 s timeouts, every 15 s (statement stats once per report). Literal values in statements are replaced with `?` on the agent before anything is sent. Run it on any machine that reaches the server, such as the database host or a bastion, and connect straight to the server rather than through PgBouncer or ProxySQL. What a server does not allow shows as a note on the Databases page.",
+    any: {
+      label: "Grants, then the agent's environment",
+      code: `-- PostgreSQL 10+: sessions, locks and statement stats
+CREATE ROLE visionary LOGIN PASSWORD '…';
+GRANT pg_monitor TO visionary;
+-- shared_preload_libraries = 'pg_stat_statements', restart, then in the database the URL names:
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- MySQL 5.7+ / MariaDB 10.3+
+CREATE USER 'visionary'@'%' IDENTIFIED BY '…';
+GRANT PROCESS ON *.* TO 'visionary'@'%';
+GRANT SELECT ON performance_schema.* TO 'visionary'@'%';
+
+# /etc/visionary-agent.env, then restart the agent
+VISIONARY_AGENT_DATABASES="postgres://visionary:…@db1:5432/app?sslmode=require&name=main mysql://visionary:…@db2:3306/?name=shop"`,
+    },
   },
   clientkey: {
     id: "clientkey",
@@ -1040,6 +1062,18 @@ export const HELP: Record<Route, PageHelp> = {
       "Containers reported by an SDK show their own CPU, memory, network, disk and processes; restarts and exits need the host agent.",
     ],
     setup: ["agent", "sdk"],
+  },
+  databases: {
+    title: "Databases",
+    tip: "What runs inside your PostgreSQL and MySQL servers: live sessions and how long each has run, blocking chains, the statements that take the time, and connections against the limit.",
+    what: "The database servers the host agent reads with a read-only user. Running now lists the sessions running a statement or idle inside a transaction at the latest sample, with what each waits on and who blocks it; Blocking draws those chains. Statements ranks normalized statements by the time they took in the range, from pg_stat_statements or performance_schema, with their trend; open one in Queries for the spans and plans your services recorded. Long-running lists the statements that ran across at least one sample. The charts follow connections, the longest-running statement, lock waits, transactions and statement time.",
+    read: [
+      "The agent samples every 15 s, so a statement shorter than that rarely shows under Running now; it still counts in Statements.",
+      "Idle in transaction holds its locks and keeps old row versions alive: a session sitting there for minutes is usually an app that forgot to commit.",
+      "Statement counters are sent as the difference since the previous read, so the totals cover only the range. Max is the slowest call since the server's statistics were last reset.",
+      "Statements show with values as ?, as the server normalized them; the agent replaces any literal left before sending.",
+    ],
+    setup: ["agent", "dbactivity"],
   },
   metrics: {
     title: "Metrics",

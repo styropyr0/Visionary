@@ -46,6 +46,7 @@ type agent struct {
 	suspect *procCollector
 	docker  *dockerCollector // nil when VISIONARY_AGENT_DOCKER is off
 	storage *storageScanner  // nil when VISIONARY_AGENT_STORAGE_SCAN is off
+	dbs     *dbCollector     // nil without VISIONARY_AGENT_DATABASES
 	sampler *visionary.HostSampler
 }
 
@@ -63,6 +64,9 @@ func newAgent(cfg config, logger *slog.Logger) *agent {
 	}
 	if cfg.storageEvery > 0 {
 		a.storage = &storageScanner{a: a, every: cfg.storageEvery}
+	}
+	if len(cfg.databases) > 0 {
+		a.dbs = newDBCollector(a, cfg.databases)
 	}
 	if cfg.security {
 		a.auth = newAuthCollector(a, cfg.authLog)
@@ -114,6 +118,9 @@ func (a *agent) report(ctx context.Context, samples []agentapi.Sample) *agentapi
 	a.hardware(ctx, rep)
 	if a.storage != nil {
 		rep.Storage = a.storage.take()
+	}
+	if a.dbs != nil {
+		rep.Databases = a.dbs.take()
 	}
 	if a.cfg.security {
 		rep.Events = append(rep.Events, a.auth.collect(ctx)...)

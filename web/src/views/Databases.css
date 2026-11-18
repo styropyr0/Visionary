@@ -1,0 +1,101 @@
+/* Databases view: live sessions, the blocking tree and statement stats. */
+
+.db-notes {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.db-notes strong {
+  display: block;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.db-notes svg {
+  margin-top: 3px;
+}
+
+.db-server-name {
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.db-sql {
+  min-width: 0;
+  max-width: 560px;
+  padding: 6px 0;
+}
+.db-sql .span-detail {
+  max-width: 560px;
+}
+
+.db-sub {
+  font-size: 11px;
+}
+
+.db-elapsed {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.db-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+}
+.db-who .dim {
+  font-size: 11.5px;
+}
+
+.db-wait {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.db-tree,
+.db-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.db-tree {
+  padding: 4px 14px 12px;
+}
+.db-tree-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+}
+.db-tree-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
+}
+.db-tree-icon.root {
+  color: var(--warning-text);
+}
+.db-tree-body {
+  min-width: 0;
+}
+.db-tree-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12.5px;
+}
+.db-tree-sql {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(900px, 80vw);
+}
+
+@media (max-width: 720px) {
+  .db-sql,
+  .db-sql .span-detail {
+    max-width: 260px;
+  }
+}

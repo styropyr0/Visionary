@@ -26,8 +26,10 @@ import (
 //     processes holding GPU memory and of every temperature and fan
 //   - host_storage: what fills the disks, one set of rows per storage scan
 //     (every few hours)
+//   - db_servers, db_stats, db_sessions, db_statements: the databases the
+//     agent reads (dbactivity.go)
 func (s *Server) hostsSchema() []string {
-	return []string{s.q.hostsTables()}
+	return []string{s.q.hostsTables(), s.q.dbActivityTables()}
 }
 
 func (q sqlDialect) hostsTables() string {

@@ -109,6 +109,9 @@ type alertScope struct {
 	// Container rules (hosts_containers.go): the container's name. Host and
 	// EventKind narrow them too.
 	Container string `json:"container,omitempty"`
+	// Database rules (dbactivity_api.go): the server's label. Host narrows
+	// them too.
+	DBServer string `json:"db_server,omitempty"`
 	// Frontend rules: the client app (client_events.app).
 	App string `json:"app,omitempty"`
 }

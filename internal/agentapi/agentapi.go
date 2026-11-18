@@ -46,6 +46,105 @@ type Report struct {
 	// Storage is what fills the disks, sent once after each scan (every few
 	// hours); nil in the reports between.
 	Storage *Storage `json:"storage,omitempty"`
+	// Databases are the database servers the agent samples
+	// (VISIONARY_AGENT_DATABASES); nil when none is configured.
+	Databases []Database `json:"databases,omitempty"`
+}
+
+// Database is what one database server ran since the previous report.
+// Statement text is always redacted (internal/sqlredact): no literal values.
+type Database struct {
+	// Server names it: the DSN's name= parameter, else host:port/database.
+	// Letters, digits and . _ : / @ - only, up to 128.
+	Server string `json:"server"`
+	// Engine is postgres or mysql; Version the server's, e.g. "16.4" or
+	// "8.0.39" ("10.11.8-MariaDB").
+	Engine  string `json:"engine"`
+	Version string `json:"version,omitempty"`
+	// Notes say what could not be read and why, e.g. a missing grant or
+	// extension; empty when everything was.
+	Notes      []string      `json:"notes,omitempty"`
+	Samples    []DBSample    `json:"samples,omitempty"`
+	Sessions   []DBSession   `json:"sessions,omitempty"`
+	Statements []DBStatement `json:"statements,omitempty"`
+}
+
+// DBColumns are the values a DBSample may carry, the db_stats columns after
+// created_at, host, server and engine:
+//
+//   - connections: client sessions now; max_connections: the server's limit.
+//   - active: sessions running a statement; idle_in_tx: sessions idle inside
+//     an open transaction; waiting: sessions waiting on a lock.
+//   - longest_query_s: the longest-running statement; longest_tx_s: the
+//     oldest open transaction; longest_idle_tx_s: the longest a session has
+//     sat idle in a transaction.
+//   - commits, rollbacks, deadlocks: since the previous sample (deltas of the
+//     server's counters, left out on the first sample and after a restart).
+var DBColumns = []string{
+	"connections", "max_connections", "active", "idle_in_tx", "waiting",
+	"longest_query_s", "longest_tx_s", "longest_idle_tx_s",
+	"commits", "rollbacks", "deadlocks",
+}
+
+// DBSample is one db_stats row.
+type DBSample struct {
+	At     string             `json:"at"`
+	Values map[string]float64 `json:"values"`
+}
+
+// DBSession is one statement or transaction seen running, once per report
+// however many samples saw it, with what the last of them read.
+type DBSession struct {
+	PID      int64  `json:"pid"`
+	User     string `json:"user,omitempty"`
+	Database string `json:"database,omitempty"`
+	Client   string `json:"client,omitempty"` // the client's address
+	App      string `json:"app,omitempty"`    // application_name (PostgreSQL)
+	// State is active, idle in transaction, idle in transaction (aborted),
+	// or MySQL's command (Query, Execute...).
+	State string `json:"state"`
+	Query string `json:"query,omitempty"` // redacted
+	// QueryStart is when the statement started, ElapsedS how long it had run
+	// when last seen (idle in a transaction: how long it has sat idle);
+	// TxAgeS is the open transaction's age.
+	QueryStart string   `json:"query_start,omitempty"`
+	ElapsedS   float64  `json:"elapsed_s"`
+	TxAgeS     *float64 `json:"tx_age_s,omitempty"`
+	// WaitEvent is what it waits on, e.g. "Lock: transactionid", "IO:
+	// DataFileRead" or MySQL's state ("Waiting for table metadata lock").
+	WaitEvent string `json:"wait_event,omitempty"`
+	// BlockedBy are the sessions holding the lock it waits for; LockType,
+	// LockMode and LockObject describe that lock, e.g. "relation",
+	// "RowExclusiveLock", "public.orders".
+	BlockedBy  []int64 `json:"blocked_by,omitempty"`
+	LockType   string  `json:"lock_type,omitempty"`
+	LockMode   string  `json:"lock_mode,omitempty"`
+	LockObject string  `json:"lock_object,omitempty"`
+	// SeenAt is the last sample that saw it; sessions of the report's
+	// latest sample are the ones running now.
+	SeenAt string `json:"seen_at"`
+}
+
+// DBStatement is one normalized statement's work since the previous
+// statement poll (pg_stat_statements or performance_schema's digests): the
+// differences of the server's cumulative counters, never the totals.
+type DBStatement struct {
+	At string `json:"at"`
+	// IntervalS is the time the deltas cover.
+	IntervalS float64 `json:"interval_s"`
+	// ID is the server's queryid or digest.
+	ID       string  `json:"id"`
+	Database string  `json:"database,omitempty"`
+	User     string  `json:"user,omitempty"`
+	Query    string  `json:"query"` // redacted
+	Calls    int64   `json:"calls"`
+	TotalMs  float64 `json:"total_ms"`
+	Rows     int64   `json:"rows"`
+	// MaxMs is the slowest single call since the server's statistics were
+	// last reset: the servers keep no maximum per interval.
+	MaxMs        float64 `json:"max_ms,omitempty"`
+	RowsExamined *int64  `json:"rows_examined,omitempty"` // MySQL
+	Errors       *int64  `json:"errors,omitempty"`        // MySQL
 }
 
 // Storage is one scan of what uses the disks.
