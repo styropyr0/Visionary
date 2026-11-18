@@ -788,7 +788,7 @@ resource "visionary_uptime_check" "home" {
     title: "Turn on the analyst",
     intro:
       "Explore and Ask need a model. Query results are sent to the model provider; IPs, user agents, headers and bodies are masked first.",
-    any: { note: "An admin adds an OpenAI API key in Settings → Server → AI analyst. Any OpenAI-compatible API works: set its API base URL and model there too. Product name and Notes about your data help the answers." },
+    any: { note: "An admin opens Settings → Server → AI analyst and picks a Provider: OpenAI, Anthropic (Claude), Google Gemini, Azure OpenAI, Ollama on your own machine, or an OpenAI-compatible service such as OpenRouter, Groq, Mistral, DeepSeek, Together AI, LM Studio or vLLM. Each one's address is known, so it asks only for what that provider needs: usually just its API key (Azure also wants the resource and deployment; Ollama, LM Studio and vLLM an address if not on this machine; Other OpenAI-compatible API its base URL). The Model list comes from the provider; empty uses its default. Test connection checks it before you save. Product name and Notes about your data help the answers." },
   },
   email: {
     id: "email",

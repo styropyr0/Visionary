@@ -259,7 +259,7 @@ func (s *Server) digestSummary(ctx context.Context, d *digestData) string {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	data, _ := json.Marshal(d.forModel())
-	content, err := s.llm().chatJSON(ctx, []chatMessage{
+	content, err := s.chatJSON(ctx, []chatMessage{
 		{Role: "system", Content: `You are Visionary, the performance analyst for ` + s.conf("app_name") + `'s API. Write the weekly digest from the numbers given: this week against the week before.
 Reply with one JSON object: {"summary": "<4 to 7 short lines separated by \n>"}.
 - First line: the one thing worth knowing this week.

@@ -177,7 +177,7 @@ func (s *Server) handleDraftPostmortem(w http.ResponseWriter, r *http.Request) {
 	var note string
 	var actions []incidentAction
 	if c := s.llm(); c == nil {
-		note = "The AI analyst is off, so this draft holds the facts and timeline only; write the root cause and lessons yourself, or add an OpenAI API key in Settings → Server for a written draft."
+		note = "The AI analyst is off, so this draft holds the facts and timeline only; write the root cause and lessons yourself, or choose a model provider in Settings → Server → AI analyst for a written draft."
 	} else if drafted, acts, err := s.modelPostmortem(ctx, c, in, entries, links, evidence); err != nil {
 		s.logger.Info("incidents: postmortem draft from the model failed", "id", in.ID, "err", userMessage(err))
 		note = "The model could not write a draft (" + userMessage(err) + "), so this one holds the facts and timeline only."
@@ -220,7 +220,7 @@ func (s *Server) handleDraftPostmortem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"postmortem": p, "actions": all, "note": note})
 }
 
-func (s *Server) modelPostmortem(ctx context.Context, c *llm, in *declaredIncident, entries []incidentEntry, links []incidentLink, evidence string) (postmortem, []incidentAction, error) {
+func (s *Server) modelPostmortem(ctx context.Context, c llmClient, in *declaredIncident, entries []incidentEntry, links []incidentLink, evidence string) (postmortem, []incidentAction, error) {
 	ctx, cancel := context.WithTimeout(ctx, postmortemBudget)
 	defer cancel()
 	prompt := `You write blameless incident postmortems for ` + s.conf("app_name") + `. You get an incident's facts, its timeline (UTC) and the traffic of the affected services.

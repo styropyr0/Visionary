@@ -153,9 +153,9 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	n := strconv.Itoa
-	model := "Add an OpenAI API key in Settings → Server to turn it on."
+	model := "Choose a model provider in Settings → Server → AI analyst to turn it on."
 	if c := s.llm(); c != nil {
-		model = c.modelName()
+		model = c.providerLabel() + ", " + c.modelName()
 	}
 	sg := s.signin()
 	signIn := sg.cfg.Type + " (" + sg.cfg.Provider + ")"

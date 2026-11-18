@@ -21,7 +21,7 @@ func fakeModel(t *testing.T, s *Server, replies ...string) *[]string {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": content}}}})
 	}))
 	t.Cleanup(srv.Close)
-	s.llmP.Store(&llm{apiKey: "k", apiBase: srv.URL, model: "m", http: srv.Client()})
+	s.setLLM(newLLMClient(llmConfig{Provider: "openai", Shape: shapeOpenAI, Label: "OpenAI", Base: srv.URL, Key: "k", Model: "m", JSONMode: "object"}, srv.Client()))
 	return &prompts
 }
 
@@ -64,7 +64,7 @@ func TestLogExplain(t *testing.T) {
 	if !strings.Contains(p, `payment timeout after <*>`) || !strings.Contains(p, "request r2") || strings.Contains(p, "hidden from viewers") {
 		t.Fatalf("prompt %s", p)
 	}
-	s.llmP.Store(nil)
+	s.setLLM(nil)
 	w = httptest.NewRecorder()
 	s.handleLogExplain(w, httptest.NewRequest("POST", "/api/applogs/explain", strings.NewReader(string(body))))
 	if w.Code != 400 || !strings.Contains(w.Body.String(), "analyst is off") {

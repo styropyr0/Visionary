@@ -293,7 +293,7 @@ export function Explore({ meta }: { meta: Meta | undefined }) {
                 {!askEnabled && (
                   <div className="notice" style={{ maxWidth: 560 }}>
                     <AlertTriangle size={15} />
-                    <span>The analyst needs an OpenAI API key in Settings → Server. Dashboards and saved panels still work.</span>
+                    <span>The analyst needs a model provider: choose one in Settings → Server → AI analyst. Dashboards and saved panels still work.</span>
                   </div>
                 )}
                 <div className="suggest-grid">

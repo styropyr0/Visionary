@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, KeyRound, Plus, RotateCcw, RotateCw, ShieldOff, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, ExternalLink, Eye, EyeOff, KeyRound, PlugZap, Plus, RefreshCw, RotateCcw, RotateCw, ShieldOff, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { formatRelative } from "../lib/time";
 import { useQuery } from "../lib/useQuery";
+import { Combobox } from "../components/Combobox";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { Modal } from "../components/Modal";
 import { Select } from "../components/Select";
@@ -39,7 +40,33 @@ interface ConfView {
   settings: ConfSetting[];
   /** Restart-only settings saved since the server started. */
   restart_pending?: string[];
+  ai_providers?: AiProvider[];
 }
+
+/** A model provider for the AI analyst, with the settings it needs. */
+interface AiProvider {
+  id: string;
+  label: string;
+  shape: string;
+  key_key?: string;
+  key_optional?: boolean;
+  host_key?: string;
+  fields?: string[];
+  default_model: string;
+  models?: string[];
+  model_label?: string;
+  key_url?: string;
+  note?: string;
+  reasoning?: boolean;
+}
+
+type ConfDraft = Record<string, string | null>;
+
+/** The provider's models, asked of it with the form's values. */
+const aiModels = (values: ConfDraft) =>
+  api<{ provider: string; default_model: string; models?: string[]; error?: string }>("/api/settings/ai/models", { method: "POST", json: { values } });
+const aiTest = (values: ConfDraft) =>
+  api<{ ok: boolean; provider: string; model?: string; ms?: number; error?: string }>("/api/settings/ai/test", { method: "POST", json: { values } });
 
 const getConfig = () => api<ConfView>("/api/settings/config");
 /** null resets a setting to its default; a secret left out stays as it is. */
@@ -99,6 +126,7 @@ export function ServerTab() {
           title={g.Label}
           help={g.Help}
           settings={view.settings.filter((s) => s.group === g.Key)}
+          providers={g.Key === "analyst" ? view.ai_providers : undefined}
           onSaved={(v) => {
             setView(v);
             setRun((n) => n + 1);
@@ -266,13 +294,38 @@ function RestartButton({ pending, labels, primary }: { pending: string[]; labels
   );
 }
 
-function ConfGroup({ title, help, settings, onSaved }: { title: string; help: string; settings: ConfSetting[]; onSaved: (v: ConfView) => void }) {
+function ConfGroup({ title, help, settings, providers, onSaved }: { title: string; help: string; settings: ConfSetting[]; providers?: AiProvider[]; onSaved: (v: ConfView) => void }) {
   const toast = useToast();
-  const [draft, setDraft] = useState<Record<string, string | null>>({});
+  const [draft, setDraft] = useState<ConfDraft>({});
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
   useEffect(() => setDraft({}), [settings]);
   const changed = Object.keys(draft);
   const restart = settings.some((s) => s.restart && s.key in draft);
+
+  // The analyst shows only what the chosen provider needs.
+  const providerSetting = settings.find((s) => s.key === "ai_provider");
+  const providerId = draft.ai_provider ?? providerSetting?.value ?? "";
+  const provider = providers?.find((p) => p.id === providerId) ?? providers?.[0];
+  const shown = useMemo(() => {
+    if (!providers || !provider) return settings;
+    const only = new Set(providers.flatMap((p) => [p.key_key, p.host_key, ...(p.fields ?? [])]).filter(Boolean));
+    const mine = new Set([provider.key_key, provider.host_key, ...(provider.fields ?? [])]);
+    return settings.filter((s) => (!only.has(s.key) || mine.has(s.key)) && (s.key !== "reasoning" || provider.reasoning));
+  }, [settings, providers, provider]);
+
+  const update = (key: string, v: string | null | undefined) => {
+    const next = { ...draft };
+    if (v === undefined) delete next[key];
+    else next[key] = v;
+    // Another provider's model would not exist there: use the new one's default.
+    if (key === "ai_provider") {
+      const model = settings.find((s) => s.key === "model");
+      if (v === undefined) delete next.model;
+      else if (model?.value) next.model = null;
+    }
+    setDraft(next);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -287,38 +340,162 @@ function ConfGroup({ title, help, settings, onSaved }: { title: string; help: st
     }
   };
 
+  const test = async () => {
+    setTesting(true);
+    try {
+      const r = await aiTest(draft);
+      if (r.ok) toast("ok", `${r.provider} answered with ${r.model} in ${((r.ms ?? 0) / 1000).toFixed(1)}s.${changed.length ? " Save to use it." : ""}`);
+      else toast("err", r.error ?? `${r.provider} did not answer.`);
+    } catch (e) {
+      toast("err", e instanceof Error ? e.message : String(e));
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <Card
       title={title}
       description={help || undefined}
       actions={
-        <button type="button" className="btn primary sm" disabled={changed.length === 0 || busy} onClick={save}>
-          {busy ? "Saving…" : changed.length ? `Save ${changed.length} change${changed.length > 1 ? "s" : ""}` : "Save"}
-        </button>
+        <>
+          {provider && (
+            <button type="button" className="btn sm" disabled={testing} onClick={() => void test()} title="Asks a tiny question with the values in this form, saved or not">
+              <PlugZap size={13} aria-hidden /> {testing ? "Testing…" : "Test connection"}
+            </button>
+          )}
+          <button type="button" className="btn primary sm" disabled={changed.length === 0 || busy} onClick={save}>
+            {busy ? "Saving…" : changed.length ? `Save ${changed.length} change${changed.length > 1 ? "s" : ""}` : "Save"}
+          </button>
+        </>
       }
     >
       <div className="settings-body pset">
-        {settings.map((s) => (
-          <ConfRow
-            key={s.key}
-            s={s}
-            draft={draft[s.key]}
-            dirty={s.key in draft}
-            onChange={(v) => {
-              const next = { ...draft };
-              if (v === undefined) delete next[s.key];
-              else next[s.key] = v;
-              setDraft(next);
-            }}
-          />
-        ))}
+        {shown.map((s) => {
+          const row = { s, draft: draft[s.key], dirty: s.key in draft, onChange: (v: string | null | undefined) => update(s.key, v) };
+          if (provider && providers && s.key === "ai_provider") {
+            return (
+              <ConfRow
+                key={s.key}
+                {...row}
+                hint={provider.note ?? s.help}
+                control={
+                  <Select
+                    label={s.label}
+                    value={provider.id}
+                    options={providers.map((p) => ({ value: p.id, label: p.label }))}
+                    onChange={(v) => update(s.key, v === s.value ? undefined : v)}
+                    maxWidth={260}
+                  />
+                }
+              />
+            );
+          }
+          if (provider && s.key === "model") return <ModelRow key={`${s.key}-${provider.id}`} {...row} provider={provider} values={draft} />;
+          if (provider && s.key === provider.key_key && provider.key_url) {
+            return (
+              <ConfRow
+                key={s.key}
+                {...row}
+                hint={
+                  <a href={provider.key_url} target="_blank" rel="noreferrer" className="conf-link">
+                    Get a key <ExternalLink size={11} aria-hidden />
+                  </a>
+                }
+              />
+            );
+          }
+          return <ConfRow key={s.key} {...row} />;
+        })}
       </div>
     </Card>
   );
 }
 
+/** The model, with the provider's own list once it answers. */
+function ModelRow({
+  s,
+  draft,
+  dirty,
+  onChange,
+  provider,
+  values,
+}: {
+  s: ConfSetting;
+  draft: string | null | undefined;
+  dirty: boolean;
+  onChange: (v: string | null | undefined) => void;
+  provider: AiProvider;
+  values: ConfDraft;
+}) {
+  const [models, setModels] = useState<string[]>(provider.models ?? []);
+  const [note, setNote] = useState<string>();
+  const [loading, setLoading] = useState(false);
+  const canList = provider.id !== "azure";
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await aiModels(values);
+      setModels(r.models ?? []);
+      setNote(r.error);
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Mounted again for each provider; the reload button covers a new key.
+  useEffect(() => {
+    if (canList) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const label = provider.model_label ?? s.label;
+  const value = draft === undefined ? s.value : (draft ?? "");
+  const fallback = provider.default_model || (provider.host_key ? "the first model it has" : "");
+  const hint = note ? `Couldn't list its models: ${note}` : !canList ? "The name of your deployment in Azure." : fallback ? `Empty uses ${fallback}.` : "";
+  return (
+    <ConfRow
+      s={s}
+      draft={draft}
+      dirty={dirty}
+      onChange={onChange}
+      label={label}
+      hint={hint}
+      control={
+        <>
+          <div className="conf-input conf-model">
+            <Combobox label={label} value={value} placeholder={fallback || "Model name"} options={models} onChange={(v) => onChange(v === s.value ? undefined : v)} />
+          </div>
+          {canList && (
+            <button type="button" className="icon-btn" title="Load the models it offers" aria-label="Load models" disabled={loading} onClick={() => void load()}>
+              <RefreshCw size={14} className={loading ? "spin" : undefined} />
+            </button>
+          )}
+        </>
+      }
+    />
+  );
+}
+
 /** One setting. draft is undefined while unchanged, null when reset. */
-function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string | null | undefined; dirty: boolean; onChange: (v: string | null | undefined) => void }) {
+function ConfRow({
+  s,
+  draft,
+  dirty,
+  onChange,
+  label,
+  hint,
+  control: custom,
+}: {
+  s: ConfSetting;
+  draft: string | null | undefined;
+  dirty: boolean;
+  onChange: (v: string | null | undefined) => void;
+  label?: string;
+  hint?: ReactNode;
+  control?: ReactNode;
+}) {
   const value = draft === undefined ? s.value : draft === null ? (s.kind === "secret" ? "" : s.default) : draft;
   const set = (v: string) => onChange(v === s.value && s.kind !== "secret" ? undefined : v);
   const canReset = s.stored && draft !== null && (s.kind === "secret" ? s.set : s.value !== s.default);
@@ -343,7 +520,8 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
     setVisible(true);
   };
 
-  let control;
+  let control = custom;
+  if (!control)
   switch (s.kind) {
     case "bool":
       control = <Switch on={value === "true"} label={s.label} onChange={(on) => set(String(on))} />;
@@ -410,10 +588,10 @@ function ConfRow({ s, draft, dirty, onChange }: { s: ConfSetting; draft: string 
     <div className={`pset-row conf-row ${dirty ? "changed" : ""} ${s.kind === "long" ? "conf-row-wide" : ""}`}>
       <div className="conf-what">
         <div className="pset-label">
-          {s.label}
+          {label ?? s.label}
           {s.restart && <span className="conf-tag">After restart</span>}
         </div>
-        {s.help && <div className="dim pset-hint">{s.help}</div>}
+        {(hint ?? s.help) && <div className="dim pset-hint">{hint ?? s.help}</div>}
       </div>
       <div className="conf-control">
         {/* Reset sits before the control so controls stay flush right. */}

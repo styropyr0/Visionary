@@ -709,11 +709,11 @@ export const GUIDE: GuideSection[] = [
     route: "explore",
     intro: "Ask a question about your data in plain words and get an answer with charts.",
     shot: "explore",
-    caption: "Explore before an OpenAI API key is set: it says where to add one.",
+    caption: "Explore before a model provider is set up: it says where to choose one.",
     steps: [
       {
         title: "Turn the analyst on",
-        text: "An admin adds an OpenAI API key, or any OpenAI-compatible API, in **Settings → Server → AI analyst**. Until then the question box is off; dashboards and saved panels still work.",
+        text: "An admin picks a **Provider** in **Settings → Server → AI analyst** (OpenAI, Anthropic, Google Gemini, Azure OpenAI, Ollama, OpenRouter, Groq, Mistral, DeepSeek, Together AI, LM Studio, vLLM or another OpenAI-compatible API), adds its API key and saves; **Test connection** checks it first. Until then the question box is off; dashboards and saved panels still work.",
       },
       {
         title: "Ask",
@@ -847,7 +847,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Configure the server",
-        text: "**Server** holds the AI analyst key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
+        text: "**Server** holds the AI analyst's provider and key, sessions (with the allow list and two-step requirement), email (SMTP), how often alerts run, ingest keys and limits, the security detectors, threat intelligence and the action webhook, and other switches. A stored secret shows with the eye button, and showing it is recorded in the audit log. Changes reach every server within seconds; a few are marked **After restart**, and once one is saved, **Restart now** at the top applies it in a few seconds.",
       },
       {
         title: "Run several replicas",

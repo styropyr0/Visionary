@@ -85,7 +85,7 @@ Now is ` + time.Now().UTC().Format(time.RFC3339) + `.
 ` + s.logFieldsHint(ctx)
 	messages := []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: body.Question}}
 	for attempt := 0; attempt < 2; attempt++ {
-		content, err := s.llm().chatJSON(ctx, messages)
+		content, err := s.chatJSON(ctx, messages)
 		if err != nil {
 			s.fail(w, err)
 			return
@@ -184,7 +184,7 @@ func (s *Server) handleLogExplain(w http.ResponseWriter, r *http.Request) {
 	prompt := `You read application logs for developers and say what is going on.
 Reply with one JSON object: {"summary": "<text>", "lines": [<ids of the lines you cite>]}.
 The text: one or two sentences on the overall picture, then 2 to 5 short lines starting with "- ": the problems in order of importance, what each most likely means, and what to look at next. Cite lines as #id. Say plainly when nothing looks wrong. No headings.`
-	content, err := s.llm().chatJSON(ctx, []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: b.String()}})
+	content, err := s.chatJSON(ctx, []chatMessage{{Role: "system", Content: prompt}, {Role: "user", Content: b.String()}})
 	if err != nil {
 		s.fail(w, err)
 		return

@@ -697,6 +697,18 @@
   width: 150px;
 }
 
+.conf-model > *,
+.conf-model .input {
+  width: 100%;
+}
+
+.conf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+}
+
 .conf-num {
   width: 72px;
 }

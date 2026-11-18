@@ -42,7 +42,7 @@ type Server struct {
 	liveSet liveHolder
 	// signinP and llmP follow Settings; see signin() and llm().
 	signinP atomic.Pointer[signin]
-	llmP    atomic.Pointer[llm]
+	llmP    atomic.Pointer[llmSlot]
 	auth    *auth
 	logger  *slog.Logger
 	static  fs.FS
@@ -467,7 +467,7 @@ func (s *Server) sessionView(sess *session) map[string]any {
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	model := ""
 	if s.llm() != nil {
-		model = s.llm().modelName()
+		model = s.modelName()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ask_enabled":    s.llm() != nil,

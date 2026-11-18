@@ -68,11 +68,26 @@ var confGroups = []struct {
 }
 
 var confDefs = []confDef{
-	{Key: "openai_api_key", Group: "analyst", Label: "OpenAI API key", Help: "Turns the analyst on. Any OpenAI-compatible API works with its base URL below.", Kind: confSecret},
-	{Key: "openai_api_base", Group: "analyst", Label: "API base URL", Kind: confText, Default: "https://api.openai.com/v1"},
-	{Key: "model", Group: "analyst", Label: "Model", Kind: confText, Default: "gpt-4.1"},
+	{Key: "ai_provider", Group: "analyst", Label: "Provider", Help: "Who runs the model. Each one's address is known; only what it needs is asked for.", Kind: confChoice, Choices: aiProviderIDs(), Default: "openai"},
+	{Key: "openai_api_key", Group: "analyst", Label: "OpenAI API key", Kind: confSecret},
+	{Key: "anthropic_api_key", Group: "analyst", Label: "Anthropic API key", Kind: confSecret},
+	{Key: "gemini_api_key", Group: "analyst", Label: "Gemini API key", Kind: confSecret},
+	{Key: "azure_openai_api_key", Group: "analyst", Label: "Azure OpenAI API key", Kind: confSecret},
+	{Key: "azure_openai_endpoint", Group: "analyst", Label: "Azure resource", Help: "The resource name, or its endpoint such as https://my-resource.openai.azure.com.", Kind: confText},
+	{Key: "azure_openai_api_version", Group: "analyst", Label: "API version", Kind: confText, Default: "2024-10-21"},
+	{Key: "openrouter_api_key", Group: "analyst", Label: "OpenRouter API key", Kind: confSecret},
+	{Key: "groq_api_key", Group: "analyst", Label: "Groq API key", Kind: confSecret},
+	{Key: "mistral_api_key", Group: "analyst", Label: "Mistral API key", Kind: confSecret},
+	{Key: "deepseek_api_key", Group: "analyst", Label: "DeepSeek API key", Kind: confSecret},
+	{Key: "together_api_key", Group: "analyst", Label: "Together AI API key", Kind: confSecret},
+	{Key: "ollama_host", Group: "analyst", Label: "Ollama address", Help: "Where Ollama runs, seen from this server.", Kind: confText, Default: "http://localhost:11434"},
+	{Key: "lmstudio_host", Group: "analyst", Label: "LM Studio address", Help: "Where LM Studio's server runs, seen from this server.", Kind: confText, Default: "http://localhost:1234"},
+	{Key: "vllm_host", Group: "analyst", Label: "vLLM address", Help: "Where vLLM serves, seen from this server.", Kind: confText, Default: "http://localhost:8000"},
+	{Key: "openai_api_base", Group: "analyst", Label: "Base URL", Help: "The API's address up to /chat/completions, e.g. https://llm.example.com/v1.", Kind: confText},
+	{Key: "custom_api_key", Group: "analyst", Label: "API key", Help: "Leave empty if the server takes none.", Kind: confSecret},
+	{Key: "model", Group: "analyst", Label: "Model", Help: "Empty uses the provider's default.", Kind: confText},
 	{Key: "explore_tables", Group: "analyst", Label: "Your tables Explore may read", Help: "Comma-separated tables of your application in this database, e.g. users, orders. Explore and the analyst can then join them with logs and requests, read-only; their rows are sent to the model like any result. Visionary's own tables with secrets are never readable.", Kind: confText},
-	{Key: "reasoning", Group: "analyst", Label: "Reasoning effort", Help: "For reasoning models; leave empty for others.", Kind: confChoice, Choices: []string{"", "low", "medium", "high"}},
+	{Key: "reasoning", Group: "analyst", Label: "Reasoning effort", Help: "For reasoning models on OpenAI-style APIs; leave empty for others.", Kind: confChoice, Choices: []string{"", "low", "medium", "high"}},
 	{Key: "app_name", Group: "analyst", Label: "Product name", Help: "The product whose API is analysed, used in answers.", Kind: confText, Default: "the application"},
 	{Key: "data_notes", Group: "analyst", Label: "Notes about your data", Help: "Anything the analyst should know, such as what each user_role means.", Kind: confLong},
 	{Key: "max_rows", Group: "analyst", Label: "Rows per query", Help: "The most rows a query returns.", Kind: confInt, Default: "5000", Min: 1, Max: 100000},
@@ -333,7 +348,7 @@ func (s *Server) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r, "admin") {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": confGroups, "settings": s.confView(), "restart_pending": s.restartPending()})
+	writeJSON(w, http.StatusOK, map[string]any{"groups": confGroups, "settings": s.confView(), "restart_pending": s.restartPending(), "ai_providers": aiProviders})
 }
 
 // handleRevealSecret shows one stored secret to an admin who asks for it. The
@@ -408,16 +423,16 @@ func (s *Server) applyConfig() {
 	setOwnTables(s.conf("explore_tables"))
 	next := s.newLLM()
 	prev := s.llmP.Load()
-	if prev != nil && next != nil && *prev == *next {
+	if prev != nil && next != nil && prev.cfg == next.cfg {
 		return
 	}
 	switch {
 	case prev == nil && next == nil && !s.analystLogged.Swap(true):
-		s.logger.Info("the AI analyst is off until an OpenAI API key is added in Settings → Server")
+		s.logger.Info("the AI analyst is off until a model provider is set up in Settings → Server")
 	case prev != nil && next == nil:
-		s.logger.Info("the AI analyst is off: its API key was removed")
+		s.logger.Info("the AI analyst is off: its provider is no longer set up")
 	case next != nil:
-		s.logger.Info("AI analyst", "model", next.model)
+		s.logger.Info("AI analyst", "provider", next.cfg.Provider, "model", next.cfg.Model)
 	}
 	s.llmP.Store(next)
 }

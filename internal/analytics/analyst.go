@@ -91,7 +91,7 @@ func (s sse) send(event string, data any) {
 
 func (s *Server) handleAnalyst(w http.ResponseWriter, r *http.Request) {
 	if s.llm() == nil {
-		writeError(w, http.StatusServiceUnavailable, "the analyst needs an OpenAI API key in Settings → Server")
+		writeError(w, http.StatusServiceUnavailable, errAnalystOff.Error())
 		return
 	}
 	var req analystRequest
@@ -124,7 +124,7 @@ func (s *Server) handleAnalyst(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("analyst failed", "err", err)
 		out.send("error", map[string]string{"message": userMessage(err)})
 	}
-	out.send("done", map[string]any{"model": s.llm().modelName()})
+	out.send("done", map[string]any{"model": s.modelName()})
 }
 
 func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRange, out sse) error {
@@ -139,7 +139,7 @@ func (s *Server) investigate(ctx context.Context, req analystRequest, tr timeRan
 
 	queries := 0
 	for turn := 0; turn < maxModelTurns; turn++ {
-		content, err := s.llm().chatJSON(ctx, messages)
+		content, err := s.chatJSON(ctx, messages)
 		if err != nil {
 			return err
 		}
@@ -344,8 +344,12 @@ func userMessage(err error) string {
 	if errors.As(err, &qe) {
 		return qe.Error()
 	}
-	if strings.Contains(err.Error(), "openai") {
-		return "The model provider returned an error. Try again in a moment."
+	var pe *providerError
+	if errors.As(err, &pe) {
+		if pe.Status == 0 || pe.Status >= 500 || pe.Status == 429 {
+			return pe.Provider + " returned an error (" + pe.Msg + "). Try again in a moment."
+		}
+		return pe.Error()
 	}
 	return err.Error()
 }

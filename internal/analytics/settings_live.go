@@ -182,6 +182,18 @@ func (s *Server) refreshLive(ctx context.Context) error {
 			l.Config[key] = v[0]
 		}
 	}
+	if mig := providerMigration(l.Config); mig != nil {
+		set := map[string]string{}
+		for k, v := range mig {
+			l.Config[k] = v
+			set[settingConfig+k] = v
+		}
+		if err := s.writeSettings(ctx, set); err != nil {
+			s.logger.Warn("saving the AI analyst's provider failed", "err", err)
+		} else {
+			s.logger.Info("AI analyst settings moved to the provider choice", "provider", mig["ai_provider"])
+		}
+	}
 	s.liveSet.p.Store(l)
 	s.applySSO(m)
 	s.applySignin(m)
