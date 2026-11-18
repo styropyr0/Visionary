@@ -33,6 +33,8 @@ type Server struct {
 	q   sqlDialect
 
 	overview map[string]string
+
+	traceCache traceCache
 	system   map[string]string
 	// perf holds the Performance panels for the Apdex rule they were built
 	// with; performance() rebuilds them when the rule changes.

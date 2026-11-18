@@ -461,6 +461,6 @@ func (t rollupTable) rawRowsSQL(from, to string) string {
 	for _, c := range t.cols {
 		cols = append(cols, c.row+" AS "+c.name)
 	}
-	return "SELECT " + strings.Join(cols, ", ") + " FROM " + t.source +
+	return "SELECT " + strings.Join(cols, ", ") + " FROM " + fillWindow(t.source, from, to) +
 		" WHERE created_at >= '" + from + "' AND created_at < '" + to + "'"
 }

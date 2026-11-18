@@ -92,6 +92,7 @@ func (rt *rollupRuntime) kinds() []rollupKind {
 	return []rollupKind{
 		{"requests", func(rt *rollupRuntime) rollupTable { return requestsTable(rt.s.apdex(), rt.knownRoutes()) }},
 		{"system", func(*rollupRuntime) rollupTable { return systemTable() }},
+		{"edges", func(*rollupRuntime) rollupTable { return edgesTable() }},
 	}
 }
 
@@ -234,7 +235,7 @@ func (rt *rollupRuntime) busy(p *rollupPanel, tr timeRange) bool {
 }
 
 func (rt *rollupRuntime) warn(ctx context.Context, step, kind string, err error) {
-	if ctx.Err() != nil || missingTable(err, "system_metrics") || missingTable(err, "api_logs") {
+	if ctx.Err() != nil || missingTable(err, "system_metrics") || missingTable(err, "api_logs") || missingTable(err, "spans") {
 		return
 	}
 	rt.s.logger.Warn("rollups: "+step, "table", kind, "err", err)
@@ -275,7 +276,7 @@ func (rt *rollupRuntime) build(ctx context.Context, t rollupTable, grain, fromGr
 	}
 	stamp := time.Now().UTC().Format(tsLayout)
 	a, b := from.Format(tsLayout), to.Format(tsLayout)
-	if err := rt.s.db.Exec(ctx, rt.s.q.aggregateSQL(t, grain, fromGrain), stamp, a, b); err != nil {
+	if err := rt.s.db.Exec(ctx, fillWindow(rt.s.q.aggregateSQL(t, grain, fromGrain), a, b), stamp, a, b); err != nil {
 		return err
 	}
 	return rt.s.db.Exec(ctx, sweepSQL(t, grain), a, b, stamp)
@@ -495,11 +496,14 @@ func (rt *rollupRuntime) buildHoursBack(ctx context.Context, k rollupKind, t rol
 }
 
 func (rt *rollupRuntime) oldestRaw(ctx context.Context, k rollupKind) (time.Time, error) {
-	source := "api_logs"
-	if k.name == "system" {
-		source = "system_metrics"
+	q := "SELECT MIN(created_at) FROM api_logs"
+	switch k.name {
+	case "system":
+		q = "SELECT MIN(created_at) FROM system_metrics"
+	case "edges":
+		q = "SELECT MIN(m) FROM (SELECT MIN(created_at) AS m FROM api_logs UNION ALL SELECT MIN(created_at) FROM spans) AS o"
 	}
-	rows, err := rt.s.db.Query(ctx, "SELECT MIN(created_at) FROM "+source)
+	rows, err := rt.s.db.Query(ctx, q)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -515,10 +519,7 @@ func (rt *rollupRuntime) retention(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, k := range rt.kinds() {
-		table := "rollup_requests"
-		if k.name == "system" {
-			table = "rollup_system"
-		}
+		table := k.table(rt).name
 		for _, g := range []struct {
 			grain int64
 			keep  time.Duration

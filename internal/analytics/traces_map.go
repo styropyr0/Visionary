@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"net/http"
 	"sort"
 
@@ -41,8 +42,39 @@ func (s *Server) handleServiceMap(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var services, internal, external *Result
-	g, ctx := errgroup.WithContext(r.Context())
+	services, internal, external, ok := s.serviceMapRollup(r.Context(), tr)
+	if ok && scopeFrom(r.Context()) != nil {
+		internal = calleesIn(internal, services)
+	}
+	if !ok {
+		var err error
+		if services, internal, external, err = s.serviceMapRaw(r.Context(), tr); err != nil {
+			s.fail(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, buildServiceMap(tr, services, internal, external))
+}
+
+// calleesIn keeps calls to services the map shows. rollup_edges is scoped by
+// caller only, so a scoped viewer would otherwise see callees outside it
+func calleesIn(internal, services *Result) *Result {
+	shown := map[string]bool{}
+	for _, m := range rowMaps(services) {
+		shown[toString(m["service"])] = true
+	}
+	out := *internal
+	out.Rows = nil
+	for _, row := range internal.Rows {
+		if shown[toString(row[1])] {
+			out.Rows = append(out.Rows, row)
+		}
+	}
+	return &out
+}
+
+func (s *Server) serviceMapRaw(ctx context.Context, tr timeRange) (services, internal, external *Result, err error) {
+	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() (err error) {
 		services, err = s.telemetryQuery(ctx, `
 WITH r AS (
@@ -102,11 +134,11 @@ ORDER BY calls DESC
 LIMIT 200`, tr)
 		return
 	})
-	if err := g.Wait(); err != nil {
-		s.fail(w, err)
-		return
-	}
+	err = g.Wait()
+	return
+}
 
+func buildServiceMap(tr timeRange, services, internal, external *Result) map[string]any {
 	minutes := tr.To.Sub(tr.From).Minutes()
 	if minutes < 1 {
 		minutes = 1
@@ -146,7 +178,7 @@ LIMIT 200`, tr)
 		list = append(list, n)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": list, "edges": edges, "from": tr.From, "to": tr.To})
+	return map[string]any{"nodes": list, "edges": edges, "from": tr.From, "to": tr.To}
 }
 
 func floatOrNil(v any) *float64 {

@@ -220,9 +220,9 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     hideTip();
-    box.current?.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     if (pointers.current.size === 2) {
+      for (const id of pointers.current.keys()) box.current?.setPointerCapture(id);
       const [a, b] = [...pointers.current.values()];
       pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), view: viewRef.current };
       drag.current = null;
@@ -255,6 +255,9 @@ export function ServiceMapGraph({ map, onEdge, onNode }: { map: ServiceMap; onEd
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
     if (!d.moved && Math.hypot(dx, dy) < CLICK_SLOP) return;
+    // Capturing on pointerdown would retarget the click to the box, so nodes
+    // and edges would never see it
+    if (!d.moved) box.current?.setPointerCapture(e.pointerId);
     d.moved = true;
     suppressClick.current = true;
     if (d.mode === "pan") {

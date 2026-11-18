@@ -14,6 +14,7 @@ func (s *Server) rollupsSchema() []string {
 	return []string{
 		s.q.rollupDDL(requestsTable(s.apdex(), nil)),
 		s.q.rollupDDL(systemTable()),
+		s.q.rollupDDL(edgesTable()),
 		s.q.rollupStateDDL(),
 	}
 }
@@ -51,5 +52,7 @@ rollup_requests: one row per bucket_s, created_at, service ('' when unset), rout
 - Percentiles come from the histogram: sum each hNN over the group, then the pth percentile lies in the first bucket where the running total reaches p * total; interpolate linearly between that bucket's edges, clamped to MIN(min_ms) and MAX(max_ms). In SQL, unpivot the buckets with UNION ALL (SELECT 0 AS b, SUM(h00) AS c FROM ... UNION ALL SELECT 1, SUM(h01) FROM ... and so on), take SUM(c) OVER (ORDER BY b) as the running total, and pick the smallest b whose running total >= p * total; report that bucket's upper edge, or interpolate. Accurate to a few percent.
 - Distinct users and individual requests are not in the rollups: read api_logs for those.
 
-rollup_system: one row per bucket_s, created_at, instance, with samples (raw rows), last_at, and per metric <name>_avg with <name>_n (non-null samples; recombine as SUM(x_avg * x_n) / SUM(x_n)), <name>_max and <name>_sum. Metrics: ` + strings.Join(metrics, "; ") + `.`
+rollup_system: one row per bucket_s, created_at, instance, with samples (raw rows), last_at, and per metric <name>_avg with <name>_n (non-null samples; recombine as SUM(x_avg * x_n) / SUM(x_n)), <name>_max and <name>_sum. Metrics: ` + strings.Join(metrics, "; ") + `.
+
+rollup_edges: the service map's calls, one row per bucket_s, created_at, src (calling service), kind ('service' for a call to another traced service, else db, http, cache or queue) and dst (the called service, or the span's target or name). Measures: calls, errors, min_ms, max_ms and the same histogram h00..h` + last + ` as rollup_requests.`
 }

@@ -15,6 +15,7 @@ const (
 	maxTraceSpans    = 3000
 	maxTraceLogs     = 500
 	maxTraceResults  = 50
+	traceSearchStep  = 5 * time.Minute
 )
 
 func (s *Server) handleTrace(w http.ResponseWriter, r *http.Request) {
@@ -124,28 +125,47 @@ func (s *Server) handleTraceSearch(w http.ResponseWriter, r *http.Request) {
 		minMs = f
 	}
 	args = append(args, minMs)
-	found, err := s.telemetryQuery(r.Context(), `
+	sql := `
 SELECT trace_id, MIN(created_at) AS started, MAX(duration_ms) AS longest
 FROM api_logs
-WHERE `+strings.Join(where, "\n  AND ")+`
+WHERE ` + strings.Join(where, "\n  AND ") + `
 GROUP BY trace_id
 HAVING MAX(duration_ms) >= ?
 ORDER BY started DESC
-LIMIT `+strconv.Itoa(maxTraceResults), tr, args...)
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
+LIMIT ` + strconv.Itoa(maxTraceResults)
+	// Newest first, so walk back from the end in growing windows and stop
+	// once there are enough, instead of grouping a whole busy day
 	var ids []string
-	for _, row := range found.Rows {
-		ids = append(ids, toString(row[0]))
+	seen := map[string]bool{}
+	var rendered string
+	step := traceSearchStep
+	for end := tr.To; end.After(tr.From) && len(ids) < maxTraceResults; step *= 2 {
+		start := end.Add(-step)
+		if start.Before(tr.From) {
+			start = tr.From
+		}
+		found, err := s.telemetryQuery(r.Context(), sql, timeRange{From: start, To: end, Bucket: tr.Bucket}, args...)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if rendered == "" {
+			rendered = found.SQL
+		}
+		for _, row := range found.Rows {
+			if id := toString(row[0]); !seen[id] && len(ids) < maxTraceResults {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+		end = start
 	}
 	out := &Result{
 		Columns: []string{"trace_id", "started", "service", "method", "route", "status", "services", "requests", "spans", "errors", "duration_ms"},
 		Rows:    [][]any{},
-		SQL:     found.SQL,
-		From:    found.From,
-		To:      found.To,
+		SQL:     rendered,
+		From:    tr.From.Format(time.RFC3339Nano),
+		To:      tr.To.Format(time.RFC3339Nano),
 	}
 	if len(ids) == 0 {
 		writeJSON(w, http.StatusOK, out)

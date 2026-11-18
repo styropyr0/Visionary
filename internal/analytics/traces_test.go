@@ -3,7 +3,9 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -122,5 +124,57 @@ func TestTraceViews(t *testing.T) {
 	}
 	if _, ok := edges["service:shop>http:stock:8080"]; ok || len(m.Edges) != 3 {
 		t.Fatalf("a call a traced service answered is not external: %v", m.Edges)
+	}
+}
+
+func TestTraceCacheSharesNearbyAsks(t *testing.T) {
+	s := &Server{}
+	runs := 0
+	h := s.traceCached(func(w http.ResponseWriter, r *http.Request) {
+		runs++
+		writeJSON(w, http.StatusOK, map[string]string{"to": r.URL.Query().Get("to")})
+	})
+	ask := func(to string) string {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", "/api/traces/map?from=2026-11-18T09:00:01Z&to="+to, nil))
+		return w.Body.String()
+	}
+	a, b := ask("2026-11-18T10:00:02Z"), ask("2026-11-18T10:00:09Z")
+	if runs != 1 || a != b || !strings.Contains(a, "10:00:00Z") {
+		t.Fatalf("runs %d, answers %q %q", runs, a, b)
+	}
+	ask("2026-11-18T10:00:31Z")
+	if runs != 2 {
+		t.Fatalf("a later range reused the answer: runs %d", runs)
+	}
+}
+
+func TestServiceMapFromRollups(t *testing.T) {
+	s, at := traceTestServer(t)
+	ctx := context.Background()
+	rt := &rollupRuntime{s: s, spans: map[string]rollupSpan{}}
+	rollupRuntimes.Store(s, rt)
+	t.Cleanup(func() { rollupRuntimes.Delete(s) })
+	low, high := at.Truncate(time.Minute).Add(-time.Hour), at.Truncate(time.Minute).Add(time.Minute)
+	for kind, tbl := range map[string]rollupTable{"requests": requestsTable(s.apdex(), nil), "edges": edgesTable()} {
+		if err := rt.build(ctx, tbl, 60, 0, low, high); err != nil {
+			t.Fatal(kind, err)
+		}
+		rt.spans[spanName(kind, 60)] = rollupSpan{low.Format(tsLayout), high.Format(tsLayout)}
+	}
+	tr := timeRange{From: low, To: low.Add(2 * time.Hour), Bucket: 300}
+
+	sv, in, ex, ok := s.serviceMapRollup(ctx, tr)
+	if !ok {
+		t.Fatal("rollups not used")
+	}
+	rsv, rin, rex, err := s.serviceMapRaw(ctx, tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(buildServiceMap(tr, sv, in, ex))
+	want, _ := json.Marshal(buildServiceMap(tr, rsv, rin, rex))
+	if string(got) != string(want) || !strings.Contains(string(got), `"source":"service:shop","target":"service:stock"`) {
+		t.Fatalf("rollup map\n%s\nraw map\n%s", got, want)
 	}
 }

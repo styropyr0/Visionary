@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_RANGE, resolveRange, type Resolved, type TimeRange } from "./time";
 import { prefs, setPrefs } from "./prefs";
+import { queriesBusy } from "./useQuery";
 
 export type Theme = "dark" | "light";
 
@@ -109,11 +110,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", on);
   }, []);
 
-  // Auto-refresh only makes sense for ranges that end at "now".
+  // Auto-refresh only makes sense for ranges that end at "now". A tick is
+  // skipped while the last one is still loading, so slow panels finish
+  // instead of being cancelled and restarted.
   useEffect(() => {
     if (!autoRefresh || range.kind !== "relative") return;
     const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible" && !queriesBusy()) refresh();
     }, autoRefresh);
     return () => window.clearInterval(id);
   }, [autoRefresh, range, refresh]);

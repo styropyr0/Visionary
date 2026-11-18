@@ -314,6 +314,13 @@ func (s *Server) deleteRollups(ctx context.Context, d dataRequest, kind string, 
 		if d.Service != nil {
 			extra, extraArgs = " AND service = ?", []any{*d.Service}
 		}
+	case "spans":
+		// The map's calls come from requests and spans alike; requests clear
+		// them below too
+		table = "rollup_edges"
+		if d.Service != nil {
+			extra, extraArgs = " AND src = ?", []any{*d.Service}
+		}
 	case "system":
 		table = "rollup_system"
 		if d.Service != nil {
@@ -338,6 +345,16 @@ func (s *Server) deleteRollups(ctx context.Context, d dataRequest, kind string, 
 	err := s.db.Exec(ctx, `DELETE FROM `+table+` WHERE `+cond+extra, append(args, extraArgs...)...)
 	if err != nil && !missingTable(err, table) {
 		return dbErr(err)
+	}
+	if kind == "requests" {
+		edges := ""
+		if d.Service != nil {
+			edges = " AND (src = ? OR dst = ?)"
+			extraArgs = []any{*d.Service, *d.Service}
+		}
+		if err := s.db.Exec(ctx, `DELETE FROM rollup_edges WHERE `+cond+edges, append(args, extraArgs...)...); err != nil && !missingTable(err, "rollup_edges") {
+			return dbErr(err)
+		}
 	}
 	return nil
 }
