@@ -9,12 +9,11 @@ import { Panel } from "../components/Panel";
 import { Select } from "../components/Select";
 import { StatTile } from "../components/StatTile";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
-import { ServiceMapGraph } from "../components/telemetry/ServiceMapGraph";
 import { TraceTimeline, traceTree } from "../components/telemetry/TraceTimeline";
 import { KIND_COLOR } from "../components/telemetry/Waterfall";
 import type { Result } from "../lib/api";
 import { logsHref } from "../lib/applogs";
-import { formatCount, formatMs, formatPercent, toNumber } from "../lib/format";
+import { formatCount, formatMs, toNumber } from "../lib/format";
 import { useMeta, useConnected } from "../lib/meta";
 import { load, save } from "../lib/state";
 import { records } from "../lib/telemetry";
@@ -25,14 +24,12 @@ import {
   traceHref,
   traceSearchHref,
   tracesApi,
-  useServiceMap,
   useTraceSearch,
-  type MapEdge,
-  type MapNode,
   type TraceFilters,
 } from "../lib/traces";
 import { useQuery } from "../lib/useQuery";
 import { LogDetail } from "./Logs";
+import { MapTab } from "./Traces.map";
 import "../components/telemetry/telemetry.css";
 import "./Traces.css";
 
@@ -243,102 +240,6 @@ function searchColumns(res: Result): Column[] {
     },
     { key: "duration_ms", label: "Duration", align: "right", render: (v) => formatMs(toNumber(v) ?? 0), width: 90 },
   ];
-}
-
-function MapTab({ onOpen }: { onOpen: (f: Partial<TraceFilters>) => void }) {
-  const q = useServiceMap();
-  const byId = useMemo(() => new Map((q.data?.nodes ?? []).map((n) => [n.id, n])), [q.data]);
-  const openEdge = (e: MapEdge) => {
-    const a = byId.get(e.source);
-    const b = byId.get(e.target);
-    if (!a || !b) return;
-    if (b.kind === "service") onOpen({ service: [a.name, b.name].filter(Boolean).join(",") });
-    else onOpen({ service: a.name, span: b.name });
-  };
-  const openNode = (n: MapNode) => (n.kind === "service" ? onOpen({ service: n.name }) : onOpen({ span: n.name }));
-  const table = useMemo<Result | undefined>(() => {
-    if (!q.data) return undefined;
-    return {
-      columns: ["from", "to", "kind", "per_min", "calls", "error_rate", "p95", "key"],
-      rows: q.data.edges.map((e) => [
-        serviceLabel(byId.get(e.source)?.name),
-        e.kind === "service" ? serviceLabel(byId.get(e.target)?.name) : (byId.get(e.target)?.name ?? ""),
-        e.kind,
-        e.per_min,
-        e.calls,
-        e.error_rate,
-        e.p95,
-        `${e.source}>${e.target}`,
-      ]),
-    } as Result;
-  }, [q.data, byId]);
-  const edgeAt = (key: unknown) => q.data?.edges.find((e) => `${e.source}>${e.target}` === key);
-  const empty = q.data && q.data.nodes.length === 0;
-  const services = q.data?.nodes.filter((n) => n.kind === "service").length ?? 0;
-  const crossing = q.data?.edges.filter((e) => e.kind === "service").length ?? 0;
-
-  return (
-    <>
-      <Panel
-        className="tr-fill-panel"
-        title="Service map"
-        description="Each box is a service, or a database, host, cache or queue they call. An arrow is calls from one to the other in the range: thicker is more often, amber or red when some failed. Calls between services come from traces; click an arrow, a box or a row of the table to list the traces behind it."
-        result={table}
-        loading={q.loading}
-        error={q.error}
-        bodyHeight={360}
-        chart={
-          q.data &&
-          (empty ? (
-            <div className="panel-state empty-why">
-              <div>No requests or calls in this range.</div>
-              <HelpLink topic="tracing">How requests join a trace</HelpLink>
-            </div>
-          ) : (
-            <>
-              {services > 1 && crossing === 0 && (
-                <p className="dim smap-note">
-                  No calls between services were traced in this range. Calls join up once the caller sends <code>traceparent</code> (the Visionary HTTP transport does) and the service it calls records it.
-                </p>
-              )}
-              <ServiceMapGraph map={q.data} onEdge={openEdge} onNode={openNode} />
-            </>
-          ))
-        }
-        table={
-          table && (
-            <DataTable
-              result={table}
-              maxHeight={420}
-              rowKey={(row) => row[7]}
-              onRowClick={(row) => {
-                const e = edgeAt(row[7]);
-                if (e) openEdge(e);
-              }}
-              columns={[
-                { key: "from", label: "From" },
-                { key: "to", label: "To", render: (v) => <span className="mono">{String(v)}</span> },
-                { key: "kind", label: "Kind", width: 80 },
-                { key: "per_min", label: "Per min", align: "right", render: (v) => formatCount(toNumber(v) ?? 0), width: 80 },
-                { key: "calls", align: "right", unit: "count", width: 80 },
-                {
-                  key: "error_rate",
-                  label: "Failed",
-                  align: "right",
-                  width: 80,
-                  render: (v) => {
-                    const n = toNumber(v) ?? 0;
-                    return <span className={n >= 5 ? "flag bad" : n > 0 ? "flag warn" : "dim"}>{formatPercent(n)}</span>;
-                  },
-                },
-                { key: "p95", align: "right", render: (v) => (toNumber(v) === null ? <span className="dim">—</span> : formatMs(toNumber(v)!)), width: 80 },
-              ]}
-            />
-          )
-        }
-      />
-    </>
-  );
 }
 
 function TracePage({ id }: { id: string }) {

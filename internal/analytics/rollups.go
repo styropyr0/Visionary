@@ -14,7 +14,7 @@ func (s *Server) rollupsSchema() []string {
 	return []string{
 		s.q.rollupDDL(requestsTable(s.apdex(), nil)),
 		s.q.rollupDDL(systemTable()),
-		s.q.rollupDDL(edgesTable()),
+		s.q.rollupDDL(edgesTable(nil)),
 		s.q.rollupStateDDL(),
 	}
 }

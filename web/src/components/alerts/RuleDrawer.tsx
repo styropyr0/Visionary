@@ -53,6 +53,20 @@ function blank(meta: AlertsMeta): RuleInput {
   };
 }
 
+/** A new rule from a link such as #/alerts?metric=edge_error_rate&service=shop&callee=stock. */
+export function ruleFromLink(meta: AlertsMeta, p: URLSearchParams): RuleInput | null {
+  const m = meta.metrics.find((x) => x.id === p.get("metric"));
+  if (!m) return null;
+  const scope: Record<string, string> = {};
+  for (const s of m.scopes) {
+    const v = p.get(s);
+    if (v !== null) scope[s] = v;
+  }
+  const b = blank(meta);
+  const where = scope.service !== undefined && scope.callee !== undefined ? `${scope.service || "unnamed service"} → ${scope.callee}` : "";
+  return { ...b, name: where ? `${m.label}: ${where}` : m.label, spec: { ...b.spec, metric: m.id, op: m.op, threshold: m.threshold, scope } };
+}
+
 export function ruleInputOf(r: RuleView): RuleInput {
   return {
     name: r.name,
@@ -346,6 +360,12 @@ export function RuleDrawer({ meta, channels, rules, rule, initial, onClose, onSa
               <label className="field">
                 <span>Service</span>
                 <Combobox label="Service" value={sp.scope.service ?? ""} placeholder="Any" options={meta.services} onChange={(v) => setScope("service", v)} />
+              </label>
+            )}
+            {scopes.includes("callee") && (
+              <label className="field">
+                <span>Calls to</span>
+                <input className="input" value={sp.scope.callee ?? ""} placeholder="Any service or dependency" onChange={(e) => setScope("callee", e.target.value)} />
               </label>
             )}
             {scopes.includes("app") && (

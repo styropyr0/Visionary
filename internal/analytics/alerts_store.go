@@ -97,6 +97,9 @@ type alertScope struct {
 	Instance string `json:"instance,omitempty"`
 	Service  string `json:"service,omitempty"`
 	Check    string `json:"check,omitempty"`
+	// Service map arrow rules: the called service or dependency. Service is
+	// the caller.
+	Callee string `json:"callee,omitempty"`
 	// security_events rules (security_alerts.go): finding kind, minimum
 	// severity, source (api or host) and host.
 	EventKind     string `json:"event_kind,omitempty"`

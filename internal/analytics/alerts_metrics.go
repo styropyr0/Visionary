@@ -43,6 +43,19 @@ type metricDef struct {
 	zeroFill bool
 }
 
+// from is the metric's table for spans. A derived table that filters inside
+// its legs ({{from}}, {{to}}) gets the spans' outer bounds.
+func (m metricDef) from(spans []timeSpan) string {
+	if len(spans) == 0 || !strings.Contains(m.table, "{{from}}") {
+		return m.table
+	}
+	lo, hi := spans[0].From, spans[0].To
+	for _, sp := range spans[1:] {
+		lo, hi = minTime(lo, sp.From), maxTime(hi, sp.To)
+	}
+	return fillWindow(m.table, lo.UTC().Format(tsLayout), hi.UTC().Format(tsLayout))
+}
+
 // filterSQL is the metric's fixed condition as an AND clause.
 func (m metricDef) filterSQL() string {
 	if m.filter == "" {
@@ -158,6 +171,7 @@ func scopeClause(m metricDef, sc alertScope) (string, []any) {
 	add("host", "host", sc.Host)
 	add("app", "app", sc.App)
 	add("check", "check_id", sc.Check)
+	add("callee", "callee", sc.Callee)
 	return b.String(), args
 }
 
@@ -194,17 +208,17 @@ func (s *Server) valueSQL(m metricDef, sc alertScope, span timeSpan, grouped boo
 		col := fallback(m.pctCol, "duration_ms")
 		return `WITH o AS (
   SELECT ` + col + ` AS v, ROW_NUMBER() OVER (ORDER BY ` + col + `) AS rn, COUNT(*) OVER () AS n
-  FROM ` + m.table + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
+  FROM ` + m.from([]timeSpan{span}) + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
 )
 SELECT '' AS k, MIN(CASE WHEN rn >= ` + fnum(m.pct) + ` * n THEN v END) AS value, COUNT(*) AS n FROM o`, args
 	}
 	agg := m.agg(int64(span.To.Sub(span.From).Seconds()))
 	if grouped {
 		key := m.groupKey()
-		return `SELECT ` + key + ` AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
+		return `SELECT ` + key + ` AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.from([]timeSpan{span}) + ` WHERE ` + where + scope + `
 GROUP BY ` + key + ` ORDER BY ` + key, args
 	}
-	return `SELECT '' AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope, args
+	return `SELECT '' AS k, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.from([]timeSpan{span}) + ` WHERE ` + where + scope, args
 }
 
 // seriesSQL is the metric per bucket over spans: rows (t, series, value, n).
@@ -218,7 +232,7 @@ func (s *Server) seriesSQL(m metricDef, sc alertScope, spans []timeSpan, bucket 
 	if m.pct > 0 {
 		col := fallback(m.pctCol, "duration_ms")
 		return `WITH b AS (
-  SELECT ` + t + ` AS t, ` + col + ` AS v FROM ` + m.table + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
+  SELECT ` + t + ` AS t, ` + col + ` AS v FROM ` + m.from(spans) + ` WHERE ` + where + scope + ` AND ` + col + ` IS NOT NULL
 ),
 r AS (
   SELECT t, v, ROW_NUMBER() OVER (PARTITION BY t ORDER BY v) AS rn, COUNT(*) OVER (PARTITION BY t) AS n FROM b
@@ -229,10 +243,10 @@ FROM r GROUP BY t ORDER BY t`, args
 	agg := m.agg(bucket)
 	if grouped {
 		key := m.groupKey()
-		return `SELECT ` + t + ` AS t, ` + key + ` AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
+		return `SELECT ` + t + ` AS t, ` + key + ` AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.from(spans) + ` WHERE ` + where + scope + `
 GROUP BY ` + t + `, ` + key + ` ORDER BY t`, args
 	}
-	return `SELECT ` + t + ` AS t, '' AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.table + ` WHERE ` + where + scope + `
+	return `SELECT ` + t + ` AS t, '' AS series, ` + agg + ` AS value, COUNT(*) AS n FROM ` + m.from(spans) + ` WHERE ` + where + scope + `
 GROUP BY ` + t + ` ORDER BY t`, args
 }
 
@@ -584,8 +598,12 @@ func describeScope(sc alertScope, key string) string {
 	if sc.Method != "" || sc.Route != "" {
 		parts = append(parts, strings.TrimSpace(sc.Method+" "+sc.Route))
 	}
-	if sc.Service != "" {
+	if sc.Service != "" && sc.Callee != "" {
+		parts = append(parts, sc.Service+" → "+sc.Callee)
+	} else if sc.Service != "" {
 		parts = append(parts, "service "+sc.Service)
+	} else if sc.Callee != "" {
+		parts = append(parts, "calls to "+sc.Callee)
 	}
 	if key != "" {
 		parts = append(parts, key)

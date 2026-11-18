@@ -20,7 +20,7 @@ import {
 } from "../../lib/alerts";
 import { formatDateTime } from "../../lib/time";
 import { SeverityTag, Sparkline, StateBadge, timeAgo } from "./bits";
-import { RuleDrawer } from "./RuleDrawer";
+import { RuleDrawer, ruleFromLink } from "./RuleDrawer";
 import { usePopover } from "../Toolbar";
 import { FloatingMenu } from "../Floating";
 import { useConfirm } from "../Confirm";
@@ -48,6 +48,18 @@ export function RulesTab({ meta, rules, channels, loading, onChange }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [imported, setImported] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // #/alerts?metric=…&service=… opens a new rule with those filled in, as
+  // the service map's "Alert on this arrow" links do.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+    if (!p.get("metric") || !meta.can_edit) return;
+    const initial = ruleFromLink(meta, p);
+    if (initial) {
+      setEditing({ initial });
+      window.history.replaceState(null, "", "#/alerts");
+    }
+  }, [meta]);
 
   // #/alerts?rule=12 opens that rule.
   const linked = useRef(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("rule"));

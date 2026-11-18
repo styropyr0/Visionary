@@ -42,18 +42,35 @@ func (s *Server) handleServiceMap(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	services, internal, external, ok := s.serviceMapRollup(r.Context(), tr)
-	if ok && scopeFrom(r.Context()) != nil {
+	out, err := s.serviceMap(r.Context(), tr)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	// The window right before, for deltas and calls that stopped
+	if r.URL.Query().Get("compare") == "1" {
+		prev, err := s.serviceMap(r.Context(), tr.previous())
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		out["previous"] = prev
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) serviceMap(ctx context.Context, tr timeRange) (map[string]any, error) {
+	services, internal, external, ok := s.serviceMapRollup(ctx, tr)
+	if ok && scopeFrom(ctx) != nil {
 		internal = calleesIn(internal, services)
 	}
 	if !ok {
 		var err error
-		if services, internal, external, err = s.serviceMapRaw(r.Context(), tr); err != nil {
-			s.fail(w, err)
-			return
+		if services, internal, external, err = s.serviceMapRaw(ctx, tr); err != nil {
+			return nil, err
 		}
 	}
-	writeJSON(w, http.StatusOK, buildServiceMap(tr, services, internal, external))
+	return buildServiceMap(tr, services, internal, external), nil
 }
 
 // calleesIn keeps calls to services the map shows. rollup_edges is scoped by

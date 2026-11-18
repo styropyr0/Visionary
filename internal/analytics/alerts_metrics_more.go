@@ -19,7 +19,12 @@ var (
 	clientScopes = []string{"app"}
 	spanScopes   = []string{"service", "instance"}
 	checkScopes  = []string{"check"}
+	edgeScopes   = []string{"service", "callee"}
 )
+
+// edgeAlertTable is the service map's calls, raw, named for alert scopes:
+// service is the caller and callee what it called
+const edgeAlertTable = `(SELECT created_at, src AS service, kind, dst AS callee, duration_ms, failed FROM ` + edgesSource + `) AS ea`
 
 func moreMetrics(rule apdexRule) []metricDef {
 	t4 := rule.sql4()
@@ -135,6 +140,16 @@ func moreMetrics(rule apdexRule) []metricDef {
 			Scopes:      clientScopes, Op: ">", Threshold: 5, UpIsBad: true, table: "client_events", filter: "kind = 'api'",
 			agg: ratio("status >= 500 OR status = 0 OR status IS NULL"), minRequests: 5},
 
+		{ID: "edge_error_rate", Label: "Failing calls between services", Group: "dependency", Unit: "percent",
+			Description: "Share of calls from a service to another service or dependency that failed, as the service map's arrows count them.",
+			Scopes:      edgeScopes, Op: ">", Threshold: 5, UpIsBad: true, table: edgeAlertTable, agg: ratio("failed = 1"), minRequests: 5},
+		{ID: "edge_p95", Label: "Call time between services (p95)", Group: "dependency", Unit: "ms",
+			Description: "95th percentile of the time a service waited on calls to another service or dependency, as the service map's arrows measure it.",
+			Scopes:      edgeScopes, Op: ">", Threshold: 1000, UpIsBad: true, table: edgeAlertTable, pct: 0.95, minRequests: 5},
+		{ID: "edge_rate", Label: "Calls between services per minute", Group: "dependency", Unit: "rpm",
+			Description: "Calls per minute from a service to another service or dependency. Use < to catch calls that stopped.",
+			Scopes:      edgeScopes, Op: "<", Threshold: 1, table: edgeAlertTable, zeroFill: true,
+			agg: func(w int64) string { return "COUNT(*) * 60.0 / " + strconv.FormatInt(w, 10) }},
 		span("db_query_p95", "Database query time (p95)", "db", 500),
 		span("outbound_http_p95", "Outbound HTTP call time (p95)", "http", 2000),
 		{ID: "dependency_errors", Label: "Failing calls to dependencies", Group: "dependency", Unit: "percent",

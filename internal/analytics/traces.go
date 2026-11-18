@@ -17,6 +17,10 @@ func (s *Server) tracesStart(ctx context.Context) {}
 func (s *Server) tracesRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/traces", s.authed(s.traceCached(s.handleTraceSearch)))
 	mux.Handle("GET /api/traces/map", s.authed(s.traceCached(s.handleServiceMap)))
+	mux.Handle("GET /api/traces/map/overlay", s.authed(s.traceCached(s.handleMapOverlay)))
+	mux.Handle("GET /api/traces/map/service", s.authed(s.traceCached(s.handleMapService)))
+	mux.Handle("GET /api/traces/map/edge", s.authed(s.traceCached(s.handleMapEdge)))
+	mux.Handle("GET /api/traces/map/series", s.authed(s.traceCached(s.handleMapSeries)))
 	mux.Handle("GET /api/traces/{trace_id}", s.authed(s.handleTrace))
 }
 

@@ -69,6 +69,8 @@ export interface Scope {
   container?: string;
   /** Frontend rules: the client app. */
   app?: string;
+  /** Service map arrow rules: what the service (the caller) calls. */
+  callee?: string;
 }
 
 export type NoDataPolicy = "" | "alerting" | "keep";

@@ -92,7 +92,7 @@ func (rt *rollupRuntime) kinds() []rollupKind {
 	return []rollupKind{
 		{"requests", func(rt *rollupRuntime) rollupTable { return requestsTable(rt.s.apdex(), rt.knownRoutes()) }},
 		{"system", func(*rollupRuntime) rollupTable { return systemTable() }},
-		{"edges", func(*rollupRuntime) rollupTable { return edgesTable() }},
+		{"edges", func(rt *rollupRuntime) rollupTable { return edgesTable(rt.knownRoutes()) }},
 	}
 }
 

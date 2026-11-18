@@ -206,7 +206,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Use the service map",
-        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it; the buttons in the corner zoom, fit the map and put moved boxes back. Click an arrow or a box to search its traces.",
+        text: "**Service map** draws each service and the databases, hosts, caches and queues it calls. Arrows are thicker for more calls and turn amber or red with failures; hover one for its rate, failures and p95, or **Show table** for all of them. Drag the canvas to pan, scroll or pinch to zoom, drag a box to move it (the map remembers where you put it in this browser); the buttons in the corner zoom, fit the map and put moved boxes back. **Focus** keeps one service and what is one or two hops from it; the other filters hide quiet arrows, show only failing ones or one kind of call. **Compare with the window before** marks what changed: rate changes, new arrows, and calls that stopped. Click a box for its trend, callers and calls, slowest routes, errors, deploys and instances, with links to its traces and logs. Click an arrow for its trend and the routes it calls, and to set an alert when those calls fail, slow down or stop.",
         shot: "traces-map",
         caption: "Services, the databases and hosts they call, and the calls between them.",
       },

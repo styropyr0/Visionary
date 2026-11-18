@@ -156,7 +156,7 @@ func TestServiceMapFromRollups(t *testing.T) {
 	rollupRuntimes.Store(s, rt)
 	t.Cleanup(func() { rollupRuntimes.Delete(s) })
 	low, high := at.Truncate(time.Minute).Add(-time.Hour), at.Truncate(time.Minute).Add(time.Minute)
-	for kind, tbl := range map[string]rollupTable{"requests": requestsTable(s.apdex(), nil), "edges": edgesTable()} {
+	for kind, tbl := range map[string]rollupTable{"requests": requestsTable(s.apdex(), nil), "edges": edgesTable(nil)} {
 		if err := rt.build(ctx, tbl, 60, 0, low, high); err != nil {
 			t.Fatal(kind, err)
 		}
@@ -176,5 +176,79 @@ func TestServiceMapFromRollups(t *testing.T) {
 	want, _ := json.Marshal(buildServiceMap(tr, rsv, rin, rex))
 	if string(got) != string(want) || !strings.Contains(string(got), `"source":"service:shop","target":"service:stock"`) {
 		t.Fatalf("rollup map\n%s\nraw map\n%s", got, want)
+	}
+}
+
+func TestServiceMapExtras(t *testing.T) {
+	s, at := traceTestServer(t)
+	ctx := context.Background()
+	rng := "from=" + at.Add(-time.Hour).Format(time.RFC3339) + "&to=" + at.Add(time.Hour).Format(time.RFC3339)
+	get := func(h http.HandlerFunc, path string, out any) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), out); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var m struct {
+		Edges    []mapEdge `json:"edges"`
+		Previous struct {
+			Edges []mapEdge `json:"edges"`
+		} `json:"previous"`
+	}
+	get(s.handleServiceMap, "/api/traces/map?compare=1&"+rng, &m)
+	if len(m.Edges) == 0 || len(m.Previous.Edges) != 0 {
+		t.Fatalf("compare: %+v", m)
+	}
+
+	var edge struct {
+		Series, Routes Result
+	}
+	get(s.handleMapEdge, "/api/traces/map/edge?src=shop&kind=service&dst=stock&"+rng, &edge)
+	if len(edge.Series.Rows) != 1 || toInt(edge.Series.Rows[0][1]) != 1 || toInt(edge.Series.Rows[0][2]) != 1 ||
+		len(edge.Routes.Rows) != 1 || edge.Routes.Rows[0][0] != "/stock/{id}" {
+		t.Fatalf("edge: %+v", edge)
+	}
+
+	var series struct {
+		Edges map[string][][3]float64 `json:"edges"`
+	}
+	get(s.handleMapSeries, "/api/traces/map/series?"+rng, &series)
+	if pts := series.Edges["service:shop>service:stock"]; len(pts) != 1 || pts[0][1] != 1 || pts[0][2] != 1 {
+		t.Fatalf("series: %+v", series.Edges)
+	}
+
+	var svc struct {
+		Trend, Routes, Errors Result
+	}
+	get(s.handleMapService, "/api/traces/map/service?name=stock&"+rng, &svc)
+	if len(svc.Trend.Rows) != 1 || len(svc.Routes.Rows) != 1 || len(svc.Errors.Rows) != 1 {
+		t.Fatalf("service: %+v", svc)
+	}
+
+	if err := s.db.Exec(ctx, `INSERT INTO releases (created_at, service, instance, version) VALUES (?, 'stock', 'i', 'v2')`, at.Format(tsLayout)); err != nil {
+		t.Fatal(err)
+	}
+	var ov struct {
+		Services map[string]mapHealth `json:"services"`
+	}
+	get(s.handleMapOverlay, "/api/traces/map/overlay?services=stock,shop&"+rng, &ov)
+	if d := ov.Services["stock"].Deploys; len(d) != 1 || d[0].Version != "v2" {
+		t.Fatalf("overlay: %+v", ov)
+	}
+
+	m5, _ := s.metricByID("edge_error_rate")
+	q, args := s.valueSQL(m5, alertScope{Service: "shop", Callee: "stock"}, timeSpan{at.Add(-time.Minute), at.Add(time.Minute)}, false)
+	res, err := s.db.Query(ctx, q, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Rows) != 1 || toFloat(res.Rows[0][1]) != 100 {
+		t.Fatalf("edge error rate: %v", res.Rows)
 	}
 }
