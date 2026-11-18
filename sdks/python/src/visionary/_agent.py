@@ -14,6 +14,7 @@ from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
 from ._profiler import Profiler
+from ._ratelimit import RateLimits
 from ._skip import SkipList
 from ._storage import Backend, open_backend
 from ._system import HttpCounters, Recorder
@@ -44,6 +45,7 @@ class Agent:
         # Own writer, so a flood of log lines never crowds out request rows.
         self._logs: Optional[_logs.LogPipeline] = None
         self._metrics: Optional[_metrics.MetricsRecorder] = None
+        self._ratelimit: Optional[RateLimits] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False
         self.errors_on = False
@@ -78,6 +80,8 @@ class Agent:
                                            _logs.parse_level(cfg.log_level) or _logs.INFO)
         if cfg.metrics:
             self._metrics = _metrics.MetricsRecorder(cfg, self._backend, logger, instance)
+        if cfg.rate_limit:
+            self._ratelimit = RateLimits(self._backend, logger, cfg.service, instance, cfg.redact_headers)
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
@@ -98,7 +102,13 @@ class Agent:
     @property
     def enabled(self) -> bool:
         """True when anything is collected (a database and at least one feature)."""
-        return self._requests is not None or self._system is not None or self._logs is not None
+        return (self._requests is not None or self._system is not None or self._logs is not None
+                or self._ratelimit is not None)
+
+    @property
+    def rate_limits(self) -> Optional[RateLimits]:
+        """Security -> Rate limits, or None when off (integration API)."""
+        return self._ratelimit
 
     @property
     def logs(self) -> Optional[_logs.LogPipeline]:
@@ -210,6 +220,8 @@ class Agent:
             _logs.set_active(self._logs)
         if self._metrics is not None:
             self._metrics.start()
+        if self._ratelimit is not None:
+            self._ratelimit.start()
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -238,6 +250,8 @@ class Agent:
                 self._skip.close()
             if self._retention is not None:
                 self._retention.close()
+            if self._ratelimit is not None:
+                self._ratelimit.close(min(deadline.left(), 5.0))
             if self._requests is not None:
                 idle = self._requests.close(deadline.left()) and idle
             if self._logs is not None:
@@ -280,6 +294,8 @@ class Agent:
             self._logs.restart_after_fork()
         if self._metrics is not None:
             self._metrics.restart_after_fork()
+        if self._ratelimit is not None:
+            self._ratelimit.restart_after_fork()
 
     def __enter__(self) -> "Agent":
         return self.start()
@@ -332,7 +348,7 @@ def init(config: Optional[Config] = None) -> Agent:
         except Exception:
             logger.exception("visionary: init failed; collection is off")
             agent = Agent(Config(log_requests=False, system_metrics=False, spans=False, errors=False, logs=False,
-                                 metrics=False),
+                                 metrics=False, rate_limit=False),
                           backend=_NoBackend())
         atexit.register(agent.close)
         _default = agent

@@ -5,6 +5,9 @@
 
 Without an explicit agent it uses ``visionary.init()``. Exceptions Flask turns
 into a 500 are recorded in ``errors``; Flask's handling is unchanged.
+Security -> Rate limits are enforced before the view runs, and
+``visionary.RateLimited`` raised by ``visionary.check_rate_limit()`` becomes
+the answer (an error handler registered by ``init_app``).
 """
 
 from __future__ import annotations
@@ -12,14 +15,15 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from flask import Flask, request
+from flask import Flask, Response, request
 
 from .. import _context, _profiler
 from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import CountingIterator, finish, finish_unlogged, logger, report_unhandled, resolve_agent
+from .._ratelimit import Denial, RateLimited
+from ._common import CountingIterator, check_request, finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 _KEY = "visionary.state"
 
@@ -87,6 +91,14 @@ class _TeeInput:
         return getattr(self._inner, name)
 
 
+def _response(d: Denial) -> Response:
+    return Response(d.body, status=d.status, headers=d.headers)
+
+
+def _rate_limited(e: RateLimited) -> Response:
+    return _response(e.denial)
+
+
 class Visionary:
     def __init__(self, app: Optional[Flask] = None, agent: Optional[Agent] = None) -> None:
         self._agent = agent
@@ -102,6 +114,7 @@ class Visionary:
     def init_app(self, app: Flask) -> None:
         agent = self.agent
         app.extensions["visionary"] = self
+        app.register_error_handler(RateLimited, _rate_limited)
         if not agent.enabled:
             return
         # First before_request (so auth hooks can call set_user) and last
@@ -125,7 +138,7 @@ class Visionary:
             tracestate = request.headers.get("tracestate")
             if not agent.should_log(request.path):
                 st.ann, st.token = _context.begin(None, _info(req, None), traceparent, tracestate)
-                return
+                return self._limit(st)
             e = Entry()
             e.started_at = now()
             e.request_id = request_id(request.headers.get(REQUEST_ID_HEADER))
@@ -142,7 +155,17 @@ class Visionary:
                     environ["wsgi.input"] = _TeeInput(environ["wsgi.input"], st.body)
         except Exception:
             logger.exception("visionary: request capture failed")
-        return None
+        return self._limit(st)
+
+    def _limit(self, st: _State) -> Optional[Response]:
+        """The rate-limit request phase; a response stops Flask before the view."""
+        if st.ann is None or self.agent.rate_limits is None:
+            return None
+        environ = request.environ
+        d = check_request(self.agent, st.ann, request.method, request.path,
+                          client_ip(environ.get("HTTP_X_FORWARDED_FOR"), environ.get("REMOTE_ADDR")),
+                          lambda name: request.headers.get(name, ""), query=lambda name: request.args.get(name, ""))
+        return _response(d) if d is not None else None
 
     def _after(self, response: Any) -> Any:
         st = request.environ.get(_KEY)

@@ -56,7 +56,7 @@ public class VisionaryAutoConfiguration {
                 return new VisionaryAgent(cfg);
             }
             if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors() && !cfg.logs()
-                    && !cfg.metrics()) {
+                    && !cfg.metrics() && !cfg.rateLimit()) {
                 return new VisionaryAgent(cfg);
             }
             ClassLoader loader = getClass().getClassLoader();
@@ -113,7 +113,7 @@ public class VisionaryAutoConfiguration {
     FilterRegistrationBean<VisionaryFilter> visionaryFilter(VisionaryAgent agent) {
         FilterRegistrationBean<VisionaryFilter> registration = new FilterRegistrationBean<>(
                 new VisionaryFilter(agent.counters(), agent.requests(), agent.telemetry(), agent.logs(),
-                        agent.skip(), agent.config()));
+                        agent.skip(), agent.rateLimits(), agent.config()));
         registration.setName("visionaryFilter");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         registration.setDispatcherTypes(DispatcherType.REQUEST);

@@ -29,7 +29,7 @@ module Visionary
       # Unlogged requests still pass the trace on to their outbound calls
       span, parent = TraceContext.request_span(env)
       TraceContext.with(span) do
-        next passthrough(agent, env) unless agent.log_path?(path)
+        next passthrough(agent, env, path) unless agent.log_path?(path)
 
         log(agent, env, path, span, parent)
       end
@@ -73,13 +73,13 @@ module Visionary
     private
 
     # Not logged: count it, and still record what escapes.
-    def passthrough(agent, env)
+    def passthrough(agent, env, path)
       agent.http.started
       Profiler::Tally.started!
       t0 = Telemetry.now_ms
       status = 500
       begin
-        res = @app.call(env)
+        res = serve(agent, env, path)
         status = res[0].to_i
         res
       rescue Exception => e # re-raised below; the app's handling is unchanged
@@ -118,7 +118,7 @@ module Visionary
       outer = RequestContext.current
       RequestContext.current = ctx
       begin
-        status, res_headers, body = @app.call(env)
+        status, res_headers, body = serve(agent, env, path)
       rescue Exception => e # re-raised below; the app's handling is unchanged
         ctx.failed!
         agent.telemetry&.exception(e, handled: false, ctx: ctx)
@@ -143,6 +143,21 @@ module Visionary
         finish(agent, env, ctx, headers, req_capture, status, res_headers, resp_capture, t0)
       end
       [status, res_headers, proxy]
+    end
+
+    # Runs the rate limits' request phase, then the app unless it was denied.
+    def serve(agent, env, path)
+      limiter = agent.respond_to?(:rate_limiter) ? agent.rate_limiter : nil
+      check = RateLimit::Check.start(limiter, env, path, client_ip(env))
+      outer = RateLimit::Check.current
+      RateLimit::Check.current = check
+      return RateLimit.response(check.denial) if check&.denial
+
+      @app.call(env)
+    rescue RateLimited => e
+      e.to_rack
+    ensure
+      RateLimit::Check.current = outer
     end
 
     def finish(agent, env, ctx, headers, req_capture, status, res_headers, resp_capture, t0)

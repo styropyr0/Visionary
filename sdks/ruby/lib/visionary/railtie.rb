@@ -29,6 +29,24 @@ module Visionary
       end
     end
 
+    # ShowExceptions would turn Visionary::RateLimited into an error page
+    # before the middleware sees it, so controllers answer it themselves (the
+    # status mapping covers code outside controllers).
+    if config.respond_to?(:action_dispatch)
+      config.action_dispatch.rescue_responses["Visionary::RateLimited"] = :too_many_requests
+    end
+
+    initializer "visionary.rate_limit" do
+      ActiveSupport.on_load(:action_controller) do
+        rescue_from(Visionary::RateLimited) { |e| Visionary::Railtie.render_rate_limited(self, e) }
+      end
+    end
+
+    def self.render_rate_limited(controller, error)
+      error.headers.each { |k, v| controller.response.headers[k] = v unless k == "content-type" }
+      controller.render(body: error.body, status: error.status, content_type: error.headers["content-type"])
+    end
+
     config.after_initialize do
       cfg = Visionary.config
       cfg.logger ||= Rails.logger

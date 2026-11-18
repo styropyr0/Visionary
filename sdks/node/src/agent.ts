@@ -10,6 +10,7 @@ import { consoleLogger, errMessage } from "./log.js";
 import { LogPipeline, activeLogs, logValues, setActiveLogs } from "./logs/pipeline.js";
 import { parseLevel, secretKeys } from "./logs/rules.js";
 import { collectMetrics, configureMetrics, metricsLimit } from "./metrics.js";
+import { RateLimits } from "./ratelimit/poller.js";
 import { SkipList } from "./skip.js";
 import { openStore } from "./store/open.js";
 import type { Table, Value } from "./store/sql.js";
@@ -46,6 +47,8 @@ export class Agent {
   private profiler?: Profiler;
   private explainer?: ExplainWorker;
   private skip?: SkipList;
+  /** Dashboard rate limits; undefined when off or without a database. */
+  readonly rateLimits?: RateLimits;
   /** Own writer, so a flood of log lines never crowds out request rows. */
   private logs?: LogPipeline;
   private logWriter?: Writer;
@@ -83,6 +86,9 @@ export class Agent {
         const store = this.store;
         this.skip = new SkipList(() => store.rows(`SELECT name, value FROM visionary_settings WHERE name LIKE 'requests.%'`, []));
       }
+    }
+    if (cfg.rateLimit) {
+      this.rateLimits = new RateLimits(this.store, { service: cfg.service, instance: this.instance }, cfg.redactHeaders, this.logger);
     }
     if (cfg.systemMetrics && cfg.systemInterval > 0) {
       this.recorder = new Recorder(
@@ -152,9 +158,10 @@ export class Agent {
   /** Launches the background work. Tables are created asynchronously, so a
    * slow or unreachable database never delays startup. Safe to call twice. */
   start(): this {
-    if (this.started || this.closing || !this.active) return this;
+    if (this.started || this.closing || (!this.active && !this.rateLimits)) return this;
     this.started = true;
     const cfg = this.config;
+    this.rateLimits?.start();
     if (this.writer) {
       this.writer.start();
       void this.writerReady();
@@ -238,6 +245,7 @@ export class Agent {
           this.logWriter?.close(timeoutMs),
           this.metricWriter?.close(timeoutMs),
           this.recorder?.close(),
+          this.rateLimits?.close(),
         ]);
         if (Date.now() > deadline) this.logger.warn("visionary: close took longer than its timeout");
       }

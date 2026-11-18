@@ -193,6 +193,46 @@ cfg.lookup_user = lookup_user
 visionary.init(cfg)
 ```
 
+## Rate limits
+
+Rules made in the dashboard (**Security → Rate limits**) are enforced by the
+integration before your view runs: a request over a limit gets `429` with
+`Retry-After`, a blocked one `403`, and the view never runs. The request is
+still logged like any other, and what was limited is written to
+`rate_limit_events`. The SDK reads the rules at start and every 15 seconds,
+so a change takes effect without a redeploy. If anything goes wrong while
+checking, the request goes through.
+
+Rules keyed on the user, the role or an attribute you pass (such as the plan)
+are only checked when you call `check_rate_limit` after `set_user`. It raises
+`visionary.RateLimited`, which the integration turns into the answer:
+
+```python
+visionary.set_user(user.id, role=user.role)
+visionary.check_rate_limit({"plan": user.plan})   # raises RateLimited when limited
+```
+
+- **Django**: call it in a view, or in a middleware listed after
+  `VisionaryMiddleware`. A view's `RateLimited` is answered by the
+  middleware's `process_exception`; one raised in a middleware reaches Django
+  as a 500 (which Django logs) and is replaced with the answer.
+- **Flask**: call it in a `before_request` hook or a view; `Visionary(app)`
+  registers the error handler.
+- **FastAPI, Starlette, ASGI**: call it in a dependency or an endpoint; the
+  middleware catches it and answers, unless the app had already started its
+  response.
+
+Only the first call per request counts (later calls repeat its outcome), and
+outside a request handled by an integration it does nothing. To answer
+yourself, catch it: `e.status`, `e.headers` (a dict) and `e.body` (bytes).
+
+Counters live in each process. A limit of 100 a minute lets through up to
+100 a minute per process: gunicorn or uwsgi workers each count separately, as
+do instances behind a load balancer, so 4 workers on 2 instances allow up to
+800. Set limits per process.
+
+`VISIONARY_RATE_LIMIT=false` turns enforcement and polling off.
+
 ## Outbound HTTP
 
 Off until you turn it on. Call this once at startup (or set
@@ -529,6 +569,7 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_METRICS` | `metrics` | `true` | Custom metrics on or off (see [Custom metrics](#custom-metrics)). |
 | `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | Time between metrics rows: `15`, `1m`. |
 | `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets per metric name. |
+| `VISIONARY_RATE_LIMIT` | `rate_limit` | `true` | Enforce **Security → Rate limits** (see [Rate limits](#rate-limits)). |
 | | `log_queue_size` | `10000` | Log line queue; when full, new lines are dropped and logged. |
 | | `queue_size` | `5000` | Request queue entries; when full, new entries are dropped and logged. |
 | | `batch_size` | `0` | Rows per write; 0 means 500 on SQL databases (at most 2000) and 50 on D1. |
@@ -578,6 +619,7 @@ time and kept (up to an hour) while the database is unreachable.
 | `agent.writer_stats()` | `WriterStats(queued, written, dropped)`, summed over the request, log and metric writers, for load tests and health checks. |
 | `VisionaryMiddleware` (Django), `Visionary` (Flask), `VisionaryASGIMiddleware` | Framework integrations, in `visionary.integrations.*`. |
 | `set_user(id, handle=None, role=None)`, `set_route(pattern)`, `login_attempt(account)` | Annotate the current request. |
+| `check_rate_limit(attrs=None)`, `RateLimited` | Check the rate limits on the user; raises `RateLimited` (`status`, `headers`, `body`) when limited. |
 | `capture_exception(exc=None)` | Record a handled error. |
 | `capture_logging(level=None)`, `LogHandler(level=NOTSET, agent=None)` | Send `logging` records to **Logs**. |
 | `span(kind, name, target=None, detail=None)` | Custom span (`with` / `async with`). |

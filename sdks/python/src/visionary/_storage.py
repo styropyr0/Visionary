@@ -97,7 +97,13 @@ METRIC_COLUMNS = [
     "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min",
     "max", "buckets",
 ]
+# Rate-limit outcomes; the Visionary server creates the table, never the SDK.
+RATE_LIMIT_COLUMNS = [
+    "created_at", "service", "instance", "rule_id", "rule_name", "outcome", "key_value", "ip", "country", "method",
+    "path", "user_id", "hits",
+]
 SETTINGS_SQL = "SELECT name, value FROM visionary_settings WHERE name LIKE '%s.%%'"
+SETTING_SQL = "SELECT value FROM visionary_settings WHERE name = '%s'"
 
 TABLES = {
     "requests": ("api_logs", REQUEST_COLUMNS),
@@ -108,6 +114,7 @@ TABLES = {
     "profiles": ("profiles", PROFILE_COLUMNS),
     "logs": ("app_logs", LOG_COLUMNS),
     "metrics": ("metrics", METRIC_COLUMNS),
+    "ratelimit": ("rate_limit_events", RATE_LIMIT_COLUMNS),
 }
 
 # Schema file per group, and the columns older tables of that group may lack.
@@ -282,6 +289,11 @@ class Backend:
         value) rows. Raises when visionary_settings doesn't exist yet."""
         raise NotImplementedError
 
+    def read_setting(self, name: str) -> Optional[str]:
+        """One visionary_settings value, None when the row is missing. name
+        is a constant of the SDK's, never user input."""
+        raise NotImplementedError
+
     def close(self) -> None:
         pass
 
@@ -349,6 +361,12 @@ class D1Backend(Backend):
     def read_settings(self, prefix: str = "profile") -> List[Tuple[str, str]]:
         return [(str(r[0]), "" if r[1] is None else str(r[1]))
                 for r in self._client.rows(SETTINGS_SQL % prefix) if len(r) >= 2]
+
+    def read_setting(self, name: str) -> Optional[str]:
+        rows = self._client.rows(SETTING_SQL % name)
+        if not rows or not rows[0]:
+            return None
+        return "" if rows[0][0] is None else str(rows[0][0])
 
 
 class SQLBackend(Backend):
@@ -524,6 +542,22 @@ class SQLBackend(Backend):
                 return [(str(r[0]), "" if r[1] is None else str(r[1])) for r in cur.fetchall()]
             finally:
                 cur.close()
+
+        return self._run(read)
+
+    def read_setting(self, name: str) -> Optional[str]:
+        sql = SETTING_SQL % name
+
+        def read(conn: Any) -> Optional[str]:
+            cur = conn.cursor()
+            try:
+                cur.execute(sql)
+                row = cur.fetchone()
+            finally:
+                cur.close()
+            if not row:
+                return None
+            return "" if row[0] is None else str(row[0])
 
         return self._run(read)
 

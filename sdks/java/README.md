@@ -332,6 +332,32 @@ plus the top five frames of the application's own code
 `org.apache.*` and the SDK are skipped. At most 20 rows per fingerprint per
 minute are written by each instance.
 
+### Rate limits
+
+Rules made under Security → Rate limits are read from `visionary_settings`
+every 15 seconds and enforced by the filter before your handler runs: a
+request over a limit gets `429` with `Retry-After`, a blocked one `403`. The
+handler never runs, and the request is still logged with that status.
+
+Rules keyed on the user, the role or an attribute you pass (such as the plan)
+need your auth code to have run, so call the check after `setUser` (or once
+Spring Security has authenticated the request) and return when it answers:
+
+```java
+Visionary.setUser(request, user.getId(), user.getUsername(), user.getRole());
+if (Visionary.checkRateLimit(request, response, Map.of("plan", user.getPlan()))) {
+    return null; // already answered with 429 or 403
+}
+```
+
+Only the first call per request counts; later ones repeat its outcome. Without
+the call, those rules never run. Every limited or blocked request is counted in
+`rate_limit_events`, written at each poll and at shutdown.
+
+Counters live in each instance: a limit of 100 a minute on 4 instances lets up
+to 400 a minute through in all, so set limits per instance.
+`VISIONARY_RATE_LIMIT=false` turns polling and enforcement off.
+
 ### Query plans
 
 Not in this starter. The Queries page's **Explain** button needs an SDK that
@@ -617,6 +643,7 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_LOG_CAPTURE` | `false` | Add Visionary's Logback appender to the root logger. Without it, only an appender declared in your Logback configuration captures. See [Logs](#logs-opt-in-with-logback). |
 | `VISIONARY_LOGS` | `true` | `false` ignores the appender even where declared. See [Logs](#logs-opt-in-with-logback). |
 | `VISIONARY_LOG_LEVEL` | `info` | The lowest level kept until Settings → Logs has been read. |
+| `VISIONARY_RATE_LIMIT` | `true` | Enforce the rules from Security → Rate limits. See [Rate limits](#rate-limits). |
 | `VISIONARY_METRICS` | `true` | Write custom metrics; `false` makes every metric call a no-op. |
 | `VISIONARY_METRICS_INTERVAL` | `15s` | How often each series is written; a plain number is seconds. |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets kept per metric name. |

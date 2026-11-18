@@ -33,14 +33,23 @@ final class SecurityUserFilter extends OncePerRequestFilter {
     }
 
     private static void record(HttpServletRequest request) {
+        VisionaryUser user = current();
+        if (user != null) {
+            request.setAttribute(ATTRIBUTE, user);
+        }
+    }
+
+    /** The signed-in principal on this thread, or null. */
+    static VisionaryUser current() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)
                     && auth.getName() != null && !auth.getName().isEmpty()) {
-                request.setAttribute(ATTRIBUTE, VisionaryUser.of(auth.getName()));
+                return VisionaryUser.of(auth.getName());
             }
         } catch (RuntimeException ignored) {
             // the user column is best effort
         }
+        return null;
     }
 }

@@ -407,6 +407,25 @@ while one runs, the usual `pprof` overhead (a few percent of one CPU).
 `VISIONARY_PROFILE=false` makes a service ignore the dashboard and never
 profile.
 
+### Rate limits
+
+Rules made in the dashboard under Security → Rate limits are enforced by
+`Middleware` before your handler runs: an over-limit request gets `429` with
+`Retry-After`, a blocked one `403`. The agent reads the rules at start and
+every 15 seconds. Counters are kept in each process, so a limit applies per
+instance. Rules by user, role or an attribute such as the plan need the user
+first; check them after your auth code:
+
+```go
+visionary.SetUser(r.Context(), visionary.User{ID: id, Role: role})
+if visionary.RateLimited(w, r, map[string]string{"plan": plan}) {
+	return
+}
+```
+
+or mount `visionary.RateLimitUsers(next)` after the middleware that calls
+`SetUser`. `VISIONARY_RATE_LIMIT=false` turns enforcement off.
+
 ### Logs
 
 Route your logs through the agent and they show up in Logs, each linked to
@@ -621,6 +640,7 @@ and the dashboards flag the N+1.
 | `VISIONARY_EXPLAIN` | `true` | Answer query plan requests; needs `Config.Explain`. |
 | `VISIONARY_ERRORS` | `true` | Record panics and `CaptureError` calls. |
 | `VISIONARY_PROFILE` | follow the dashboard | `false`: never take CPU profiles, whatever Settings → Profiling says. |
+| `VISIONARY_RATE_LIMIT` | `true` | `false`: ignore Security → Rate limits. See [Rate limits](#rate-limits). |
 | `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |

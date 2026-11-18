@@ -18,7 +18,7 @@ internal sealed class Redactor
 {
     public const string Redacted = "[REDACTED]";
 
-    private static readonly string[] DefaultHeaders =
+    internal static readonly string[] DefaultHeaders =
         { "Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie", "X-Api-Key", "X-Auth-Token" };
 
     internal static readonly string[] DefaultFields =

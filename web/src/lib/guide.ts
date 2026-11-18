@@ -685,6 +685,22 @@ export const GUIDE: GuideSection[] = [
         caption: "Signals raised by the rules, newest first.",
       },
       {
+        title: "Limit and block requests",
+        text: "**Rate limits** holds rules every server SDK enforces in its middleware, before your handler runs. **New rule** picks an action: **Limit** (requests per window per **Counted per**: client IP, user, role, country, everyone together, a request header, a query parameter or an app attribute; over it, 429 with Retry-After), **Block** (403 for every match: blocklists of IPs and CIDR ranges, or countries) or **Allow** (exempt matches from the rules below it). Narrow it by methods, path globs such as `/api/export*`, IPs and ranges, countries, services and conditions such as `header:X-Plan is free`. **Different limits by** gives each value its own limit, for example plan `free` 60 and `pro` 600 a minute. Pick **Sliding window**, **Fixed window** or **Token bucket** with a burst, and optionally a custom status and body.",
+      },
+      {
+        title: "Try a limit before enforcing it",
+        text: "New rules start in **Monitor only**: they refuse nothing and record what they would have refused, shown as **Would refuse** and on the rule's row. Switch to **Enforce** once the numbers look right. Order matters, first rule first; move rules with the arrows, and turn one off with its power button. **From Route limits** turns the detector's Route limits into rules in one click.",
+      },
+      {
+        title: "Limit by user or plan",
+        text: "Rules that use the user, role or an app attribute run only where your service calls the SDK's user check after setting the user: **RateLimited** (Go), **rateLimited** (Node), **check_rate_limit** (Python), **check_rate_limit!** (Ruby), **checkRateLimit** (Java) or **RateLimitedAsync** (.NET), passing attributes such as the plan. **Help** on the Security page has the line for each language.",
+      },
+      {
+        title: "See what was refused",
+        text: "Below the rules, tiles and a chart count what was limited, blocked and would have been, over the time range, with the most refused clients (place and network when a location database is set) and the latest rows. An IP refused often becomes a **rate_limited** finding (tune it with **Rate-limited requests from one IP** in **Settings → Server → Security detectors**), so security alerts can fire on it. **Client IP and country** sets the header with the real client IP behind your proxy, the CDN headers the country is read from, and a switch for all enforcement.",
+      },
+      {
         title: "Add places and blocklists",
         text: "In **Settings → Server → Threat intelligence**, point **Location database** at a GeoLite2-City or DB-IP City Lite `.mmdb` file on the server to get places on findings and the new-location and impossible-travel checks, and **Network database** at an ASN file to name who runs each address. **Blocklist feeds** takes URLs of IP lists, such as `https://check.torproject.org/torbulkexitlist`; findings from listed addresses go up one level. **Threat intelligence** on the Security page shows whether they loaded.",
       },

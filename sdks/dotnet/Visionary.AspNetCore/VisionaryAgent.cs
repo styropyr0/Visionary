@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -45,6 +46,12 @@ internal sealed class VisionaryAgent : IDisposable
     private IReadOnlyList<string> _skip = Array.Empty<string>();
 
     public VisionaryAgent(IOptions<VisionaryOptions> options, ILoggerFactory loggers, IHostApplicationLifetime? lifetime = null)
+        : this(options, loggers, lifetime, null)
+    {
+    }
+
+    /// <summary>For tests: writes to <paramref name="store"/> instead of the configured database.</summary>
+    internal VisionaryAgent(IOptions<VisionaryOptions> options, ILoggerFactory loggers, IHostApplicationLifetime? lifetime, IStore? store)
     {
         Stopping = lifetime?.ApplicationStopping ?? CancellationToken.None;
         Options = options.Value;
@@ -63,7 +70,7 @@ internal sealed class VisionaryAgent : IDisposable
         });
         try
         {
-            Store = StoreFactory.Create(Options);
+            Store = store ?? StoreFactory.Create(Options);
             if (Store is null)
             {
                 Logger.LogWarning("visionary: no database configured (set VISIONARY_DATABASE_URL, the D1_* variables, or VisionaryOptions.DataSource); collection is off");
@@ -78,6 +85,11 @@ internal sealed class VisionaryAgent : IDisposable
             if (Options.Logs && Options.LogsAdded)
             {
                 Logs = new AppLogs(this);
+            }
+            if (Options.RateLimit)
+            {
+                RateLimits = new RateLimits(Service);
+                RateLimits.SetRedactHeaders(Redactor.DefaultHeaders.Concat(Options.RedactHeaders));
             }
             Interlocked.Exchange(ref _current, this);
         }
@@ -106,6 +118,9 @@ internal sealed class VisionaryAgent : IDisposable
 
     /// <summary>Null unless builder.Logging.AddVisionary() was called and VISIONARY_LOGS isn't false.</summary>
     public AppLogs? Logs { get; }
+
+    /// <summary>Security → Rate limits; null when VISIONARY_RATE_LIMIT is false or collection is off.</summary>
+    public RateLimits? RateLimits { get; }
 
     /// <summary>Settings → Data's skip list, refreshed by the telemetry writer.</summary>
     public IReadOnlyList<string> Skip

@@ -60,10 +60,12 @@ type securitySettings struct {
 	idorIDs       int // distinct records refused through one route
 	injectionHits int // injection-looking requests from one IP
 	routeLimits   []routeLimit
-	signupLikes   []string
-	signupMax     int
-	otpLikes      []string
-	otpMax        int
+	// rateLimitedHits refused by Security → Rate limits make a finding
+	rateLimitedHits int
+	signupLikes     []string
+	signupMax       int
+	otpLikes        []string
+	otpMax          int
 }
 
 // defaultLoginWords match login-like routes when the Login routes setting is
@@ -101,6 +103,7 @@ func (s *Server) securitySettings() securitySettings {
 		enumIDs:           max(s.confInt("security_enum_ids"), 2),
 		idorIDs:           max(s.confInt("security_idor_ids"), 2),
 		injectionHits:     max(s.confInt("security_injection_hits"), 1),
+		rateLimitedHits:   max(s.confInt("security_rate_limited_hits"), 1),
 		signupMax:         max(s.confInt("security_signup_max"), 1),
 		otpMax:            max(s.confInt("security_otp_max"), 1),
 	}
@@ -247,7 +250,7 @@ func (s *Server) securityPrompt() string {
 	return `Table security_events: one row per security finding. Use it for "was there an attack", brute force, scanners and host security questions.
 - id INTEGER, created_at TEXT (same format as api_logs; when the finding was first seen)
 - source TEXT: 'api' (Visionary's detectors over api_logs), 'host' (the Visionary host agent on a VM, and ssh_bruteforce graded from its events), 'audit' (Visionary's own audit log), 'logs' (secret_in_logs from the log scanner) or 'rule' (signals from the team's detection rules in security_rules: kind is the rule's rule_* kind, target names the group such as ip=… user=…, detail has rule, logic, tactic and technique (MITRE ATT&CK ids), group and a few samples)
-- kind TEXT. From the API: auth_bruteforce (many failed logins from one IP), credential_stuffing (one IP failing against many accounts), account_targeted (many IPs failing against one account; critical when one of them then signed in), login_as_other (a browser signed in as one user trying to sign in as another account; actor = the signed-in user, target = the account tried), auth_bruteforce_slow / account_targeted_slow / distributed_login_attack (the same over a long window, and many IPs each failing a little), new_login_location, new_login_device, impossible_travel, listed_ip_login (a sign-in from a blocklisted IP), session_spread (one account used from many places at once), risky_account_change (a password, email, MFA or payout change soon after a risky sign-in), enumeration (many records read through one route with an ID), idor_probe (many records refused through such a route), injection_attempt (SQL, script, template, command, JNDI or traversal patterns), route_rate_limit, signup_abuse, otp_abuse, scanner (probe paths such as /.env or /wp-admin, or a scanner user agent), rate_abuse (an IP or user far above its usual request rate), forbidden_spike (a jump in 403s for one user or role). From Visionary's audit log: portal_bruteforce, portal_account_targeted, and portal_* changes (secret_viewed, account_created, account_changed, roles_changed, signin_changed, api_key_created, data_deleted, ip_blocked, two_step_reset). From hosts: ssh_failed, ssh_login, ssh_bruteforce, sudo, port_opened, port_closed, updates_pending (count = updates waiting), reboot, ssh_key_added, ssh_key_removed, file_changed, suspicious_process, container_privileged, container_root, container_new_image
+- kind TEXT. From the API: auth_bruteforce (many failed logins from one IP), credential_stuffing (one IP failing against many accounts), account_targeted (many IPs failing against one account; critical when one of them then signed in), login_as_other (a browser signed in as one user trying to sign in as another account; actor = the signed-in user, target = the account tried), auth_bruteforce_slow / account_targeted_slow / distributed_login_attack (the same over a long window, and many IPs each failing a little), new_login_location, new_login_device, impossible_travel, listed_ip_login (a sign-in from a blocklisted IP), session_spread (one account used from many places at once), risky_account_change (a password, email, MFA or payout change soon after a risky sign-in), enumeration (many records read through one route with an ID), idor_probe (many records refused through such a route), injection_attempt (SQL, script, template, command, JNDI or traversal patterns), route_rate_limit, rate_limited (an IP refused many times by Security → Rate limits), signup_abuse, otp_abuse, scanner (probe paths such as /.env or /wp-admin, or a scanner user agent), rate_abuse (an IP or user far above its usual request rate), forbidden_spike (a jump in 403s for one user or role). From Visionary's audit log: portal_bruteforce, portal_account_targeted, and portal_* changes (secret_viewed, account_created, account_changed, roles_changed, signin_changed, api_key_created, data_deleted, ip_blocked, two_step_reset). From hosts: ssh_failed, ssh_login, ssh_bruteforce, sudo, port_opened, port_closed, updates_pending (count = updates waiting), reboot, ssh_key_added, ssh_key_removed, file_changed, suspicious_process, container_privileged, container_root, container_new_image
 - status TEXT: NULL or '' while open, else acknowledged, resolved or false_positive; note TEXT is what whoever triaged it wrote
 - severity TEXT: info, warning or critical
 - host TEXT (host rows), service TEXT, actor TEXT (the user or account involved), ip TEXT (values hidden from you; join api_logs.ip = security_events.ip to see an IP's requests), target TEXT (the route, path, port or command involved)

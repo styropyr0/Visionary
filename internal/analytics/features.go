@@ -41,7 +41,7 @@ import (
 // after the core tables exist.
 func (s *Server) featureSchemas() []string {
 	var out []string
-	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.uptimeLocationsSchema(), s.uptimeTagsSchema(), s.uptimeRunsSchema(), s.uptimePlaywrightSchema(), s.uptimeKindsSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema(), s.workspacesSchema()} {
+	for _, f := range [][]string{s.telemetrySchema(), s.alertsSchema(), s.uptimeSchema(), s.uptimeBrowserSchema(), s.uptimeLocationsSchema(), s.uptimeTagsSchema(), s.uptimeRunsSchema(), s.uptimePlaywrightSchema(), s.uptimeKindsSchema(), s.rollupsSchema(), s.rumSchema(), s.teamSchema(), s.hostsSchema(), s.insightsSchema(), s.settingsSchema(), s.accountsSchema(), s.securitySchema(), s.applogsSchema(), s.tracesSchema(), s.incidentsSchema(), s.metricsSchema(), s.scimSchema(), s.ciSchema(), s.replaySchema(), s.q.leasesSchema(), s.workspacesSchema(), s.rateLimitSchema()} {
 		out = append(out, f...)
 	}
 	return out
@@ -59,6 +59,7 @@ func (s *Server) featureRoutes(mux *http.ServeMux) {
 	s.teamRoutes(mux)
 	s.hostsRoutes(mux)
 	s.securityRoutes(mux)
+	s.rateLimitRoutes(mux)
 	s.insightsRoutes(mux)
 	s.settingsRoutes(mux)
 	s.dataRoutes(mux)

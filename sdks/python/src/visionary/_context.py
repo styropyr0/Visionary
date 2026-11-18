@@ -16,7 +16,7 @@ class Annotations:
     """
 
     __slots__ = ("_lock", "user_id", "user_handle", "user_role", "login_account", "route", "trace", "request",
-                 "trace_id", "span", "parent_span_id", "failed", "logs", "done")
+                 "trace_id", "span", "parent_span_id", "failed", "logs", "done", "rate_limit")
 
     def __init__(self, trace: Any = None, request: Optional["RequestInfo"] = None, trace_id: str = "") -> None:
         self._lock = threading.Lock()
@@ -35,6 +35,8 @@ class Annotations:
         # _logs.Held: lines below the level, held until the request ends.
         self.logs: Any = None
         self.done = False
+        # _ratelimit.RequestLimit, set by the request phase.
+        self.rate_limit: Any = None
 
     def set_user(self, id: Any, handle: Optional[str], role: Optional[str]) -> None:
         with self._lock:

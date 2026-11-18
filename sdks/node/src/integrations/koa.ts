@@ -3,6 +3,7 @@ import type { Agent } from "../agent.js";
 import { enterRequest, observeRequest } from "../capture.js";
 import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
+import { checkRequest } from "../ratelimit/http.js";
 
 /** The parts of Koa's context the SDK reads. */
 interface KoaContext {
@@ -25,6 +26,7 @@ export function koa(agent?: Agent) {
   return function visionaryMiddleware(ctx: KoaContext, next: () => Promise<unknown>): Promise<unknown> {
     const route = () => (ctx._matchedRoute === undefined ? "" : String(ctx._matchedRoute));
     const state = observeRequest(a, ctx.req, ctx.res, route, ctx.originalUrl ?? ctx.req.url, () => ctx.state?.user);
+    if (checkRequest(a, ctx.req, ctx, ctx.originalUrl ?? ctx.req.url ?? "/", () => ctx.state?.user)) return Promise.resolve();
     const run = async () => {
       try {
         return await next();

@@ -13,7 +13,8 @@ background threads
 
 Then add the integration for your framework (``visionary.integrations.django``,
 ``.asgi`` or ``.flask``) and call ``visionary.set_user(id)`` once the user is
-known. See README.md and SPEC.md.
+known. The integration enforces Security -> Rate limits; rules on the user
+need ``visionary.check_rate_limit()`` after ``set_user``. See README.md and SPEC.md.
 """
 
 from ._agent import Agent, get_agent, init
@@ -24,13 +25,14 @@ from ._db import instrument_connection, instrument_cursor
 from ._http import instrument_http
 from ._loghandler import LogHandler, capture_logging
 from ._metrics import Counter, Gauge, Histogram, counter, describe_metric, gauge, histogram
+from ._ratelimit import RateLimited, check_rate_limit
 from ._writer import WriterStats
 
 __version__ = "0.2.0"
 
 __all__ = [
-    "Agent", "Config", "Counter", "Gauge", "Histogram", "LogHandler", "WriterStats", "background",
-    "background_span", "capture_exception", "capture_logging", "counter", "describe_metric", "from_env", "gauge",
+    "Agent", "Config", "Counter", "Gauge", "Histogram", "LogHandler", "RateLimited", "WriterStats", "background",
+    "background_span", "capture_exception", "capture_logging", "check_rate_limit", "counter", "describe_metric", "from_env", "gauge",
     "get_agent",
     "histogram", "init", "instrument_connection", "instrument_cursor", "instrument_http", "instrument_sqlalchemy",
     "login_attempt", "set_route", "set_user", "span", "__version__",

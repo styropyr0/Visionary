@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,6 +43,48 @@ public static partial class Visionary
             return;
         }
         context.Items[VisionaryMiddleware.LoginKey] = account;
+    }
+
+    /// <summary>
+    /// Checks the rate limits that need the user (by user, role or an attribute such as the
+    /// plan) once <see cref="SetUser"/> has run, and answers the request (429 with Retry-After,
+    /// or the rule's status) when one denies it. Call it from auth code or the handler and stop
+    /// when it returns true. Only the first call per request counts; later calls repeat its
+    /// outcome. Returns false outside a request the middleware handled.
+    /// </summary>
+    /// <param name="context">The request.</param>
+    /// <param name="attrs">Values rules can match or key on as <c>attr:&lt;name&gt;</c>, e.g. {"plan": "pro"}.</param>
+    public static async Task<bool> RateLimitedAsync(HttpContext context, IReadOnlyDictionary<string, string>? attrs = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!context.Items.TryGetValue(VisionaryMiddleware.RateLimitKey, out var item) || item is not RateLimitCheck check)
+        {
+            return false;
+        }
+        LimitDenial? denial;
+        try
+        {
+            lock (check)
+            {
+                if (check.Answered)
+                {
+                    return true;
+                }
+                var user = VisionaryMiddleware.UserOf(context);
+                denial = check.Limiter.CheckUser(check.State, check.Request, new LimitUser(user?.Id, user?.Role), attrs, DateTime.UtcNow);
+                if (denial is null)
+                {
+                    return false;
+                }
+                check.Answered = true;
+            }
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        await VisionaryMiddleware.WriteDenialAsync(context, denial).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Records the route pattern (e.g. /users/{id}) for requests endpoint routing doesn't see.</summary>

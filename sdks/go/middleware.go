@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/styropyr0/visionary/sdks/go/ratelimit"
 )
 
 const requestIDHeader = "X-Request-ID"
@@ -43,6 +45,11 @@ type annotations struct {
 	// held until the request ends
 	logs *heldLogs
 	done bool
+
+	// limit carries the rate-limit check from Middleware to RateLimited.
+	limit         *ratelimit.State
+	limitReq      *ratelimit.Request
+	limitAnswered bool
 }
 
 // fromContext returns the request's annotations (nil outside Middleware) and
@@ -102,7 +109,7 @@ type httpCounters struct {
 // it always did. Mounted outside the recovery it never sees panics, only the
 // 500 they become.
 func (a *Agent) Middleware(next http.Handler) http.Handler {
-	if a == nil || (a.writer == nil && a.system == nil && a.profiler == nil && a.logs == nil) {
+	if a == nil || (a.writer == nil && a.system == nil && a.profiler == nil && a.logs == nil && a.rl == nil) {
 		return next
 	}
 	counters := a.counters()
@@ -233,6 +240,11 @@ func (a *Agent) Middleware(next http.Handler) http.Handler {
 				panic(v)
 			}
 		}()
+		if a.checkRateLimit(rec, r, ann) {
+			completed = true
+			finish()
+			return
+		}
 		next.ServeHTTP(rec, r)
 		completed = true
 		finish()

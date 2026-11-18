@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "../agent.js";
 import { enterRequest, observeRequest, trackedState } from "../capture.js";
 import { resolveAgent } from "../global.js";
+import { checkRequest } from "../ratelimit/http.js";
 
 /** The parts of Fastify's request and reply the SDK reads. */
 interface FastifyRequest {
@@ -38,6 +39,8 @@ export function fastify(agent?: Agent) {
     const a = resolveAgent(agent);
     instance.addHook("onRequest", (request: FastifyRequest, reply: FastifyReply, next: Done) => {
       observeRequest(a, request.raw, reply.raw, () => fastifyRoute(request), request.raw.url, () => request.user);
+      // A denial is sent with reply.send(); Fastify then skips the handler.
+      if (checkRequest(a, request.raw, reply, request.raw.url ?? "/", () => request.user)) return;
       enterRequest(request.raw, () => next());
     });
     // Body parsing can resume in another context; re-enter before the handler.

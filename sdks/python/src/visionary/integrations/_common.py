@@ -7,6 +7,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional
 from .. import _agent, _context, _errors, _profiler
 from .._agent import Agent
 from .._entry import BodyCapture, Entry
+from .._ratelimit import Denial, RateLimited
 
 logger = logging.getLogger("visionary")
 
@@ -47,10 +48,20 @@ def finish_unlogged(method: str, route: str, t0: float, agent: Optional[Agent] =
         agent.finish_logs(ann, pattern, status, seconds)
 
 
+def check_request(agent: Agent, ann: Any, method: str, path: str, remote_ip: str, header: Callable[[str], str],
+                  query_string: str = "", query: Optional[Callable[[str], str]] = None) -> Optional[Denial]:
+    """The rate-limit request phase, right before the view; the answer when
+    a rule denies the request. Never raises."""
+    rl = agent.rate_limits
+    if rl is None:
+        return None
+    return rl.begin(ann, method, path, remote_ip, header, query_string, query)
+
+
 def report_unhandled(agent: Agent, exc: BaseException, info: Any = None) -> None:
     """Record an exception escaping the app (handled = 0) once, however many
     hooks see it. The caller re-raises it."""
-    if not isinstance(exc, Exception):
+    if not isinstance(exc, Exception) or isinstance(exc, RateLimited):
         return
     _context.mark_failed()
     if agent.errors_on and _errors.mark_seen(exc):

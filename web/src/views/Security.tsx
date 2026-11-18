@@ -33,6 +33,7 @@ import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
 import { AccountDrawer, AuditExport, FindingActions, IntelPanel, IPCard, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
 import { RULE_DETAIL, RulesTab, SignalDetail } from "./Security.rules";
+import { RateLimitsTab } from "./Security.ratelimits";
 import "./Security.css";
 import { AgentSteps, SetupCard, SetupOption } from "../components/SetupCard";
 
@@ -55,12 +56,13 @@ export function Security() {
 
 const EMPTY: FindingFilters = { source: "", kind: "", severity: "", host: "", ip: "", status: "" };
 
-type SecTab = "overview" | "signals" | "rules";
+type SecTab = "overview" | "signals" | "rules" | "limits";
 
 const TABS: { key: SecTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "signals", label: "Signals" },
   { key: "rules", label: "Rules" },
+  { key: "limits", label: "Rate limits" },
 ];
 
 function SecurityPage({ hash }: { hash: string }) {
@@ -105,6 +107,7 @@ function SecurityPage({ hash }: { hash: string }) {
         {tab === "overview" && <SecurityOverview meta={meta.data} onSelect={setSelected} />}
         {tab === "signals" && <SignalsTab onSelect={setSelected} />}
         {tab === "rules" && <RulesTab openRule={Number(params.get("rule")) || undefined} />}
+        {tab === "limits" && <RateLimitsTab />}
       </div>
       {account && (
         <AccountDrawer

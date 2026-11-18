@@ -171,6 +171,12 @@ internal static class Schema
         "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
     };
 
+    public static readonly string[] RateLimitColumns =
+    {
+        "created_at", "service", "instance", "rule_id", "rule_name", "outcome", "key_value", "ip",
+        "country", "method", "path", "user_id", "hits",
+    };
+
     public static readonly string[] ReleaseColumns =
     {
         "created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime",

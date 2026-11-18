@@ -56,6 +56,8 @@ var dataKinds = []dataKind{
 		tables: []dataTable{{"alert_events", false}, {"alert_deliveries", false}}},
 	{Key: "security", Label: "Security findings", Description: "Findings from the detectors and host events.", Service: true,
 		tables: []dataTable{{"security_events", true}}},
+	{Key: "ratelimits", Label: "Rate-limited requests", Description: "What the SDKs refused or would have refused under Security → Rate limits.", Service: true,
+		tables: []dataTable{{"rate_limit_events", true}}},
 	{Key: "hosts", Label: "Host agent data", Description: "Processes, mounts, services, containers, GPUs and sensors, and their metrics and events.",
 		tables: []dataTable{{"host_processes", false}, {"host_mounts", false}, {"host_storage", false}, {"host_units", false}, {"host_containers", false}, {"container_metrics", false}, {"container_events", false},
 			{"host_gpus", false}, {"host_gpu_processes", false}, {"host_sensors", false}}},

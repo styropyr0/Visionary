@@ -136,6 +136,12 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_METRICS_METERS, comma-separated meter names whose instruments are recorded too</summary>
     public List<string> MetricsMeters { get; set; } = new();
 
+    /// <summary>
+    /// VISIONARY_RATE_LIMIT (default true): enforce the rate limits made in the dashboard
+    /// (Security, Rate limits). False neither polls nor enforces them.
+    /// </summary>
+    public bool RateLimit { get; set; } = true;
+
     /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
     internal bool ProfilingAdded { get; set; }
 
@@ -222,6 +228,7 @@ public sealed class VisionaryOptions
         Metrics = Bool("VISIONARY_METRICS", true);
         MetricsInterval = Duration(Get("VISIONARY_METRICS_INTERVAL"), TimeSpan.FromSeconds(15));
         MetricsMeters = List("VISIONARY_METRICS_METERS");
+        RateLimit = Bool("VISIONARY_RATE_LIMIT", true);
         MetricsMaxSeries = Int("VISIONARY_METRICS_MAX_SERIES", 1000) is > 0 and var max ? max : 1000;
     }
 

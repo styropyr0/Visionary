@@ -48,7 +48,8 @@ record VisionaryConfig(
         String logLevel,
         boolean metrics,
         Duration metricsInterval,
-        int metricsMaxSeries) {
+        int metricsMaxSeries,
+        boolean rateLimit) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -91,7 +92,9 @@ record VisionaryConfig(
                 r.string("VISIONARY_LOG_LEVEL", "info"),
                 r.bool("VISIONARY_METRICS", true),
                 r.duration("VISIONARY_METRICS_INTERVAL", Duration.ofSeconds(15)),
-                r.positiveInt("VISIONARY_METRICS_MAX_SERIES", Metrics.DEFAULT_MAX_SERIES));
+                r.positiveInt("VISIONARY_METRICS_MAX_SERIES", Metrics.DEFAULT_MAX_SERIES),
+                // false: no rate-limit polling or enforcement.
+                r.bool("VISIONARY_RATE_LIMIT", true));
     }
 
     /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */

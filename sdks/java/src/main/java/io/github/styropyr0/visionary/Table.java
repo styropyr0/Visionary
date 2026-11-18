@@ -135,6 +135,13 @@ final class Table {
             .text("routes", "folded")
             .build();
 
+    /** Created by the Visionary server, never by the SDK. */
+    static final Table RATE_LIMIT_EVENTS = builder("rate_limit_events", null)
+            .text("created_at", "service", "instance", "rule_id", "rule_name", "outcome", "key_value", "ip",
+                    "country", "method", "path", "user_id")
+            .integer("hits")
+            .build();
+
     final String name;
     /** Base name of the schema file, {@code schema/<dialect>/<schemaName>.sql}. */
     final String schemaName;

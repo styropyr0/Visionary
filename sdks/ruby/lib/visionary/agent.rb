@@ -29,6 +29,9 @@ module Visionary
   class Agent
     attr_reader :config, :http, :telemetry, :logger, :instance, :logs
 
+    # The rate limiter, or nil when VISIONARY_RATE_LIMIT is off or there is no database.
+    def rate_limiter = @rate_limit&.limiter
+
     def initialize(cfg)
       @config = cfg
       @logger = cfg.logger || StderrLogger.new
@@ -49,6 +52,10 @@ module Visionary
       @telemetry = Telemetry::Recorder.new(cfg, @instance, @writer) if cfg.spans || cfg.errors
       @logs = Logs::Pipeline.new(cfg, @instance, @store, @schemas, @logger) if cfg.logs
       @metrics = Metrics::Recorder.new(cfg, @instance, @store, @schemas, @logger) if cfg.metrics
+      if cfg.rate_limit
+        limiter = RateLimit::Limiter.new(cfg.service, redact_headers: cfg.redact_headers)
+        @rate_limit = RateLimit::Poller.new(limiter, @store, cfg, @instance, @logger)
+      end
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)
       end
@@ -65,7 +72,7 @@ module Visionary
       @retention = Retention.new(@store, @logger, tables)
     end
 
-    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil? || !@metrics.nil?)
+    def enabled? = !@store.nil? && !@closed && (!@writer.nil? || !@system.nil? || !@logs.nil? || !@metrics.nil? || !@rate_limit.nil?)
 
     # A skipped path is treated exactly like one outside the prefix.
     def log_path?(path)
@@ -110,6 +117,7 @@ module Visionary
       @logs&.start
       @metrics&.start
       @skip&.start
+      @rate_limit&.start
       @retention.start
       @profiler&.start
       install_hooks
@@ -127,6 +135,7 @@ module Visionary
       deadline = mono + timeout
       @retention&.close
       @skip&.close
+      @rate_limit&.close([timeout / 2.0, 5].min)
       @profiler&.close
       idle = @writer ? @writer.close(timeout) : true
       idle = @logs.close([deadline - mono, 0].max) && idle if @logs
@@ -152,6 +161,7 @@ module Visionary
       @logs&.after_fork
       @metrics&.after_fork
       @skip&.after_fork
+      @rate_limit&.after_fork
       @retention&.after_fork if @retention&.needed?
       @profiler&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")

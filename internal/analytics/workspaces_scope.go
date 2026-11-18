@@ -79,7 +79,7 @@ var scopedTables = map[string]scopeRule{
 	"CI_PIPELINES": {byService, "service"}, "CI_JOBS": {byService, "service"}, "CI_TESTS": {byService, "service"},
 	"CI_FLAKY_TESTS":  {byService, "service"},
 	"ROLLUP_REQUESTS": {byService, "service"}, "ROLLUP_EDGES": {byService, "src"}, "HOST_INVENTORY": {byService, "service"},
-	"SECURITY_EVENTS": {byService, "service"}, "CLIENT_EVENTS": {byService, "app"},
+	"SECURITY_EVENTS": {byService, "service"}, "CLIENT_EVENTS": {byService, "app"}, "RATE_LIMIT_EVENTS": {byService, "service"},
 	"REPLAY_SESSIONS": {byService, "app"}, "REPLAY_CHUNKS": {by: byReplay},
 	"ROLLUP_SYSTEM":  {by: byInstance},
 	"HOST_PROCESSES": {by: byHost}, "HOST_MOUNTS": {by: byHost}, "HOST_UNITS": {by: byHost},

@@ -3,6 +3,7 @@ import type { Agent } from "../agent.js";
 import { enterRequest, observeRequest } from "../capture.js";
 import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
+import { checkRequest } from "../ratelimit/http.js";
 
 /**
  * Wraps a plain `node:http` request handler (or any framework that exposes
@@ -18,6 +19,7 @@ export function wrap<Req extends IncomingMessage, Res extends ServerResponse>(
   const a = resolveAgent(agent);
   return function visionaryHandler(req: Req, res: Res): unknown {
     const state = observeRequest(a, req, res, () => "");
+    if (checkRequest(a, req, res, req.url ?? "/")) return undefined;
     const run = () => {
       let result: unknown;
       try {

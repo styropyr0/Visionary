@@ -7,7 +7,9 @@ or wrap any ASGI app: ``app = VisionaryASGIMiddleware(app)``. Without an
 explicit agent it uses ``visionary.init()``.
 
 Exceptions escaping the app are recorded in ``errors`` and re-raised, so the
-server's own 500 handling is unchanged.
+server's own 500 handling is unchanged. Security -> Rate limits are enforced
+before the app runs, and ``visionary.RateLimited`` raised from the app (by
+``visionary.check_rate_limit()``) becomes its answer.
 """
 
 from __future__ import annotations
@@ -20,7 +22,8 @@ from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import finish, finish_unlogged, logger, report_unhandled, resolve_agent
+from .._ratelimit import Denial, RateLimited
+from ._common import check_request, finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
@@ -56,16 +59,19 @@ class VisionaryASGIMiddleware:
             if agent.should_log(scope.get("path", "")):
                 await self._logged(agent, scope, receive, send, status)
             else:
+                started = [False]
+
                 async def send_status(message: Message) -> None:
                     if message["type"] == "http.response.start":
                         status[0] = message["status"]
+                        started[0] = True
                     await send(message)
 
                 t0 = time.perf_counter()
                 ann, token = _context.begin(None, _info(scope, None), _header(scope, b"traceparent"),
                                              _header(scope, b"tracestate"))
                 try:
-                    await self.app(scope, receive, send_status)
+                    await _run(agent, self.app, scope, receive, send_status, ann, started)
                 except BaseException as e:
                     report_unhandled(agent, e)
                     raise
@@ -89,6 +95,7 @@ class VisionaryASGIMiddleware:
         req = BodyCapture(cfg.capture_bodies and capturable(e.request_content_type), cfg.max_body_bytes)
         resp = BodyCapture(False, cfg.max_body_bytes)
         state: Dict[str, Any] = {"declared": 0}
+        started = [False]
         rid = e.request_id.encode("latin-1", errors="replace")
 
         async def tee_receive() -> Message:
@@ -101,6 +108,7 @@ class VisionaryASGIMiddleware:
             kind = message.get("type")
             if kind == "http.response.start":
                 status[0] = message.get("status", 200)
+                started[0] = True
                 out = [(k, v) for k, v in message.get("headers", []) if k.lower() != _RID]
                 out.append((_RID, rid))
                 for k, v in out:
@@ -120,7 +128,7 @@ class VisionaryASGIMiddleware:
         ann, token = _context.begin(trace, _info(scope, e.request_id), lookup.get("traceparent"),
                                     lookup.get("tracestate"))
         try:
-            await self.app(scope, tee_receive, tee_send)
+            await _run(agent, self.app, scope, tee_receive, tee_send, ann, started)
         except BaseException as exc:
             report_unhandled(agent, exc)
             raise
@@ -144,6 +152,45 @@ class VisionaryASGIMiddleware:
                 finish(agent, e, t0, status[0], trace, ann)
             except Exception:
                 logger.exception("visionary: request capture failed")
+
+
+async def _run(agent: Agent, app: Callable[..., Awaitable[None]], scope: Scope, receive: Receive, send: Send,
+               ann: Any, started: List[bool]) -> None:
+    """The app behind the rate limits: denied requests are answered here."""
+    denial = check_request(agent, ann, scope.get("method", ""), scope.get("path", ""), _client(scope),
+                           _header_lookup(scope), scope.get("query_string", b"").decode("latin-1"))
+    if denial is not None:
+        await _deny(send, denial)
+        return
+    try:
+        await app(scope, receive, send)
+    except RateLimited as e:
+        if not started[0]:
+            await _deny(send, e.denial)
+
+
+async def _deny(send: Send, d: Denial) -> None:
+    headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in d.headers.items()]
+    headers.append((b"content-length", str(len(d.body)).encode("latin-1")))
+    await send({"type": "http.response.start", "status": d.status, "headers": headers})
+    await send({"type": "http.response.body", "body": d.body})
+
+
+def _client(scope: Scope) -> str:
+    client = scope.get("client")
+    return client_ip(_header(scope, b"x-forwarded-for"), client[0] if client else "")
+
+
+def _header_lookup(scope: Scope) -> Callable[[str], str]:
+    found: Dict[str, str] = {}
+
+    def get(name: str) -> str:
+        if not found:
+            for k, v in scope.get("headers", []):
+                found.setdefault(k.decode("latin-1").lower(), v.decode("latin-1"))
+        return found.get(name.lower(), "")
+
+    return get
 
 
 def _info(scope: Scope, rid: Optional[str]) -> _context.RequestInfo:

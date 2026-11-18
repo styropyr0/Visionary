@@ -143,7 +143,22 @@ export const METRIC_COLUMNS = [
   "created_at", "service", "instance", "name", "kind", "unit", "labels", "series", "value", "count", "sum", "min", "max", "buckets",
 ];
 
-export type Table = "api_logs" | "system_metrics" | "spans" | "errors" | "releases" | "profiles" | "app_logs" | "metrics";
+/** The server creates rate_limit_events; the SDK only inserts. */
+export const RATE_LIMIT_COLUMNS = [
+  "created_at", "service", "instance", "rule_id", "rule_name", "outcome", "key_value", "ip",
+  "country", "method", "path", "user_id", "hits",
+];
+
+export type Table =
+  | "api_logs"
+  | "system_metrics"
+  | "spans"
+  | "errors"
+  | "releases"
+  | "profiles"
+  | "app_logs"
+  | "metrics"
+  | "rate_limit_events";
 
 export const TABLE_COLUMNS: Record<Table, string[]> = {
   api_logs: REQUEST_COLUMNS,
@@ -154,6 +169,7 @@ export const TABLE_COLUMNS: Record<Table, string[]> = {
   profiles: PROFILE_COLUMNS,
   app_logs: LOG_COLUMNS,
   metrics: METRIC_COLUMNS,
+  rate_limit_events: RATE_LIMIT_COLUMNS,
 };
 
 /** A typed value: string, number or null. */

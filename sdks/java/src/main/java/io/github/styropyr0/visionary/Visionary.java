@@ -1,5 +1,8 @@
 package io.github.styropyr0.visionary;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -10,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Application-facing API of the Visionary collector. Every method is harmless
@@ -86,6 +90,36 @@ public final class Visionary {
             return;
         }
         request.setAttribute(LOGIN_ATTRIBUTE, account);
+    }
+
+    /**
+     * Checks the rate-limit rules that need the user (by user, role or an attribute
+     * such as the plan) and answers the request when one denies it. Call it after
+     * {@link #setUser} (or once Spring Security has authenticated), then return:
+     *
+     * <pre>{@code
+     * if (Visionary.checkRateLimit(request, response, Map.of("plan", account.plan()))) {
+     *     return null;
+     * }
+     * }</pre>
+     *
+     * Only the first call per request counts; later calls repeat its outcome. Returns
+     * false outside a request Visionary's filter handled.
+     *
+     * @param attrs values for {@code attr:<name>} in the rules; may be null
+     * @return true when the request was limited or blocked and has been answered
+     */
+    public static boolean checkRateLimit(HttpServletRequest request, HttpServletResponse response,
+            Map<String, String> attrs) {
+        try {
+            return RateLimits.checkUser(request, response, attrs);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static boolean checkRateLimit(HttpServletRequest request, HttpServletResponse response) {
+        return checkRateLimit(request, response, null);
     }
 
     /**

@@ -1030,6 +1030,252 @@ counts up per session; `start` and `end` are epoch milliseconds; `reason` is
 `sample` or `error`. Answers: `204`, `400`, `401`, `403` (replays off in
 Settings → Server → Ingest), `413`, `429`, `507` (the storage cap is reached).
 
+## Rate limits (`ratelimit.*`, `rate_limit_events`)
+
+Rules made in the dashboard (Security → Rate limits) that every server SDK
+enforces in its request middleware, before the application's handler runs:
+a request over a limit gets `429` with `Retry-After`, a blocked one `403`.
+The Go package `sdks/go/ratelimit` is the reference (the server validates
+rules with it too), and `sdks/go/ratelimit/testdata/cases.json` holds the
+cases every SDK's tests run (below). `VISIONARY_RATE_LIMIT=false` turns
+enforcement and polling off.
+
+**Counters live in each process.** A limit of 100 a minute on a service
+running 4 instances (or 4 worker processes) lets through up to 400 a minute
+in all, split however the load balancer spreads the traffic. Set limits per
+instance; there is no shared counter store.
+
+### Rules (`visionary_settings`)
+
+The server keeps two rows:
+
+| `name` | `value` |
+|---|---|
+| `ratelimit.version` | an opaque text the server changes on every save |
+| `ratelimit.config` | the JSON document below |
+
+The SDK reads `SELECT value FROM visionary_settings WHERE name = 'ratelimit.version'`
+at start and then every 15 seconds, off the request path. Only when the
+value differs from the last one read does it read
+`SELECT value FROM visionary_settings WHERE name = 'ratelimit.config'` and
+parse it, so unchanged rules cost one small read. No row (or no table)
+means no rules: enforcement stops. A failed read keeps the rules in force. A
+document that is not valid JSON keeps the rules in force and is logged once
+per version.
+
+```json
+{
+  "enabled": true,
+  "ip_header": "CF-Connecting-IP",
+  "country_headers": ["CF-IPCountry"],
+  "rules": [
+    {
+      "id": "k3x9a1", "name": "Export API", "enabled": true,
+      "mode": "enforce", "action": "limit",
+      "services": [], "methods": ["POST"], "paths": ["/api/export*"],
+      "ips": [], "countries": [], "match": {},
+      "key": "ip", "limit": 10, "window_s": 60, "algorithm": "sliding", "burst": 0,
+      "limit_by": "", "limits": {},
+      "status": 0, "body": "", "content_type": ""
+    }
+  ]
+}
+```
+
+Top level: `enabled` (missing means `true`; `false` turns every rule off),
+`ip_header` and `country_headers` (see Client IP and country), `rules` in
+priority order (first is evaluated first). Unknown fields are ignored. An
+SDK skips a rule it cannot use (missing or malformed `id`, unknown `action`, `mode`,
+`algorithm` or property, `window_s` outside 1 to 86400 on a limit rule)
+and keeps the others; the server refuses to save one. Zero values (`0`,
+`""`, `[]`, `{}`, `null`) mean the same as a missing field.
+
+| Field | Meaning | Missing means |
+|---|---|---|
+| `id` | stable id the server gives a rule, `[A-Za-z0-9_-]{1,32}` | rule skipped |
+| `name` | label for the dashboard and `rate_limit_events.rule_name` | `id` |
+| `enabled` | `false` skips the rule | `true` |
+| `mode` | `enforce` answers for the rule; `monitor` only records what it would have done (dry run) | `enforce` |
+| `action` | `limit` counts requests per key; `block` answers every matching request; `allow` exempts matching requests from every later rule | rule skipped |
+| `services` | service names (`VISIONARY_SERVICE`) the rule applies to; a service with no name matches only an empty list | every service |
+| `methods` | methods, compared upper-cased | any method |
+| `paths` | globs over the raw path (no query string): `*` matches any run of characters, `/` included; everything else is literal and case-sensitive; the whole path must match (`/api/export*` matches `/api/export` and `/api/export/7`) | any path |
+| `ips` | IPs and CIDRs, IPv4 and IPv6 (`203.0.113.9`, `10.0.0.0/8`, `2001:db8::/32`); the client IP must be in one. An IPv4-mapped IPv6 address (`::ffff:1.2.3.4`) is compared as IPv4. Entries that do not parse are ignored | any IP |
+| `countries` | ISO 3166 alpha-2 codes, compared upper-cased; the request's country must be one of them. A request whose country is unknown matches no list | any country |
+| `match` | object of property → list of values: the property's value must equal one of them (case-sensitive); an empty list means the property is present and not empty. Every entry must hold | always |
+| `key` | `limit` only: the property whose value names the counter (one counter per value). A request whose key value is empty is not counted by the rule | `ip` |
+| `limit` | `limit` only: requests per window (0 answers every matching request) | `0` |
+| `window_s` | `limit` only: window in seconds, 1 to 86400 | rule skipped |
+| `algorithm` | `sliding`, `fixed` or `token_bucket` | `sliding` |
+| `burst` | `token_bucket` only: the bucket's size | `limit` |
+| `limit_by` | dynamic limits: a property whose value picks the limit from `limits` | none |
+| `limits` | object of value → limit; a value not listed uses `limit`; a negative limit means no limit for that value | none |
+| `status` | the answer's status, 400 to 599 | 429 for `limit`, 403 for `block` |
+| `body` | the answer's body; `{retry_after}` in it becomes the seconds (`0` for block) | the default body below |
+| `content_type` | the answer's `Content-Type` | `application/json` for the default body; for a custom body `application/json` when it starts with `{` or `[` (after spaces), else `text/plain; charset=utf-8` |
+
+**Properties** (in `key`, `limit_by` and the names in `match`):
+
+| Property | Value |
+|---|---|
+| `ip` | the client IP (below) |
+| `country` | the request's country (below), `""` when unknown |
+| `method`, `path` | as received (method upper-cased), path without the query string |
+| `header:<Name>` | the request header's first value, name case-insensitive |
+| `query:<name>` | the first value of the URL-decoded query parameter |
+| `global` | `*` for every request: one counter for the whole rule |
+| `user` | the request's user id (`set_user`) |
+| `role` | the request's user role |
+| `attr:<name>` | an attribute the application passes to the user check (below) |
+
+Anything else (an unknown name, `header:` with no name) makes the rule
+unusable.
+
+### When rules are checked
+
+`user`, `role` and `attr:*` are only known once the application's auth code
+has run, which is usually inside the SDK's middleware. So rules are checked
+in two phases:
+
+1. **Request phase**, in the middleware before the handler: every rule
+   whose `key`, `limit_by` and `match` use none of `user`, `role`, `attr:*`.
+2. **User phase**, when the application calls the SDK's check after
+   `set_user` (in its auth middleware or handler): the remaining rules. Rules
+   in this phase never run for an application that does not call the check.
+
+| SDK | User check |
+|---|---|
+| Go | `visionary.RateLimited(w, r, attrs) bool` answers and returns `true` when limited; `visionary.RateLimitUsers(next)` wraps a handler with it |
+| Node | `visionary.rateLimited(req, res, attrs?) => boolean`, the same |
+| Python | `visionary.check_rate_limit(attrs=None)` raises `visionary.RateLimited` (with `status`, `headers`, `body`), which the Django, Flask and ASGI integrations turn into the answer |
+| Ruby | `Visionary.check_rate_limit!(attrs = {})` raises `Visionary::RateLimited` (with `status`, `headers`, `body`), which the Rack middleware (and, in Rails, a `rescue_from` the Railtie adds) turns into the answer |
+| Java | `Visionary.checkRateLimit(request, response, attrs)` answers and returns `true` when limited |
+| .NET | `await Visionary.RateLimitedAsync(httpContext, attrs)` answers and returns `true` when limited |
+
+The user check runs once per request (later calls repeat the first
+outcome), and does nothing when the request phase already answered or
+matched an `allow` rule. `attrs` is a map of text to text, e.g.
+`{"plan": "pro"}`; null or missing is empty. Outside a request handled by
+the middleware it does nothing.
+
+### Evaluation
+
+In each phase, go through that phase's rules in order, skipping disabled
+ones, ones whose `services` exclude this service, and ones whose `methods`,
+`paths`, `ips`, `countries` or `match` do not hold:
+
+- `allow`, mode `enforce`: stop; the request passes and the user phase is
+  skipped. In `monitor` mode an allow rule does nothing.
+- `block`: record `blocked` and answer (mode `enforce`), or record
+  `would_block` and go on (`monitor`).
+- `limit`: take the key value (skip the rule when empty) and the limit
+  (`limits[value of limit_by]` when present, else `limit`; skip the rule when
+  negative), then take one hit on the counter `(rule id, key value)`. Over
+  the limit: record `limited` and answer (`enforce`) or record
+  `would_limit` and go on (`monitor`). A request that passes a limit rule
+  still goes on to later rules, and stays counted even when a later rule
+  answers it.
+
+`ratelimit.config.enabled = false`, no rules, or anything going wrong while
+checking (a bug, a bad value) lets the request through: rate limiting fails
+open and never fails a request on its own.
+
+**Counters** (`t` is the wall clock in seconds with fractions, `W` the
+window, `L` the limit):
+
+- A limit of 0 answers every matching request with `Retry-After: W`,
+  whatever the algorithm, and keeps no counter.
+- `fixed` and `sliding` keep `(win, curr, prev)` per counter. On a hit,
+  `w = floor(t / W)`; when the counter is new, `prev = curr = 0`; when
+  `w = win + 1`, `prev = curr` and `curr = 0`; when `w > win + 1`,
+  `prev = curr = 0`; then `win = w`.
+  - `fixed`: over when `curr >= L`; otherwise `curr += 1`.
+  - `sliding`: `e = t - w * W`; over when `prev * (W - e) / W + curr + 1 > L`;
+    otherwise `curr += 1`.
+  - `Retry-After` is `max(1, ceil((w + 1) * W - t))`.
+- `token_bucket` keeps `(tokens, last)`; capacity `C = burst > 0 ? burst : L`,
+  refill rate `R = L / W` per second. A new counter starts with `tokens = C,
+  last = t`. On a hit, when `t > last`: `tokens = min(C, tokens + (t - last) * R)`
+  and `last = t`. Over when `tokens < 1`, with `Retry-After`
+  `max(1, ceil((1 - tokens) / R))`; otherwise `tokens -= 1`.
+- Requests that are over are not counted (the counter only moves when the
+  request passes the rule). Monitor-mode rules count the same way, so a
+  would-be block shows exactly what enforcing would do.
+
+Keep at most 10000 counters per rule. When a new key would go past that,
+first drop the rule's idle counters (`fixed`/`sliding` with `win < w - 1`;
+`token_bucket` whose bucket would be full again), and if it is still full,
+drop all of that rule's counters. Also drop idle counters at every poll.
+When new rules are read, a rule keeps its counters (matched by `id`) unless
+its `key`, `window_s`, `algorithm` or `burst` changed; counters of removed
+rules are dropped.
+
+### Client IP and country
+
+- **IP**: when `ip_header` is set and the request has it, its first
+  comma-separated value, trimmed; otherwise the IP the SDK logs (first
+  `X-Forwarded-For` hop, else the peer). `X-Forwarded-For` is whatever the
+  client sent unless a proxy in front overwrites it, so behind a CDN or load
+  balancer name its header (`CF-Connecting-IP`, `True-Client-IP`,
+  `X-Real-IP`, ...) in `ip_header`, or IP rules can be dodged.
+- **Country**: the first non-empty header among `country_headers`
+  (empty or missing: `CF-IPCountry`, `CloudFront-Viewer-Country`,
+  `X-Vercel-IP-Country`, `Fastly-Geo-Country`, `X-AppEngine-Country`,
+  `X-Country-Code`), trimmed and upper-cased. CDNs and edge platforms set
+  these from their own IP data, so SDKs carry no GeoIP database. Without
+  such a header the country is unknown and country rules match nothing; a
+  proxy you run can add `X-Country-Code` from its own GeoIP module.
+
+### The answer
+
+Status per the rule; headers `Content-Type` and, for `limit`,
+`Retry-After: <seconds>`. Default bodies (exact):
+
+- limit: `{"error":{"code":"rate_limited","key":"<rule id>","message":"Too many requests"}}`
+- block: `{"error":{"code":"blocked","key":"<rule id>","message":"Forbidden"}}`
+
+The request is still logged like any other (an `api_logs` row with the
+status, and `error_code` `rate_limited` or `blocked` from the default body);
+the handler never runs.
+
+### Recording (`rate_limit_events`)
+
+Every `limited`, `blocked`, `would_limit` and `would_block` outcome is
+counted in memory, aggregated by `(rule id, outcome, key value, ip)`, and
+written every 15 seconds (at the poll) and at shutdown. At most 1000
+aggregates are held between writes; outcomes for a new aggregate past that
+add to one per `(rule id, outcome)` with key value `(other)` and no IP.
+The server creates the table; when it is missing the rows are dropped
+(logged once). Insert, columns in this order, as one batch (see Writing
+rows):
+
+```sql
+INSERT INTO rate_limit_events (
+	created_at, service, instance, rule_id, rule_name, outcome, key_value, ip,
+	country, method, path, user_id, hits
+) VALUES (13 placeholders)
+```
+
+`created_at` is the aggregate's first outcome; `key_value` the counter's
+key value clipped to 200 characters, NULL for `block`; for a key on a header
+whose name is redacted (the request redaction header list) it is
+`sha256:` plus the first 12 hex digits of the value's SHA-256, never the
+value. `country`, `method`, `path` (clipped to 300) and `user_id` are the
+first request's (NULL when empty); `hits` the count.
+
+### Shared test cases
+
+`sdks/go/ratelimit/testdata/cases.json` is a list of cases, each with a
+`name`, a `config` (the JSON above), a `service` (optional) and `steps`, run
+in order against one fresh limiter. Each step is one request:
+`{"t", "method", "path", "remote_ip", "headers", "query", "user", "attrs"}`
+(`user` is `{"id", "role"}`; the user phase sees `user` and `attrs`), run
+through the request phase and then the user phase, and `expect`s
+`{"status", "rule", "retry_after", "body", "content_type"}` (`status` 0
+when it passes; fields left out are not checked) and the `records` made, as
+`"<rule id>:<outcome>"` in order. Every SDK's test suite runs all of them
+with a fixed clock.
+
 ## Environment
 
 | Variable | Default |
@@ -1060,6 +1306,7 @@ Settings → Server → Ingest), `413`, `429`, `507` (the storage cap is reached
 | `VISIONARY_METRICS` | `true` (custom metrics; see Custom metrics) |
 | `VISIONARY_METRICS_INTERVAL` | `15s` (plain number = seconds) |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` (label sets per metric name) |
+| `VISIONARY_RATE_LIMIT` | `true` (enforce Security → Rate limits; see Rate limits) |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the

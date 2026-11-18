@@ -54,6 +54,7 @@ func (s *Server) detectMore(ctx context.Context, from, to, cursor, now time.Time
 		s.detectPortal,
 		s.detectTakeover,
 		s.detectAbuse,
+		s.detectRateLimited,
 		s.detectSSH,
 	}
 	for _, step := range steps {

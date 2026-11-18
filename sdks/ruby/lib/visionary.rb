@@ -14,6 +14,7 @@ require_relative "visionary/logs"
 require_relative "visionary/retention"
 require_relative "visionary/metrics"
 require_relative "visionary/skip_list"
+require_relative "visionary/rate_limit"
 require_relative "visionary/system/sources"
 require_relative "visionary/system/host_stats"
 require_relative "visionary/system/cgroup"
@@ -126,6 +127,21 @@ module Visionary
     # request seen by Visionary::Middleware.
     def set_user(id, handle: nil, role: nil)
       RequestContext.current&.set_user(id, handle, role)
+      RateLimit::Check.current&.set_user(id, role)
+      nil
+    end
+
+    # Checks the rate-limit rules that need the user (by user, role or an
+    # attribute such as the plan) once set_user has run, and raises
+    # Visionary::RateLimited when one limits or blocks the request; the
+    # middleware turns it into the response. Only the first call per request
+    # counts (later ones repeat its outcome). No-op outside a request seen by
+    # Visionary::Middleware.
+    #
+    #   Visionary.set_user(user.id, role: user.role)
+    #   Visionary.check_rate_limit!(plan: user.plan)
+    def check_rate_limit!(attrs = {})
+      RateLimit::Check.current&.check_user!(attrs)
       nil
     end
 

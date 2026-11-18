@@ -31,6 +31,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     private final AppLogs logs;
     private final MetricsWriter metrics;
     private final Retention retention;
+    private final RateLimits rateLimits;
     private final String summary;
     private volatile boolean running;
     private boolean closed;
@@ -48,6 +49,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.logs = null;
         this.metrics = null;
         this.retention = null;
+        this.rateLimits = null;
         this.summary = "disabled";
     }
 
@@ -69,6 +71,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 ? new MetricsWriter(store, origin, Metrics.REGISTRY, cfg.metricsInterval(), cfg.metricsMaxSeries())
                 : null;
         this.retention = new Retention(store);
+        this.rateLimits = cfg.rateLimit() ? new RateLimits(store, origin, cfg.redactHeaders(), new ObjectMapper()) : null;
         if (logRequests) {
             retention.add(Table.API_LOGS, cfg.logRetentionDays());
         }
@@ -102,7 +105,8 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 + "; app logs " + (logs == null ? "off" : cfg.logCapture() ? "on (root logger)"
                         : "where VisionaryLogbackAppender is configured")
                 + "; system metrics " + (system != null ? "every " + cfg.systemInterval().toMillis() + "ms" : "off")
-                + "; custom metrics " + (metrics != null ? "every " + cfg.metricsInterval().toMillis() + "ms" : "off");
+                + "; custom metrics " + (metrics != null ? "every " + cfg.metricsInterval().toMillis() + "ms" : "off")
+                + "; rate limits " + (rateLimits != null ? "on" : "off");
     }
 
     boolean enabled() {
@@ -147,6 +151,11 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         return logs;
     }
 
+    /** Null when rate limiting is off or Visionary is disabled. */
+    RateLimits rateLimits() {
+        return rateLimits;
+    }
+
     /** Span and error capture, null when both are off or Visionary is disabled. */
     Telemetry telemetry() {
         return telemetry;
@@ -174,6 +183,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         if (metrics != null) {
             metrics.start();
         }
+        if (rateLimits != null) {
+            rateLimits.start();
+        }
         retention.start();
         log.info("visionary: " + summary);
     }
@@ -186,6 +198,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         running = false;
         if (skip != null) {
             skip.stop();
+        }
+        if (rateLimits != null) {
+            rateLimits.stop(SHUTDOWN_TIMEOUT);
         }
         if (telemetry != null) {
             telemetry.deactivate();

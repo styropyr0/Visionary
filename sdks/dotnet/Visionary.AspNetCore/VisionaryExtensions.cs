@@ -30,6 +30,7 @@ namespace Microsoft.Extensions.DependencyInjection
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, TelemetryWriter>());
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SystemSampler>());
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MetricsWriter>());
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RateLimitPoller>());
             return services;
         }
     }

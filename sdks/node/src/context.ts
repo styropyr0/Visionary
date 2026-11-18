@@ -81,6 +81,8 @@ export class RequestState {
 }
 
 const requests = new AsyncLocalStorage<RequestState>();
+/** Holds setUser for a request that is rate limited but not logged. */
+const limitUsers = new AsyncLocalStorage<RequestState>();
 const quiet = new AsyncLocalStorage<boolean>();
 
 export function currentRequest(): RequestState | undefined {
@@ -89,6 +91,10 @@ export function currentRequest(): RequestState | undefined {
 
 export function runInRequest<T>(state: RequestState, fn: () => T): T {
   return requests.run(state, fn);
+}
+
+export function runForUser<T>(holder: RequestState, fn: () => T): T {
+  return limitUsers.run(holder, fn);
 }
 
 /** Runs the SDK's own I/O so instrumentation doesn't record it as spans. */
@@ -109,7 +115,7 @@ export function isQuiet(): boolean {
  *     setUser(user.id)
  */
 export function setUser(user: User | string | number | null | undefined, handle?: string, role?: string): void {
-  const state = requests.getStore();
+  const state = requests.getStore() ?? limitUsers.getStore();
   if (!state) return;
   if (user !== null && typeof user === "object") state.setUser(user.id, user.handle, user.role);
   else state.setUser(user, handle, role);

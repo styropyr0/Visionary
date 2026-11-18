@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Agent } from "./agent.js";
-import { RequestState, requestTally, runInRequest } from "./context.js";
+import { RequestState, requestTally, runForUser, runInRequest } from "./context.js";
+import { limitUserHolder } from "./ratelimit/http.js";
 import type { SpanContext } from "./telemetry/trace.js";
 import { requestSpan, runInSpan } from "./telemetry/trace.js";
 
@@ -78,7 +79,7 @@ function contentLength(v: string | string[] | number | undefined): number {
 
 /** The first X-Forwarded-For hop, as most deployments sit behind a proxy;
  * informational only. */
-function clientIp(req: IncomingMessage): string {
+export function clientIp(req: IncomingMessage): string {
   const fwd = header(req.headers["x-forwarded-for"]);
   if (fwd) return fwd.split(",")[0]!.trim();
   const addr = req.socket?.remoteAddress ?? "";
@@ -93,7 +94,8 @@ export function trackedState(req: unknown): RequestState | undefined {
 export function enterRequest<T>(req: unknown, fn: () => T): T {
   const span = (req as Record<symbol, SpanContext | undefined> | undefined)?.[TRACE];
   const state = trackedState(req);
-  const inState = state ? () => runInRequest(state, fn) : fn;
+  const holder = state ? undefined : limitUserHolder(req);
+  const inState = state ? () => runInRequest(state, fn) : holder ? () => runForUser(holder, fn) : fn;
   return span ? runInSpan(span, inState) : inState();
 }
 

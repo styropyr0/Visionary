@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Rate limits from Security → Rate limits: the middleware reads the rules
+  every 15 s and answers limited (`429` with `Retry-After`) or blocked
+  (`403`) requests before the app runs. Rules on the user, role or an
+  attribute run when the app calls `Visionary.check_rate_limit!(attrs)`
+  after `set_user`; it raises `Visionary::RateLimited`, which the middleware
+  (and in Rails a `rescue_from` from the Railtie) turns into the response.
+  Counters are per process. Outcomes go to `rate_limit_events`.
+  `VISIONARY_RATE_LIMIT=false` turns it off.
+
 - Requests on the Settings → Data skip list (`requests.skip`) are handled
   like paths outside `VISIONARY_LOG_PATH_PREFIX`: no `api_logs` row or spans.
 

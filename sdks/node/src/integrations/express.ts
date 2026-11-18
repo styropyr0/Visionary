@@ -3,6 +3,7 @@ import type { Agent } from "../agent.js";
 import { enterRequest, observeRequest, trackedState } from "../capture.js";
 import { currentRequest } from "../context.js";
 import { resolveAgent } from "../global.js";
+import { checkRequest } from "../ratelimit/http.js";
 
 /** The parts of Express's request the SDK reads. */
 interface ExpressRequest extends IncomingMessage {
@@ -53,6 +54,7 @@ export function express(agent?: Agent) {
     }
     const routeOf = () => pattern || expressRoute(r);
     observeRequest(a, r, res, routeOf, r.originalUrl ?? r.url, () => r.user);
+    if (checkRequest(a, r, res, r.originalUrl ?? r.url ?? "/", () => r.user)) return;
     enterRequest(r, () => next());
   };
 }

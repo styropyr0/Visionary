@@ -33,6 +33,7 @@ final class VisionaryFilter extends OncePerRequestFilter {
     private final AppLogs logs;
     private final String pathPrefix;
     private final RequestSkip skip;
+    private final RateLimits rateLimits;
     private final boolean bodies;
     private final int maxBodyBytes;
 
@@ -44,6 +45,13 @@ final class VisionaryFilter extends OncePerRequestFilter {
      */
     VisionaryFilter(HttpCounters counters, RequestWriter writer, Telemetry telemetry, AppLogs logs,
             RequestSkip skip, VisionaryConfig cfg) {
+        this(counters, writer, telemetry, logs, skip, null, cfg);
+    }
+
+    /** @param rateLimits null when rate limiting is off */
+    VisionaryFilter(HttpCounters counters, RequestWriter writer, Telemetry telemetry, AppLogs logs,
+            RequestSkip skip, RateLimits rateLimits, VisionaryConfig cfg) {
+        this.rateLimits = rateLimits;
         this.counters = counters;
         this.writer = writer;
         this.telemetry = telemetry;
@@ -110,7 +118,9 @@ final class VisionaryFilter extends OncePerRequestFilter {
         LogScope previousLogs = LogScope.enter(logScope);
         Throwable thrown = null;
         try {
-            chain.doFilter(capturedRequest != null ? capturedRequest : request, capturedResponse);
+            if (!rateLimited(request, capturedResponse)) {
+                chain.doFilter(capturedRequest != null ? capturedRequest : request, capturedResponse);
+            }
         } catch (Throwable t) {
             thrown = t;
             throw t;
@@ -129,6 +139,11 @@ final class VisionaryFilter extends OncePerRequestFilter {
         }
     }
 
+    /** The request phase of the rate limits; a denied request is answered and still logged. */
+    private boolean rateLimited(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return rateLimits != null && rateLimits.checkRequest(request, response);
+    }
+
     /** Inside the path prefix and not on Settings → Data's skip list. */
     boolean logged(String path) {
         return writer != null && path.startsWith(pathPrefix) && (skip == null || !skip.skipped(path));
@@ -142,7 +157,9 @@ final class VisionaryFilter extends OncePerRequestFilter {
         LogScope previousLogs = LogScope.enter(logScope);
         Throwable thrown = null;
         try {
-            chain.doFilter(request, response);
+            if (!rateLimited(request, response)) {
+                chain.doFilter(request, response);
+            }
         } catch (Throwable t) {
             thrown = t;
             throw t;

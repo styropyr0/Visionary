@@ -485,6 +485,43 @@ of profiling whatever the dashboard says, set `VISIONARY_PROFILE=false`.
 `routes` (the milliseconds per `METHOD route` for requests that finished
 during the profile). See [How profiling works](#how-profiling-works).
 
+### Rate limits
+
+**When:** you made rules in the dashboard (Security → Rate limits) and want
+this service to enforce them.
+
+Nothing to add for rules on IP, country, method, path, headers or query
+parameters: the middleware reads the rules every 15 seconds and checks each
+request before the app runs. A limited request gets `429` with
+`Retry-After`, a blocked one `403`; the app is not called and the request is
+still logged. Rules keyed on the user, role or an attribute (`attr:plan`)
+need the user, so call the check after `set_user`:
+
+```ruby
+# Rails: app/controllers/application_controller.rb
+before_action do
+  if current_user
+    Visionary.set_user(current_user.id, role: current_user.role)
+    Visionary.check_rate_limit!(plan: current_user.plan)
+  end
+end
+```
+
+`check_rate_limit!` raises `Visionary::RateLimited` (with `status`,
+`headers` and `body`) when a rule limits the request. The Rack middleware
+turns it into the response, and in Rails the Railtie adds a `rescue_from`
+to controllers that does the same (an app-wide `rescue_from StandardError`
+added later would catch it first). Only the first call per request counts.
+
+Counters live in each process: with Puma or Unicorn workers (or several
+instances) each one counts on its own, so a limit of 100 a minute on 4
+workers lets up to 400 through. Set limits per process. Rate limiting fails
+open: an error in it never fails a request. `VISIONARY_RATE_LIMIT=false`
+turns enforcement and polling off.
+
+**Records:** limited and blocked requests (and what `monitor` rules would
+have done), aggregated, in `rate_limit_events` every 15 seconds.
+
 ### Query plans (Explain)
 
 The Ruby SDK has no explainer. It does not answer **Explain** on the Queries
@@ -556,6 +593,7 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_METRICS` | `metrics` | `true` | Record custom metrics; `false` makes `counter`, `gauge` and `histogram` no-ops |
 | `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | How often each series is written |
 | `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets kept per metric name |
+| `VISIONARY_RATE_LIMIT` | `rate_limit` | `true` | Enforce the dashboard's rate limits (see [Rate limits](#rate-limits)); `false` turns enforcement and polling off |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,

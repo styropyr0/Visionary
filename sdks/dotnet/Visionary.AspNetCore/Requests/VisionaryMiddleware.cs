@@ -27,6 +27,7 @@ internal sealed class VisionaryMiddleware
     internal const string UserKey = "__visionary.user";
     internal const string RouteKey = "__visionary.route";
     internal const string LoginKey = "__visionary.login";
+    internal const string RateLimitKey = "__visionary.ratelimit";
 
     private readonly RequestDelegate _next;
     private readonly VisionaryAgent _agent;
@@ -95,7 +96,10 @@ internal sealed class VisionaryMiddleware
     {
         try
         {
-            await _next(ctx).ConfigureAwait(false);
+            if (!await RateLimitedAsync(ctx).ConfigureAwait(false))
+            {
+                await _next(ctx).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -153,7 +157,10 @@ internal sealed class VisionaryMiddleware
         Exception? error = null;
         try
         {
-            await _next(ctx).ConfigureAwait(false);
+            if (!await RateLimitedAsync(ctx).ConfigureAwait(false))
+            {
+                await _next(ctx).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -237,6 +244,68 @@ internal sealed class VisionaryMiddleware
         {
             ExceptionDispatchInfo.Capture(error).Throw();
         }
+    }
+
+    /// <summary>The request phase of the rate limits; answers and returns true when one denies the request.</summary>
+    private async Task<bool> RateLimitedAsync(HttpContext ctx)
+    {
+        var limiter = _agent.RateLimits;
+        if (limiter is null || !limiter.Active)
+        {
+            return false;
+        }
+        LimitDenial? denial;
+        try
+        {
+            var req = LimitRequestOf(ctx);
+            var state = limiter.CheckRequest(req, DateTime.UtcNow);
+            var check = new RateLimitCheck(limiter, req, state);
+            ctx.Items[RateLimitKey] = check;
+            denial = state.Denied;
+            if (denial is null)
+            {
+                return false;
+            }
+            check.Answered = true;
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: rate limit check failed");
+            return false;
+        }
+        await WriteDenialAsync(ctx, denial).ConfigureAwait(false);
+        return true;
+    }
+
+    internal static LimitRequest LimitRequestOf(HttpContext ctx)
+    {
+        var request = ctx.Request;
+        return new LimitRequest
+        {
+            Method = request.Method,
+            Path = (request.PathBase + request.Path).Value ?? "/",
+            RemoteIp = ClientIp(ctx) ?? "",
+            Header = name => request.Headers.TryGetValue(name, out var v) && v.Count > 0 ? v[0] ?? "" : "",
+            Query = name => request.Query.TryGetValue(name, out var v) && v.Count > 0 ? v[0] ?? "" : "",
+        };
+    }
+
+    internal static async Task WriteDenialAsync(HttpContext ctx, LimitDenial d)
+    {
+        var response = ctx.Response;
+        if (response.HasStarted)
+        {
+            return;
+        }
+        response.StatusCode = d.Status;
+        response.ContentType = d.ContentType;
+        if (d.RetryAfter > 0)
+        {
+            response.Headers.RetryAfter = d.RetryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        var body = System.Text.Encoding.UTF8.GetBytes(d.Body);
+        response.ContentLength = body.Length;
+        await response.Body.WriteAsync(body, ctx.RequestAborted).ConfigureAwait(false);
     }
 
     // Failed means a 5xx, an exception, or an error captured during the request.
@@ -352,7 +421,7 @@ internal sealed class VisionaryMiddleware
     /// The first X-Forwarded-For hop, as most deployments sit behind a proxy; informational only
     /// and never used for decisions.
     /// </summary>
-    private static string? ClientIp(HttpContext ctx)
+    internal static string? ClientIp(HttpContext ctx)
     {
         var fwd = ctx.Request.Headers["X-Forwarded-For"].ToString();
         if (fwd.Length > 0)
@@ -366,4 +435,22 @@ internal sealed class VisionaryMiddleware
         }
         return (ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip).ToString();
     }
+}
+
+/// <summary>The request phase's outcome, kept for <see cref="Visionary.RateLimitedAsync"/>.</summary>
+internal sealed class RateLimitCheck
+{
+    public RateLimitCheck(RateLimits limiter, LimitRequest request, LimitState state)
+    {
+        Limiter = limiter;
+        Request = request;
+        State = state;
+    }
+
+    public RateLimits Limiter { get; }
+    public LimitRequest Request { get; }
+    public LimitState State { get; }
+
+    /// <summary>A denial was written for this request.</summary>
+    public bool Answered { get; set; }
 }

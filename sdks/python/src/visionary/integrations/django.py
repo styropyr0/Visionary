@@ -11,6 +11,10 @@ It also records every SQL statement of every database alias as a span (via
 ``execute_wrappers``, the list behind ``connection.execute_wrapper``) and
 every exception Django turns into a 500 (``got_request_exception``).
 
+Security -> Rate limits are enforced before the view runs, and
+``visionary.RateLimited`` raised by ``visionary.check_rate_limit()`` becomes
+the answer.
+
 With Django 5.1+ PostgreSQL pooling (``OPTIONS["pool"]``) and no
 ``db_stats`` hook, the ``db_*`` system columns come from Django's pools.
 """
@@ -23,14 +27,15 @@ from typing import Any, Optional
 
 from django.core.signals import got_request_exception
 from django.db.backends.signals import connection_created
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
 
 from .. import _context, _db, _profiler, _spans
 from .._agent import Agent
 from .._entry import (
     REQUEST_ID_HEADER, BodyCapture, Entry, capturable, client_ip, now, parse_content_length, request_id,
 )
-from ._common import CountingIterator, finish, finish_unlogged, logger, report_unhandled, resolve_agent
+from .._ratelimit import Denial, RateLimited
+from ._common import CountingIterator, check_request, finish, finish_unlogged, logger, report_unhandled, resolve_agent
 
 try:
     from asgiref.sync import iscoroutinefunction, markcoroutinefunction
@@ -71,8 +76,13 @@ class VisionaryMiddleware:
         if not self.agent.enabled:
             return self.get_response(request)
         state = self._begin(request)
+        denied = self._limit(request, state)
+        if denied is not None:
+            return self._end(request, denied, state)
         try:
             response = self.get_response(request)
+        except RateLimited as e:
+            return self._end(request, _denial_response(e.denial), state)
         except BaseException as e:
             report_unhandled(self.agent, e)
             self._end(request, None, state)
@@ -83,18 +93,45 @@ class VisionaryMiddleware:
         if not self.agent.enabled:
             return await self.get_response(request)
         state = self._begin(request)
+        denied = self._limit(request, state)
+        if denied is not None:
+            return self._end(request, denied, state)
         try:
             response = await self.get_response(request)
+        except RateLimited as e:
+            return self._end(request, _denial_response(e.denial), state)
         except BaseException as e:
             report_unhandled(self.agent, e)
             self._end(request, None, state)
             raise
         return self._end(request, response, state)
 
+    def process_exception(self, request: Any, exception: Exception) -> Any:
+        if isinstance(exception, RateLimited):
+            return _denial_response(exception.denial)
+        return None
+
+    def _limit(self, request: Any, state: Optional[_State]) -> Any:
+        if state is None or self.agent.rate_limits is None:
+            return None
+        try:
+            meta = request.META
+
+            def query(name: str) -> str:
+                v = request.GET.getlist(name)
+                return v[0] if v else ""
+
+            d = check_request(self.agent, state.ann, request.method or "", request.path,
+                              client_ip(meta.get("HTTP_X_FORWARDED_FOR"), meta.get("REMOTE_ADDR")),
+                              lambda name: request.headers.get(name, ""), query=query)
+            return _denial_response(d) if d is not None else None
+        except Exception:
+            return None
+
     def _on_exception(self, sender: Any = None, request: Any = None, **kwargs: Any) -> None:
         # Sent from inside Django's except block, before it builds the 500.
         exc = sys.exc_info()[1]
-        if exc is None:
+        if exc is None or isinstance(exc, RateLimited):
             return
         info = None
         if _context.current() is None and request is not None:
@@ -121,6 +158,8 @@ class VisionaryMiddleware:
             return None
 
     def _end(self, request: Any, response: Any, state: Optional[_State]) -> Any:
+        if state is not None:
+            response = _raised_answer(response, state.ann)
         status = getattr(response, "status_code", 500) if response is not None else 500
         if state is not None:
             _context.end(state.token)
@@ -198,6 +237,22 @@ class VisionaryMiddleware:
         else:
             response.streaming_content = CountingIterator(response.streaming_content, resp, done)
         return True
+
+
+def _denial_response(d: Denial) -> Any:
+    response = HttpResponse(d.body, status=d.status, content_type=d.content_type)
+    if d.retry_after > 0:
+        response["Retry-After"] = str(d.retry_after)
+    return response
+
+
+def _raised_answer(response: Any, ann: Any) -> Any:
+    # RateLimited raised outside a view (e.g. in another middleware) reaches
+    # us as Django's 500; answer with the denial instead.
+    rl = getattr(ann, "rate_limit", None)
+    if rl is not None and rl.raised and rl.denial is not None and             (response is None or getattr(response, "status_code", 500) == 500):
+        return _denial_response(rl.denial)
+    return response
 
 
 async def _acount(inner: Any, capture: BodyCapture, done: Any) -> Any:

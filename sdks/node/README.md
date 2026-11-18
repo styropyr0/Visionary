@@ -204,6 +204,39 @@ it does nothing.
 
 It runs on the writer, once per distinct user per batch.
 
+## Rate limits
+
+Rules made in the dashboard (**Security → Rate limits**) are enforced by the
+integrations before your handler runs: a request over a limit gets `429`
+with `Retry-After`, a blocked one `403`, and the handler never runs. The
+request is still logged. The SDK reads the rules every 15 seconds and
+writes what it limited to `rate_limit_events`.
+
+Rules keyed or matched on the user, role or an attribute (such as the plan)
+need your auth code to have run, so call the user check after `setUser`
+and stop when it returns `true` (it has answered the request):
+
+```js
+// Express, plain node:http
+visionary.setUser({ id: user.id, role: user.role });
+if (visionary.rateLimited(req, res, { plan: user.plan })) return;
+
+// Fastify (in a preHandler or the handler)
+if (visionary.rateLimited(request, reply, { plan })) return reply;
+
+// Koa
+if (visionary.rateLimited(ctx, ctx, { plan })) return;
+```
+
+Only the first call per request counts; later calls repeat its answer.
+Without the call, user rules never run. Outside a request the integration
+handled it returns `false`.
+
+Counters live in each process: a limit of 100 a minute on 4 instances (or
+4 cluster workers) lets through up to 400 in all, so set limits per
+instance. `VISIONARY_RATE_LIMIT=false` turns enforcement off. Anything going
+wrong in the limiter lets the request through.
+
 ## Database queries
 
 The SDK does not patch drivers on its own. Add one line where the client or
@@ -530,6 +563,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_METRICS` | `metrics` | `true` | Custom metrics on or off ([Custom metrics](#custom-metrics)). |
 | `VISIONARY_METRICS_INTERVAL` | `metricsInterval` (seconds) | `15s` | Time between a series' rows. |
 | `VISIONARY_METRICS_MAX_SERIES` | `metricsMaxSeries` | `1000` | Label sets kept per metric name. |
+| `VISIONARY_RATE_LIMIT` | `rateLimit` | `true` | Enforce the dashboard's rate limits ([Rate limits](#rate-limits)). |
 | | `instrumentHttp` | `true` | Record outbound `fetch`/`undici`/`http`/`https` calls and send `traceparent` on them. |
 | | `captureUncaught` | `true` | Record uncaught exceptions and crashing rejections. |
 | | `explain` | `[]` | Explainers for query plans (`explainWith(pool)`). |
@@ -558,6 +592,7 @@ truncated bodies.
 | `express()`, `expressErrorHandler()`, `fastify()`, `koa()`, `wrap(handler)` | Framework integrations. |
 | `VisionaryModule.forRoot(options?)`, `VisionaryInterceptor` | NestJS. |
 | `setUser({ id, handle?, role? })`, `setRoute(pattern)`, `loginAttempt(account)` | Annotate the current request. |
+| `rateLimited(req, res, attrs?)` | The user-phase rate limit check; answers and returns `true` when limited. |
 | `captureException(err)` | Record a handled error. |
 | `captureConsole()`, `pinoStream(next?)`, `winstonTransport()` | Send application logs to **Logs**. `captureConsole` returns a function that undoes it. |
 | `span(kind, name, fn, { target?, detail? })`, `background(name, fn)` | Custom spans. |

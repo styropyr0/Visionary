@@ -188,6 +188,7 @@ export const KINDS: Record<string, { label: string; source: "api" | "host" | "au
   idor_probe: { label: "Access probing", source: "api", text: "Many different records refused (403/404) through one route: trying records that aren't yours." },
   injection_attempt: { label: "Injection attempt", source: "api", text: "SQL, script, template, command, JNDI or traversal patterns in a path or query string." },
   route_rate_limit: { label: "Route limit", source: "api", text: "A route called more often than its per-minute limit." },
+  rate_limited: { label: "Rate limited", source: "api", text: "An IP the SDKs refused many times under Security → Rate limits." },
   signup_abuse: { label: "Sign-up flood", source: "api", text: "Many sign-ups from one IP." },
   otp_abuse: { label: "Code flood", source: "api", text: "Many sign-in codes sent from one IP or to one account." },
   portal_bruteforce: { label: "Visionary brute force", source: "audit", text: "Many failed sign-ins to this dashboard from one IP." },

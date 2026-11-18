@@ -1,0 +1,308 @@
+[
+  {
+    "name": "fixed window per IP",
+    "config": {"rules": [{"id": "f1", "action": "limit", "key": "ip", "limit": 2, "window_s": 60, "algorithm": "fixed"}]},
+    "steps": [
+      {"t": 6000, "expect": {"status": 0}},
+      {"t": 6001, "expect": {"status": 0}},
+      {"t": 6002, "expect": {"status": 429, "rule": "f1", "retry_after": 58, "content_type": "application/json", "body": "{\"error\":{\"code\":\"rate_limited\",\"key\":\"f1\",\"message\":\"Too many requests\"}}"}, "records": ["f1:limited"]},
+      {"t": 6003, "remote_ip": "203.0.113.2", "expect": {"status": 0}},
+      {"t": 6060, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "sliding window weighs the previous window",
+    "config": {"rules": [{"id": "s1", "action": "limit", "limit": 4, "window_s": 60}]},
+    "steps": [
+      {"t": 6050, "expect": {"status": 0}},
+      {"t": 6050, "expect": {"status": 0}},
+      {"t": 6051, "expect": {"status": 0}},
+      {"t": 6052, "expect": {"status": 0}},
+      {"t": 6053, "expect": {"status": 429, "rule": "s1", "retry_after": 7}, "records": ["s1:limited"]},
+      {"t": 6070, "expect": {"status": 429, "rule": "s1", "retry_after": 50}, "records": ["s1:limited"]},
+      {"t": 6110, "expect": {"status": 0}},
+      {"t": 6250, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "token bucket with burst",
+    "config": {"rules": [{"id": "b1", "action": "limit", "limit": 60, "window_s": 60, "algorithm": "token_bucket", "burst": 3}]},
+    "steps": [
+      {"t": 1000, "expect": {"status": 0}},
+      {"t": 1000, "expect": {"status": 0}},
+      {"t": 1000, "expect": {"status": 0}},
+      {"t": 1000, "expect": {"status": 429, "rule": "b1", "retry_after": 1}, "records": ["b1:limited"]},
+      {"t": 1000.5, "expect": {"status": 429, "rule": "b1", "retry_after": 1}, "records": ["b1:limited"]},
+      {"t": 1002, "expect": {"status": 0}},
+      {"t": 1002, "expect": {"status": 0}},
+      {"t": 1002, "expect": {"status": 429, "rule": "b1", "retry_after": 1}, "records": ["b1:limited"]}
+    ]
+  },
+  {
+    "name": "slow token bucket waits for a whole token",
+    "config": {"rules": [{"id": "b2", "action": "limit", "limit": 1, "window_s": 10, "algorithm": "token_bucket"}]},
+    "steps": [
+      {"t": 500, "expect": {"status": 0}},
+      {"t": 504, "expect": {"status": 429, "rule": "b2", "retry_after": 6}, "records": ["b2:limited"]},
+      {"t": 510, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "methods and path globs",
+    "config": {"rules": [
+      {"id": "e1", "action": "limit", "methods": ["post"], "paths": ["/api/export*"], "limit": 1, "window_s": 60, "algorithm": "fixed"},
+      {"id": "e2", "action": "block", "paths": ["/api/*/admin"]}
+    ]},
+    "steps": [
+      {"t": 6000, "method": "GET", "path": "/api/export", "expect": {"status": 0}},
+      {"t": 6000, "method": "POST", "path": "/api/export", "expect": {"status": 0}},
+      {"t": 6001, "method": "POST", "path": "/api/export/7", "expect": {"status": 429, "rule": "e1"}, "records": ["e1:limited"]},
+      {"t": 6002, "method": "POST", "path": "/API/export", "expect": {"status": 0}},
+      {"t": 6003, "path": "/api/v1/admin", "expect": {"status": 403, "rule": "e2"}, "records": ["e2:blocked"]},
+      {"t": 6004, "path": "/api/v1/admin/users", "expect": {"status": 0}},
+      {"t": 6005, "path": "/api/v1/v2/admin", "expect": {"status": 403, "rule": "e2"}, "records": ["e2:blocked"]}
+    ]
+  },
+  {
+    "name": "allowlist before a block, IPv4 and IPv6",
+    "config": {"rules": [
+      {"id": "a1", "action": "allow", "ips": ["10.0.0.0/8", "2001:db8::/32", "192.0.2.7", "not-an-ip"]},
+      {"id": "k1", "action": "block", "paths": ["/admin*"]}
+    ]},
+    "steps": [
+      {"t": 6000, "path": "/admin", "remote_ip": "10.1.2.3", "expect": {"status": 0}},
+      {"t": 6000, "path": "/admin", "remote_ip": "::ffff:10.0.0.5", "expect": {"status": 0}},
+      {"t": 6000, "path": "/admin", "remote_ip": "2001:db8:1::9", "expect": {"status": 0}},
+      {"t": 6000, "path": "/admin", "remote_ip": "192.0.2.7", "expect": {"status": 0}},
+      {"t": 6000, "path": "/admin/x", "remote_ip": "203.0.113.9", "expect": {"status": 403, "rule": "k1", "retry_after": 0, "content_type": "application/json", "body": "{\"error\":{\"code\":\"blocked\",\"key\":\"k1\",\"message\":\"Forbidden\"}}"}, "records": ["k1:blocked"]},
+      {"t": 6000, "path": "/admin", "remote_ip": "2001:db9::1", "expect": {"status": 403, "rule": "k1"}, "records": ["k1:blocked"]},
+      {"t": 6000, "path": "/public", "remote_ip": "203.0.113.9", "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "blocklist of IPs and CIDRs",
+    "config": {"rules": [{"id": "d1", "action": "block", "ips": ["198.51.100.0/24", "203.0.113.9"]}]},
+    "steps": [
+      {"t": 1, "remote_ip": "198.51.100.200", "expect": {"status": 403, "rule": "d1"}, "records": ["d1:blocked"]},
+      {"t": 1, "remote_ip": "203.0.113.9", "expect": {"status": 403, "rule": "d1"}, "records": ["d1:blocked"]},
+      {"t": 1, "remote_ip": "203.0.113.10", "expect": {"status": 0}},
+      {"t": 1, "remote_ip": "unknown", "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "IP header names the client",
+    "config": {"ip_header": "X-Real-IP", "rules": [{"id": "h1", "action": "block", "ips": ["1.2.3.4"]}]},
+    "steps": [
+      {"t": 1, "remote_ip": "9.9.9.9", "headers": {"x-real-ip": " 1.2.3.4 , 5.6.7.8"}, "expect": {"status": 403, "rule": "h1"}, "records": ["h1:blocked"]},
+      {"t": 1, "remote_ip": "1.2.3.4", "expect": {"status": 403, "rule": "h1"}, "records": ["h1:blocked"]},
+      {"t": 1, "remote_ip": "1.2.3.4", "headers": {"X-Real-IP": "5.5.5.5"}, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "country from the default CDN headers",
+    "config": {"rules": [{"id": "c1", "action": "block", "countries": ["CN", "ru"]}]},
+    "steps": [
+      {"t": 1, "headers": {"CF-IPCountry": "cn"}, "expect": {"status": 403, "rule": "c1"}, "records": ["c1:blocked"]},
+      {"t": 1, "headers": {"X-Country-Code": "RU"}, "expect": {"status": 403, "rule": "c1"}, "records": ["c1:blocked"]},
+      {"t": 1, "headers": {"CF-IPCountry": "US"}, "expect": {"status": 0}},
+      {"t": 1, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "country headers configured, limit keyed by country",
+    "config": {"country_headers": ["X-Geo"], "rules": [{"id": "c2", "action": "limit", "key": "country", "limit": 1, "window_s": 60, "algorithm": "fixed"}]},
+    "steps": [
+      {"t": 6000, "headers": {"X-Geo": "de"}, "expect": {"status": 0}},
+      {"t": 6001, "headers": {"X-Geo": "DE"}, "remote_ip": "203.0.113.50", "expect": {"status": 429, "rule": "c2"}, "records": ["c2:limited"]},
+      {"t": 6002, "headers": {"CF-IPCountry": "DE"}, "expect": {"status": 0}},
+      {"t": 6003, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "monitor mode records and lets through",
+    "config": {"rules": [
+      {"id": "m1", "mode": "monitor", "action": "limit", "limit": 1, "window_s": 60, "algorithm": "fixed"},
+      {"id": "m2", "mode": "monitor", "action": "block", "paths": ["/x"]},
+      {"id": "r2", "action": "limit", "limit": 3, "window_s": 60, "algorithm": "fixed"}
+    ]},
+    "steps": [
+      {"t": 6000, "expect": {"status": 0}},
+      {"t": 6001, "expect": {"status": 0}, "records": ["m1:would_limit"]},
+      {"t": 6002, "path": "/x", "expect": {"status": 0}, "records": ["m1:would_limit", "m2:would_block"]},
+      {"t": 6003, "expect": {"status": 429, "rule": "r2", "retry_after": 57}, "records": ["m1:would_limit", "r2:limited"]}
+    ]
+  },
+  {
+    "name": "monitor allow does nothing",
+    "config": {"rules": [
+      {"id": "a2", "mode": "monitor", "action": "allow", "ips": ["203.0.113.1"]},
+      {"id": "k2", "action": "block"}
+    ]},
+    "steps": [
+      {"t": 1, "expect": {"status": 403, "rule": "k2"}, "records": ["k2:blocked"]}
+    ]
+  },
+  {
+    "name": "dynamic limits by plan, per user",
+    "config": {"rules": [{"id": "p1", "action": "limit", "key": "user", "limit": 2, "window_s": 60, "algorithm": "fixed", "limit_by": "attr:plan", "limits": {"free": 1, "pro": 3, "internal": -1}}]},
+    "steps": [
+      {"t": 6000, "user": {"id": "u1"}, "attrs": {"plan": "free"}, "expect": {"status": 0}},
+      {"t": 6001, "user": {"id": "u1"}, "attrs": {"plan": "free"}, "expect": {"status": 429, "rule": "p1", "retry_after": 59}, "records": ["p1:limited"]},
+      {"t": 6002, "user": {"id": "u2"}, "attrs": {"plan": "pro"}, "expect": {"status": 0}},
+      {"t": 6002, "user": {"id": "u2"}, "attrs": {"plan": "pro"}, "expect": {"status": 0}},
+      {"t": 6002, "user": {"id": "u2"}, "attrs": {"plan": "pro"}, "expect": {"status": 0}},
+      {"t": 6003, "user": {"id": "u2"}, "attrs": {"plan": "pro"}, "expect": {"status": 429, "rule": "p1"}, "records": ["p1:limited"]},
+      {"t": 6004, "user": {"id": "u3"}, "expect": {"status": 0}},
+      {"t": 6004, "user": {"id": "u3"}, "expect": {"status": 0}},
+      {"t": 6004, "user": {"id": "u3"}, "expect": {"status": 429, "rule": "p1"}, "records": ["p1:limited"]},
+      {"t": 6005, "user": {"id": "u4"}, "attrs": {"plan": "internal"}, "expect": {"status": 0}},
+      {"t": 6005, "user": {"id": "u4"}, "attrs": {"plan": "internal"}, "expect": {"status": 0}},
+      {"t": 6005, "user": {"id": "u4"}, "attrs": {"plan": "internal"}, "expect": {"status": 0}},
+      {"t": 6006, "expect": {"status": 0}},
+      {"t": 6006, "expect": {"status": 0}},
+      {"t": 6006, "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "role match and header-driven limits",
+    "config": {"rules": [
+      {"id": "g1", "action": "allow", "match": {"role": ["admin"]}},
+      {"id": "g2", "action": "limit", "key": "user", "limit": 1, "window_s": 60, "algorithm": "fixed", "limit_by": "header:X-Plan", "limits": {"pro": 2}}
+    ]},
+    "steps": [
+      {"t": 6000, "user": {"id": "u1", "role": "admin"}, "expect": {"status": 0}},
+      {"t": 6000, "user": {"id": "u1", "role": "admin"}, "expect": {"status": 0}},
+      {"t": 6000, "user": {"id": "u2", "role": "member"}, "expect": {"status": 0}},
+      {"t": 6000, "user": {"id": "u2", "role": "member"}, "expect": {"status": 429, "rule": "g2"}, "records": ["g2:limited"]},
+      {"t": 6000, "user": {"id": "u3"}, "headers": {"x-plan": "pro"}, "expect": {"status": 0}},
+      {"t": 6000, "user": {"id": "u3"}, "headers": {"X-PLAN": "pro"}, "expect": {"status": 0}},
+      {"t": 6000, "user": {"id": "u3"}, "headers": {"X-Plan": "pro"}, "expect": {"status": 429, "rule": "g2"}, "records": ["g2:limited"]}
+    ]
+  },
+  {
+    "name": "request-phase allow skips user rules",
+    "config": {"rules": [
+      {"id": "u0", "action": "limit", "key": "user", "limit": 0, "window_s": 30},
+      {"id": "a3", "action": "allow", "ips": ["10.0.0.0/8"]}
+    ]},
+    "steps": [
+      {"t": 1, "remote_ip": "10.0.0.1", "user": {"id": "x"}, "expect": {"status": 0}},
+      {"t": 1, "remote_ip": "1.1.1.1", "user": {"id": "x"}, "expect": {"status": 429, "rule": "u0", "retry_after": 30}, "records": ["u0:limited"]},
+      {"t": 1, "remote_ip": "1.1.1.1", "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "header and query keys with a presence match",
+    "config": {"rules": [
+      {"id": "q1", "action": "limit", "key": "header:X-Api-Key", "match": {"header:X-Api-Key": []}, "limit": 1, "window_s": 60, "algorithm": "fixed"},
+      {"id": "q2", "action": "limit", "key": "query:token", "limit": 1, "window_s": 60, "algorithm": "fixed"}
+    ]},
+    "steps": [
+      {"t": 6000, "expect": {"status": 0}},
+      {"t": 6000, "expect": {"status": 0}},
+      {"t": 6000, "headers": {"X-Api-Key": "abc"}, "expect": {"status": 0}},
+      {"t": 6000, "headers": {"x-api-key": "abc"}, "expect": {"status": 429, "rule": "q1"}, "records": ["q1:limited"]},
+      {"t": 6000, "headers": {"X-Api-Key": "def"}, "expect": {"status": 0}},
+      {"t": 6000, "query": {"token": "t 1"}, "expect": {"status": 0}},
+      {"t": 6000, "query": {"token": "t 1"}, "expect": {"status": 429, "rule": "q2"}, "records": ["q2:limited"]}
+    ]
+  },
+  {
+    "name": "global key counts every client together",
+    "config": {"rules": [{"id": "w1", "action": "limit", "key": "global", "limit": 2, "window_s": 10, "algorithm": "fixed"}]},
+    "steps": [
+      {"t": 100, "remote_ip": "1.1.1.1", "expect": {"status": 0}},
+      {"t": 101, "remote_ip": "2.2.2.2", "expect": {"status": 0}},
+      {"t": 102, "remote_ip": "3.3.3.3", "expect": {"status": 429, "rule": "w1", "retry_after": 8}, "records": ["w1:limited"]},
+      {"t": 110, "remote_ip": "3.3.3.3", "expect": {"status": 0}}
+    ]
+  },
+  {
+    "name": "custom status, body and content type",
+    "config": {"rules": [
+      {"id": "x1", "action": "block", "paths": ["/legal"], "status": 451, "body": "Unavailable here. Retry in {retry_after}."},
+      {"id": "x2", "action": "limit", "paths": ["/slow"], "limit": 0, "window_s": 15, "body": "  {\"wait\": {retry_after}}"},
+      {"id": "x3", "action": "limit", "paths": ["/xml"], "limit": 0, "window_s": 5, "status": 503, "body": "<busy/>", "content_type": "application/xml"}
+    ]},
+    "steps": [
+      {"t": 1, "path": "/legal", "expect": {"status": 451, "rule": "x1", "retry_after": 0, "body": "Unavailable here. Retry in 0.", "content_type": "text/plain; charset=utf-8"}, "records": ["x1:blocked"]},
+      {"t": 1, "path": "/slow", "expect": {"status": 429, "rule": "x2", "retry_after": 15, "body": "  {\"wait\": 15}", "content_type": "application/json"}, "records": ["x2:limited"]},
+      {"t": 1, "path": "/xml", "expect": {"status": 503, "rule": "x3", "retry_after": 5, "body": "<busy/>", "content_type": "application/xml"}, "records": ["x3:limited"]}
+    ]
+  },
+  {
+    "name": "disabled rules and a disabled config",
+    "config": {"rules": [
+      {"id": "o1", "action": "block", "enabled": false},
+      {"id": "o2", "action": "block", "paths": ["/off"]}
+    ]},
+    "steps": [
+      {"t": 1, "expect": {"status": 0}},
+      {"t": 1, "path": "/off", "expect": {"status": 403, "rule": "o2"}, "records": ["o2:blocked"]}
+    ]
+  },
+  {
+    "name": "config switched off",
+    "config": {"enabled": false, "rules": [{"id": "o3", "action": "block"}]},
+    "steps": [{"t": 1, "expect": {"status": 0}}]
+  },
+  {
+    "name": "rules for other services are skipped",
+    "service": "web",
+    "config": {"rules": [
+      {"id": "v1", "action": "block", "services": ["api"]},
+      {"id": "v2", "action": "block", "services": ["web", "api"], "paths": ["/web-only"]}
+    ]},
+    "steps": [
+      {"t": 1, "expect": {"status": 0}},
+      {"t": 1, "path": "/web-only", "expect": {"status": 403, "rule": "v2"}, "records": ["v2:blocked"]}
+    ]
+  },
+  {
+    "name": "a service with no name matches only rules for every service",
+    "config": {"rules": [{"id": "v3", "action": "block", "services": ["api"]}, {"id": "v4", "action": "block", "paths": ["/all"]}]},
+    "steps": [
+      {"t": 1, "expect": {"status": 0}},
+      {"t": 1, "path": "/all", "expect": {"status": 403, "rule": "v4"}, "records": ["v4:blocked"]}
+    ]
+  },
+  {
+    "name": "unusable rules are skipped, the rest kept",
+    "config": {"rules": [
+      {"id": "n1", "action": "nope"},
+      {"id": "bad id!", "action": "block"},
+      {"action": "block"},
+      {"id": "n2", "action": "limit", "limit": 1},
+      {"id": "n3", "action": "limit", "limit": 1, "window_s": 60, "key": "cookie"},
+      {"id": "n4", "action": "limit", "limit": 1, "window_s": 60, "algorithm": "leaky"},
+      {"id": "n5", "action": "block", "mode": "dry"},
+      {"id": "n6", "action": "block", "match": {"header:": ["x"]}},
+      {"id": "n7", "action": "block", "paths": ["/kept"]}
+    ]},
+    "steps": [
+      {"t": 1, "expect": {"status": 0}},
+      {"t": 1, "path": "/kept", "expect": {"status": 403, "rule": "n7"}, "records": ["n7:blocked"]}
+    ]
+  },
+  {
+    "name": "a later rule answers after an earlier one counted",
+    "config": {"rules": [
+      {"id": "l1", "action": "limit", "limit": 2, "window_s": 60, "algorithm": "fixed"},
+      {"id": "l2", "action": "block", "paths": ["/blocked"]}
+    ]},
+    "steps": [
+      {"t": 6000, "path": "/blocked", "expect": {"status": 403, "rule": "l2"}, "records": ["l2:blocked"]},
+      {"t": 6001, "path": "/blocked", "expect": {"status": 403, "rule": "l2"}, "records": ["l2:blocked"]},
+      {"t": 6002, "path": "/ok", "expect": {"status": 429, "rule": "l1"}, "records": ["l1:limited"]}
+    ]
+  },
+  {
+    "name": "match on method, path and query values",
+    "config": {"rules": [{"id": "z1", "action": "block", "match": {"query:debug": ["1", "true"], "method": ["DELETE"]}}]},
+    "steps": [
+      {"t": 1, "method": "delete", "query": {"debug": "true"}, "expect": {"status": 403, "rule": "z1"}, "records": ["z1:blocked"]},
+      {"t": 1, "method": "DELETE", "query": {"debug": "yes"}, "expect": {"status": 0}},
+      {"t": 1, "method": "GET", "query": {"debug": "1"}, "expect": {"status": 0}}
+    ]
+  }
+]

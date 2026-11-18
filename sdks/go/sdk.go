@@ -44,6 +44,7 @@ import (
 
 	"github.com/styropyr0/visionary/sdks/go/d1"
 	"github.com/styropyr0/visionary/sdks/go/logrules"
+	"github.com/styropyr0/visionary/sdks/go/ratelimit"
 )
 
 // User is who made a request. Only ID is required; Handle and Role make the
@@ -107,6 +108,9 @@ type Config struct {
 	// the dashboard's Settings -> Profiling says. Otherwise profiling follows
 	// the dashboard (off until it is turned on there).
 	ProfileOff bool
+	// RateLimitOff is VISIONARY_RATE_LIMIT=false: ignore Security → Rate
+	// limits. Otherwise Middleware enforces the rules made there.
+	RateLimitOff bool
 
 	Requests RequestsConfig
 	System   SystemConfig
@@ -230,6 +234,7 @@ type SystemConfig struct {
 //	VISIONARY_METRICS=true|false         (default true, see Counter, Gauge and Histogram)
 //	VISIONARY_METRICS_INTERVAL           (default 15s)
 //	VISIONARY_METRICS_MAX_SERIES         (default 1000 per metric name)
+//	VISIONARY_RATE_LIMIT=true|false      (default true, enforce Security → Rate limits)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -249,6 +254,7 @@ func FromEnv() Config {
 		ExplainOff:     !envBool("VISIONARY_EXPLAIN", true),
 		Errors:         envBool("VISIONARY_ERRORS", true),
 		ProfileOff:     !envBool("VISIONARY_PROFILE", true),
+		RateLimitOff:   !envBool("VISIONARY_RATE_LIMIT", true),
 		Requests: RequestsConfig{
 			Enabled:             envBool("VISIONARY_LOG_REQUESTS", true),
 			PathPrefix:          env("VISIONARY_LOG_PATH_PREFIX", ""),
@@ -297,6 +303,9 @@ type Agent struct {
 	metrics *metricsRecorder
 	// skip holds the paths Settings → Data leaves out.
 	skip atomic.Pointer[[]string]
+	// limiter enforces Security → Rate limits; nil with VISIONARY_RATE_LIMIT=false.
+	rl             *ratelimit.Limiter
+	rlStop, rlDone chan struct{}
 }
 
 // ErrNotConfigured is returned when no database is configured. Callers can
@@ -340,6 +349,7 @@ func New(cfg Config) (*Agent, error) {
 	}
 	cfg.Release = shortRelease(cfg.Release)
 	a := &Agent{cfg: cfg, db: db, ident: identity{service: cfg.Service, instance: cfg.Instance, version: cfg.Release}}
+	a.rl = newLimiter(cfg)
 	if cfg.Requests.Enabled || cfg.Spans || cfg.Errors {
 		a.writer = newWriter(cfg.Requests, cfg.Requests.Enabled, a.ident, db, cfg.Logger)
 	}
@@ -434,6 +444,10 @@ func (a *Agent) Start(ctx context.Context) {
 	if a.metrics != nil {
 		a.metrics.start(ctx)
 	}
+	if a.rl != nil {
+		a.rlStop, a.rlDone = make(chan struct{}), make(chan struct{})
+		go a.rateLimitLoop(ctx)
+	}
 }
 
 // Close flushes queued rows and buffered samples, waiting until ctx ends at
@@ -443,6 +457,13 @@ func (a *Agent) Close(ctx context.Context) {
 		return
 	}
 	active.CompareAndSwap(a, nil)
+	if a.rlStop != nil {
+		close(a.rlStop)
+		select {
+		case <-a.rlDone:
+		case <-ctx.Done():
+		}
+	}
 	if a.profiler != nil {
 		a.profiler.close(ctx)
 	}

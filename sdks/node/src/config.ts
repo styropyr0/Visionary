@@ -87,6 +87,8 @@ export interface Options {
   metricsInterval?: number;
   /** Label sets kept per metric, later ones dropped (VISIONARY_METRICS_MAX_SERIES, default 1000) */
   metricsMaxSeries?: number;
+  /** Enforce the dashboard's rate limits (VISIONARY_RATE_LIMIT, default true) */
+  rateLimit?: boolean;
 }
 
 export type LookupResult = { handle?: string; role?: string } | null | undefined;
@@ -129,6 +131,7 @@ export interface Config {
   metrics: boolean;
   metricsInterval: number;
   metricsMaxSeries: number;
+  rateLimit: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -179,6 +182,7 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     metrics: opts.metrics ?? parseBool(s("VISIONARY_METRICS"), true),
     metricsInterval: positive(opts.metricsInterval ?? parseDuration(s("VISIONARY_METRICS_INTERVAL"), 15), 15),
     metricsMaxSeries: positive(opts.metricsMaxSeries ?? parseInt0(s("VISIONARY_METRICS_MAX_SERIES"), 1000), 1000),
+    rateLimit: opts.rateLimit ?? parseBool(s("VISIONARY_RATE_LIMIT"), true),
   };
 }
 

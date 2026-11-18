@@ -16,6 +16,7 @@ import { fastify } from "./integrations/fastify.js";
 import { koa } from "./integrations/koa.js";
 import { VisionaryInterceptor, VisionaryModule } from "./integrations/nest.js";
 import { wrap } from "./integrations/node-http.js";
+import { rateLimited } from "./ratelimit/http.js";
 import { captureConsole, pinoStream, winstonTransport } from "./logs/hooks.js";
 import { mysqlPoolStats, pgPoolStats } from "./system/pool.js";
 import { instrumentMysql2, instrumentPg, instrumentSqlite, prismaExtension } from "./telemetry/db.js";
@@ -63,6 +64,7 @@ export {
   pgPoolStats,
   pinoStream,
   prismaExtension,
+  rateLimited,
   setRoute,
   setUser,
   span,
@@ -77,6 +79,7 @@ const visionary = {
   setUser,
   setRoute,
   loginAttempt,
+  rateLimited,
   captureException,
   captureConsole,
   pinoStream,

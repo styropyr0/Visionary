@@ -209,6 +209,42 @@ not it exists or the password was right. The value is trimmed and clipped to
 
 **Records:** `login_account` on the request row.
 
+### Rate limits
+
+**When:** you made rules in the dashboard (Security → Rate limits) and want
+this service to enforce them.
+
+The middleware reads the rules every 15 seconds and checks each request
+before the rest of the pipeline runs. A request over a limit gets `429` with
+`Retry-After`, a blocked one `403`, and your handlers never run; the request
+is still logged. Rules keyed on the user, role or an attribute (`user`,
+`role`, `attr:plan`) need your auth code first, so call the check once the
+user is set:
+
+```csharp
+app.Use(async (ctx, next) =>
+{
+    var user = await auth.UserAsync(ctx);
+    Visionary.SetUser(ctx, user.Id, role: user.Role);
+    if (await Visionary.RateLimitedAsync(ctx, new Dictionary<string, string> { ["plan"] = user.Plan }))
+    {
+        return; // already answered
+    }
+    await next();
+});
+```
+
+Only the first call per request counts; later calls return the same answer.
+Without the call, rules that need the user never apply.
+
+Counters live in each process: a limit of 100 a minute on 4 instances lets
+up to 400 through in all, so set limits per instance. Behind a CDN or load
+balancer, name its client IP header in the rules' IP header setting, or IP
+rules can be dodged. `VISIONARY_RATE_LIMIT=false` turns enforcement off.
+
+**Records:** `rate_limit_events`, one row per rule, outcome, key and IP every
+15 seconds.
+
 ### EF Core, Npgsql, MySqlConnector, Dapper
 
 **When:** the app talks to a database. Nothing to add. The span listeners
@@ -613,6 +649,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_METRICS_INTERVAL` | `MetricsInterval` | `15s` | How often each series is written (a plain number is seconds) |
 | `VISIONARY_METRICS_MAX_SERIES` | `MetricsMaxSeries` | `1000` | Label sets per metric name |
 | `VISIONARY_METRICS_METERS` | `MetricsMeters` | empty | `System.Diagnostics.Metrics` meters to record as custom metrics, comma-separated |
+| `VISIONARY_RATE_LIMIT` | `RateLimit` | `true` | Enforce Security → Rate limits; `false` neither reads nor enforces them |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
@@ -757,6 +794,7 @@ app.UseVisionary();                              // the request middleware, firs
 Visionary.SetUser(ctx, id, handle, role);        // the signed-in user of this request
 Visionary.SetRoute(ctx, "/files/{id}");          // route pattern, for requests without an endpoint
 Visionary.LoginAttempt(ctx, form.Email);         // the account a sign-in request tried
+if (await Visionary.RateLimitedAsync(ctx, attrs)) return;   // rate limits that need the user
 Visionary.CaptureException(e);                   // a handled error (handled = 1)
 Visionary.CaptureException(ctx, e);              // the same, for a specific request
 using var span = Visionary.StartSpan(kind, name, target, detail);   // a manual span

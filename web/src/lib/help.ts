@@ -169,6 +169,45 @@ VISIONARY_SERVICE=my-api                                          # any name; te
       dotnet: { code: `Visionary.LoginAttempt(ctx, form.Email);` },
     },
   },
+  ratelimit: {
+    id: "ratelimit",
+    title: "Rate-limit by user or plan",
+    intro:
+      "Rules in Security → Rate limits that use the client IP, a header, a query parameter, the path or the country work with the middleware alone. Rules by user, role or an attribute such as the plan need the user first: call the check right after your auth code sets it. Over the limit it answers 429 with Retry-After (or the rule's own response) and your handler stops. Counters are kept in each process, so a limit of 100 a minute on 4 instances allows up to 400 in all. `VISIONARY_RATE_LIMIT=false` turns enforcement off in a service.",
+    langs: {
+      go: {
+        code: `visionary.SetUser(r.Context(), visionary.User{ID: id, Role: role})
+if visionary.RateLimited(w, r, map[string]string{"plan": plan}) {
+	return
+}
+// or mount visionary.RateLimitUsers(next) after your auth middleware`,
+      },
+      node: {
+        code: `visionary.setUser({ id: user.id, role: user.role });
+if (visionary.rateLimited(req, res, { plan: user.plan })) return;   // Express, node:http
+// Fastify: if (visionary.rateLimited(request, reply, attrs)) return reply;
+// Koa:     if (visionary.rateLimited(ctx, ctx, attrs)) return;`,
+      },
+      python: {
+        note: "Raises `visionary.RateLimited`; the Django, Flask and ASGI integrations turn it into the response.",
+        code: `visionary.set_user(user.id, role=user.role)
+visionary.check_rate_limit({"plan": user.plan})`,
+      },
+      ruby: {
+        note: "Raises `Visionary::RateLimited`; the Rack middleware, and in Rails a `rescue_from` the Railtie adds, turn it into the response.",
+        code: `Visionary.set_user(current_user.id, role: current_user.role)
+Visionary.check_rate_limit!(plan: current_user.plan)`,
+      },
+      java: {
+        code: `Visionary.setUser(request, user.getId(), user.getUsername(), user.getRole());
+if (Visionary.checkRateLimit(request, response, Map.of("plan", user.getPlan()))) return;`,
+      },
+      dotnet: {
+        code: `Visionary.SetUser(ctx, id, role: role);
+if (await Visionary.RateLimitedAsync(ctx, new Dictionary<string, string> { ["plan"] = plan })) return;`,
+      },
+    },
+  },
   db: {
     id: "db",
     title: "Record database queries",
@@ -1070,7 +1109,7 @@ export const HELP: Record<Route, PageHelp> = {
   security: {
     title: "Security",
     tip: "Attacks and account takeovers found in your traffic, events from your machines, and changes to Visionary itself, with what to do about each.",
-    what: "Findings from the API detectors: brute force, credential stuffing and targeted accounts on login routes (also slow and spread across many addresses), someone signed in as one user trying another's account, new places and devices, impossible travel, one session used from many places, sensitive changes right after a risky sign-in, scraping and ID guessing, injection attempts, per-route limits, sign-up and code floods, scanners, request floods and bursts of 403s. With the host agent: SSH brute force, logins, sudo, new SSH keys, changed system files, suspicious processes, risky containers, opened ports and pending updates. From Visionary's own audit log: failed sign-ins to this dashboard, secrets shown, role and sign-in changes. Rules adds your own detectors over requests, app logs, security events and the audit log (a count over a threshold, a value a user or host never had, one thing then another, or a jump over the usual), from a library tagged with MITRE ATT&CK; what they find shows under Signals. Each finding or signal can be acknowledged, resolved or marked a false positive, and acted on.",
+    what: "Findings from the API detectors: brute force, credential stuffing and targeted accounts on login routes (also slow and spread across many addresses), someone signed in as one user trying another's account, new places and devices, impossible travel, one session used from many places, sensitive changes right after a risky sign-in, scraping and ID guessing, injection attempts, per-route limits, sign-up and code floods, scanners, request floods and bursts of 403s. With the host agent: SSH brute force, logins, sudo, new SSH keys, changed system files, suspicious processes, risky containers, opened ports and pending updates. From Visionary's own audit log: failed sign-ins to this dashboard, secrets shown, role and sign-in changes. Rate limits are rules every server SDK enforces in its middleware: limits per IP, user, header, query parameter or attribute (with different limits per plan or role), blocks of IPs, ranges and countries, and exemptions, each enforced or in monitor mode, with what they refused. Rules adds your own detectors over requests, app logs, security events and the audit log (a count over a threshold, a value a user or host never had, one thing then another, or a jump over the usual), from a library tagged with MITRE ATT&CK; what they find shows under Signals. Each finding or signal can be acknowledged, resolved or marked a false positive, and acted on.",
     read: [
       "Each finding links to the requests behind it; click an account for its sign-in history, or About this IP for where an address is and what else it did.",
       "Don't flag this again stops one kind of finding for one IP or account; Not flagged lists those rules.",
@@ -1079,8 +1118,11 @@ export const HELP: Record<Route, PageHelp> = {
       "New-value rules learn what each group had over their learning period the first time they run, then flag only what's new. Rules run every fifth of their window (1 to 10 minutes) and read only that window.",
       "Places, impossible travel and networks need a location database, and blocklists raise findings from listed addresses: both in Settings → Server → Threat intelligence.",
       "Settings → Server tunes every detector; host events still show when the API detectors are off.",
+      "Rate limits apply in order, first rule first: put allow rules (office IPs, health checks) above the limits they exempt. Services pick up changes within 15 seconds, and each instance keeps its own counters.",
+      "A monitor-mode rate limit refuses nothing and shows as Would refuse, so a new rule can be checked against real traffic before it is enforced. Clients refused often become rate_limited findings, which security alerts can fire on.",
+      "Country rules read the visitor's country from your CDN's header (CF-IPCountry, CloudFront-Viewer-Country, X-Vercel-IP-Country and the like), so no service ships a GeoIP database; without such a header they match nothing. Set Client IP header to your proxy's real-IP header, or IP rules can be dodged with a forged X-Forwarded-For.",
     ],
-    setup: ["sdk", "user", "login", "agent"],
+    setup: ["sdk", "user", "login", "ratelimit", "agent"],
   },
   explore: {
     title: "Explore",
