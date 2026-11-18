@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -27,7 +28,9 @@ const (
 	storageMaxEntries = 2_000_000
 	storagePaceEvery  = 1000
 	storagePause      = 20 * time.Millisecond // at most ~50k files a second
-	storageMaxLinks   = 200_000
+	storageMaxLinks   = 50_000
+	storageMaxDF      = 16 << 20
+	storageDirBatch   = 1000
 
 	storageTopDirs     = 20
 	storageExpandDirs  = 6
@@ -107,6 +110,9 @@ func (s *storageScanner) scan(ctx context.Context) *agentapi.Storage {
 		st.Items = st.Items[:storageMaxItems]
 	}
 	st.TookS = round(time.Since(start).Seconds(), 1)
+	// The walk leaves a lot of garbage; give it back now rather than holding
+	// the peak until the runtime gets round to it
+	debug.FreeOSMemory()
 	s.a.log.Info("storage scanned", "took", time.Since(start).Round(time.Second).String(), "items", len(st.Items), "partial", st.Partial)
 	return st
 }
@@ -151,14 +157,10 @@ func (w *storageWalk) mount(mp string) []agentapi.StorageItem {
 		if !w.sameDev(p, dev) {
 			continue
 		}
-		inner, err := os.ReadDir(p)
-		if err != nil {
-			continue
-		}
-		for _, k := range inner {
+		eachEntry(p, func(k fs.DirEntry) {
 			kp := filepath.Join(p, k.Name())
 			if w.skipped(kp) {
-				continue
+				return
 			}
 			ks := &storageSize{}
 			kids[k.Name()] = ks
@@ -171,7 +173,7 @@ func (w *storageWalk) mount(mp string) []agentapi.StorageItem {
 			}
 			t.bytes += ks.bytes
 			t.files += ks.files
-		}
+		})
 	}
 
 	names := biggest(top, storageTopDirs)
@@ -199,19 +201,34 @@ func (w *storageWalk) tree(dir string, dev uint64, into *storageSize) {
 		}
 		d := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		entries, err := os.ReadDir(d)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
+		eachEntry(d, func(e fs.DirEntry) {
 			p := filepath.Join(d, e.Name())
 			if e.IsDir() {
 				if !w.skipped(p) && w.sameDev(p, dev) {
 					stack = append(stack, p)
 				}
-				continue
+				return
 			}
 			w.add(p, e, into)
+		})
+	}
+}
+
+// eachEntry reads dir a batch at a time, so a directory of millions of files
+// never sits in memory whole the way os.ReadDir would hold and sort it.
+func eachEntry(dir string, fn func(fs.DirEntry)) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	for {
+		batch, err := f.ReadDir(storageDirBatch)
+		for _, e := range batch {
+			fn(e)
+		}
+		if err != nil {
+			return
 		}
 	}
 }
@@ -327,8 +344,9 @@ func engineStorage(ctx context.Context, setting string) ([]agentapi.StorageItem,
 	defer tr.CloseIdleConnections()
 	d := &dockerCollector{client: &http.Client{Transport: tr}}
 	var df dockerDF
-	// The engine sizes every container and volume, which can take a while on a busy host
-	if err := d.getWithin(ctx, 3*time.Minute, "/system/df", &df); err != nil {
+	// The engine sizes every container and volume, which can take a while on
+	// a busy host. The decoder holds the whole body, so it is kept small
+	if err := d.getWithin(ctx, 3*time.Minute, storageMaxDF, "/system/df", &df); err != nil {
 		return nil, err
 	}
 	return dfItems(df), nil

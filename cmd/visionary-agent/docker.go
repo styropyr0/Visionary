@@ -118,10 +118,10 @@ func socketCandidates(setting string) []string {
 }
 
 func (d *dockerCollector) get(ctx context.Context, path string, out any) error {
-	return d.getWithin(ctx, 10*time.Second, path, out)
+	return d.getWithin(ctx, 10*time.Second, 64<<20, path, out)
 }
 
-func (d *dockerCollector) getWithin(ctx context.Context, limit time.Duration, path string, out any) error {
+func (d *dockerCollector) getWithin(ctx context.Context, limit time.Duration, maxBody int64, path string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://engine"+path, nil)
@@ -137,7 +137,7 @@ func (d *dockerCollector) getWithin(ctx context.Context, limit time.Duration, pa
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("%s: %s %s", path, resp.Status, strings.TrimSpace(string(b)))
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(out)
+	return json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(out)
 }
 
 // listed is one entry of GET /containers/json.
