@@ -11,7 +11,10 @@ export interface Column {
   align?: "left" | "right";
   render?: (value: unknown, row: unknown[]) => ReactNode;
   width?: number | string;
+  sortable?: boolean;
 }
+
+export type SortState = { key: string; dir: 1 | -1 } | null;
 
 interface Props {
   result: Result;
@@ -22,10 +25,13 @@ interface Props {
   rowKey?: (row: unknown[]) => unknown;
   sortable?: boolean;
   defaultUnit?: Unit;
+  /** Sorted elsewhere, such as by the server: only columns marked sortable toggle */
+  sortBy?: SortState;
+  onSort?: (sort: SortState) => void;
 }
 
 /** Generic result table. Numbers right-align with tabular figures. */
-export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey, rowKey, sortable = true, defaultUnit }: Props) {
+export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey, rowKey, sortable = true, defaultUnit, sortBy, onSort }: Props) {
   const cols = useMemo<Column[]>(() => {
     if (columns) return columns;
     return result.columns.map((key) => {
@@ -39,10 +45,12 @@ export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey,
     });
   }, [columns, result, defaultUnit]);
 
-  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+  const [localSort, setSort] = useState<SortState>(null);
+  const sort = onSort ? (sortBy ?? null) : localSort;
+  const canSort = (c: Column) => (onSort ? !!c.sortable : sortable);
 
   const rows = useMemo(() => {
-    if (!sort) return result.rows;
+    if (!sort || onSort) return result.rows;
     const i = result.columns.indexOf(sort.key);
     if (i < 0) return result.rows;
     return [...result.rows].sort((a, b) => {
@@ -51,11 +59,13 @@ export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey,
       if (na !== null && nb !== null) return (na - nb) * sort.dir;
       return String(a[i] ?? "").localeCompare(String(b[i] ?? "")) * sort.dir;
     });
-  }, [result, sort]);
+  }, [result, sort, onSort]);
 
-  const toggle = (key: string) => {
-    if (!sortable) return;
-    setSort((s) => (s?.key === key ? (s.dir === -1 ? { key, dir: 1 } : null) : { key, dir: -1 }));
+  const toggle = (c: Column) => {
+    if (!canSort(c)) return;
+    const next = (s: SortState): SortState => (s?.key === c.key ? (s.dir === -1 ? { key: c.key, dir: 1 } : null) : { key: c.key, dir: -1 });
+    if (onSort) onSort(next(sort));
+    else setSort(next);
   };
 
   if (result.rows.length === 0) {
@@ -70,9 +80,9 @@ export function DataTable({ result, columns, maxHeight, onRowClick, selectedKey,
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`${c.align === "right" ? "num" : ""} ${sortable ? "sortable" : ""}`}
+                className={`${c.align === "right" ? "num" : ""} ${canSort(c) ? "sortable" : ""}`}
                 style={{ width: c.width }}
-                onClick={() => toggle(c.key)}
+                onClick={() => toggle(c)}
                 aria-sort={sort?.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}
               >
                 {c.label ?? humanize(c.key)}

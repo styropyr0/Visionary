@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_RANGE, resolveRange, type Resolved, type TimeRange } from "./time";
 import { prefs, setPrefs } from "./prefs";
 import { queriesBusy } from "./useQuery";
@@ -8,6 +8,8 @@ export type Theme = "dark" | "light";
 interface AppState {
   range: TimeRange;
   setRange: (r: TimeRange) => void;
+  /** Back to the range before a picked or zoomed one, or the preferred range */
+  clearRange: () => void;
   /** The range pinned to absolute times; recomputed on every refresh. */
   resolved: Resolved;
   tick: number;
@@ -63,6 +65,13 @@ function initialRange(): TimeRange {
   return p && p !== "last" ? { kind: "relative", key: p } : load("va.range", DEFAULT_RANGE);
 }
 
+function defaultRange(): TimeRange {
+  const p = prefs().range;
+  return p && p !== "last" ? { kind: "relative", key: p } : DEFAULT_RANGE;
+}
+
+const MAX_HISTORY = 10;
+
 function initialAutoRefresh(): number {
   const p = prefs().autoRefresh;
   return typeof p === "number" ? p : load("va.auto", 0);
@@ -70,6 +79,11 @@ function initialAutoRefresh(): number {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [range, setRangeState] = useState<TimeRange>(initialRange);
+  const [history, setHistory] = useState<TimeRange[]>([]);
+  const current = useRef(range);
+  useEffect(() => {
+    current.current = range;
+  }, [range]);
   const [tick, setTick] = useState(0);
   const [autoRefresh, setAutoState] = useState<number>(initialAutoRefresh);
   const [theme, setThemeState] = useState<Theme>(initialTheme);
@@ -77,9 +91,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const resolved = useMemo(() => resolveRange(range), [range, tick]);
 
   const setRange = useCallback((r: TimeRange) => {
+    const prev = current.current;
+    setHistory((h) => (r.kind === "absolute" ? [...h, prev].slice(-MAX_HISTORY) : []));
     setRangeState(r);
     save("va.range", r);
   }, []);
+
+  const clearRange = useCallback(() => {
+    const prev = history[history.length - 1] ?? defaultRange();
+    setHistory((h) => h.slice(0, -1));
+    setRangeState(prev);
+    save("va.range", prev);
+  }, [history]);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -122,8 +145,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [autoRefresh, range, refresh]);
 
   const value = useMemo<AppState>(
-    () => ({ range, setRange, resolved, tick, refresh, autoRefresh, setAutoRefresh, theme, setTheme }),
-    [range, setRange, resolved, tick, refresh, autoRefresh, setAutoRefresh, theme, setTheme],
+    () => ({ range, setRange, clearRange, resolved, tick, refresh, autoRefresh, setAutoRefresh, theme, setTheme }),
+    [range, setRange, clearRange, resolved, tick, refresh, autoRefresh, setAutoRefresh, theme, setTheme],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -7,7 +7,7 @@ import { formatBytes, formatMs, toNumber } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { formatFull, formatLogTime } from "../lib/time";
-import { DataTable, type Column } from "../components/DataTable";
+import { DataTable, type Column, type SortState } from "../components/DataTable";
 import { Select } from "../components/Select";
 import { CopyButton, Drawer } from "../components/Modal";
 import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
@@ -34,6 +34,19 @@ function linkedFilters(): Filters {
   return f;
 }
 
+/** Columns the server can sort by, with their sort parameter */
+const SORTS: Record<string, string> = { duration_ms: "duration", response_size: "size", request_size: "request_size" };
+
+function linkedSort(): SortState {
+  const p = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+  const key = Object.keys(SORTS).find((k) => SORTS[k] === p.get("sort"));
+  return key ? { key, dir: p.get("dir") === "asc" ? 1 : -1 } : null;
+}
+
+function sortParams(sort: SortState): Record<string, string> {
+  return sort ? { sort: SORTS[sort.key], dir: sort.dir === 1 ? "asc" : "desc" } : {};
+}
+
 export function Logs({ meta }: { meta: Meta | undefined }) {
   const connected = useConnected("requests");
   const { resolved, tick } = useApp();
@@ -42,6 +55,17 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
   const [pages, setPages] = useState<Result[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [sort, setSortState] = useState<SortState>(linkedSort);
+  const setSort = (next: SortState) => {
+    setSortState(next);
+    const [path, qs = ""] = window.location.hash.split("?");
+    const p = new URLSearchParams(qs);
+    p.delete("sort");
+    p.delete("dir");
+    for (const [k, v] of Object.entries(sortParams(next))) p.set(k, v);
+    const q = p.toString();
+    window.history.replaceState(null, "", q ? `${path}?${q}` : path || "#/logs");
+  };
 
   // Text inputs settle before querying D1; selects apply at once.
   useEffect(() => {
@@ -49,7 +73,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
     return () => window.clearTimeout(id);
   }, [filters]);
 
-  const qs = rangeQuery(resolved.from, resolved.to, { ...debounced });
+  const qs = rangeQuery(resolved.from, resolved.to, { ...debounced, ...sortParams(sort) });
   const first = useQuery(`logs?${qs}#${tick}`, (signal) => api<Result>(`/api/logs?${qs}`, { signal }));
 
   useEffect(() => {
@@ -66,7 +90,9 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
     const last = merged.rows[merged.rows.length - 1];
     setLoadingMore(true);
     try {
-      const next = await api<Result>(`/api/logs?${rangeQuery(resolved.from, resolved.to, { ...debounced, before: String(last[0]) })}`);
+      const cursor: Record<string, string> = { before: String(last[0]) };
+      if (sort) cursor.before_value = String(last[merged.columns.indexOf(sort.key)]);
+      const next = await api<Result>(`/api/logs?${rangeQuery(resolved.from, resolved.to, { ...debounced, ...sortParams(sort), ...cursor })}`);
       setPages((p) => [...p, next]);
     } finally {
       setLoadingMore(false);
@@ -153,7 +179,8 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
               <DataTable
                 result={merged}
                 columns={logColumns}
-                sortable={false}
+                sortBy={sort}
+                onSort={setSort}
                 rowKey={(r) => r[0]}
                 selectedKey={selected ?? undefined}
                 onRowClick={(r) => setSelected(Number(r[0]))}
@@ -161,7 +188,7 @@ export function Logs({ meta }: { meta: Meta | undefined }) {
               {merged.truncated && (
                 <div className="load-more">
                   <button type="button" className="btn" onClick={loadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading…" : "Load older requests"}
+                    {loadingMore ? "Loading…" : sort ? "Load more requests" : "Load older requests"}
                   </button>
                 </div>
               )}
@@ -201,8 +228,9 @@ const logColumns: Column[] = [
       </span>
     ),
   },
-  { key: "duration_ms", label: "Duration", align: "right", render: (v) => formatMs(toNumber(v) ?? 0), width: 90 },
-  { key: "response_size", label: "Size", align: "right", render: (v) => <span className="dim">{formatBytes(toNumber(v) ?? 0)}</span>, width: 80 },
+  { key: "duration_ms", label: "Duration", align: "right", render: (v) => formatMs(toNumber(v) ?? 0), width: 90, sortable: true },
+  { key: "request_size", label: "Request", align: "right", render: (v) => <span className="dim">{formatBytes(toNumber(v) ?? 0)}</span>, width: 80, sortable: true },
+  { key: "response_size", label: "Response", align: "right", render: (v) => <span className="dim">{formatBytes(toNumber(v) ?? 0)}</span>, width: 84, sortable: true },
   {
     key: "user_handle",
     label: "User",

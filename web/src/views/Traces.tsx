@@ -59,7 +59,7 @@ export function Traces() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  if (where.traceId) return <TracePage id={where.traceId} />;
+  if (where.traceId) return <TracePage id={where.traceId} key={where.traceId} />;
   return <TraceLists initialTab={where.tab} initialFilters={where.filters} key={`${where.tab}-${JSON.stringify(where.filters)}`} />;
 }
 

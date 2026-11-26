@@ -2881,7 +2881,7 @@ pre.code {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 12px 24px 0;
+  margin: 12px 16px 0;
   padding: 8px 12px;
   border: 1px solid var(--warning-text);
   border-radius: var(--radius);
@@ -2903,7 +2903,6 @@ pre.code {
 @media (max-width: 640px) {
   .open-banner {
     flex-wrap: wrap;
-    margin: 12px 16px 0;
   }
 }
 

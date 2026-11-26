@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Clock, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Clock, RefreshCw, X } from "lucide-react";
 import { useApp } from "../lib/state";
 import { HelpButton } from "./Help";
 import { PRESETS, rangeLabel, toLocalInput } from "../lib/time";
@@ -28,7 +28,8 @@ export function usePopover() {
 
 /** Preset rows first; a custom range sits behind a hairline in the footer. */
 export function TimeRangePicker() {
-  const { range, setRange, resolved, refresh } = useApp();
+  const { range, setRange, clearRange, resolved, refresh } = useApp();
+  const picked = range.kind === "absolute";
   const { open, setOpen, ref } = usePopover();
   const [from, setFrom] = useState(toLocalInput(resolved.from));
   const [to, setTo] = useState(toLocalInput(resolved.to));
@@ -54,12 +55,17 @@ export function TimeRangePicker() {
   };
 
   return (
-    <div className="popover-anchor" ref={ref}>
+    <div className={`popover-anchor ${picked ? "btn-group" : ""}`} ref={ref}>
       <button type="button" className="btn" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
         <Clock size={14} />
         <span>{rangeLabel(range)}</span>
         <ChevronDown size={14} />
       </button>
+      {picked && (
+        <button type="button" className="btn" onClick={clearRange} title="Clear time range" aria-label="Clear time range">
+          <X size={14} />
+        </button>
+      )}
       {open && (
         <div className="popover" role="menu" style={{ width: 280 }}>
           {PRESETS.map((p) => {

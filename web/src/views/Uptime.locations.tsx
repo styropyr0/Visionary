@@ -70,7 +70,7 @@ export function LocationsTab() {
         {list.loading && <div className="progress" aria-hidden />}
         <header className="panel-head">
           <h3 className="panel-title">Locations</h3>
-          <div className="panel-actions">
+          <div className="panel-actions pinned">
             {admin && (
               <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>
                 <Plus size={14} />
@@ -86,7 +86,7 @@ export function LocationsTab() {
         </p>
         {data && (
           <div className="table-wrap">
-            <table className="data">
+            <table className="data up-loc-table">
               <thead>
                 <tr>
                   <th>Location</th>
