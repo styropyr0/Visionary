@@ -113,7 +113,7 @@ export function TraceTimeline({ trace, onOpenRequest }: { trace: TraceResponse; 
     const seen = new Set(nodes.map((n) => n.kind));
     return Object.keys(KIND_COLOR).filter((k) => seen.has(k));
   }, [nodes]);
-  const [open, setOpen] = useState<Set<string>>(() => new Set(nodes.map((n) => n.key)));
+  const [open, setOpen] = useState<Set<string>>(() => new Set(nodes.filter((n) => n.depth === 0).map((n) => n.key)));
   const total = Math.max(end - start, 1);
   const toggle = (k: string) =>
     setOpen((o) => {
