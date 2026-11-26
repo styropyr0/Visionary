@@ -401,7 +401,9 @@ It reports to three pages:
   against limits, restarts, OOM kills and failing health checks.
 - **Security:** SSH logins and sudo, open ports, pending updates, reboots,
   `authorized_keys` and system file changes, suspicious processes, risky
-  containers.
+  containers. It also drops the addresses you block on Security, through
+  nftables (or ipset and iptables), and never blocks private ranges, the
+  Visionary server or an address with a live SSH session.
 
 It also ships logs from journald, containers and files when you set
 `VISIONARY_AGENT_LOGS`. While the server is unreachable it keeps up to an hour
@@ -567,7 +569,25 @@ Settings → Sign-in, then remove the variable and restart.
 ## Security monitoring
 
 The Security page works from data Visionary already has: the request log, the
-host agent's events and its own audit log. Built-in detectors catch brute
+host agent's events and its own audit log. It opens on what needs you:
+incidents that got through and anything badly exposed.
+
+- **Incidents** group findings by the address, account or host behind them and
+  say whether the attack worked (a probe answered 2xx, a sign-in after the
+  failed ones, an SSH login after a brute force), was blocked, or only tried.
+  Internet scanners that never got anywhere fold into one line.
+- **Posture** lists weak spots until they're fixed: paths only scanners ask for
+  that answered 2xx, debug routes reachable from outside, admin changes with no
+  signed-in user, packages with known vulnerabilities (the SDKs report them and
+  the server looks them up on osv.dev), missing security headers and expiring
+  certificates on the sites your uptime checks watch, privileged containers,
+  new ports and pending updates.
+- **Block an address** in the host firewall through the agent, in every server
+  SDK, or both, for a while or until you lift it. Click any address for one
+  timeline of what it did: requests, SSH logins, sudo by whoever logged in from
+  it, log lines and Visionary sign-ins.
+
+Built-in detectors catch brute
 force, credential stuffing, account takeover signs (new location or device,
 impossible travel), enumeration, injection attempts, scanners, rate abuse,
 SSH brute force and changes to Visionary itself. Add your own detection rules
@@ -577,8 +597,9 @@ SSH brute force and changes to Visionary itself. Add your own detection rules
   an account; without it, the account detectors can't fire.
 - Location and network databases (GeoLite2 or DB-IP `.mmdb`) and blocklist
   feeds are optional, in Settings → Server → Threat intelligence.
-- **Block IP** and **End sessions** call your own webhook (Settings → Server →
-  Response), signed with HMAC-SHA256 when a secret is set.
+- **End sessions** calls your own webhook (Settings → Server → Response),
+  signed with HMAC-SHA256 when a secret is set. **Block IP** calls it too when
+  one is set, on top of blocking the address itself.
 - Thresholds are in Settings → Server → Security detectors. On D1, a longer
   scan interval or shorter look-back reads fewer rows.
 - `GET /api/security/audit/export` streams a hash-chained, signed audit log.
@@ -696,7 +717,7 @@ default, and most behaviour is set in the dashboard instead.
 | `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | — | For D1. |
 | `VISIONARY_SERVICE` | none | Always; it names the service. |
 | `VISIONARY_RELEASE` | the platform's commit | Your platform isn't detected, or you want a version name. |
-| `VISIONARY_INSTANCE` | hostname | Hostnames are not meaningful. |
+| `VISIONARY_INSTANCE` | hostname, or the service name in a container | Hostnames are not meaningful, or replicas should show apart. |
 | `VISIONARY_LOG_REQUESTS` | `true` | `false` to stop recording requests. |
 | `VISIONARY_LOG_PATH_PREFIX` | all paths | Record only e.g. `/api`. |
 | `VISIONARY_LOG_BODIES` | `true` | `false` to not store request and response bodies. |
@@ -715,11 +736,12 @@ default, and most behaviour is set in the dashboard instead.
 | `VISIONARY_METRICS` | `true` | `false` to stop custom metrics. |
 | `VISIONARY_METRICS_INTERVAL` | `15s` | How often metrics are written. |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets allowed per metric name. |
-| `VISIONARY_SYSTEM_METRICS` | `true` | `false` to stop host and process metrics. |
+| `VISIONARY_SYSTEM_METRICS` | `true` | `false` to stop host and process metrics in this service. Settings → Server → Ingest turns them off for every service. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | How often the host is sampled. |
 | `VISIONARY_SYSTEM_GPU` | `true` | Go SDK: `false` stops the GPU columns, which run nvidia-smi once per sample when it is installed. |
 | `VISIONARY_EXPLAIN` | `true` | `false` to refuse query plan requests (needs an explainer in code anyway). |
 | `VISIONARY_PROFILE` | follow Settings → Profiling | `false` so this service never profiles. |
+| `VISIONARY_PACKAGES` | `true` | `false` to stop reporting installed packages for Security → Posture. |
 | `VISIONARY_LOG_RETENTION_DAYS`, `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Only when no Visionary server reads this database; the SDK then deletes its own old rows. |
 
 Browser and mobile SDKs use no variables: the server URL and client key go in
