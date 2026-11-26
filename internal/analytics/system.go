@@ -473,27 +473,79 @@ func instanceClause(name string) (string, error) {
 	return " AND instance = '" + name + "'", nil
 }
 
-// servicePrefix picks every instance an SDK service had in the range, as one:
-// in a container the instance is the hostname, which each deploy changes.
-const servicePrefix = "service:"
+// An SDK's System entry groups its instances by service, or by language for
+// an unnamed app whose older SDK named it after the container's hostname
+const (
+	servicePrefix = "service:"
+	appPrefix     = "app:"
+)
+
+var containerHost = regexp.MustCompile(`^([0-9a-f]{12}|[0-9a-f]{64})$`)
+
+// systemKey is the System entry an instance's rows belong to
+func systemKey(instance, service, sdk string) string {
+	switch {
+	case sdk == "agent":
+		return instance
+	case service != "":
+		return servicePrefix + service
+	case sdk != "" && (containerHost.MatchString(instance) || instance == sdk+"-app"):
+		return appPrefix + sdk
+	}
+	return instance
+}
+
+// withSystemKeys adds the system column to the instances panel
+func withSystemKeys(res *Result) {
+	col := func(name string) int {
+		for i, c := range res.Columns {
+			if c == name {
+				return i
+			}
+		}
+		return -1
+	}
+	ii, si, vi := col("instance"), col("sdk"), col("service")
+	if ii < 0 || si < 0 || vi < 0 || col("system") >= 0 {
+		return
+	}
+	res.Columns = append(res.Columns, "system")
+	for i, row := range res.Rows {
+		res.Rows[i] = append(row, systemKey(toString(row[ii]), toString(row[vi]), toString(row[si])))
+	}
+}
+
+// systemWhere narrows system_metrics to the rows that may belong to a
+// grouped entry; ok is false for a single instance
+func systemWhere(key string) (where, arg string, ok bool) {
+	if svc, found := strings.CutPrefix(key, servicePrefix); found {
+		return "service = ?", svc, true
+	}
+	if sdk, found := strings.CutPrefix(key, appPrefix); found {
+		return "COALESCE(service, '') = '' AND sdk = ?", sdk, true
+	}
+	return "", "", false
+}
 
 func (s *Server) systemClause(ctx context.Context, tr timeRange, name string) (string, error) {
-	svc, ok := strings.CutPrefix(strings.TrimSpace(name), servicePrefix)
+	name = strings.TrimSpace(name)
+	where, arg, ok := systemWhere(name)
 	if !ok {
 		return instanceClause(name)
 	}
-	if !instanceName.MatchString(svc) {
+	if !instanceName.MatchString(arg) {
 		return "", errInvalidInstance
 	}
-	res, err := s.db.Query(ctx, `SELECT DISTINCT instance FROM system_metrics
-WHERE created_at >= ? AND created_at < ? AND service = ? AND COALESCE(sdk, '') <> 'agent' LIMIT 1000`,
-		tr.From.Format(tsLayout), tr.To.Format(tsLayout), svc)
+	res, err := s.db.Query(ctx, `SELECT instance, MAX(service), MAX(sdk) FROM system_metrics
+WHERE created_at >= ? AND created_at < ? AND `+where+` AND COALESCE(sdk, '') <> 'agent' GROUP BY instance LIMIT 1000`,
+		tr.From.Format(tsLayout), tr.To.Format(tsLayout), arg)
 	if err != nil {
 		return "", err
 	}
 	var names []string
 	for _, row := range res.Rows {
-		if n := toString(row[0]); instanceName.MatchString(n) {
+		n := toString(row[0])
+		if instanceName.MatchString(n) && systemKey(n, toString(row[1]), toString(row[2])) == name {
 			names = append(names, "'"+n+"'")
 		}
 	}

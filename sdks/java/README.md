@@ -624,7 +624,7 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_USE_APP_DATASOURCE` | `false` | Write through the application's own `DataSource` when no URL or D1 is set. |
 | `VISIONARY_SERVICE` | none | Names the service when several share a database. |
 | `VISIONARY_RELEASE` | the platform's commit variable | The version on deploy markers. See [Release markers](#release-markers). |
-| `VISIONARY_INSTANCE` | hostname | Labels this server on the System page. |
+| `VISIONARY_INSTANCE` | hostname, or the service (else `java-app`) when the hostname is a container ID | Labels this server on the System page. |
 | `VISIONARY_LOG_REQUESTS` | `true` | Log requests to `api_logs`. |
 | `VISIONARY_LOG_PATH_PREFIX` | all paths | Log only paths starting with this, e.g. `/api`. |
 | `VISIONARY_LOG_BODIES` | `true` | Store request and response bodies (redacted, capped). |
@@ -648,7 +648,7 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_METRICS` | `true` | Write custom metrics; `false` makes every metric call a no-op. |
 | `VISIONARY_METRICS_INTERVAL` | `15s` | How often each series is written; a plain number is seconds. |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets kept per metric name. |
-| `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
+| `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. Settings → Server → Ingest → SDK system metrics turns it off for every service within 30 seconds. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds, also `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |
 

@@ -543,6 +543,9 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	if r.PathValue("panel") == "instances" {
+		withSystemKeys(res)
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 

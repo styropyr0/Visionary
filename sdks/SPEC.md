@@ -230,7 +230,10 @@ float; everything else text.
 
 ## System metrics (`system_metrics`)
 
-A background sampler every `VISIONARY_SYSTEM_INTERVAL` (default 15 s). It
+A background sampler every `VISIONARY_SYSTEM_INTERVAL` (default 15 s), for
+teams that don't run the host agent. `VISIONARY_SYSTEM_METRICS=false` turns it
+off in one service; Settings → Server turns it off for every service (see
+"The switch in Settings" below). It
 buffers rows and writes 4 at a time in one `batch` call. Flush on shutdown.
 If a write fails, keep the rows (at most one hour's worth) and try again with
 the next batch. Take baseline readings at start so the first row has real
@@ -254,7 +257,7 @@ Counts are integers, measurements floats, `created_at`, `instance`, `service`,
 | Column | Meaning | Python | Java |
 |---|---|---|---|
 | `created_at` | sample time, same format as above | | |
-| `instance` | `VISIONARY_INSTANCE` or hostname | | |
+| `instance` | `VISIONARY_INSTANCE`, else the default instance (see Service and version) | | |
 | `interval_s` | seconds since the previous sample (2 decimals) | | |
 | `host_cpu_percent` | whole-machine CPU % since the previous sample | `psutil.cpu_percent(None)` | `/proc/stat` on Linux, else `OperatingSystemMXBean.getCpuLoad()*100` |
 | `load_1/5/15` | load average | `os.getloadavg()` | `getSystemLoadAverage()` (load_1 only) |
@@ -394,6 +397,21 @@ Partition rule: skip disk devices matching
 `^((sd|vd|xvd|hd)[a-z]+\d+|nvme\d+n\d+p\d+|mmcblk\d+p\d+|loop\d+|ram\d+|zram\d+|dm-\d+|sr\d+|fd\d+|md\d+)$`,
 so a partition's I/O is not counted again on top of its disk.
 
+### The switch in Settings
+
+Settings → Server → Ingest keeps "SDK system metrics" in `visionary_settings`
+as `config.sdk_system_metrics` (`true` or `false`; missing means `true`). The
+sampler reads `SELECT value FROM visionary_settings WHERE name =
+'config.sdk_system_metrics'` at start and then every 30 seconds, off the
+request path. When the value is `false` (any case, spaces trimmed) it stops
+sampling and drops the rows it has not written yet. When it changes back, or
+the row is deleted, it takes one sample to throw away (a fresh baseline for
+the deltas) and carries on. A failed read (no table yet, database down)
+keeps the current state. `VISIONARY_SYSTEM_METRICS=false` wins: the sampler
+never starts and never reads the setting.
+
+### Retention
+
 Retention: the server's (Settings → Retention); with
 `VISIONARY_SYSTEM_RETENTION_DAYS` above 0 (default 0, off) the SDK also
 deletes on the same schedule as requests,
@@ -411,6 +429,13 @@ kept.
 ### Service and version
 
 - `service`: `VISIONARY_SERVICE`, else NULL. Lets several services share a database.
+- `instance`: `VISIONARY_INSTANCE`, else the hostname. When the hostname is
+  Docker's container ID (it matches `^([0-9a-f]{12}|[0-9a-f]{64})$`, or is
+  empty), every rebuild would make a new instance, so use `VISIONARY_SERVICE`
+  instead, else `<sdk>-app` (`go-app`, `node-app`, `python-app`, `java-app`,
+  `ruby-app`, `dotnet-app`). Replicas of one service then share an instance;
+  give each its own `VISIONARY_INSTANCE` (or a fixed hostname) to tell them
+  apart. The hostname itself still goes in `app_logs.host`.
 - `version` (the release): `VISIONARY_RELEASE`, else the first non-empty of
   `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,
   `HEROKU_SLUG_COMMIT`, `SOURCE_VERSION`, `GIT_COMMIT`, `GITHUB_SHA`, `K_REVISION`;
@@ -1306,7 +1331,7 @@ with a fixed clock.
 |---|---|
 | `VISIONARY_DATABASE_URL` | see Databases; may be omitted when the app passes its own connection, or when `D1_*` is set |
 | `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN`, `D1_API_BASE` | for D1 only |
-| `VISIONARY_INSTANCE` | hostname |
+| `VISIONARY_INSTANCE` | hostname; in a container named by its ID, the service, else `<sdk>-app` (see Service and version) |
 | `VISIONARY_LOG_REQUESTS` | `true` |
 | `VISIONARY_LOG_PATH_PREFIX` | empty (log everything) |
 | `VISIONARY_LOG_BODIES` | `true` |
@@ -1314,7 +1339,7 @@ with a fixed clock.
 | `VISIONARY_LOG_RETENTION_DAYS` | `0` (off: the server applies Settings → Retention) |
 | `VISIONARY_LOG_REDACT_HEADERS`, `_REDACT_FIELDS`, `_REDACT_REQUEST_FIELDS` | empty (comma lists) |
 | `VISIONARY_LOG_ERROR_CODE_FIELD`, `_ERROR_KEY_FIELD` | `error.code`, `error.key` |
-| `VISIONARY_SYSTEM_METRICS` | `true` |
+| `VISIONARY_SYSTEM_METRICS` | `true` (`false` never samples; Settings → Server can also turn it off for every service) |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` (plain number = seconds; also `500ms`, `1m`) |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off: the server applies Settings → Retention) |
 | `VISIONARY_SERVICE` | empty (NULL) |

@@ -480,7 +480,9 @@ dirty, writeback, slab, shmem and committed memory (`/proc/meminfo`). In a
 container the `container_*` columns also hold the cgroup's page faults and
 how often it hit its `memory.high` and `memory.max` limits. Columns a
 platform cannot report are empty; on Windows and macOS that is most of the
-I/O columns.
+I/O columns. `VISIONARY_SYSTEM_METRICS=false` turns it off in one service,
+and Settings → Server → Ingest → SDK system metrics turns it off for every
+service within 30 seconds, without a redeploy.
 
 The `goroutines` column holds Node's active handles, requests and timers.
 `heap_alloc_mb` and `heap_inuse_mb` are V8's used and total heap.
@@ -538,7 +540,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | | `db`, `dialect` | | A pool or connection your app already has. |
 | `VISIONARY_SERVICE` | `service` | empty | Service name on every row. |
 | `VISIONARY_RELEASE` | `version` | platform commit | Release on every row and the deploy marker. |
-| `VISIONARY_INSTANCE` | `instance` | hostname | Labels this process on **System**. |
+| `VISIONARY_INSTANCE` | `instance` | hostname, or the service (else `node-app`) when the hostname is a container ID | Labels this process on **System**. |
 | `VISIONARY_LOG_REQUESTS` | `logRequests` | `true` | Request logging on or off. |
 | `VISIONARY_LOG_PATH_PREFIX` | `pathPrefix` | empty (all) | Only log paths starting with this, e.g. `/api`. |
 | `VISIONARY_LOG_BODIES` | `captureBodies` | `true` | Store request and response bodies (redacted). |
@@ -549,7 +551,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `errorCodeField` | `error.code` | Where error responses keep their code (dotted JSON path). |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `errorKeyField` | `error.key` | The same, for the error key. |
 | `VISIONARY_LOG_RETENTION_DAYS` | `retentionDays` | `0` (off) | Only for a database no Visionary server reads: the SDK then deletes its own api_logs, spans, errors, profiles, app_logs and metrics older than this. |
-| `VISIONARY_SYSTEM_METRICS` | `systemMetrics` | `true` | System samples on or off. |
+| `VISIONARY_SYSTEM_METRICS` | `systemMetrics` | `true` | System samples on or off. Settings → Server → Ingest → SDK system metrics turns them off for every service within 30 seconds. |
 | `VISIONARY_SYSTEM_INTERVAL` | `systemInterval` (seconds) | `15s` | Time between samples: `15`, `500ms`, `1m`. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `systemRetentionDays` | `0` (off) | The same as the log retention, for system_metrics. |
 | `VISIONARY_SPANS` | `spans` | `true` | Database and outbound call spans and totals. |

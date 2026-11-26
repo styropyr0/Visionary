@@ -228,21 +228,21 @@ interface Source {
 }
 
 /**
- * One entry per agent host, and one per SDK service: a service in a container
- * reports under its hostname, which changes on every deploy, so its instances
- * are picked together as "service:<name>".
+ * One entry per agent host, and one per SDK service or unnamed app in a
+ * container, whose instance changed on every rebuild with older SDKs. The
+ * server names the entry in the system column.
  */
 function systemSources(r: Result | undefined): Source[] {
   if (!r) return [];
   const col = (name: string) => r.columns.indexOf(name);
-  const [si, ri, vi] = [col("sdk"), col("runtime"), col("service")];
+  const [si, ri, vi, ki] = [col("sdk"), col("runtime"), col("service"), col("system")];
   const out = new Map<string, Source>();
   for (const row of r.rows) {
     const inst = String(row[0]);
     const sdk = si >= 0 ? row[si] : null;
     const runtime = ri >= 0 && row[ri] ? String(row[ri]) : "";
     const service = vi >= 0 && row[vi] ? String(row[vi]) : "";
-    const value = service && sdk !== "agent" ? `service:${service}` : inst;
+    const value = ki >= 0 && row[ki] ? String(row[ki]) : service && sdk !== "agent" ? `service:${service}` : inst;
     const have = out.get(value);
     if (have) {
       have.members.push(inst);
@@ -251,7 +251,7 @@ function systemSources(r: Result | undefined): Source[] {
     const by = reporterName(sdk, runtime);
     out.set(value, {
       value,
-      label: [value === inst ? inst : service, by, runtime].filter(Boolean).join(" · "),
+      label: [value === inst ? inst : service || "App in a container", by, runtime].filter(Boolean).join(" · "),
       lang: langOf(sdk, runtime),
       members: [inst],
     });

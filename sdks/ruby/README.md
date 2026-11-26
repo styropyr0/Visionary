@@ -567,7 +567,7 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_DATABASE_URL` | `database_url` | none | Where rows go; see [Choosing the database](#choosing-the-database) |
 | `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | `d1_account_id`, `d1_database_id`, `d1_api_token` | none | Cloudflare D1 credentials |
 | `D1_API_BASE` | `d1_api_base` | Cloudflare's API | D1 API URL, for a proxy |
-| `VISIONARY_INSTANCE` | `instance` | hostname | Labels this process's rows |
+| `VISIONARY_INSTANCE` | `instance` | hostname; in a container named by its ID, the service, else `ruby-app` | Labels this process's rows |
 | `VISIONARY_SERVICE` | `service` | NULL | Service name; lets several services share a database |
 | `VISIONARY_RELEASE` | `version` | the platform's commit variable | Release for the deploy marker; hashes are cut to 12 characters |
 | `VISIONARY_LOG_REQUESTS` | `log_requests` | `true` | Write one `api_logs` row per request |
@@ -580,7 +580,7 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `error_code_field` | `error.code` | Dotted path to the error code in JSON error bodies |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `error_key_field` | `error.key` | Dotted path to the error key |
 | `VISIONARY_LOG_RETENTION_DAYS` | `log_retention_days` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles` and `app_logs` rows |
-| `VISIONARY_SYSTEM_METRICS` | `system_metrics` | `true` | Write `system_metrics` samples |
+| `VISIONARY_SYSTEM_METRICS` | `system_metrics` | `true` | Write `system_metrics` samples; `false` never samples. Settings → Server → Ingest → SDK system metrics turns it off for every service within 30 seconds |
 | `VISIONARY_SYSTEM_INTERVAL` | `system_interval` (seconds) | `15s` | Sample interval: `15`, `15s`, `500ms`, `1m`, `1h` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `system_retention_days` | `0` (off) | Above 0, the SDK also deletes older `system_metrics` rows |
 | `VISIONARY_SPANS` | `spans` | `true` | Record database, HTTP and custom spans, and per-request totals |

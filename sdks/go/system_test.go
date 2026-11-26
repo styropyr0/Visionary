@@ -2,6 +2,7 @@ package visionary
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -66,5 +67,56 @@ func TestHostColumnsAreSystemColumns(t *testing.T) {
 		if strings.HasPrefix(c, "container_") {
 			t.Errorf("host column %s describes a container", c)
 		}
+	}
+}
+
+func TestDefaultInstance(t *testing.T) {
+	cases := []struct{ host, service, want string }{
+		{"web-1", "api", "web-1"},
+		{"a1b2c3d4e5f6", "api", "api"},
+		{"a1b2c3d4e5f6", "", "go-app"},
+		{strings.Repeat("ab12", 16), "", "go-app"},
+		{"", "api", "api"},
+		{"A1B2C3D4E5F6", "", "A1B2C3D4E5F6"},
+		{"a1b2c3d4e5f", "", "a1b2c3d4e5f"},
+		{"deadbeefcafe-2", "api", "deadbeefcafe-2"},
+	}
+	for _, c := range cases {
+		if got := defaultInstance(c.host, c.service); got != c.want {
+			t.Errorf("defaultInstance(%q, %q) = %q, want %q", c.host, c.service, got, c.want)
+		}
+	}
+}
+
+func TestSystemSwitch(t *testing.T) {
+	st := &fakeStore{err: errors.New("no such table: visionary_settings")}
+	r := newRecorder(SystemConfig{Interval: 15e9}, identity{instance: "i"}, st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r.prime()
+	ctx := context.Background()
+
+	r.readSwitch(ctx)
+	if r.off {
+		t.Fatal("no table: on")
+	}
+	r.buf = [][]any{r.sample()}
+	st.err, st.data = nil, [][]string{{"false"}}
+	r.readSwitch(ctx)
+	if !r.off || len(r.buf) != 0 {
+		t.Fatalf("false: off=%v, buffered %d", r.off, len(r.buf))
+	}
+	st.err = errors.New("database is locked")
+	r.readSwitch(ctx)
+	if !r.off {
+		t.Fatal("read error: stays off")
+	}
+	st.err, st.data = nil, nil
+	r.readSwitch(ctx)
+	if r.off {
+		t.Fatal("row deleted: on")
+	}
+	st.data = [][]string{{"true"}}
+	r.readSwitch(ctx)
+	if r.off {
+		t.Fatal("true: on")
 	}
 }

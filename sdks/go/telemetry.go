@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -143,8 +144,22 @@ func truncateRunes(s string, n int) string {
 	return s
 }
 
-// hostname is the default instance label.
 func hostname() string {
 	h, _ := os.Hostname()
 	return h
+}
+
+// containerID matches the hostname Docker gives a container, new on every rebuild
+var containerID = regexp.MustCompile(`^([0-9a-f]{12}|[0-9a-f]{64})$`)
+
+// defaultInstance is the hostname, or the service (else go-app) when the
+// hostname is a container ID, so a rebuilt container keeps its instance
+func defaultInstance(host, service string) string {
+	if host != "" && !containerID.MatchString(host) {
+		return host
+	}
+	if service != "" {
+		return service
+	}
+	return "go-app"
 }

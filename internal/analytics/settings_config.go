@@ -119,6 +119,7 @@ var confDefs = []confDef{
 	{Key: "otlp_rate", Group: "ingest", Label: "OpenTelemetry requests per second", Kind: confInt, Default: "50", Max: 100000},
 	{Key: "otlp_grpc", Group: "ingest", Label: "Accept OpenTelemetry over gRPC", Help: "Serves OTLP/gRPC on the port below, for exporters set to OTEL_EXPORTER_OTLP_PROTOCOL=grpc. OTLP/HTTP on the main port always works. Plaintext: put TLS in front with a proxy that speaks HTTP/2.", Kind: confBool, Default: "false", Restart: true},
 	{Key: "otlp_grpc_addr", Group: "ingest", Label: "OpenTelemetry gRPC address", Help: "host:port or :port to listen on.", Kind: confText, Default: ":4317", Restart: true},
+	{Key: "sdk_system_metrics", Group: "ingest", Label: "SDK system metrics", Help: "Server SDKs sample the machine and process they run in (CPU, memory, disks, network, runtime) for the System page, for teams not running the host agent. Turning it off stops every service within 30 seconds, without a redeploy. VISIONARY_SYSTEM_METRICS=false turns it off in one service. Older SDK versions ignore this switch.", Kind: confBool, Default: "true"},
 	{Key: "agent_rate", Group: "ingest", Label: "Host agent reports per second", Kind: confInt, Default: "50", Max: 100000},
 	{Key: "spans", Group: "ingest", Label: "Keep OpenTelemetry spans", Kind: confBool, Default: "true"},
 	{Key: "errors", Group: "ingest", Label: "Keep OpenTelemetry errors", Kind: confBool, Default: "true"},

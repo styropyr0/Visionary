@@ -43,6 +43,9 @@ export class HttpCounters {
 
 // One write per minute at the default 15 s interval.
 const SAMPLES_PER_WRITE = 4;
+/** The visionary_settings row Settings → Server keeps the SDK system metrics switch in */
+export const SYSTEM_SETTING = "config.sdk_system_metrics";
+const SETTINGS_POLL_MS = 30_000;
 const MB = 1 << 20;
 const GB = 1 << 30;
 
@@ -73,6 +76,9 @@ export class Recorder {
   private readonly insert: string;
   private readonly startedAt = Date.now();
   private timer?: NodeJS.Timeout;
+  private settingsTimer?: NodeJS.Timeout;
+  private reading?: Promise<void>;
+  private off = false;
   private buf: Value[][] = [];
   private flushing?: Promise<void>;
   private gcObserver?: PerformanceObserver;
@@ -116,12 +122,52 @@ export class Recorder {
     this.prime();
     this.timer = setInterval(() => this.tick(), this.opts.intervalS * 1000);
     this.timer.unref();
+    this.settingsTimer = setInterval(() => void this.readSwitch(), SETTINGS_POLL_MS);
+    this.settingsTimer.unref();
+    void this.readSwitch();
+  }
+
+  /** Whether Settings → Server has turned system metrics off */
+  get paused(): boolean {
+    return this.off;
+  }
+
+  /** Follows Settings → Server, and a failed read keeps the state */
+  readSwitch(): Promise<void> {
+    this.reading ??= this.applySwitch().finally(() => (this.reading = undefined));
+    return this.reading;
+  }
+
+  private async applySwitch(): Promise<void> {
+    let rows: string[][];
+    try {
+      rows = await this.store.rows(`SELECT value FROM visionary_settings WHERE name = '${SYSTEM_SETTING}'`, []);
+    } catch {
+      return;
+    }
+    const off = (rows[0]?.[0] ?? "").trim().toLowerCase() === "false";
+    if (off === this.off) return;
+    this.off = off;
+    if (off) {
+      this.buf = [];
+      this.logger.info("visionary: system metrics turned off in Settings → Server");
+      return;
+    }
+    // A fresh baseline, so the next row doesn't average over the pause
+    try {
+      this.sample();
+    } catch {
+      // the next tick reports it
+    }
+    this.logger.info("visionary: system metrics turned back on in Settings → Server");
   }
 
   async close(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
+    if (this.settingsTimer) clearInterval(this.settingsTimer);
     this.timer = undefined;
     this.gcObserver?.disconnect();
+    await this.reading;
     await this.flushing;
     await this.flush();
   }
@@ -143,6 +189,7 @@ export class Recorder {
   }
 
   private tick(): void {
+    if (this.off) return;
     try {
       this.buf.push(this.sample());
     } catch (e) {
@@ -161,6 +208,7 @@ export class Recorder {
       if (!(await this.ready())) throw new Error("system_metrics table not ready");
       await this.store.batch(rows.flatMap((args) => systemRowStmts(this.insert, this.store.stringParams, args)));
     } catch (e) {
+      if (this.off) return;
       this.logger.warn(`visionary: system metrics write failed (${rows.length} rows kept): ${errMessage(e)}`);
       // Keep at most an hour of samples while the database is unreachable.
       const keep = Math.max(1, Math.floor(3600 / this.opts.intervalS));

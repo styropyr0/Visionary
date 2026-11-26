@@ -1049,6 +1049,8 @@ export const HELP: Record<Route, PageHelp> = {
       "A CPU near 90 °C, a clock well below its maximum under load, or throttle events mean heat or power limits are costing speed. GPUs slow down from about 85 °C.",
       "GPU memory is what runs out first for model serving and training; the agent lists the processes holding it.",
       "Panels for Linux-only sources say so instead of showing an empty chart. The GPU section only appears when a GPU reported.",
+      "Each SDK service is one entry however often it is redeployed. An app with no VISIONARY_SERVICE that runs in a container shows as App in a container, because its hostname changes with every rebuild; give it a service name, or VISIONARY_INSTANCE to tell replicas apart.",
+      "The SDKs sample their machine so you don't need the host agent. If you run the agent, or don't want these samples, turn off SDK system metrics in Settings → Server → Ingest: every service stops within 30 seconds, without a redeploy. VISIONARY_SYSTEM_METRICS=false turns them off in one service.",
     ],
     setup: ["sdk", "connect", "agent", "otlp"],
   },

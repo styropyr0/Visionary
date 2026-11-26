@@ -195,4 +195,59 @@ class SystemStatsTest < Minitest::Test
     assert stmts[1][0].start_with?("UPDATE system_metrics SET #{cols[100]} = NULLIF(?, '')")
     assert stmts[1][0].end_with?("WHERE id = last_insert_rowid()")
   end
+
+  class SettingsStore
+    attr_accessor :value, :err
+
+    def dialect = "sqlite"
+    def string_params? = false
+
+    def rows(sql)
+      raise err if err
+      value.nil? ? [] : [[value]]
+    end
+  end
+
+  def test_switch_in_settings
+    st = SettingsStore.new
+    st.err = RuntimeError.new("no such table: visionary_settings")
+    rec = Visionary::System::Recorder.new(Visionary::Config.new, "inst", st, nil, Visionary::System::HttpCounters.new, Visionary::StderrLogger.new(:error))
+    rec.send(:prime)
+
+    rec.read_switch
+    refute rec.off, "no table: on"
+    rec.instance_variable_get(:@buf) << rec.sample
+    st.err = nil
+    st.value = " FALSE "
+    rec.read_switch
+    assert rec.off, "false: off"
+    assert_empty rec.instance_variable_get(:@buf)
+    st.err = RuntimeError.new("database is locked")
+    rec.read_switch
+    assert rec.off, "read error: stays off"
+    st.err = nil
+    st.value = nil
+    rec.read_switch
+    refute rec.off, "row deleted: on"
+    st.value = "false"
+    rec.read_switch
+    st.value = "true"
+    rec.read_switch
+    refute rec.off, "true: on"
+  end
+
+  def test_default_instance
+    [
+      ["web-1", "api", "web-1"],
+      ["a1b2c3d4e5f6", "api", "api"],
+      ["a1b2c3d4e5f6", nil, "ruby-app"],
+      ["ab12" * 16, "", "ruby-app"],
+      ["", "api", "api"],
+      ["A1B2C3D4E5F6", nil, "A1B2C3D4E5F6"],
+      ["a1b2c3d4e5f", nil, "a1b2c3d4e5f"],
+      ["deadbeefcafe-2", "api", "deadbeefcafe-2"]
+    ].each do |host, service, want|
+      assert_equal want, Visionary::Agent.default_instance(host, service), "#{host.inspect}, #{service.inspect}"
+    end
+  end
 end

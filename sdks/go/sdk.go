@@ -77,7 +77,8 @@ type Config struct {
 	// by the SDK; see OpenURL for the drivers it needs.
 	DatabaseURL string
 	D1          D1Config
-	// Instance labels this server's rows (defaults to the hostname).
+	// Instance labels this server's rows (defaults to the hostname, or to
+	// Service when the hostname is a container ID that each rebuild changes)
 	Instance string
 	Logger   *slog.Logger
 
@@ -205,7 +206,7 @@ type SystemConfig struct {
 //
 //	VISIONARY_DATABASE_URL               (postgres://, mysql://, sqlite:///path, d1://)
 //	D1_ACCOUNT_ID, D1_DATABASE_ID, D1_API_TOKEN, D1_API_BASE
-//	VISIONARY_INSTANCE                   (default: hostname)
+//	VISIONARY_INSTANCE                   (default: hostname; in a container named by its ID, the service or go-app)
 //	VISIONARY_LOG_REQUESTS=true|false    (default true)
 //	VISIONARY_LOG_PATH_PREFIX            (e.g. /api; default: everything)
 //	VISIONARY_LOG_BODIES=true|false      (default true)
@@ -216,7 +217,7 @@ type SystemConfig struct {
 //	VISIONARY_LOG_REDACT_REQUEST_FIELDS  (comma list, request bodies only)
 //	VISIONARY_LOG_ERROR_CODE_FIELD       (default error.code)
 //	VISIONARY_LOG_ERROR_KEY_FIELD        (default error.key)
-//	VISIONARY_SYSTEM_METRICS=true|false  (default true)
+//	VISIONARY_SYSTEM_METRICS=true|false  (default true; Settings → Server can also turn it off)
 //	VISIONARY_SYSTEM_INTERVAL            (default 15s)
 //	VISIONARY_SYSTEM_RETENTION_DAYS      (default 0, off: the server applies Settings → Retention)
 //	VISIONARY_SYSTEM_GPU=true|false      (default true, GPU columns through nvidia-smi or amdgpu)
@@ -346,7 +347,7 @@ func New(cfg Config) (*Agent, error) {
 		cfg.Logger = slog.Default()
 	}
 	if cfg.Instance == "" {
-		cfg.Instance = hostname()
+		cfg.Instance = defaultInstance(hostname(), cfg.Service)
 	}
 	if cfg.SpanMax <= 0 {
 		cfg.SpanMax = 100

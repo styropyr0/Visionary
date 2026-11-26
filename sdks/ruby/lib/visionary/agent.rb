@@ -29,6 +29,17 @@ module Visionary
   class Agent
     attr_reader :config, :http, :telemetry, :logger, :instance, :logs
 
+    # The hostname Docker gives a container, new on every rebuild
+    CONTAINER_ID = /\A([0-9a-f]{12}|[0-9a-f]{64})\z/
+
+    # The hostname, or the service (else ruby-app) when the hostname is a
+    # container ID, so a rebuilt container keeps its instance
+    def self.default_instance(host, service)
+      host = host.to_s
+      return host unless host.empty? || CONTAINER_ID.match?(host)
+      service.to_s.empty? ? "ruby-app" : service.to_s
+    end
+
     # The rate limiter, or nil when VISIONARY_RATE_LIMIT is off or there is no database.
     def rate_limiter = @rate_limit&.limiter
 
@@ -42,7 +53,7 @@ module Visionary
       @store = open_store(cfg)
       return unless @store
 
-      @instance = cfg.instance.to_s.empty? ? Socket.gethostname : cfg.instance
+      @instance = cfg.instance.to_s.empty? ? Agent.default_instance(hostname, cfg.service) : cfg.instance
       @schemas = Schemas.new(@store, @logger)
       if cfg.log_requests || cfg.spans || cfg.errors || cfg.version || cfg.profile
         @writer = Writer.new(cfg, @store, @schemas, @logger)
@@ -207,6 +218,12 @@ module Visionary
         info[:route_info].path.to_s
       else ""
       end
+    rescue StandardError
+      ""
+    end
+
+    def hostname
+      Socket.gethostname
     rescue StandardError
       ""
     end

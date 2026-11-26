@@ -31,6 +31,10 @@ module Visionary
       # D1 binds at most 100 params a statement
       D1_MAX_PARAMS = 100
       MB = 1024.0 * 1024
+      # The switch Settings → Server keeps in visionary_settings
+      SETTING = "config.sdk_system_metrics"
+      SETTING_SQL = "SELECT value FROM visionary_settings WHERE name = '#{SETTING}'".freeze
+      SETTINGS_POLL_S = 30
 
       def initialize(cfg, instance, store, schemas, http, logger)
         @cfg = cfg
@@ -47,6 +51,7 @@ module Visionary
       end
 
       attr_writer :http
+      attr_reader :off
 
       def start
         prime
@@ -66,6 +71,24 @@ module Visionary
           @cond.broadcast
         end
         @thread.nil? || !@thread.join(timeout).nil?
+      end
+
+      # Follows Settings → Server, and a failed read keeps the state
+      def read_switch
+        rows = @store.rows(SETTING_SQL)
+        off = rows.first&.first.to_s.strip.casecmp?("false")
+        return if off == @off
+        @off = off
+        if off
+          @buf.clear
+          @logger.info("visionary: system metrics turned off in Settings → Server")
+          return
+        end
+        # A fresh baseline, so the next row doesn't average over the pause
+        sample
+        @logger.info("visionary: system metrics turned back on in Settings → Server")
+      rescue StandardError
+        nil
       end
 
       # One row in Schema::TABLES["system_metrics"] order. A source that
@@ -105,6 +128,7 @@ module Visionary
         @stopped = false
         @thread = nil
         @buf = []
+        @off = false
       end
 
       def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -133,10 +157,17 @@ module Visionary
         Telemetry.internal!
         @schemas.ensure(:system)
         next_at = mono + @interval
+        poll_at = mono
         loop do
-          break if wait_until(next_at)
+          break if wait_until([next_at, poll_at].min)
+          if mono >= poll_at
+            read_switch
+            poll_at = mono + SETTINGS_POLL_S
+          end
+          next if mono < next_at
           next_at += @interval
           next_at = mono + @interval if next_at < mono # fell behind (suspended host); don't burst
+          next if @off
           begin
             @buf << sample
           rescue StandardError => e

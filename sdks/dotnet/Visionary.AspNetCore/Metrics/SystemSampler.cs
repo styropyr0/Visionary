@@ -20,6 +20,12 @@ internal sealed class SystemSampler : BackgroundService
     /// <summary>D1's limit of bound params per statement</summary>
     internal const int D1MaxParams = 100;
 
+    /// <summary>The visionary_settings row Settings → Server keeps the switch for SDK system metrics in</summary>
+    internal const string Setting = "config.sdk_system_metrics";
+
+    private const string SettingQuery = "SELECT value FROM visionary_settings WHERE name = '" + Setting + "'";
+    private static readonly TimeSpan SettingsPoll = TimeSpan.FromSeconds(30);
+
     private readonly VisionaryAgent _agent;
     private readonly string _insert;
     private readonly bool _d1;
@@ -29,6 +35,7 @@ internal sealed class SystemSampler : BackgroundService
     private CgroupReader? _cgroup; // null off Linux and outside a cgroup
     private HostStats? _stats;
     private bool _schemaReady;
+    private bool _off;
 
     // Previous readings, touched only on the sampler loop.
     private long _last;
@@ -55,7 +62,6 @@ internal sealed class SystemSampler : BackgroundService
         }
         Suppress.Enter();
         await Task.Yield();
-        _host = new HostSampler(_agent.Options.DiskPath);
         Prime();
         _agent.Logger.LogInformation("visionary: recording system metrics every {Interval} as {Instance}", Interval, _agent.Instance);
         await EnsureSchemaAsync(stoppingToken).ConfigureAwait(false);
@@ -64,22 +70,27 @@ internal sealed class SystemSampler : BackgroundService
             : new(), stoppingToken);
 
         using var timer = new PeriodicTimer(Interval);
+        using var poll = new PeriodicTimer(SettingsPoll);
         try
         {
-            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            await ReadSwitchAsync(stoppingToken).ConfigureAwait(false);
+            var tick = timer.WaitForNextTickAsync(stoppingToken).AsTask();
+            var check = poll.WaitForNextTickAsync(stoppingToken).AsTask();
+            while (true)
             {
-                try
+                var done = await Task.WhenAny(tick, check).ConfigureAwait(false);
+                if (!await done.ConfigureAwait(false))
                 {
-                    _buffer.Add(Sample());
+                    break;
                 }
-                catch (Exception e)
+                if (done == check)
                 {
-                    _agent.Logger.LogDebug(e, "visionary: system sample failed");
+                    await ReadSwitchAsync(stoppingToken).ConfigureAwait(false);
+                    check = poll.WaitForNextTickAsync(stoppingToken).AsTask();
+                    continue;
                 }
-                if (_buffer.Count >= SamplesPerWrite && _buffer.Count % SamplesPerWrite == 0)
-                {
-                    await FlushAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
-                }
+                await TickAsync().ConfigureAwait(false);
+                tick = timer.WaitForNextTickAsync(stoppingToken).AsTask();
             }
         }
         catch (OperationCanceledException)
@@ -95,6 +106,72 @@ internal sealed class SystemSampler : BackgroundService
         {
             // stopped with the host
         }
+    }
+
+    internal bool Off => _off;
+
+    internal int Buffered => _buffer.Count;
+
+    internal async Task TickAsync()
+    {
+        if (_off)
+        {
+            return;
+        }
+        try
+        {
+            _buffer.Add(Sample());
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: system sample failed");
+        }
+        if (_buffer.Count >= SamplesPerWrite && _buffer.Count % SamplesPerWrite == 0)
+        {
+            await FlushAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Follows Settings → Server, and a failed read keeps the state
+    /// </summary>
+    internal async Task ReadSwitchAsync(CancellationToken ct)
+    {
+        List<string?[]> rows;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            rows = await _agent.Store!.RowsAsync(SettingQuery, timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            _agent.Logger.LogDebug("visionary: system metrics switch unavailable; keeping the current state: {Error}", e.Message);
+            return;
+        }
+        var off = rows.Count > 0 && rows[0].Length > 0
+            && string.Equals(rows[0][0]?.Trim(), "false", StringComparison.OrdinalIgnoreCase);
+        if (off == _off)
+        {
+            return;
+        }
+        _off = off;
+        if (off)
+        {
+            _buffer.Clear();
+            _agent.Logger.LogInformation("visionary: system metrics turned off in Settings → Server");
+            return;
+        }
+        // A fresh baseline, so the next row doesn't average over the pause
+        try
+        {
+            Sample();
+        }
+        catch (Exception e)
+        {
+            _agent.Logger.LogDebug(e, "visionary: system sample failed");
+        }
+        _agent.Logger.LogInformation("visionary: system metrics turned back on in Settings → Server");
     }
 
     private async Task EnsureSchemaAsync(CancellationToken ct)
@@ -162,8 +239,9 @@ internal sealed class SystemSampler : BackgroundService
         + " WHERE id = last_insert_rowid()";
 
     /// <summary>Baseline readings so the first row has real deltas.</summary>
-    private void Prime()
+    internal void Prime()
     {
+        _host = new HostSampler(_agent.Options.DiskPath);
         _last = Stopwatch.GetTimestamp();
         _requests = Interlocked.Read(ref _agent.Http.Requests);
         _errors = Interlocked.Read(ref _agent.Http.Errors);

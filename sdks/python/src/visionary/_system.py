@@ -25,6 +25,10 @@ except ImportError:  # host/process columns stay NULL without the "system" extra
 # One write per minute at the default 15 s interval.
 SAMPLES_PER_WRITE = 4
 
+# The visionary_settings row Settings -> Server keeps the SDK system metrics switch in
+SETTING = "config.sdk_system_metrics"
+SETTINGS_POLL_S = 30.0
+
 _MB = float(1 << 20)
 
 
@@ -101,10 +105,13 @@ class Recorder:
         self._schema = Schema(backend, "system", logger)
         self._gc = _GCTimer()
         self._started = time.monotonic()
+        self._poll_s = SETTINGS_POLL_S
         self._init_state()
 
     def _init_state(self) -> None:
         self._buf: List[Tuple[Any, ...]] = []
+        self.off = False
+        self._read_failed = False
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._proc = None
@@ -170,13 +177,22 @@ class Recorder:
 
     def _run(self) -> None:
         _spans.mark_internal()
+        self.read_switch()
         self._schema.ensure()
         next_at = time.monotonic() + self._interval
-        while not self._stop.wait(max(0.0, next_at - time.monotonic())):
-            next_at += self._interval
+        poll_at = time.monotonic() + self._poll_s
+        while not self._stop.wait(max(0.0, min(next_at, poll_at) - time.monotonic())):
             now = time.monotonic()
+            if now >= poll_at:
+                self.read_switch()
+                poll_at = time.monotonic() + self._poll_s
+            if now < next_at:
+                continue
+            next_at += self._interval
             if next_at < now:  # fell behind (suspended host); don't burst
                 next_at = now + self._interval
+            if self.off:
+                continue
             try:
                 self._buf.append(self.sample())
             except Exception:
@@ -184,6 +200,29 @@ class Recorder:
             if len(self._buf) >= SAMPLES_PER_WRITE:
                 self._flush()
         self._flush()
+
+    def read_switch(self) -> None:
+        """Follow Settings -> Server; a failed read keeps the current state."""
+        try:
+            value = self._backend.read_setting(SETTING)
+        except Exception as e:
+            # No server or table yet
+            if not self._read_failed:
+                self._read_failed = True
+                self._logger.debug("visionary: system metrics switch unavailable (%s)", e)
+            return
+        self._read_failed = False
+        off = value is not None and value.strip().lower() == "false"
+        if off == self.off:
+            return
+        self.off = off
+        if off:
+            self._buf.clear()
+            self._logger.info("visionary: system metrics turned off in Settings -> Server")
+            return
+        # A fresh baseline, so the next row doesn't average over the pause
+        _quiet(self.sample)
+        self._logger.info("visionary: system metrics turned back on in Settings -> Server")
 
     def _flush(self) -> None:
         if not self._buf:

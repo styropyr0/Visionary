@@ -27,6 +27,10 @@ final class SystemSampler {
     private static final Log log = LogFactory.getLog(SystemSampler.class);
 
     static final int SAMPLES_PER_WRITE = 4;
+    /** The visionary_settings row Settings → Server → Ingest keeps for this switch */
+    static final String SETTING = "config.sdk_system_metrics";
+    static final String SETTING_QUERY = "SELECT value FROM visionary_settings WHERE name = '" + SETTING + "'";
+    static final Duration POLL_INTERVAL = Duration.ofSeconds(30);
     private static final double MB = 1024.0 * 1024.0;
     private static final double GB = MB * 1024.0;
 
@@ -58,6 +62,7 @@ final class SystemSampler {
     /** Buffer size that triggers the next write; after a failure, one more batch's worth. */
     private int writeAt = SAMPLES_PER_WRITE;
     private boolean schemaReady;
+    private boolean off;
 
     SystemSampler(Store store, Origin origin, Duration interval, HttpCounters http, PoolStats pool) {
         this.store = store;
@@ -76,6 +81,7 @@ final class SystemSampler {
         executor.execute(this::prime);
         long ms = interval.toMillis();
         executor.scheduleAtFixedRate(this::tick, ms, ms, TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(this::readSwitchSafely, 0, POLL_INTERVAL.toSeconds(), TimeUnit.SECONDS);
     }
 
     /** Flushes buffered rows and stops, waiting at most {@code timeout}. */
@@ -124,7 +130,55 @@ final class SystemSampler {
         }
     }
 
-    private void tick() {
+    private void readSwitchSafely() {
+        try {
+            readSwitch();
+        } catch (RuntimeException e) {
+            log.debug("visionary: system metrics setting poll failed", e);
+        }
+    }
+
+    /** Follows Settings → Server; a missing table or failed read keeps the current state */
+    void readSwitch() {
+        List<String[]> rows;
+        try {
+            rows = store.select(SETTING_QUERY);
+        } catch (Exception e) {
+            return;
+        }
+        boolean next = !rows.isEmpty() && rows.get(0).length > 0 && rows.get(0)[0] != null
+                && rows.get(0)[0].trim().equalsIgnoreCase("false");
+        if (next == off) {
+            return;
+        }
+        off = next;
+        if (off) {
+            buffer.clear();
+            writeAt = SAMPLES_PER_WRITE;
+            log.info("visionary: system metrics turned off in Settings → Server");
+            return;
+        }
+        // A sample to throw away, so the next row doesn't average over the pause
+        try {
+            sample();
+        } catch (RuntimeException e) {
+            log.debug("visionary: system sample failed", e);
+        }
+        log.info("visionary: system metrics turned back on in Settings → Server");
+    }
+
+    boolean off() {
+        return off;
+    }
+
+    int buffered() {
+        return buffer.size();
+    }
+
+    void tick() {
+        if (off) {
+            return;
+        }
         try {
             buffer.add(sample());
         } catch (RuntimeException e) {

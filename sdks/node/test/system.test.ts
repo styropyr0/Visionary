@@ -3,6 +3,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
+import { defaultInstance } from "../src/config.js";
+import type { Logger } from "../src/log.js";
 import { SYSTEM_COLUMNS, type Value } from "../src/store/sql.js";
 import { CgroupReader } from "../src/system/cgroup.js";
 import {
@@ -14,7 +16,8 @@ import {
   parsePressure,
   parseVMStat,
 } from "../src/system/hoststats.js";
-import { systemRowStmts } from "../src/system/recorder.js";
+import type { Store } from "../src/store/store.js";
+import { HttpCounters, Recorder, SYSTEM_SETTING, systemRowStmts } from "../src/system/recorder.js";
 
 const FIXTURES = path.resolve("test/fixtures/linux");
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), "utf8");
@@ -148,4 +151,67 @@ test("D1 rows split after 100 params", () => {
   assert.ok(upd!.sql.startsWith(`UPDATE system_metrics SET ${SYSTEM_COLUMNS[100]} = NULLIF(?, '')`));
   assert.ok(upd!.sql.endsWith("WHERE id = last_insert_rowid()"));
   assert.deepEqual(systemRowStmts("INSERT", false, row), [{ sql: "INSERT", args: row }]);
+});
+
+test("default instance skips container IDs", () => {
+  const cases: [string, string, string][] = [
+    ["web-1", "api", "web-1"],
+    ["a1b2c3d4e5f6", "api", "api"],
+    ["a1b2c3d4e5f6", "", "node-app"],
+    ["ab12".repeat(16), "", "node-app"],
+    ["", "api", "api"],
+    ["A1B2C3D4E5F6", "", "A1B2C3D4E5F6"],
+    ["a1b2c3d4e5f", "", "a1b2c3d4e5f"],
+    ["deadbeefcafe-2", "api", "deadbeefcafe-2"],
+  ];
+  for (const [host, service, want] of cases) assert.equal(defaultInstance(host, service), want, `${host} ${service}`);
+});
+
+test("Settings → Server turns system metrics off and on", async () => {
+  let rows: string[][] | Error = new Error("no such table: visionary_settings");
+  const reads: string[] = [];
+  const store: Store = {
+    dialect: "sqlite",
+    stringParams: false,
+    async execScript() {},
+    async batch() {},
+    async execChanges() {
+      return 0;
+    },
+    async columns() {
+      return [];
+    },
+    async rows(sql) {
+      reads.push(sql);
+      if (rows instanceof Error) throw rows;
+      return rows;
+    },
+    async close() {},
+  };
+  const infos: string[] = [];
+  const logger: Logger = { info: (m) => infos.push(m), warn() {}, error() {} };
+  const r = new Recorder({ intervalS: 15, instance: "i", service: "", version: "", diskPath: os.tmpdir() }, store, async () => true, new HttpCounters(), logger);
+  r["prime"]();
+
+  await r.readSwitch();
+  assert.ok(!r.paused, "no table: on");
+  assert.ok(reads[0]!.includes(`name = '${SYSTEM_SETTING}'`));
+  r["tick"]();
+  assert.equal(r["buf"].length, 1);
+  rows = [[" FALSE "]];
+  await r.readSwitch();
+  assert.ok(r.paused, "false: off");
+  assert.equal(r["buf"].length, 0);
+  r["tick"]();
+  assert.equal(r["buf"].length, 0, "no samples while off");
+  rows = new Error("database is locked");
+  await r.readSwitch();
+  assert.ok(r.paused, "read error: stays off");
+  rows = [];
+  await r.readSwitch();
+  assert.ok(!r.paused, "row deleted: on");
+  rows = [["true"]];
+  await r.readSwitch();
+  assert.ok(!r.paused, "true: on");
+  assert.equal(infos.length, 2);
 });

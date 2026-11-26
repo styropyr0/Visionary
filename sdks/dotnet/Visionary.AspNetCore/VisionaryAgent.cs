@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Http;
@@ -56,8 +57,8 @@ internal sealed class VisionaryAgent : IDisposable
         Stopping = lifetime?.ApplicationStopping ?? CancellationToken.None;
         Options = options.Value;
         Logger = loggers.CreateLogger("Visionary");
-        Instance = string.IsNullOrWhiteSpace(Options.Instance) ? HostName() : Options.Instance.Trim();
         Service = string.IsNullOrWhiteSpace(Options.Service) ? null : Options.Service.Trim();
+        Instance = string.IsNullOrWhiteSpace(Options.Instance) ? DefaultInstance(HostName(), Service) : Options.Instance.Trim();
         Version = Options.Version();
         Runtime = RuntimeInformation.FrameworkDescription;
         SdkVersion = typeof(VisionaryAgent).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
@@ -273,6 +274,22 @@ internal sealed class VisionaryAgent : IDisposable
         {
             return Environment.MachineName;
         }
+    }
+
+    // The hostname Docker gives a container, new on every rebuild
+    private static readonly Regex ContainerId = new(@"^([0-9a-f]{12}|[0-9a-f]{64})\z", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The hostname, or the service (else dotnet-app) when the hostname is a container ID,
+    /// so a rebuilt container keeps its instance
+    /// </summary>
+    internal static string DefaultInstance(string? host, string? service)
+    {
+        if (!string.IsNullOrEmpty(host) && !ContainerId.IsMatch(host))
+        {
+            return host;
+        }
+        return string.IsNullOrWhiteSpace(service) ? "dotnet-app" : service.Trim();
     }
 
     private static string? Cap(string? s, int max) =>

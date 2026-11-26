@@ -622,7 +622,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_DATABASE_URL` | `DatabaseUrl` | none | Where rows go; see [Choosing the database](#choosing-the-database) |
 | `D1_ACCOUNT_ID`, `D1_DATABASE_ID`, `D1_API_TOKEN` | `D1AccountId`, `D1DatabaseId`, `D1ApiToken` | none | Cloudflare D1 credentials |
 | `D1_API_BASE` | `D1ApiBase` | Cloudflare's API | D1 API URL, for a proxy |
-| `VISIONARY_INSTANCE` | `Instance` | hostname | Labels this server's rows |
+| `VISIONARY_INSTANCE` | `Instance` | hostname, or the service (else `dotnet-app`) when the hostname is a container ID | Labels this server's rows |
 | `VISIONARY_SERVICE` | `Service` | empty | Service name; lets several services share a database |
 | `VISIONARY_RELEASE` | `Release` | the platform's commit variable | Release for the deploy marker; hashes are cut to 12 characters |
 | `VISIONARY_LOG_REQUESTS` | `LogRequests` | `true` | Write one `api_logs` row per request |
@@ -635,7 +635,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_LOG_ERROR_CODE_FIELD` | `ErrorCodeField` | `error.code` | Dotted path to the error code in JSON error bodies |
 | `VISIONARY_LOG_ERROR_KEY_FIELD` | `ErrorKeyField` | `error.key` | Dotted path to the error key |
 | `VISIONARY_LOG_RETENTION_DAYS` | `LogRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `api_logs`, `spans`, `errors`, `profiles`, `app_logs` and `metrics` rows |
-| `VISIONARY_SYSTEM_METRICS` | `SystemMetrics` | `true` | Write `system_metrics` samples |
+| `VISIONARY_SYSTEM_METRICS` | `SystemMetrics` | `true` | Write `system_metrics` samples. Settings → Server → Ingest → SDK system metrics turns it off for every service within 30 seconds, without a redeploy |
 | `VISIONARY_SYSTEM_INTERVAL` | `SystemInterval` | `15s` | Sample interval: a plain number is seconds; also `500ms`, `1m`, `1h30m` |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `SystemRetentionDays` | `0` (off) | Above 0, the SDK also deletes older `system_metrics` rows |
 | `VISIONARY_SPANS` | `Spans` | `true` | Record database, HTTP and custom spans, and per-request totals |

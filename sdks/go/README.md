@@ -460,7 +460,9 @@ connection tracking, UDP errors, CPU temperature and clock speed, and with a
 GPU (nvidia-smi on Linux and Windows, amdgpu on Linux) the busiest GPU's use,
 memory and temperature. `cfg.System.DiskPath` picks the
 filesystem whose usage is reported (default: the working directory's).
-`VISIONARY_SYSTEM_METRICS=false` turns it off.
+`VISIONARY_SYSTEM_METRICS=false` turns it off in one service, and Settings →
+Server → Ingest → SDK system metrics turns it off for every service within
+30 seconds, without a redeploy.
 
 ### Bodies and redaction
 
@@ -622,7 +624,7 @@ and the dashboards flag the N+1.
 | `D1_API_BASE` | Cloudflare's API | Another D1 API URL (a proxy). |
 | `VISIONARY_SERVICE` | none | Names the service when several share a database. |
 | `VISIONARY_RELEASE` | the platform's commit variable | The version on deploy markers. See [Release markers](#release-markers). |
-| `VISIONARY_INSTANCE` | hostname | Labels this server on the System page. |
+| `VISIONARY_INSTANCE` | hostname, or the service (else `go-app`) when the hostname is a container ID | Labels this server on the System page. |
 | `VISIONARY_LOG_REQUESTS` | `true` | Log requests to `api_logs`. |
 | `VISIONARY_LOG_PATH_PREFIX` | all paths | Log only paths starting with this, e.g. `/api`. |
 | `VISIONARY_LOG_BODIES` | `true` | Store request and response bodies (redacted, capped). |
@@ -642,7 +644,7 @@ and the dashboards flag the N+1.
 | `VISIONARY_PROFILE` | follow the dashboard | `false`: never take CPU profiles, whatever Settings → Profiling says. |
 | `VISIONARY_RATE_LIMIT` | `true` | `false`: ignore Security → Rate limits. See [Rate limits](#rate-limits). |
 | `VISIONARY_PACKAGES` | `true` | `false`: don't report the modules the binary was built with to `app_packages`. |
-| `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
+| `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. Settings → Server → Ingest can also turn it off for every service. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |
 | `VISIONARY_SYSTEM_GPU` | `true` | `false`: leave out the GPU columns, so nvidia-smi never runs. |

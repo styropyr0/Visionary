@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import re
 import socket
 import threading
 import time
@@ -22,6 +23,17 @@ from ._system import HttpCounters, Recorder
 from ._writer import Release, RequestWriter, Retention, WriterStats
 
 logger = logging.getLogger("visionary")
+
+# The hostname Docker gives a container, new on every rebuild
+_CONTAINER_ID = re.compile(r"^([0-9a-f]{12}|[0-9a-f]{64})$")
+
+
+def default_instance(host: str, service: str) -> str:
+    """The hostname, or the service (else python-app) when the hostname is a
+    container ID, so a rebuilt container keeps its instance."""
+    if host and not _CONTAINER_ID.fullmatch(host):
+        return host
+    return service or "python-app"
 
 
 class Agent:
@@ -64,7 +76,7 @@ class Agent:
             logger.warning("visionary: no database configured (set VISIONARY_DATABASE_URL or D1_*); collection is off")
             return
 
-        instance = cfg.instance or socket.gethostname()
+        instance = cfg.instance or default_instance(socket.gethostname(), cfg.service)
         self.instance = instance
         if cfg.log_requests or cfg.spans or cfg.errors or cfg.version:
             # One writer for api_logs and the telemetry tables.

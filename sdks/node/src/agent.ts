@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { cwd } from "node:process";
 import type { Config, Options } from "./config.js";
-import { resolveConfig } from "./config.js";
+import { defaultInstance, resolveConfig } from "./config.js";
 import type { RequestState } from "./context.js";
 import { currentRequest } from "./context.js";
 import type { Entry } from "./entry.js";
@@ -67,7 +67,7 @@ export class Agent {
   constructor(options: Options = {}) {
     this.config = resolveConfig(options);
     this.logger = options.logger ?? consoleLogger;
-    this.instance = this.config.instance || hostname();
+    this.instance = this.config.instance || defaultInstance(hostname(), this.config.service);
     configureMetrics(this.config.metrics, this.config.metricsMaxSeries);
     try {
       this.store = openStore(this.config, this.logger);

@@ -129,10 +129,26 @@ record VisionaryConfig(
     }
 
     String resolvedInstance() {
-        return instance.isEmpty() ? hostname() : instance;
+        return instance.isEmpty() ? defaultInstance(localHostname(), service) : instance;
+    }
+
+    /** The hostname Docker gives a container, new on every rebuild */
+    private static final Pattern CONTAINER_ID = Pattern.compile("[0-9a-f]{12}|[0-9a-f]{64}");
+
+    /** The hostname, or the service (else java-app) when the hostname is a container ID */
+    static String defaultInstance(String host, String service) {
+        if (host != null && !host.isEmpty() && !CONTAINER_ID.matcher(host).matches()) {
+            return host;
+        }
+        return service == null || service.isEmpty() ? "java-app" : service;
     }
 
     static String hostname() {
+        String name = localHostname();
+        return name.isEmpty() ? "unknown" : name;
+    }
+
+    private static String localHostname() {
         try {
             return InetAddress.getLocalHost().getHostName();
         } catch (Exception e) {
@@ -140,7 +156,7 @@ record VisionaryConfig(
             if (name == null || name.isEmpty()) {
                 name = System.getenv("HOSTNAME");
             }
-            return name == null || name.isEmpty() ? "unknown" : name;
+            return name == null ? "" : name;
         }
     }
 

@@ -45,7 +45,8 @@ public sealed class VisionaryOptions
     /// <summary>D1_API_BASE: overrides https://api.cloudflare.com/client/v4.</summary>
     public string? D1ApiBase { get; set; }
 
-    /// <summary>VISIONARY_INSTANCE: labels this server's rows; defaults to the hostname.</summary>
+    /// <summary>VISIONARY_INSTANCE: labels this server's rows; defaults to the hostname, or to the service
+    /// (else dotnet-app) when the hostname is a container ID that each rebuild changes</summary>
     public string? Instance { get; set; }
 
     /// <summary>VISIONARY_LOG_REQUESTS (default true).</summary>
@@ -79,7 +80,8 @@ public sealed class VisionaryOptions
     /// <summary>VISIONARY_LOG_ERROR_KEY_FIELD (default error.key).</summary>
     public string ErrorKeyField { get; set; } = "error.key";
 
-    /// <summary>VISIONARY_SYSTEM_METRICS (default true).</summary>
+    /// <summary>VISIONARY_SYSTEM_METRICS (default true), and Settings → Server → Ingest → SDK system metrics
+    /// can also turn it off for every service, read every 30 seconds</summary>
     public bool SystemMetrics { get; set; } = true;
 
     /// <summary>VISIONARY_SYSTEM_INTERVAL (default 15s; a plain number is seconds, also 500ms, 1m).</summary>

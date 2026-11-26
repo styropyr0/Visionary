@@ -28,7 +28,7 @@ export interface Options {
   /** postgres://, mysql://, sqlite:///abs/path.db, sqlite://relative.db or d1:// */
   databaseUrl?: string;
   d1?: { accountId?: string; databaseId?: string; apiToken?: string; apiBase?: string };
-  /** Labels this process's rows (default: the hostname). */
+  /** Labels this process's rows (default: the hostname, or the service when the hostname is a container ID) */
   instance?: string;
   service?: string;
   /** The release; defaults to the platform's commit variable. */
@@ -52,6 +52,7 @@ export interface Options {
   /** Rows per write (default 500, at most 2000). D1 always takes 50 */
   batchSize?: number;
 
+  /** Settings → Server → Ingest can also turn system metrics off for every service */
   systemMetrics?: boolean;
   /** Seconds between samples (default 15). */
   systemInterval?: number;
@@ -138,6 +139,15 @@ export interface Config {
 }
 
 type Env = Record<string, string | undefined>;
+
+// The hostname Docker gives a container, new on every rebuild
+const CONTAINER_ID = /^([0-9a-f]{12}|[0-9a-f]{64})$/;
+
+/** The hostname, or the service (else node-app) when the hostname is a container ID */
+export function defaultInstance(host: string, service: string): string {
+  if (host !== "" && !CONTAINER_ID.test(host)) return host;
+  return service || "node-app";
+}
 
 /** The configuration from the environment, with `opts` taking precedence. */
 export function resolveConfig(opts: Options = {}, env: Env = process.env): Config {

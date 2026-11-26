@@ -50,6 +50,12 @@ var systemBaseColumns = []string{
 // samplesPerWrite batches rows: one write per minute at the default interval.
 const samplesPerWrite = 4
 
+// SystemSetting is the visionary_settings row Settings → Server keeps the
+// switch for SDK system metrics in
+const SystemSetting = "config.sdk_system_metrics"
+
+const systemSettingsPoll = 30 * time.Second
+
 type recorder struct {
 	cfg    SystemConfig
 	ident  identity
@@ -83,6 +89,7 @@ type recorder struct {
 	prev     counters
 	cgroup   *cgroupReader // nil off Linux and for HostSampler
 	buf      [][]any
+	off      bool
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
@@ -166,6 +173,8 @@ func (r *recorder) run(ctx context.Context) {
 	defer close(r.done)
 	t := time.NewTicker(r.cfg.Interval)
 	defer t.Stop()
+	poll := time.NewTimer(0)
+	defer poll.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -174,7 +183,13 @@ func (r *recorder) run(ctx context.Context) {
 		case <-r.stop:
 			r.flushOnExit()
 			return
+		case <-poll.C:
+			r.readSwitch(ctx)
+			poll.Reset(systemSettingsPoll)
 		case <-t.C:
+			if r.off {
+				continue
+			}
 			r.buf = append(r.buf, r.sample())
 			if len(r.buf) >= samplesPerWrite {
 				wctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -183,6 +198,29 @@ func (r *recorder) run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// readSwitch follows Settings → Server, and a failed read keeps the state
+func (r *recorder) readSwitch(ctx context.Context) {
+	qctx, cancel := context.WithTimeout(quiet(ctx), 10*time.Second)
+	rows, err := r.db.rows(qctx, "SELECT value FROM visionary_settings WHERE name = '"+SystemSetting+"'")
+	cancel()
+	if err != nil {
+		return
+	}
+	off := len(rows) > 0 && len(rows[0]) > 0 && strings.EqualFold(strings.TrimSpace(rows[0][0]), "false")
+	if off == r.off {
+		return
+	}
+	r.off = off
+	if off {
+		r.buf = r.buf[:0]
+		r.logger.Info("visionary: system metrics turned off in Settings → Server")
+		return
+	}
+	// A fresh baseline, so the next row doesn't average over the pause
+	r.values()
+	r.logger.Info("visionary: system metrics turned back on in Settings → Server")
 }
 
 func (r *recorder) flushOnExit() {
