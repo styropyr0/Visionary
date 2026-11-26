@@ -80,6 +80,9 @@ func runsAsRoot(user string) bool {
 
 func imageID(id string) string { return strings.TrimPrefix(id, "sha256:") }
 
+// isAgentImage is this agent's own image, which needs the host by design
+func isAgentImage(image string) bool { return strings.Contains(image, "visionary-agent") }
+
 // check looks at every running container of this report.
 func (r *riskTracker) check(ctx context.Context, d *dockerCollector, all []listed, details map[string]inspected) {
 	baseline := r.images == nil
@@ -107,6 +110,9 @@ func (r *riskTracker) check(ctx context.Context, d *dockerCollector, all []liste
 			continue
 		}
 		name := c.name()
+		if isAgentImage(c.Image) {
+			continue
+		}
 		if risks := containerRisks(in); len(risks) > 0 {
 			r.add(c.ID, "privileged "+strings.Join(risks, ","), agentapi.Event{Kind: "container_privileged", Target: name,
 				Detail: c.Image + ": " + strings.Join(risks, ", ")})

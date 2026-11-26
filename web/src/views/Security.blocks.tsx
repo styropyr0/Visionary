@@ -40,7 +40,7 @@ export function blockWhere(b: Block): string {
 function hostState(h: BlockHost): { tone: "ok" | "warn" | "bad"; text: string } {
   switch (h.backend) {
     case "never":
-      return { tone: "warn", text: "agent too old or not polling" };
+      return { tone: "warn", text: "agent doesn't block yet: update it to 1.5 or later" };
     case "off":
       return { tone: "warn", text: "blocking turned off on this host" };
     case "unsupported":
@@ -277,17 +277,21 @@ export function BlockedPanel({ onIP }: { onIP: (ip: string) => void }) {
             <DataTable result={result} columns={columns} sortable={false} maxHeight={360} rowKey={(r) => r[0]} onRowClick={(r) => !String(r[1]).includes("/") && onIP(String(r[1]))} />
           )}
           {q.data.hosts.length > 0 && (
-            <div className="sec-block-status">
+            <ul className="sec-block-status" aria-label="Firewall on each host">
               {q.data.hosts.map((h) => {
                 const st = hostState(h);
                 return (
-                  <span key={h.host} className={`sec-host-state ${st.tone}`} title={h.skipped?.length ? `Skipped: ${h.skipped.join(", ")}` : undefined}>
-                    <span className="mono">{h.host}</span> {st.text}
-                    {h.skipped?.length ? ` · ${h.skipped.length} skipped` : ""}
-                  </span>
+                  <li key={h.host} title={h.skipped?.length ? `Skipped: ${h.skipped.join(", ")}` : undefined}>
+                    <span className={`sec-host-dot ${st.tone}`} aria-hidden />
+                    <span className="mono sec-host-name">{h.host}</span>
+                    <span className="sec-host-text">
+                      {st.text}
+                      {h.skipped?.length ? ` · ${h.skipped.length} skipped` : ""}
+                    </span>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </>
       )}

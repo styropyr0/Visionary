@@ -184,7 +184,7 @@ func (f *firewall) sync(ctx context.Context, b agentapi.Blocks) {
 	lost := false
 	if time.Since(f.verified) >= fwVerifyEvery {
 		f.verified = time.Now()
-		lost = f.ok && !f.backend.present(ctx)
+		lost = f.ok && f.applied > 0 && !f.backend.present(ctx)
 	}
 	if f.ok && f.lastErr == "" && b.Version == f.version && !lost {
 		return
@@ -208,8 +208,12 @@ func (f *firewall) sync(ctx context.Context, b agentapi.Blocks) {
 		f.log.Info("not blocking these addresses", "version", b.Version, "count", len(refused), "addresses", refusalText(refused, fwSkippedMax))
 	}
 	f.logged = b.Version
+	if len(v4)+len(v6) == 0 && f.applied == 0 && !f.backend.present(ctx) {
+		f.ok, f.version, f.lastErr, f.verified = true, b.Version, "", time.Now()
+		return
+	}
 	if err := f.backend.apply(ctx, v4, v6); err != nil {
-		msg := clipRunes(err.Error(), 300)
+		msg := fwErrorText(err)
 		if msg != f.lastErr {
 			f.log.Warn("could not apply IP blocks", "backend", f.mode, "err", msg)
 		}
@@ -245,4 +249,15 @@ func clearFirewall(ctx context.Context, r cmdRunner, logger *slog.Logger) error 
 		logger.Info("IP block rules removed")
 	}
 	return err
+}
+
+// fwErrorText says in plain words why blocking failed, keeping the tool's
+// message only when it is not a permission problem
+func fwErrorText(err error) string {
+	msg := err.Error()
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "operation not permitted") || strings.Contains(low, "permission denied") {
+		return "the agent may not change the firewall here: run it on the host, or give its container NET_ADMIN with host networking"
+	}
+	return clipRunes(msg, 300)
 }

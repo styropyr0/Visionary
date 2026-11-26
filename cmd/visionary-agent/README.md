@@ -163,7 +163,7 @@ job if it is given the host:
 
 ```sh
 docker run -d --name visionary-agent --restart unless-stopped \
-  --pid=host --net=host -v /:/host:ro \
+  --pid=host --net=host --cap-add NET_ADMIN -v /:/host:ro \
   -v visionary-agent:/var/lib/visionary-agent \
   -e HOST_ROOT=/host -e HOST_PROC=/host/proc -e HOST_SYS=/host/sys -e HOST_ETC=/host/etc \
   -e VISIONARY_URL=https://visionary.example.com -e VISIONARY_KEY=<server key> \
@@ -181,6 +181,10 @@ host. Paths in `VISIONARY_AGENT_LOGS` are host paths. The volume keeps log
 positions across restarts.
 
 What differs from the host install:
+
+- Blocking addresses from Security needs `--cap-add NET_ADMIN`, which lets it
+  change the host's firewall. Without it everything else works and Security
+  says the agent may not block on that machine.
 
 - GPUs need the NVIDIA container toolkit and `--gpus all`. Without it the
   agent tries the host's nvidia-smi through the chroot, which only works when

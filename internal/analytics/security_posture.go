@@ -205,6 +205,7 @@ WHERE e.kind = 'updates_pending' GROUP BY e.host`, since)
 	recent := time.Now().UTC().Add(-48 * time.Hour).Format(tsLayout)
 	risky, err := s.db.Query(ctx, `SELECT kind, host, target, MIN(created_at), MAX(created_at) FROM security_events
 WHERE source = 'host' AND kind IN ('container_privileged', 'container_root') AND created_at >= ?
+  AND COALESCE(detail, '') NOT LIKE '%visionary-agent%' 
 GROUP BY kind, host, target ORDER BY kind, host LIMIT 50`, recent)
 	if err != nil {
 		return nil, dbErr(err)

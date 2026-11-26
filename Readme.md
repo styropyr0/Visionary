@@ -386,7 +386,8 @@ curl -fsSL https://raw.githubusercontent.com/styropyr0/Visionary/main/deploy/age
 ```
 
 It can also run in a container from `ghcr.io/styropyr0/visionary-agent`, given
-the host with `--pid=host --net=host -v /:/host:ro` and `HOST_ROOT=/host`. The
+the host with `--pid=host --net=host -v /:/host:ro` and `HOST_ROOT=/host`
+(and `--cap-add NET_ADMIN` to block addresses). The
 host install is still recommended; see
 [Run it in a container](cmd/visionary-agent/README.md#run-it-in-a-container).
 

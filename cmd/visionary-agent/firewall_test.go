@@ -311,3 +311,23 @@ func TestFwPollWait(t *testing.T) {
 		}
 	}
 }
+
+func TestFirewallLeavesHostAloneWithNothingToBlock(t *testing.T) {
+	be := &fakeBackend{gone: true, err: &commandError{code: 1, stderr: "netlink: Error: cache initialization failed: Operation not permitted"}}
+	f := &firewall{cfg: config{url: "https://192.0.2.10"}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), backend: be, mode: "fake"}
+	ctx := context.Background()
+	f.sync(ctx, agentapi.Blocks{Version: "empty", Addresses: []string{}})
+	if f.lastErr != "" || !f.ok || f.version != "empty" {
+		t.Fatalf("an empty list touched the firewall: %+v", f)
+	}
+	f.sync(ctx, agentapi.Blocks{Version: "v1", Addresses: []string{"203.0.113.7"}})
+	if !strings.Contains(f.lastErr, "NET_ADMIN") || strings.Contains(f.lastErr, "netlink") {
+		t.Fatalf("permission error not explained: %q", f.lastErr)
+	}
+}
+
+func TestContainerRiskSkipsTheAgent(t *testing.T) {
+	if !isAgentImage("ghcr.io/styropyr0/visionary-agent:1.5.0") || isAgentImage("redis:7") {
+		t.Fatal("isAgentImage")
+	}
+}

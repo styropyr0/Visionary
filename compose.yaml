@@ -64,6 +64,7 @@ services:
     image: ghcr.io/styropyr0/visionary-agent
     pid: host
     network_mode: host
+    cap_add: [NET_ADMIN]
     volumes:
       - /:/host:ro
       - agent:/var/lib/visionary-agent

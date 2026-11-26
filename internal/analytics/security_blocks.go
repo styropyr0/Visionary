@@ -225,7 +225,7 @@ func (s *Server) blockHosts(ctx context.Context, list []block) ([]blockHost, err
 			continue
 		}
 		h := blockHost{Host: toString(row[0]), Version: toString(row[1]), Backend: toString(row[2]), Applied: int(toInt(row[3])),
-			Error: toString(row[4]), SeenAt: toString(row[6])}
+			Error: firewallError(toString(row[4])), SeenAt: toString(row[6])}
 		if sk := toString(row[5]); sk != "" {
 			_ = json.Unmarshal([]byte(sk), &h.Skipped)
 		}
@@ -497,4 +497,13 @@ func nullableID(id int64) any {
 		return nil
 	}
 	return id
+}
+
+// firewallError rewords what 1.5.0 agents sent raw from nft and iptables
+func firewallError(msg string) string {
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "operation not permitted") || strings.Contains(low, "permission denied") {
+		return "the agent may not change the firewall here: run it on the host, or give its container NET_ADMIN with host networking"
+	}
+	return msg
 }

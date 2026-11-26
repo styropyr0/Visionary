@@ -75,3 +75,31 @@ func TestHideLogsPage(t *testing.T) {
 		t.Fatalf("hide = %d %s", w.Code, w.Body)
 	}
 }
+
+func TestDeleteEveryKind(t *testing.T) {
+	s := logsTestServer(t, nil)
+	now := time.Now().UTC()
+	if err := s.db.Exec(context.Background(), `INSERT INTO db_servers (host, server, engine, first_seen, last_seen) VALUES ('h', 'main', 'postgres', ?, ?)`,
+		now.Add(-2*time.Hour).Format(tsLayout), now.Add(-time.Hour).Format(tsLayout)); err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	for _, k := range dataKinds {
+		kinds = append(kinds, `"`+k.Key+`"`)
+	}
+	body := `{"kinds":[` + strings.Join(kinds, ",") + `],"from":"` + now.Add(-3*time.Hour).Format(time.RFC3339) + `","to":"` + now.Format(time.RFC3339) + `"}`
+	for _, h := range []http.HandlerFunc{s.handleDataPreview, s.handleDataDelete} {
+		r := httptest.NewRequest("POST", "/api/data/x", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, &session{UserID: "u", Name: "Ad", Role: "admin"}))
+		w := httptest.NewRecorder()
+		h(w, r)
+		if w.Code != 200 {
+			t.Fatalf("%d %s", w.Code, w.Body.String())
+		}
+	}
+	res, err := s.db.Query(context.Background(), `SELECT COUNT(*) FROM db_servers`)
+	if err != nil || toInt(res.Rows[0][0]) != 0 {
+		t.Fatalf("db_servers not deleted: %v %v", err, res)
+	}
+}

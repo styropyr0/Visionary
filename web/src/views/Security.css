@@ -1007,15 +1007,23 @@ table.data.sec-print-table td.num {
 .sec-block-hosts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-left: 24px; }
 .sec-block-row { display: flex; gap: 8px; }
 .sec-block-row > .input { flex: 1; }
-.sec-block-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.sec-host-state {
-  padding: 3px 9px;
-  border-radius: 11px;
+.sec-block-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
   font-size: 12px;
 }
-.sec-host-state.ok { background: color-mix(in srgb, var(--good) 12%, transparent); color: var(--good-text); }
-.sec-host-state.warn { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-text); }
-.sec-host-state.bad { background: color-mix(in srgb, var(--critical) 14%, transparent); color: var(--critical-text); }
+.sec-block-status li { display: flex; align-items: flex-start; gap: 8px; line-height: 18px; }
+.sec-host-dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-3); }
+.sec-host-dot.ok { background: var(--good); }
+.sec-host-dot.warn { background: var(--warning); }
+.sec-host-dot.bad { background: var(--critical); }
+.sec-host-name { flex: none; min-width: 140px; color: var(--text-1); }
+.sec-host-text { color: var(--text-2); }
 
 /* Timeline */
 .sec-act-req { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }

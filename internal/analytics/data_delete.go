@@ -89,7 +89,11 @@ type dataRequest struct {
 // dataTimeColumns is for tables without created_at; a row is in range only when its whole span is.
 var dataTimeColumns = map[string][2]string{
 	"log_patterns": {"first_seen", "last_seen"},
+	"db_servers":   {"first_seen", "last_seen"},
 }
+
+// keyedTables have no id column, so their rows go in one delete
+var keyedTables = map[string]bool{"db_servers": true}
 
 // where is the condition shared by every table of a kind, with its args.
 func (d dataRequest) where(t dataTable) (string, []any, bool) {
@@ -259,6 +263,12 @@ func (s *Server) handleDataDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteChunked(ctx context.Context, d dataRequest, t dataTable) error {
 	cond, args, ok := d.where(t)
 	if !ok {
+		return nil
+	}
+	if keyedTables[t.name] {
+		if err := s.db.Exec(ctx, `DELETE FROM `+t.name+` WHERE `+cond, args...); err != nil && !missingTable(err, t.name) {
+			return dbErr(err)
+		}
 		return nil
 	}
 	stmt := `DELETE FROM ` + t.name + ` WHERE id IN (SELECT id FROM ` + t.name + ` WHERE ` + cond + ` LIMIT 5000)`
