@@ -577,6 +577,7 @@ func TestEveryTableClassified(t *testing.T) {
 		"VISIONARY_SCIM_GROUPS": true, "AUDIT_LOG": true, "ALERT_CHANNELS": true, "ALERT_SILENCES": true,
 		"ROLLUP_STATE": true, "SECURITY_SUPPRESSIONS": true, "WORKSPACES": true, "SQLITE_SEQUENCE": true,
 		"VISIONARY_LEASES": true, "UPTIME_LOCATIONS": true, "VISIONARY_REPLICAS": true, "VISIONARY_CHANGES": true, "VISIONARY_ONCE": true,
+		"SECURITY_BLOCKS": true, "SECURITY_BLOCK_HOSTS": true, "SECURITY_POSTURE_SCANS": true,
 	}
 	for _, table := range testTables(t, f.s) {
 		name := strings.ToUpper(table)

@@ -212,6 +212,8 @@ func (s *Server) securityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/security/panels/{panel}", s.authed(s.handleSecurityPanel))
 	s.securityTriageRoutes(mux)
 	s.securityRulesRoutes(mux)
+	s.securityBlocksRoutes(mux)
+	s.securityActivityRoutes(mux)
 }
 
 func (s *Server) securityStart(ctx context.Context) {
@@ -220,6 +222,8 @@ func (s *Server) securityStart(ctx context.Context) {
 	go s.intelLoop(ctx)
 	// The team's own rules run even with the built-in detectors off
 	s.leased("security-rules", s.rulesLoop)
+	s.leased("security-blocks", s.blocksLoop)
+	s.leased("security-posture", s.postureLoop)
 	if !sec.st.enabled {
 		s.logger.Info("security detectors disabled in Settings → Server; the Security page still shows host events and the audit log")
 		return

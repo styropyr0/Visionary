@@ -231,18 +231,24 @@ func (l *locationRunner) flush(ctx context.Context) {
 }
 
 func (l *locationRunner) post(ctx context.Context, path string, body, out any) (int, string, error) {
+	return postJSON(ctx, l.client, l.cfg, path, body, out)
+}
+
+// postJSON posts body to the server with the key and decodes the answer into
+// out, returning the status and the server's error message
+func postJSON(ctx context.Context, client *http.Client, cfg config, path string, body, out any) (int, string, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return 0, "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.cfg.url+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.url+path, bytes.NewReader(raw))
 	if err != nil {
 		return 0, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+l.cfg.key)
+	req.Header.Set("Authorization", "Bearer "+cfg.key)
 	req.Header.Set("User-Agent", "visionary-agent/"+version)
-	resp, err := l.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, "", err
 	}

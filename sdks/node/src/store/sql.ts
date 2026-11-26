@@ -131,6 +131,8 @@ export const ERROR_COLUMNS = [
 
 export const RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"];
 
+export const PACKAGE_COLUMNS = ["created_at", "service", "instance", "version", "ecosystem", "name", "pkg_version"];
+
 export const PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"];
 
 export const LOG_COLUMNS = [
@@ -155,6 +157,7 @@ export type Table =
   | "spans"
   | "errors"
   | "releases"
+  | "app_packages"
   | "profiles"
   | "app_logs"
   | "metrics"
@@ -166,6 +169,7 @@ export const TABLE_COLUMNS: Record<Table, string[]> = {
   spans: SPAN_COLUMNS,
   errors: ERROR_COLUMNS,
   releases: RELEASE_COLUMNS,
+  app_packages: PACKAGE_COLUMNS,
   profiles: PROFILE_COLUMNS,
   app_logs: LOG_COLUMNS,
   metrics: METRIC_COLUMNS,

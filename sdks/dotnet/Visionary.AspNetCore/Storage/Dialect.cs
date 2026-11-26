@@ -182,6 +182,11 @@ internal static class Schema
         "created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime",
     };
 
+    public static readonly string[] PackageColumns =
+    {
+        "created_at", "service", "instance", "version", "ecosystem", "name", "pkg_version",
+    };
+
     /// <summary>The CREATE statements of sdks/go/schema/&lt;dialect&gt;/&lt;name&gt;.sql.</summary>
     public static string Script(VisionaryDialect d, string name)
     {

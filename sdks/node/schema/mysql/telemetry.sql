@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS releases (
 ) CHARACTER SET utf8mb4;
 CREATE INDEX idx_releases_created_at ON releases (created_at);
 CREATE INDEX idx_releases_version_created_at ON releases (version, created_at);
+CREATE TABLE IF NOT EXISTS app_packages (
+    id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    created_at  VARCHAR(32) NOT NULL,
+    service     VARCHAR(255),
+    instance    VARCHAR(255) NOT NULL,
+    version     VARCHAR(255),
+    ecosystem   VARCHAR(32) NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    pkg_version VARCHAR(128) NOT NULL
+) CHARACTER SET utf8mb4;
+CREATE INDEX idx_app_packages_created_at ON app_packages (created_at);
+CREATE INDEX idx_app_packages_instance ON app_packages (instance, created_at);
 
 CREATE TABLE IF NOT EXISTS profiles (
     id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

@@ -142,6 +142,9 @@ public sealed class VisionaryOptions
     /// </summary>
     public bool RateLimit { get; set; } = true;
 
+    /// <summary>VISIONARY_PACKAGES (default true), report the app's NuGet packages to app_packages</summary>
+    public bool Packages { get; set; } = true;
+
     /// <summary>Set by <c>AddVisionaryProfiling()</c>.</summary>
     internal bool ProfilingAdded { get; set; }
 
@@ -229,6 +232,7 @@ public sealed class VisionaryOptions
         MetricsInterval = Duration(Get("VISIONARY_METRICS_INTERVAL"), TimeSpan.FromSeconds(15));
         MetricsMeters = List("VISIONARY_METRICS_METERS");
         RateLimit = Bool("VISIONARY_RATE_LIMIT", true);
+        Packages = Bool("VISIONARY_PACKAGES", true);
         MetricsMaxSeries = Int("VISIONARY_METRICS_MAX_SERIES", 1000) is > 0 and var max ? max : 1000;
     }
 

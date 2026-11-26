@@ -564,6 +564,7 @@ Everything is optional. Options passed to `init()` win over the environment.
 | `VISIONARY_METRICS_INTERVAL` | `metricsInterval` (seconds) | `15s` | Time between a series' rows. |
 | `VISIONARY_METRICS_MAX_SERIES` | `metricsMaxSeries` | `1000` | Label sets kept per metric name. |
 | `VISIONARY_RATE_LIMIT` | `rateLimit` | `true` | Enforce the dashboard's rate limits ([Rate limits](#rate-limits)). |
+| `VISIONARY_PACKAGES` | `packages` | `true` | Report the packages under `node_modules` to `app_packages`. |
 | | `instrumentHttp` | `true` | Record outbound `fetch`/`undici`/`http`/`https` calls and send `traceparent` on them. |
 | | `captureUncaught` | `true` | Record uncaught exceptions and crashing rejections. |
 | | `explain` | `[]` | Explainers for query plans (`explainWith(pool)`). |

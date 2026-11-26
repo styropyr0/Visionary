@@ -570,6 +570,7 @@ result of `visionary.from_env()` and pass that to `init()`.
 | `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | Time between metrics rows: `15`, `1m`. |
 | `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets per metric name. |
 | `VISIONARY_RATE_LIMIT` | `rate_limit` | `true` | Enforce **Security → Rate limits** (see [Rate limits](#rate-limits)). |
+| `VISIONARY_PACKAGES` | `packages` | `true` | Report installed distributions to `app_packages`. |
 | | `log_queue_size` | `10000` | Log line queue; when full, new lines are dropped and logged. |
 | | `queue_size` | `5000` | Request queue entries; when full, new entries are dropped and logged. |
 | | `batch_size` | `0` | Rows per write; 0 means 500 on SQL databases (at most 2000) and 50 on D1. |

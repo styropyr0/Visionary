@@ -65,6 +65,9 @@ type rateLimitsView struct {
 	// RouteLimits are the detector's Route limits, offered as rules to enforce.
 	RouteLimits    []routeLimitView `json:"route_limits"`
 	CountryHeaders []string         `json:"default_country_headers"`
+	// AppBlocks counts the addresses Security blocks through managed rules,
+	// which are left out of Config
+	AppBlocks int `json:"app_blocks"`
 }
 
 type routeLimitView struct {
@@ -102,6 +105,15 @@ func (s *Server) rateLimitsView(r *http.Request) (rateLimitsView, error) {
 	}
 	v := rateLimitsView{Config: cfg, Version: version, UpdatedAt: updated, CanEdit: s.can(r, "admin") && scopeFrom(r.Context()) == nil,
 		RouteLimits: []routeLimitView{}, CountryHeaders: ratelimit.DefaultCountryHeaders}
+	kept := v.Config.Rules[:0:0]
+	for _, rule := range v.Config.Rules {
+		if isBlockRule(rule.ID) {
+			v.AppBlocks += len(rule.IPs)
+		} else {
+			kept = append(kept, rule)
+		}
+	}
+	v.Config.Rules = kept
 	for _, rl := range parseRouteLimits(s.conf("security_route_limits")) {
 		v.RouteLimits = append(v.RouteLimits, routeLimitView{Method: rl.method, Path: rl.glob, PerMin: rl.perMin})
 	}
@@ -129,6 +141,18 @@ func (s *Server) handlePutRateLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	normalizeRateLimits(&cfg)
+	current, _, _, err := s.loadRateLimits(r.Context())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	var blocked []string
+	for _, rule := range current.Rules {
+		if isBlockRule(rule.ID) {
+			blocked = append(blocked, rule.IPs...)
+		}
+	}
+	cfg.Rules = withBlockRules(cfg.Rules, blocked)
 	if err := ratelimit.Validate(cfg); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

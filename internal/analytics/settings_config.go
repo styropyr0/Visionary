@@ -163,6 +163,8 @@ var confDefs = []confDef{
 	{Key: "geoip_asn_db", Group: "security_intel", Label: "Network database", Help: "Path to a GeoLite2-ASN or DB-IP ASN Lite .mmdb file. Names who runs each address.", Kind: confText},
 	{Key: "security_blocklists", Group: "security_intel", Label: "Blocklist feeds", Help: "One URL per line, each a list of IP addresses or CIDR ranges, such as https://check.torproject.org/torbulkexitlist. Fetched every 6 hours; findings from listed addresses are raised one level.", Kind: confLong},
 
+	{Key: "security_osv", Group: "security_intel", Label: "Look up vulnerable packages", Help: "Sends the package names and versions your services report to osv.dev every 6 hours to find known vulnerabilities for Security → Posture. Nothing else is sent.", Kind: confBool, Default: "true"},
+
 	{Key: "security_action_webhook", Group: "security_response", Label: "Action webhook", Help: "Block IP and End sessions on a finding POST JSON here, for your firewall, API gateway or app to act on.", Kind: confText},
 	{Key: "security_action_secret", Group: "security_response", Label: "Webhook signing secret", Help: "Signs each call with HMAC-SHA256 in the X-Visionary-Signature header.", Kind: confSecret},
 

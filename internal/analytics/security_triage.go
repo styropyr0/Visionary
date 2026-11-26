@@ -248,6 +248,11 @@ func (s *Server) handleFindingAction(w http.ResponseWriter, r *http.Request) {
 		Scope   string `json:"scope"`   // suppress: "ip" or "actor"
 		Days    int    `json:"days"`    // suppress / ignore_ip: 0 is forever
 		Note    string `json:"note"`
+		// block_ip: where and for how long
+		Firewall *bool    `json:"firewall"`
+		App      *bool    `json:"app"`
+		Hosts    []string `json:"hosts"`
+		Hours    int      `json:"hours"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -271,13 +276,27 @@ func (s *Server) handleFindingAction(w http.ResponseWriter, r *http.Request) {
 	}
 	ip, actor := f["ip"].(string), f["actor"].(string)
 	switch body.Action {
-	case "block_ip", "end_sessions":
-		target := ip
-		if body.Action == "end_sessions" {
-			target = fallback(strings.TrimSpace(body.Account), actor)
+	case "block_ip":
+		if ip == "" {
+			writeError(w, http.StatusBadRequest, "this finding has no IP address")
+			return
 		}
+		b, status, err := s.createBlock(r, blockRequest{Address: ip, Reason: fallback(clip(strings.TrimSpace(body.Note), 500), toString(f["summary"])),
+			FindingID: id, Firewall: body.Firewall, App: body.App, Hosts: body.Hosts, Hours: body.Hours})
+		if err != nil {
+			writeError(w, status, err.Error())
+			return
+		}
+		out := map[string]any{"ok": true, "block": b}
+		if strings.TrimSpace(s.conf("security_action_webhook")) != "" {
+			hook, err := s.sendAction(r, body.Action, ip, f)
+			out["webhook_status"], out["webhook_error"] = hook, errText(err)
+		}
+		writeJSON(w, http.StatusOK, out)
+	case "end_sessions":
+		target := fallback(strings.TrimSpace(body.Account), actor)
 		if target == "" {
-			writeError(w, http.StatusBadRequest, "this finding has no "+map[string]string{"block_ip": "IP address", "end_sessions": "account"}[body.Action])
+			writeError(w, http.StatusBadRequest, "this finding has no account")
 			return
 		}
 		status, err := s.sendAction(r, body.Action, target, f)

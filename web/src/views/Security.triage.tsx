@@ -93,7 +93,7 @@ export const SUPPRESS_DAYS = [
 ];
 
 /** Block IP, End sessions, Ignore IP and Don't flag again. */
-export function FindingActions({ finding, onTimeline }: { finding: Finding; onTimeline: (account: string) => void }) {
+export function FindingActions({ finding, onTimeline, onBlock }: { finding: Finding; onTimeline: (account: string) => void; onBlock?: () => void }) {
   const { can } = useSession();
   const toast = useToast();
   const [busy, setBusy] = useState("");
@@ -125,10 +125,10 @@ export function FindingActions({ finding, onTimeline }: { finding: Finding; onTi
             Account timeline
           </button>
         )}
-        {admin && finding.ip && (
-          <button type="button" className="btn" disabled={busy !== ""} onClick={() => run("block_ip", {}, `Asked your webhook to block ${finding.ip}.`)}>
+        {admin && finding.ip && onBlock && (
+          <button type="button" className="btn" onClick={onBlock}>
             <Ban size={14} />
-            {busy === "block_ip" ? "Sending…" : "Block IP"}
+            Block IP
           </button>
         )}
         {admin && accountish && finding.source === "api" && (
@@ -268,7 +268,7 @@ export function AccountDrawer({ account, onClose, onFinding }: { account: string
     { key: "device", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
   ];
   return (
-    <Drawer onClose={onClose} title={<span className="mono">{account}</span>}>
+    <Drawer onClose={onClose} className="sec-drawer" title={<span className="mono">{account}</span>}>
       <div className="sec-actions">
         <Select label="Range" align="left" value={days} options={TIMELINE_DAYS} onChange={setDays} />
       </div>

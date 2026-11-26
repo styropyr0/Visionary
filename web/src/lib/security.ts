@@ -47,6 +47,8 @@ export interface FindingDetail {
   audit?: Result;
   rule?: DetectionRule;
   events?: Result;
+  activity?: ActivityItem[];
+  block?: Block | null;
 }
 
 export interface Suppression {
@@ -136,6 +138,140 @@ export interface FindingFilters {
   status: string;
 }
 
+export interface Block {
+  id: number;
+  created_at: string;
+  created_by: string;
+  address: string;
+  reason: string;
+  finding_id?: number;
+  firewall: boolean;
+  app: boolean;
+  hosts: string[];
+  expires_at: string;
+}
+
+export interface BlockHost {
+  host: string;
+  version: string;
+  /** nftables, iptables, off, unsupported, or never for an agent that has not polled */
+  backend: string;
+  applied: number;
+  error?: string;
+  skipped?: string[];
+  seen_at: string;
+  current: boolean;
+}
+
+export interface BlockList {
+  blocks: Block[];
+  hosts: BlockHost[];
+  can_edit: boolean;
+  webhook: boolean;
+}
+
+export interface BlockRequest {
+  address: string;
+  reason?: string;
+  finding_id?: number;
+  firewall?: boolean;
+  app?: boolean;
+  hosts?: string[];
+  hours?: number;
+}
+
+export interface ActivityItem {
+  at: string;
+  type: "request" | "event" | "host" | "log" | "audit";
+  kind?: string;
+  severity?: string;
+  host?: string;
+  actor?: string;
+  ip?: string;
+  method?: string;
+  path?: string;
+  status?: number;
+  text?: string;
+  ref?: number;
+  request_id?: string;
+  count?: number;
+  detail?: Record<string, unknown>;
+  via?: string;
+}
+
+export interface Verdict {
+  outcome: "succeeded" | "attempted" | "quiet";
+  probes: number;
+  probes_answered: number;
+  refused: number;
+  ssh_logins: number;
+  sudo: number;
+  failed_logins?: number;
+  logins?: number;
+}
+
+export interface IPActivity {
+  ip: string;
+  public: boolean;
+  items: ActivityItem[];
+  routes: Result;
+  verdict: Verdict;
+  block: Block | null;
+}
+
+export type Outcome = "succeeded" | "attempted" | "blocked";
+
+export interface IncidentStep {
+  text: string;
+  action?: "block_ip" | "end_sessions";
+  target?: string;
+}
+
+export interface Incident {
+  key: string;
+  by: "ip" | "account" | "host" | "role" | "kind";
+  value: string;
+  first: string;
+  last: string;
+  severity: FindingSeverity;
+  outcome: Outcome;
+  why: string[];
+  kinds: string[];
+  findings: number[];
+  hosts: string[];
+  accounts: string[];
+  count: number;
+  open: boolean;
+  steps: IncidentStep[];
+  block: Block | null;
+  summary: string;
+}
+
+export interface IncidentList {
+  incidents: Incident[];
+  noise: { incidents: number; addresses: number; findings: number };
+}
+
+export interface PostureItem {
+  key: string;
+  kind: string;
+  severity: FindingSeverity;
+  title: string;
+  target: string;
+  fix: string;
+  since?: string;
+  last?: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface Posture {
+  items: PostureItem[];
+  counts: Record<string, number>;
+  osv_enabled: boolean;
+  osv_checked: string;
+  headers_checked: string;
+}
+
 export const securityApi = {
   meta: (signal?: AbortSignal) => api<SecurityMeta>("/api/security/meta", { signal }),
   panel: (name: string, from: Date, to: Date, signal?: AbortSignal) => api<Result>(`/api/security/panels/${name}?${rangeQuery(from, to)}`, { signal }),
@@ -145,13 +281,28 @@ export const securityApi = {
   audit: (from: Date, to: Date, signal?: AbortSignal) =>
     api<{ entries: AuditEntry[]; counts: { action: string; count: number }[] }>(`/api/security/audit?${rangeQuery(from, to)}`, { signal }),
   updateFinding: (id: number, change: { status?: FindingStatus; note?: string }) => api<Finding>(`/api/security/findings/${id}`, { method: "PATCH", json: change }),
-  action: (id: number, action: FindingAction, extra: { account?: string; scope?: "ip" | "actor"; days?: number; note?: string } = {}) =>
+  action: (
+    id: number,
+    action: FindingAction,
+    extra: { account?: string; scope?: "ip" | "actor"; days?: number; note?: string; firewall?: boolean; app?: boolean; hosts?: string[]; hours?: number } = {},
+  ) =>
     api<Record<string, unknown>>(`/api/security/findings/${id}/actions`, { method: "POST", json: { action, ...extra } }),
   suppressions: (signal?: AbortSignal) => api<{ suppressions: Suppression[] }>("/api/security/suppressions", { signal }),
   addSuppression: (s: { kind: string; ip?: string; actor?: string; note?: string; days?: number }) => api<Suppression>("/api/security/suppressions", { method: "POST", json: s }),
   deleteSuppression: (id: number) => api(`/api/security/suppressions/${id}`, { method: "DELETE" }),
   account: (account: string, days: number, signal?: AbortSignal) => api<AccountTimeline>(`/api/security/accounts/${encodeURIComponent(account)}?days=${days}`, { signal }),
   ip: (ip: string, signal?: AbortSignal) => api<IPInfo>(`/api/security/ip/${encodeURIComponent(ip)}`, { signal }),
+  ipActivity: (ip: string, from: Date, to: Date, signal?: AbortSignal) =>
+    api<IPActivity>(`/api/security/ip/${encodeURIComponent(ip)}/activity?${rangeQuery(from, to)}`, { signal }),
+  probed: (path: string, from: Date, to: Date, signal?: AbortSignal) =>
+    api<{ path: string; ips: Result; statuses: Result }>(`/api/security/probed?${rangeQuery(from, to, { path })}`, { signal }),
+  hostEvents: (from: Date, to: Date, filters: { host?: string; kind?: string; user?: string; ip?: string; before?: string }, signal?: AbortSignal) =>
+    api<{ events: ActivityItem[]; more: boolean; kinds: Record<string, number> }>(`/api/security/host-events?${rangeQuery(from, to, filters as Record<string, string>)}`, { signal }),
+  incidents: (from: Date, to: Date, signal?: AbortSignal) => api<IncidentList>(`/api/security/incidents?${rangeQuery(from, to)}`, { signal }),
+  posture: (signal?: AbortSignal) => api<Posture>("/api/security/posture", { signal }),
+  blocks: (signal?: AbortSignal) => api<BlockList>("/api/security/blocks", { signal }),
+  block: (b: BlockRequest) => api<Block>("/api/security/blocks", { method: "POST", json: b }),
+  unblock: (id: number) => api(`/api/security/blocks/${id}`, { method: "DELETE" }),
   intel: (refresh = false, signal?: AbortSignal) => api<IntelStatus>(`/api/security/intel${refresh ? "?refresh=1" : ""}`, { signal }),
   auditExportUrl: (from: Date, to: Date) => `/api/security/audit/export?${rangeQuery(from, to)}`,
   verifyAudit: (file: string) =>

@@ -22,7 +22,7 @@ var schemas embed.FS
 // RequestsSchema returns the CREATE statements for api_logs in d.
 func (d Dialect) RequestsSchema() string { return d.schema("requests.sql") }
 
-// TelemetrySchema returns the CREATE statements for spans, errors and releases.
+// TelemetrySchema returns the CREATE statements for spans, errors, releases and app_packages.
 func (d Dialect) TelemetrySchema() string { return d.schema("telemetry.sql") }
 
 // LogsSchema returns the CREATE statements for app_logs in d.

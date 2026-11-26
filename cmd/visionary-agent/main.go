@@ -76,6 +76,9 @@ type config struct {
 
 	databases  []dbTarget
 	dbInterval time.Duration
+
+	firewall      bool
+	firewallClear bool
 }
 
 func main() {
@@ -90,6 +93,13 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.firewallClear {
+		if err := clearFirewall(ctx, hostRunner{}, logger); err != nil {
+			logger.Error("could not remove IP block rules", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("visionary-agent", "err", err)
 		os.Exit(1)
@@ -124,6 +134,8 @@ func loadConfig(args []string) (config, error) {
 	storage := fs.String("storage-scan", os.Getenv("VISIONARY_AGENT_STORAGE_SCAN"), `how often to find what fills the disks, at the lowest priority: a duration such as 6h, or "off" (VISIONARY_AGENT_STORAGE_SCAN, default 6h)`)
 	databases := fs.String("databases", os.Getenv("VISIONARY_AGENT_DATABASES"), "PostgreSQL and MySQL servers to watch: postgres:// or mysql:// URLs of a read-only monitoring user, separated by spaces or commas; name= labels one (VISIONARY_AGENT_DATABASES)")
 	fs.DurationVar(&c.dbInterval, "db-interval", envDuration("VISIONARY_AGENT_DB_INTERVAL", 15*time.Second), "how often to read the databases' sessions and locks, at least 5s (VISIONARY_AGENT_DB_INTERVAL)")
+	fs.BoolVar(&c.firewall, "firewall", envBool("VISIONARY_AGENT_FIREWALL", true), "block the IPs the server lists, with nftables or ipset and iptables (VISIONARY_AGENT_FIREWALL)")
+	fs.BoolVar(&c.firewallClear, "firewall-clear", false, "remove the agent's IP block rules and exit")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return c, err
@@ -131,6 +143,9 @@ func loadConfig(args []string) (config, error) {
 	if *showVersion {
 		fmt.Println("visionary-agent", version)
 		return c, flag.ErrHelp
+	}
+	if c.firewallClear {
+		return c, nil
 	}
 	c.units, c.disks, c.logs = splitList(*units), splitList(*disks), splitList(*logs)
 	every, err := parseScanEvery(*storage)
@@ -210,9 +225,11 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if a.dbs != nil {
 		a.dbs.run(ctx)
 	}
+	fw := newFirewall(cfg, logger, hostRunner{})
+	go fw.run(ctx)
 	logger.Info("visionary-agent started", "version", version, "host", cfg.host, "server", cfg.url,
 		"interval", cfg.interval.String(), "report", cfg.report.String(), "security", cfg.security, "docker", fallbackStr(cfg.docker, "auto"), "gpu", cfg.gpu,
-		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"), "storage_scan", scanEveryText(cfg.storageEvery), "databases", len(cfg.databases))
+		"logs", fallbackStr(strings.Join(cfg.logs, ","), "off"), "storage_scan", scanEveryText(cfg.storageEvery), "databases", len(cfg.databases), "firewall", fw.mode)
 
 	sampleT := time.NewTicker(cfg.interval)
 	defer sampleT.Stop()

@@ -111,6 +111,8 @@ type Config struct {
 	// RateLimitOff is VISIONARY_RATE_LIMIT=false: ignore Security → Rate
 	// limits. Otherwise Middleware enforces the rules made there.
 	RateLimitOff bool
+	// PackagesOff is VISIONARY_PACKAGES=false: never report modules to app_packages
+	PackagesOff bool
 
 	Requests RequestsConfig
 	System   SystemConfig
@@ -235,6 +237,7 @@ type SystemConfig struct {
 //	VISIONARY_METRICS_INTERVAL           (default 15s)
 //	VISIONARY_METRICS_MAX_SERIES         (default 1000 per metric name)
 //	VISIONARY_RATE_LIMIT=true|false      (default true, enforce Security → Rate limits)
+//	VISIONARY_PACKAGES=true|false        (default true, report modules to app_packages)
 func FromEnv() Config {
 	return Config{
 		DatabaseURL: env("VISIONARY_DATABASE_URL", ""),
@@ -255,6 +258,7 @@ func FromEnv() Config {
 		Errors:         envBool("VISIONARY_ERRORS", true),
 		ProfileOff:     !envBool("VISIONARY_PROFILE", true),
 		RateLimitOff:   !envBool("VISIONARY_RATE_LIMIT", true),
+		PackagesOff:    !envBool("VISIONARY_PACKAGES", true),
 		Requests: RequestsConfig{
 			Enabled:             envBool("VISIONARY_LOG_REQUESTS", true),
 			PathPrefix:          env("VISIONARY_LOG_PATH_PREFIX", ""),
@@ -399,7 +403,7 @@ func (a *Agent) Start(ctx context.Context) {
 			a.cfg.Logger.Error("visionary: add api_logs columns failed", "err", err)
 		}
 	}
-	if a.writer != nil || a.ident.version != "" {
+	if a.writer != nil || a.ident.version != "" || !a.cfg.PackagesOff {
 		if err := a.db.execScript(schemaCtx, d.TelemetrySchema()); err != nil {
 			a.cfg.Logger.Error("visionary: create telemetry tables failed", "err", err)
 		}
@@ -407,6 +411,9 @@ func (a *Agent) Start(ctx context.Context) {
 			a.cfg.Logger.Error("visionary: add spans columns failed", "err", err)
 		}
 		a.writeRelease(schemaCtx)
+	}
+	if !a.cfg.PackagesOff {
+		go a.reportPackages(ctx)
 	}
 	if a.writer != nil {
 		a.writer.start(ctx)

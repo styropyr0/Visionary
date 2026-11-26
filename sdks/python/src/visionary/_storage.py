@@ -91,6 +91,7 @@ LOG_COLUMNS = [
     "code_func", "size",
 ]
 RELEASE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime"]
+PACKAGE_COLUMNS = ["created_at", "service", "instance", "version", "ecosystem", "name", "pkg_version"]
 # CPU profiles; the Visionary server creates the table, never the SDK.
 PROFILE_COLUMNS = ["created_at", "service", "instance", "version", "sdk", "duration_ms", "samples", "routes", "folded"]
 METRIC_COLUMNS = [
@@ -111,6 +112,7 @@ TABLES = {
     "spans": ("spans", SPAN_COLUMNS),
     "errors": ("errors", ERROR_COLUMNS),
     "releases": ("releases", RELEASE_COLUMNS),
+    "packages": ("app_packages", PACKAGE_COLUMNS),
     "profiles": ("profiles", PROFILE_COLUMNS),
     "logs": ("app_logs", LOG_COLUMNS),
     "metrics": ("metrics", METRIC_COLUMNS),
@@ -150,7 +152,7 @@ _MYSQL_CHARS = {
     "service": 255, "version": 255, "kind": 255, "name": 255, "target": 255, "type": 255,
     "fingerprint": 255, "runtime": 255, "sdk": 255, "sdk_version": 255, "login_account": 255,
     "source": 32, "host": 255, "container": 255, "level": 8, "logger": 255, "trace_id": 64, "span_id": 32,
-    "session_id": 255, "code_file": 512, "code_func": 255, "unit": 64,
+    "session_id": 255, "code_file": 512, "code_func": 255, "unit": 64, "ecosystem": 32, "pkg_version": 128,
 }
 _MYSQL_BYTES = {
     "path": 65535, "query": 65535, "user_agent": 65535, "request_headers": 65535,

@@ -83,6 +83,9 @@ class Config:
     # Enforce Security -> Rate limits (VISIONARY_RATE_LIMIT=false turns it off)
     rate_limit: bool = True
 
+    # Report installed distributions to app_packages (VISIONARY_PACKAGES=false turns it off)
+    packages: bool = True
+
 
 def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
     """Build a Config from environment variables (see SPEC.md "Environment")."""
@@ -126,6 +129,7 @@ def from_env(environ: Optional[Dict[str, str]] = None) -> Config:
         metrics_interval=parse_duration(s("VISIONARY_METRICS_INTERVAL"), 15.0),
         metrics_max_series=parse_int(s("VISIONARY_METRICS_MAX_SERIES"), 1000),
         rate_limit=parse_bool(s("VISIONARY_RATE_LIMIT"), True),
+        packages=parse_bool(s("VISIONARY_PACKAGES"), True),
     )
 
 

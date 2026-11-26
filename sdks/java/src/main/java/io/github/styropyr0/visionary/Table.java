@@ -87,7 +87,7 @@ final class Table {
             .real("container_read_kbps", "container_write_kbps")
             .build();
 
-    // The three telemetry tables share one schema file, telemetry.sql.
+    // The telemetry tables share one schema file, telemetry.sql.
     static final Table SPANS = builder("spans", "telemetry")
             .text("created_at", "request_id", "service", "instance", "kind", "name", "target", "detail")
             .real("offset_ms", "duration_ms")
@@ -107,6 +107,10 @@ final class Table {
 
     static final Table RELEASES = builder("releases", "telemetry")
             .text("created_at", "service", "instance", "version", "sdk", "sdk_version", "runtime")
+            .build();
+
+    static final Table APP_PACKAGES = builder("app_packages", "telemetry")
+            .text("created_at", "service", "instance", "version", "ecosystem", "name", "pkg_version")
             .build();
 
     static final Table APP_LOGS = builder("app_logs", "logs")

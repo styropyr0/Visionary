@@ -92,6 +92,18 @@ how often, `off` stops it.
 never runs. Counting sockets in CLOSE_WAIT walks `/proc/net/tcp`, so it is
 skipped on hosts with more than 20,000 sockets in use.
 
+The agent blocks the IP addresses and ranges the server lists. It polls
+`/api/agent/v1/blocks` every 15 s and keeps them in a table of its own,
+`inet visionary` with nftables (`nft`), or else the ipsets `visionary4` and
+`visionary6` with `iptables` and `ip6tables`, dropping their packets at
+prerouting in the raw table, so ports Docker publishes are covered too. It
+never blocks loopback, link-local, multicast or private ranges, ranges wider
+than /8 (IPv4) or /32 (IPv6), the Visionary server, or the address of a live
+SSH session; those show as skipped. The rules stay when the agent stops and
+are put back if a firewall reload removes them.
+`VISIONARY_AGENT_FIREWALL=off` (`-firewall=false`) stops it, and
+`visionary-agent -firewall-clear` removes the rules.
+
 ## Databases
 
 The agent can watch PostgreSQL and MySQL or MariaDB servers too: what runs

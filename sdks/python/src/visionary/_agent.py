@@ -13,6 +13,7 @@ from . import _context, _errors, _logs, _metrics, _spans
 from ._config import Config, from_env
 from ._context import RequestInfo
 from ._entry import Entry
+from ._packages import PackageReport
 from ._profiler import Profiler
 from ._ratelimit import RateLimits
 from ._skip import SkipList
@@ -46,6 +47,7 @@ class Agent:
         self._logs: Optional[_logs.LogPipeline] = None
         self._metrics: Optional[_metrics.MetricsRecorder] = None
         self._ratelimit: Optional[RateLimits] = None
+        self._packages: Optional[PackageReport] = None
         self._error_limit = _errors.RateLimiter()
         self.spans_on = False
         self.errors_on = False
@@ -82,6 +84,8 @@ class Agent:
             self._metrics = _metrics.MetricsRecorder(cfg, self._backend, logger, instance)
         if cfg.rate_limit:
             self._ratelimit = RateLimits(self._backend, logger, cfg.service, instance, cfg.redact_headers)
+        if cfg.packages:
+            self._packages = PackageReport(self._backend, logger, cfg.service, instance, cfg.version)
         if cfg.system_metrics and cfg.system_interval > 0:
             self._system = Recorder(cfg, instance, self._backend, self.http, logger)
         retention = {}
@@ -222,6 +226,8 @@ class Agent:
             self._metrics.start()
         if self._ratelimit is not None:
             self._ratelimit.start()
+        if self._packages is not None:
+            self._packages.start()
         if self._system is not None:
             self._system.start()
             logger.info("visionary: recording system metrics every %ss", self.config.system_interval)
@@ -248,6 +254,8 @@ class Agent:
                 self._profiler.close()
             if self._skip is not None:
                 self._skip.close()
+            if self._packages is not None:
+                self._packages.close()
             if self._retention is not None:
                 self._retention.close()
             if self._ratelimit is not None:
@@ -296,6 +304,8 @@ class Agent:
             self._metrics.restart_after_fork()
         if self._ratelimit is not None:
             self._ratelimit.restart_after_fork()
+        if self._packages is not None:
+            self._packages.restart_after_fork()
 
     def __enter__(self) -> "Agent":
         return self.start()

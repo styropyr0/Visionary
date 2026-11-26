@@ -650,6 +650,7 @@ accept `true/false/1/0/yes/no/on/off`.
 | `VISIONARY_METRICS_MAX_SERIES` | `MetricsMaxSeries` | `1000` | Label sets per metric name |
 | `VISIONARY_METRICS_METERS` | `MetricsMeters` | empty | `System.Diagnostics.Metrics` meters to record as custom metrics, comma-separated |
 | `VISIONARY_RATE_LIMIT` | `RateLimit` | `true` | Enforce Security → Rate limits; `false` neither reads nor enforces them |
+| `VISIONARY_PACKAGES` | `Packages` | `true` | Report the app's NuGet packages (from its `.deps.json`) to `app_packages` |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,

@@ -89,6 +89,8 @@ export interface Options {
   metricsMaxSeries?: number;
   /** Enforce the dashboard's rate limits (VISIONARY_RATE_LIMIT, default true) */
   rateLimit?: boolean;
+  /** Report installed packages to app_packages (VISIONARY_PACKAGES, default true) */
+  packages?: boolean;
 }
 
 export type LookupResult = { handle?: string; role?: string } | null | undefined;
@@ -132,6 +134,7 @@ export interface Config {
   metricsInterval: number;
   metricsMaxSeries: number;
   rateLimit: boolean;
+  packages: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -183,6 +186,7 @@ export function resolveConfig(opts: Options = {}, env: Env = process.env): Confi
     metricsInterval: positive(opts.metricsInterval ?? parseDuration(s("VISIONARY_METRICS_INTERVAL"), 15), 15),
     metricsMaxSeries: positive(opts.metricsMaxSeries ?? parseInt0(s("VISIONARY_METRICS_MAX_SERIES"), 1000), 1000),
     rateLimit: opts.rateLimit ?? parseBool(s("VISIONARY_RATE_LIMIT"), true),
+    packages: opts.packages ?? parseBool(s("VISIONARY_PACKAGES"), true),
   };
 }
 

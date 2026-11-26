@@ -594,6 +594,7 @@ options in code, plus the hooks below. Set them before the first request
 | `VISIONARY_METRICS_INTERVAL` | `metrics_interval` (seconds) | `15s` | How often each series is written |
 | `VISIONARY_METRICS_MAX_SERIES` | `metrics_max_series` | `1000` | Label sets kept per metric name |
 | `VISIONARY_RATE_LIMIT` | `rate_limit` | `true` | Enforce the dashboard's rate limits (see [Rate limits](#rate-limits)); `false` turns enforcement and polling off |
+| `VISIONARY_PACKAGES` | `packages` | `true` | Report the loaded gems to `app_packages` |
 
 If `VISIONARY_RELEASE` is unset, the release is read from the first of
 `RAILWAY_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `VERCEL_GIT_COMMIT_SHA`,

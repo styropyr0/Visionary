@@ -79,6 +79,8 @@ module Visionary
 
     RELEASE_COLUMNS = %w[created_at service instance version sdk sdk_version runtime].freeze
 
+    PACKAGE_COLUMNS = %w[created_at service instance version ecosystem name pkg_version].freeze
+
     # Created by the Visionary server, never by the SDK.
     PROFILE_COLUMNS = %w[created_at service instance version sdk duration_ms samples routes folded].freeze
 
@@ -98,6 +100,7 @@ module Visionary
       "spans" => SPAN_COLUMNS + ADDED_SPAN_COLUMNS.map(&:first),
       "errors" => ERROR_COLUMNS,
       "releases" => RELEASE_COLUMNS,
+      "app_packages" => PACKAGE_COLUMNS,
       "profiles" => PROFILE_COLUMNS,
       "app_logs" => LOG_COLUMNS,
       "metrics" => METRIC_COLUMNS

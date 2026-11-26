@@ -21,6 +21,7 @@ import { HttpCounters, Recorder } from "./system/recorder.js";
 import { ErrorLimiter, RUNTIME, describe, errorStatus, fingerprint } from "./telemetry/errors.js";
 import { ExplainWorker } from "./telemetry/explain.js";
 import { instrumentHttp } from "./telemetry/http.js";
+import { PACKAGES_DELAY_MS, reportPackages } from "./telemetry/packages.js";
 import { Profiler } from "./telemetry/profiler.js";
 import type { SpanRow } from "./telemetry/spans.js";
 import { setSpanSink, spanValues, visibility } from "./telemetry/spans.js";
@@ -54,6 +55,7 @@ export class Agent {
   private logWriter?: Writer;
   private metricWriter?: Writer;
   private metricTimer?: NodeJS.Timeout;
+  private packagesTimer?: NodeJS.Timeout;
   private readonly schemas = new Map<Schema, Promise<boolean> | true>();
   private readonly schemaReported = new Set<Schema>();
   private readonly limiter = new ErrorLimiter();
@@ -209,6 +211,12 @@ export class Agent {
       this.metricTimer = setInterval(() => this.flushMetrics(), cfg.metricsInterval * 1000);
       this.metricTimer.unref();
     }
+    if (cfg.packages && this.store) {
+      const store = this.store;
+      const id = { service: cfg.service, instance: this.instance, version: cfg.version };
+      this.packagesTimer = setTimeout(() => void reportPackages(store, () => this.ready("telemetry"), id, this.logger), PACKAGES_DELAY_MS);
+      this.packagesTimer.unref();
+    }
     if (cfg.instrumentHttp) instrumentHttp();
     if (this.store && cfg.explain.length > 0) {
       this.explainer = new ExplainWorker(cfg.explain, this.store, this.instance, this.logger);
@@ -231,6 +239,7 @@ export class Agent {
       process.off("unhandledRejection", this.onRejection);
       setSpanSink(undefined);
       if (this.metricTimer) clearInterval(this.metricTimer);
+      if (this.packagesTimer) clearTimeout(this.packagesTimer);
       this.retention?.stop();
       this.profiler?.stop();
       this.skip?.stop();

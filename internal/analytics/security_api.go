@@ -192,6 +192,23 @@ func (s *Server) handleSecurityFinding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip, actor := f["ip"].(string), f["actor"].(string)
+	var activity []activityItem
+	switch host := toString(f["host"]); {
+	case ip != "":
+		activity, err = s.ipActivity(r.Context(), ip, tr)
+	case host != "":
+		activity, err = s.hostActivity(r.Context(), host, tr)
+	}
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	out["activity"] = activity
+	if ip != "" {
+		if b, err := s.blockedBy(r.Context(), ip); err == nil {
+			out["block"] = b
+		}
+	}
 	var cond string
 	var args []any
 	switch {

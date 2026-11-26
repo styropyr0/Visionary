@@ -49,7 +49,8 @@ record VisionaryConfig(
         boolean metrics,
         Duration metricsInterval,
         int metricsMaxSeries,
-        boolean rateLimit) {
+        boolean rateLimit,
+        boolean packages) {
 
     static final String DEFAULT_D1_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -94,7 +95,9 @@ record VisionaryConfig(
                 r.duration("VISIONARY_METRICS_INTERVAL", Duration.ofSeconds(15)),
                 r.positiveInt("VISIONARY_METRICS_MAX_SERIES", Metrics.DEFAULT_MAX_SERIES),
                 // false: no rate-limit polling or enforcement.
-                r.bool("VISIONARY_RATE_LIMIT", true));
+                r.bool("VISIONARY_RATE_LIMIT", true),
+                // false: never report the class path's artifacts to app_packages
+                r.bool("VISIONARY_PACKAGES", true));
     }
 
     /** Platform variables that carry the deployed commit, in the order SPEC.md gives. */

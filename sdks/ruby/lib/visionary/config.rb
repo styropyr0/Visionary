@@ -23,7 +23,7 @@ module Visionary
                   :system_metrics, :system_interval, :system_retention_days, :disk_path,
                   :service, :version, :spans, :span_threshold_ms, :span_max, :errors,
                   :profile, :logs, :log_level, :log_queue_size,
-                  :metrics, :metrics_interval, :metrics_max_series, :rate_limit
+                  :metrics, :metrics_interval, :metrics_max_series, :rate_limit, :packages
 
     # Runs on the writer thread, once per distinct user per batch, for users
     # missing a handle or role: ->(id) { [handle, role] } or nil.
@@ -77,6 +77,8 @@ module Visionary
       @metrics_max_series = 1000
       # false: never enforce or poll the dashboard's rate limits (VISIONARY_RATE_LIMIT).
       @rate_limit = true
+      # false: never report the loaded gems to app_packages (VISIONARY_PACKAGES)
+      @packages = true
     end
 
     def self.from_env(env = ENV)
@@ -114,6 +116,7 @@ module Visionary
       c.metrics_interval = parse_duration(s.("VISIONARY_METRICS_INTERVAL"), 15.0)
       c.metrics_max_series = parse_int(s.("VISIONARY_METRICS_MAX_SERIES"), 1000)
       c.rate_limit = parse_bool(s.("VISIONARY_RATE_LIMIT"), true)
+      c.packages = parse_bool(s.("VISIONARY_PACKAGES"), true)
       c
     end
 

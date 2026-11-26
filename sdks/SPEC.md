@@ -427,6 +427,30 @@ At start, when `version` is known, write one row:
 `OpenJDK 21.0.4`. The dashboards draw a marker at the earliest `created_at` of
 each version.
 
+### Packages (`app_packages`)
+
+Security → Posture matches these against known vulnerabilities, so every
+server SDK reports what the process runs with. About 30 seconds after start,
+off the request path, write one row per installed package:
+`app_packages(created_at, service, instance, version, ecosystem, name, pkg_version)`,
+all with the same `created_at`. `version` is the release as above (NULL when
+unknown). At most 5000 rows; skip packages with no version. Do it once per
+process. `VISIONARY_PACKAGES=false` turns it off.
+
+`ecosystem` uses OSV's names so the server can look them up as they are:
+
+| SDK | `ecosystem` | Where the list comes from | `name` |
+|---|---|---|---|
+| Go | `Go` | `debug.ReadBuildInfo().Deps` (a `Replace` with a version wins), plus `stdlib` at the Go version (`1.26.2`, no `go` prefix) | module path |
+| Node | `npm` | every `package.json` under the app's `node_modules` (nested ones too, scoped `@scope/pkg`), deduplicated by name and version | package name |
+| Python | `PyPI` | `importlib.metadata.distributions()` | distribution name |
+| Ruby | `RubyGems` | `Gem.loaded_specs` | gem name |
+| Java | `Maven` | `META-INF/maven/*/*/pom.properties` in every jar on the class path (Spring Boot nested jars included) | `groupId:artifactId` |
+| .NET | `NuGet` | the `libraries` of type `package` in the app's `<entry>.deps.json` | package id |
+
+Errors are logged once and never stop the app. The server keeps the newest
+report per service and instance and drops rows older than 30 days.
+
 ### Spans (database and outbound calls)
 
 A span is one call the service made while handling a request (or in background
@@ -1307,6 +1331,7 @@ with a fixed clock.
 | `VISIONARY_METRICS_INTERVAL` | `15s` (plain number = seconds) |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` (label sets per metric name) |
 | `VISIONARY_RATE_LIMIT` | `true` (enforce Security → Rate limits; see Rate limits) |
+| `VISIONARY_PACKAGES` | `true` (report installed packages; see Packages) |
 
 Booleans accept `true/false/1/0/yes/no`. No database configured means
 "collection off": log one warning and make every API a no-op, never crash the

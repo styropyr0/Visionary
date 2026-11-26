@@ -644,6 +644,7 @@ properties, or `application.properties` under the same names. Booleans take
 | `VISIONARY_LOGS` | `true` | `false` ignores the appender even where declared. See [Logs](#logs-opt-in-with-logback). |
 | `VISIONARY_LOG_LEVEL` | `info` | The lowest level kept until Settings → Logs has been read. |
 | `VISIONARY_RATE_LIMIT` | `true` | Enforce the rules from Security → Rate limits. See [Rate limits](#rate-limits). |
+| `VISIONARY_PACKAGES` | `true` | Report the Maven artifacts on the class path to `app_packages`. |
 | `VISIONARY_METRICS` | `true` | Write custom metrics; `false` makes every metric call a no-op. |
 | `VISIONARY_METRICS_INTERVAL` | `15s` | How often each series is written; a plain number is seconds. |
 | `VISIONARY_METRICS_MAX_SERIES` | `1000` | Label sets kept per metric name. |

@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS releases (
 );
 CREATE INDEX IF NOT EXISTS idx_releases_created_at ON releases (created_at);
 CREATE INDEX IF NOT EXISTS idx_releases_version_created_at ON releases (version, created_at);
+CREATE TABLE IF NOT EXISTS app_packages (
+    id          BIGSERIAL PRIMARY KEY,
+    created_at  TEXT NOT NULL,
+    service     TEXT,
+    instance    TEXT NOT NULL,
+    version     TEXT,
+    ecosystem   TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    pkg_version TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_packages_created_at ON app_packages (created_at);
+CREATE INDEX IF NOT EXISTS idx_app_packages_instance ON app_packages (instance, created_at);
 
 CREATE TABLE IF NOT EXISTS profiles (
     id          BIGSERIAL PRIMARY KEY,

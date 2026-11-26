@@ -17,8 +17,10 @@ import {
   rowObjects,
   securityApi,
   useSecurityPanel,
+  type Block,
   type Finding,
   type FindingFilters,
+  type Incident,
   type SecurityMeta,
 } from "../lib/security";
 import { DataTable, type Column } from "../components/DataTable";
@@ -31,7 +33,9 @@ import { RefreshControl, TimeRangePicker, TopBar } from "../components/Toolbar";
 import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
-import { AccountDrawer, AuditExport, FindingActions, IntelPanel, IPCard, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
+import { AccountDrawer, AuditExport, FindingActions, IntelPanel, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
+import { ActivityTimeline, BlockForm, BlockState, BlockedPanel, HostEventsPanel, IPDrawer, ProbedPathDrawer } from "./Security.blocks";
+import { IncidentDrawer, IncidentsPanel, NeedsYou, PosturePanel, useIncidents, usePosture } from "./Security.incidents";
 import { RULE_DETAIL, RulesTab, SignalDetail } from "./Security.rules";
 import { RateLimitsTab } from "./Security.ratelimits";
 import "./Security.css";
@@ -56,10 +60,14 @@ export function Security() {
 
 const EMPTY: FindingFilters = { source: "", kind: "", severity: "", host: "", ip: "", status: "" };
 
-type SecTab = "overview" | "signals" | "rules" | "limits";
+type SecTab = "overview" | "posture" | "findings" | "hosts" | "traffic" | "signals" | "rules" | "limits";
 
 const TABS: { key: SecTab; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "posture", label: "Posture" },
+  { key: "findings", label: "Findings" },
+  { key: "hosts", label: "Hosts" },
+  { key: "traffic", label: "Traffic" },
   { key: "signals", label: "Signals" },
   { key: "rules", label: "Rules" },
   { key: "limits", label: "Rate limits" },
@@ -72,6 +80,10 @@ function SecurityPage({ hash }: { hash: string }) {
   const meta = useQuery(`sec-meta#${tick}`, (signal) => securityApi.meta(signal));
   const [selected, setSelected] = useState<Finding | null>(null);
   const [account, setAccount] = useState<string | null>(null);
+  const [ip, setIp] = useState<{ ip: string; findingId?: number; reason?: string } | null>(null);
+  const [probed, setProbed] = useState<string | null>(null);
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const openIP = (addr: string) => setIp({ ip: addr });
   const reportHref = `#/security/report?from=${encodeURIComponent(resolved.from.toISOString())}&to=${encodeURIComponent(resolved.to.toISOString())}`;
 
   return (
@@ -104,7 +116,11 @@ function SecurityPage({ hash }: { hash: string }) {
             </button>
           ))}
         </nav>
-        {tab === "overview" && <SecurityOverview meta={meta.data} onSelect={setSelected} />}
+        {tab === "overview" && <SecurityOverview meta={meta.data} onIncident={setIncident} onIP={openIP} />}
+        {tab === "posture" && <PostureTab />}
+        {tab === "findings" && <FindingsTab onSelect={setSelected} />}
+        {tab === "hosts" && <HostSecurity hosts={meta.data?.hosts ?? 0} onIP={openIP} />}
+        {tab === "traffic" && <TrafficTab meta={meta.data} onIP={openIP} onProbed={setProbed} />}
         {tab === "signals" && <SignalsTab onSelect={setSelected} />}
         {tab === "rules" && <RulesTab openRule={Number(params.get("rule")) || undefined} />}
         {tab === "limits" && <RateLimitsTab />}
@@ -119,29 +135,27 @@ function SecurityPage({ hash }: { hash: string }) {
           }}
         />
       )}
+      {incident && <IncidentDrawer incident={incident} onClose={() => setIncident(null)} onFinding={setSelected} onIP={openIP} />}
       {selected && (
         <FindingDrawer
           finding={selected}
           onClose={() => setSelected(null)}
+          onIP={(addr) => setIp({ ip: addr, findingId: selected.id, reason: selected.summary })}
           onTimeline={(a) => {
             setSelected(null);
             setAccount(a);
           }}
         />
       )}
+      {probed && <ProbedPathDrawer path={probed} onClose={() => setProbed(null)} onIP={openIP} />}
+      {ip && <IPDrawer ip={ip.ip} findingId={ip.findingId} reason={ip.reason} onClose={() => setIp(null)} />}
     </>
   );
 }
 
-function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; onSelect: (f: Finding) => void }) {
-  const summary = useSecurityPanel("summary");
-  const failed = useSecurityPanel("failed_logins");
-  const [filters, setFilters] = useState<FindingFilters>(EMPTY);
-  const s = rowObjects(summary.data)[0] ?? {};
-  const n = (k: string) => toNumber(s[k]);
-  const hosts = meta?.hosts ?? 0;
+function DetectorNotices({ meta }: { meta: SecurityMeta | undefined }) {
   return (
-    <div className="grid">
+    <>
       {meta && !meta.enabled && (
         <div className="span-12 notice">
           <ShieldAlert size={16} />
@@ -154,6 +168,53 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
           <span>The last detector run failed: {meta.error}</span>
         </div>
       )}
+    </>
+  );
+}
+
+function SecurityOverview({ meta, onIncident, onIP }: { meta: SecurityMeta | undefined; onIncident: (i: Incident) => void; onIP: (ip: string) => void }) {
+  const incidents = useIncidents();
+  const posture = usePosture();
+  return (
+    <div className="grid">
+      <DetectorNotices meta={meta} />
+      <NeedsYou incidents={incidents.data} posture={posture.data} onIncident={onIncident} />
+      <IncidentsPanel q={incidents} onIncident={onIncident} limit={12} />
+      <BlockedPanel onIP={onIP} />
+    </div>
+  );
+}
+
+function PostureTab() {
+  const posture = usePosture();
+  return (
+    <div className="grid">
+      <PosturePanel q={posture} />
+    </div>
+  );
+}
+
+function FindingsTab({ onSelect }: { onSelect: (f: Finding) => void }) {
+  const [filters, setFilters] = useState<FindingFilters>(EMPTY);
+  return (
+    <div className="grid">
+      <Section title="Findings" text="Every finding, one row each, from the API detectors, the host agent, the log scanner and Visionary's audit log. Incidents on the Overview group these by who did them." />
+      <FindingsTable filters={filters} setFilters={setFilters} onSelect={onSelect} />
+      <Section title="Response" text="What the detectors skip, and where they get the place, network and reputation of an address." />
+      <SuppressionsPanel />
+      <IntelPanel />
+    </div>
+  );
+}
+
+function TrafficTab({ meta, onIP, onProbed }: { meta: SecurityMeta | undefined; onIP: (ip: string) => void; onProbed: (path: string) => void }) {
+  const summary = useSecurityPanel("summary");
+  const failed = useSecurityPanel("failed_logins");
+  const s = rowObjects(summary.data)[0] ?? {};
+  const n = (k: string) => toNumber(s[k]);
+  const hosts = meta?.hosts ?? 0;
+  return (
+    <div className="grid">
       <StatTile
         label="Findings"
         description="Security findings first seen in this range, from the API detectors and the host agent."
@@ -214,16 +275,6 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
         footer={hosts === 0 ? "No host agent yet" : "Across all hosts"}
       />
 
-      <Section
-        title="Findings"
-        text={`Each row is one finding. API findings are written at most once per kind and IP or account every ${meta?.dedupe ?? "10m"}; their count grows while the activity goes on.`}
-      />
-      <FindingsTable filters={filters} setFilters={setFilters} onSelect={onSelect} />
-
-      <Section title="Response" text="What the detectors skip, and where they get the place, network and reputation of an address." />
-      <SuppressionsPanel />
-      <IntelPanel />
-
       <Section title="Sign-ins and access" text="Failed logins and auth errors over time, and the IPs, paths and clients behind them." />
       <ChartPanel
         name="failed_logins"
@@ -265,9 +316,9 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
       <SecurityTable
         name="top_ips"
         title="Top offending IPs"
-        description="IPs with the most failed logins and probe requests, then client errors. Click one to see its requests."
+        description="IPs with the most failed logins and probe requests, then client errors. Click one for everything it did, and to block it."
         span="span-12"
-        onRowClick={(row, r) => openLogs(String(row[r.columns.indexOf("ip")]))}
+        onRowClick={(row, r) => onIP(String(row[r.columns.indexOf("ip")]))}
         columns={[
           { key: "ip", label: "IP", render: (v) => <span className="mono">{String(v)}</span> },
           { key: "requests", align: "right", unit: "count" },
@@ -283,8 +334,9 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
       <SecurityTable
         name="probed_paths"
         title="Top probed paths"
-        description="Requests for paths that only scanners ask for. Any 2xx answer deserves a look."
+        description="Requests for paths that only scanners ask for. Any 2xx answer deserves a look. Click one for the addresses that asked."
         span="span-6"
+        onRowClick={(row, r) => onProbed(String(row[r.columns.indexOf("path")]))}
         columns={[
           { key: "path", render: (v) => <span className="mono">{String(v)}</span> },
           { key: "hits", align: "right", unit: "count" },
@@ -319,7 +371,6 @@ function SecurityOverview({ meta, onSelect }: { meta: SecurityMeta | undefined; 
         ]}
       />
 
-      <HostSecurity hosts={hosts} />
       <AuditSection admin={meta?.is_admin ?? false} />
     </div>
   );
@@ -529,11 +580,13 @@ function FindingsTable({
   );
 }
 
-function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onClose: () => void; onTimeline: (account: string) => void }) {
+function FindingDrawer({ finding, onClose, onTimeline, onIP }: { finding: Finding; onClose: () => void; onTimeline: (account: string) => void; onIP: (ip: string) => void }) {
   const { setRange } = useApp();
   const q = useQuery(`sec-finding-${finding.id}`, (signal) => securityApi.finding(finding.id, signal));
   const [triaged, setTriaged] = useState<Finding | null>(null);
-  const [ipOpen, setIpOpen] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const [blocked, setBlocked] = useState<Block | null | undefined>(undefined);
+  const block = blocked === undefined ? q.data?.block : blocked;
   const f = triaged ?? q.data?.finding ?? finding;
   const isRule = f.source === "rule";
   const extra = Object.entries(f.detail ?? {}).filter(([k]) => k !== "summary" && !(isRule && RULE_DETAIL.has(k)));
@@ -550,6 +603,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
   return (
     <Drawer
       onClose={onClose}
+      className="wide sec-drawer"
       title={
         <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
           <SeverityBadge severity={f.severity} />
@@ -559,12 +613,30 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
     >
       {f.summary && <p className="sec-summary">{f.summary}</p>}
       <TriageBox finding={f} onChange={setTriaged} />
-      <FindingActions finding={f} onTimeline={onTimeline} />
+      {block && <BlockState block={block} onChange={() => setBlocked(null)} />}
+      <FindingActions finding={f} onTimeline={onTimeline} onBlock={block ? undefined : () => setBlocking(!blocking)} />
+      {blocking && !block && f.ip && (
+        <BlockForm
+          address={f.ip}
+          findingId={f.id}
+          reason={f.summary}
+          onDone={(b) => {
+            setBlocking(false);
+            setBlocked(b);
+          }}
+        />
+      )}
       <div className="sec-actions">
         <button type="button" className="btn primary" onClick={investigate}>
           <Sparkles size={14} />
           Investigate
         </button>
+        {f.ip && (
+          <button type="button" className="btn" onClick={() => onIP(f.ip)}>
+            <Globe size={14} />
+            Everything from this IP
+          </button>
+        )}
         {f.ip && (
           <button type="button" className="btn" onClick={() => openLogs(f.ip, q.data?.from, q.data?.to, setRange)}>
             <ScrollText size={14} />
@@ -584,6 +656,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
           </a>
         )}
       </div>
+      <div className="section-label">Details</div>
       <dl className="kv">
         <dt>{isRule ? "Rule" : "Kind"}</dt>
         <dd>
@@ -618,15 +691,7 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
         {f.ip && (
           <>
             <dt>IP</dt>
-            <dd className="sec-ip-row">
-              <span className="mono">{f.ip}</span>
-              {!ipOpen && (
-                <button type="button" className="btn sm" onClick={() => setIpOpen(true)}>
-                  <Globe size={14} />
-                  About this IP
-                </button>
-              )}
-            </dd>
+            <dd className="mono">{f.ip}</dd>
           </>
         )}
         {f.actor && (
@@ -651,10 +716,14 @@ function FindingDrawer({ finding, onClose, onTimeline }: { finding: Finding; onC
           <FragmentKV key={k} k={k} v={v} />
         ))}
       </dl>
-      {f.ip && ipOpen && (
+      {!isRule && q.data?.activity && q.data.activity.length > 0 && (
         <>
-          <div className="section-label">About {f.ip}</div>
-          <IPCard ip={f.ip} />
+          <div className="section-label">Everything around it</div>
+          <p className="dim">
+            {f.ip ? "Requests, security and host events, sudo after an SSH login from this address, logs and audit entries" : `Security and host events and warnings in the logs on ${f.host}`} between{" "}
+            {formatLogTime(q.data.from)} and {formatLogTime(q.data.to)}.
+          </p>
+          <ActivityTimeline items={q.data.activity} onIP={onIP} maxHeight={420} />
         </>
       )}
       {isRule && <SignalDetail finding={f} detail={q.data} onTimeline={onTimeline} />}
@@ -764,12 +833,12 @@ function SecurityTable({
 
 const NO_AGENT = "Install the Visionary host agent on your machines to see SSH logins, open ports and pending updates";
 
-function HostSecurity({ hosts }: { hosts: number }) {
+function HostSecurity({ hosts, onIP }: { hosts: number; onIP: (ip: string) => void }) {
   const status = useSecurityPanel("host_status");
   const noAgent = hosts === 0 && status.data !== undefined && status.data.rows.length === 0;
   return (
-    <>
-      <Section title="Host security" text="What the Visionary host agent reports from your VMs: SSH logins, sudo use, listening ports and pending updates." />
+    <div className="grid">
+      <Section title="Host security" text="What the Visionary host agent reports from your machines: SSH logins, sudo use, keys, files, processes, ports, containers and pending updates." />
       {noAgent ? (
         <SetupCard icon={<ShieldAlert size={20} />} title="No machines report here yet" text={`${NO_AGENT}.`} topic="agent" className="span-12 sc-inline">
           <SetupOption title="Install the host agent" text="It reads the auth log or journald for SSH and sudo, watches listening ports, and checks for updates every 6 hours.">
@@ -811,26 +880,13 @@ function HostSecurity({ hosts }: { hosts: number }) {
             title="SSH failures by host"
             description="Failed SSH logins per interval, per host."
             viz={{ type: "timeseries", x: "t", y: ["value"], series: "series", unit: "count", stack: true }}
-            span="span-6"
+            span="span-12"
             empty="No failed SSH logins in this range."
           />
-          <SecurityTable
-            name="host_events"
-            title="Host events"
-            description="SSH logins, sudo, ports, updates and reboots, newest first."
-            span="span-6"
-            empty="No host events in this range."
-            columns={[
-              { key: "created_at", label: "Time", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span> },
-              { key: "host", render: (v) => <span className="mono">{String(v ?? "—")}</span> },
-              { key: "kind", render: (v) => kindLabel(String(v)) },
-              { key: "actor", label: "User", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
-              { key: "target", render: (v) => (v ? <span className="mono">{String(v)}</span> : <span className="dim">—</span>) },
-            ]}
-          />
+          <HostEventsPanel onIP={onIP} />
         </>
       )}
-    </>
+    </div>
   );
 }
 

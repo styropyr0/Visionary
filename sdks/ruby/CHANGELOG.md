@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The loaded gems (`Gem.loaded_specs`) go to `app_packages` 30 s after
+  start, once per process, for Security → Posture.
+  `VISIONARY_PACKAGES=false` turns it off.
+
 - Rate limits from Security → Rate limits: the middleware reads the rules
   every 15 s and answers limited (`429` with `Retry-After`) or blocked
   (`403`) requests before the app runs. Rules on the user, role or an

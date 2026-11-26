@@ -743,6 +743,7 @@ writes them to `/etc/visionary-agent.env`.
 | `VISIONARY_DISK_PATHS` | all mounts | Report only some mounts. |
 | `VISIONARY_AGENT_DOCKER` | auto | A container socket path, or `off`. |
 | `VISIONARY_AGENT_GPU` | `true` | `off` stops GPU readings (nvidia-smi and amdgpu). |
+| `VISIONARY_AGENT_FIREWALL` | `true` | `off` stops blocking the IPs the server lists ([IP blocking](cmd/visionary-agent/README.md#install)). |
 | `VISIONARY_AGENT_STORAGE_SCAN` | `6h` | How often to find what fills the disks, at the lowest priority (at least `10m`), or `off`. |
 | `VISIONARY_AGENT_DATABASES` | none | PostgreSQL and MySQL servers to watch for sessions, locks and statement stats: `postgres://` or `mysql://` URLs of a read-only monitoring user ([grants](cmd/visionary-agent/README.md#databases)). |
 | `VISIONARY_AGENT_DB_INTERVAL` | `15s` | How often to read the databases' sessions and locks. |

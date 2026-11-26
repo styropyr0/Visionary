@@ -56,7 +56,7 @@ public class VisionaryAutoConfiguration {
                 return new VisionaryAgent(cfg);
             }
             if (!cfg.logRequests() && !cfg.systemEnabled() && !cfg.spans() && !cfg.errors() && !cfg.logs()
-                    && !cfg.metrics() && !cfg.rateLimit()) {
+                    && !cfg.metrics() && !cfg.rateLimit() && !cfg.packages()) {
                 return new VisionaryAgent(cfg);
             }
             ClassLoader loader = getClass().getClassLoader();

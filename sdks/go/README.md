@@ -641,6 +641,7 @@ and the dashboards flag the N+1.
 | `VISIONARY_ERRORS` | `true` | Record panics and `CaptureError` calls. |
 | `VISIONARY_PROFILE` | follow the dashboard | `false`: never take CPU profiles, whatever Settings → Profiling says. |
 | `VISIONARY_RATE_LIMIT` | `true` | `false`: ignore Security → Rate limits. See [Rate limits](#rate-limits). |
+| `VISIONARY_PACKAGES` | `true` | `false`: don't report the modules the binary was built with to `app_packages`. |
 | `VISIONARY_SYSTEM_METRICS` | `true` | Record `system_metrics`. |
 | `VISIONARY_SYSTEM_INTERVAL` | `15s` | Sample interval; a plain number is seconds. |
 | `VISIONARY_SYSTEM_RETENTION_DAYS` | `0` (off) | Like `VISIONARY_LOG_RETENTION_DAYS`, for `system_metrics`. |

@@ -32,6 +32,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
     private final MetricsWriter metrics;
     private final Retention retention;
     private final RateLimits rateLimits;
+    private final InstalledPackages packages;
     private final String summary;
     private volatile boolean running;
     private boolean closed;
@@ -50,6 +51,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         this.metrics = null;
         this.retention = null;
         this.rateLimits = null;
+        this.packages = null;
         this.summary = "disabled";
     }
 
@@ -72,6 +74,7 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                 : null;
         this.retention = new Retention(store);
         this.rateLimits = cfg.rateLimit() ? new RateLimits(store, origin, cfg.redactHeaders(), new ObjectMapper()) : null;
+        this.packages = cfg.packages() ? new InstalledPackages(store, origin) : null;
         if (logRequests) {
             retention.add(Table.API_LOGS, cfg.logRetentionDays());
         }
@@ -106,7 +109,8 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
                         : "where VisionaryLogbackAppender is configured")
                 + "; system metrics " + (system != null ? "every " + cfg.systemInterval().toMillis() + "ms" : "off")
                 + "; custom metrics " + (metrics != null ? "every " + cfg.metricsInterval().toMillis() + "ms" : "off")
-                + "; rate limits " + (rateLimits != null ? "on" : "off");
+                + "; rate limits " + (rateLimits != null ? "on" : "off")
+                + "; packages " + (packages != null ? "on" : "off");
     }
 
     boolean enabled() {
@@ -186,6 +190,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         if (rateLimits != null) {
             rateLimits.start();
         }
+        if (packages != null) {
+            packages.start();
+        }
         retention.start();
         log.info("visionary: " + summary);
     }
@@ -201,6 +208,9 @@ final class VisionaryAgent implements SmartLifecycle, DisposableBean {
         }
         if (rateLimits != null) {
             rateLimits.stop(SHUTDOWN_TIMEOUT);
+        }
+        if (packages != null) {
+            packages.stop();
         }
         if (telemetry != null) {
             telemetry.deactivate();

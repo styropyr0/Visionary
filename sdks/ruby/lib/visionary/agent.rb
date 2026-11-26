@@ -56,6 +56,7 @@ module Visionary
         limiter = RateLimit::Limiter.new(cfg.service, redact_headers: cfg.redact_headers)
         @rate_limit = RateLimit::Poller.new(limiter, @store, cfg, @instance, @logger)
       end
+      @packages = Packages.new(cfg, @instance, @store, @schemas, @logger) if cfg.packages
       if cfg.system_metrics && cfg.system_interval.to_f.positive?
         @system = System::Recorder.new(cfg, @instance, @store, @schemas, @http, @logger)
       end
@@ -120,6 +121,7 @@ module Visionary
       @rate_limit&.start
       @retention.start
       @profiler&.start
+      @packages&.start
       install_hooks
       release
       self
@@ -137,6 +139,7 @@ module Visionary
       @skip&.close
       @rate_limit&.close([timeout / 2.0, 5].min)
       @profiler&.close
+      @packages&.close
       idle = @writer ? @writer.close(timeout) : true
       idle = @logs.close([deadline - mono, 0].max) && idle if @logs
       idle = @metrics.close([deadline - mono, 0].max) && idle if @metrics
@@ -164,6 +167,7 @@ module Visionary
       @rate_limit&.after_fork
       @retention&.after_fork if @retention&.needed?
       @profiler&.after_fork
+      @packages&.after_fork
       @logger.info("visionary: restarted in forked process #{@pid}")
     end
 
