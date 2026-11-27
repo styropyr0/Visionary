@@ -99,10 +99,12 @@ func (s *Server) handleSecurityIncidents(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) loadIncidentFindings(ctx context.Context, tr timeRange) ([]incidentFinding, error) {
 	res, err := s.db.Query(ctx, `SELECT `+findingColumns+` FROM security_events WHERE created_at >= ? AND created_at < ?
-ORDER BY created_at LIMIT `+strconv.Itoa(incidentFindings), tr.From.Format(tsLayout), tr.To.Format(tsLayout))
+ORDER BY created_at DESC LIMIT `+strconv.Itoa(incidentFindings), tr.From.Format(tsLayout), tr.To.Format(tsLayout))
 	if err != nil {
 		return nil, dbErr(err)
 	}
+	// newest first so a long range keeps the latest, then oldest first to group
+	slices.Reverse(res.Rows)
 	out := make([]incidentFinding, 0, len(res.Rows))
 	for _, row := range res.Rows {
 		f := findingView(row)

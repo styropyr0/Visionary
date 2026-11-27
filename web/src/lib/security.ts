@@ -252,6 +252,17 @@ export interface IncidentList {
   noise: { incidents: number; addresses: number; findings: number };
 }
 
+/** What needs you over the last 30 days, whatever range the page shows. */
+export interface Needs {
+  through: Incident[];
+  exposed: PostureItem[];
+  tried: number;
+  blocked: number;
+  noise_addresses: number;
+  from: string;
+  at: string;
+}
+
 export interface PostureItem {
   key: string;
   kind: string;
@@ -300,6 +311,7 @@ export const securityApi = {
     api<{ events: ActivityItem[]; more: boolean; kinds: Record<string, number> }>(`/api/security/host-events?${rangeQuery(from, to, filters as Record<string, string>)}`, { signal }),
   incidents: (from: Date, to: Date, signal?: AbortSignal) => api<IncidentList>(`/api/security/incidents?${rangeQuery(from, to)}`, { signal }),
   posture: (signal?: AbortSignal) => api<Posture>("/api/security/posture", { signal }),
+  needs: (signal?: AbortSignal) => api<Needs>("/api/security/needs", { signal }),
   blocks: (signal?: AbortSignal) => api<BlockList>("/api/security/blocks", { signal }),
   block: (b: BlockRequest) => api<Block>("/api/security/blocks", { method: "POST", json: b }),
   unblock: (id: number) => api(`/api/security/blocks/${id}`, { method: "DELETE" }),

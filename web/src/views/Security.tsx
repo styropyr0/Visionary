@@ -34,8 +34,8 @@ import { VizView, useChartTokens, vizNote } from "../components/VizView";
 import { linkify } from "../components/ErrorNotice";
 import { SecurityReport } from "./Security.report";
 import { AccountDrawer, AuditExport, FindingActions, IntelPanel, StatusPill, SuppressionsPanel, TriageBox } from "./Security.triage";
-import { ActivityTimeline, BlockForm, BlockState, BlockedPanel, HostEventsPanel, IPDrawer, ProbedPathDrawer } from "./Security.blocks";
-import { IncidentDrawer, IncidentsPanel, NeedsYou, PosturePanel, useIncidents, usePosture } from "./Security.incidents";
+import { ActivityTimeline, BlockModal, BlockState, BlockedPanel, HostEventsPanel, IPDrawer, ProbedPathDrawer } from "./Security.blocks";
+import { IncidentDrawer, IncidentsPanel, NeedsYou, PosturePanel, useIncidents, useNeeds, usePosture } from "./Security.incidents";
 import { RULE_DETAIL, RulesTab, SignalDetail } from "./Security.rules";
 import { RateLimitsTab } from "./Security.ratelimits";
 import "./Security.css";
@@ -174,11 +174,11 @@ function DetectorNotices({ meta }: { meta: SecurityMeta | undefined }) {
 
 function SecurityOverview({ meta, onIncident, onIP }: { meta: SecurityMeta | undefined; onIncident: (i: Incident) => void; onIP: (ip: string) => void }) {
   const incidents = useIncidents();
-  const posture = usePosture();
+  const needs = useNeeds();
   return (
     <div className="grid">
       <DetectorNotices meta={meta} />
-      <NeedsYou incidents={incidents.data} posture={posture.data} onIncident={onIncident} />
+      <NeedsYou q={needs} onIncident={onIncident} />
       <IncidentsPanel q={incidents} onIncident={onIncident} limit={12} />
       <BlockedPanel onIP={onIP} />
     </div>
@@ -614,12 +614,13 @@ function FindingDrawer({ finding, onClose, onTimeline, onIP }: { finding: Findin
       {f.summary && <p className="sec-summary">{f.summary}</p>}
       <TriageBox finding={f} onChange={setTriaged} />
       {block && <BlockState block={block} onChange={() => setBlocked(null)} />}
-      <FindingActions finding={f} onTimeline={onTimeline} onBlock={block ? undefined : () => setBlocking(!blocking)} />
+      <FindingActions finding={f} onTimeline={onTimeline} onBlock={block ? undefined : () => setBlocking(true)} />
       {blocking && !block && f.ip && (
-        <BlockForm
+        <BlockModal
           address={f.ip}
           findingId={f.id}
           reason={f.summary}
+          onClose={() => setBlocking(false)}
           onDone={(b) => {
             setBlocking(false);
             setBlocked(b);
@@ -930,11 +931,6 @@ function AuditSection({ admin }: { admin: boolean }) {
           loading={q.loading}
           error={q.error}
           bodyHeight={120}
-          extraActions={
-            q.data && q.data.counts.length > 0 ? (
-              <span className="dim sec-counts">{q.data.counts.map((c) => `${auditLabel(c.action)} ${c.count}`).join(" · ")}</span>
-            ) : undefined
-          }
           table={
             result &&
             (result.rows.length === 0 ? (

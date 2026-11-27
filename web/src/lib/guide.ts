@@ -662,7 +662,24 @@ export const GUIDE: GuideSection[] = [
     route: "security",
     intro: "Attacks and account takeovers found in your request log, events from your machines, and who changed what in Visionary, with what to do about each.",
     shot: "security",
+    caption: "What needs you over the last 30 days, opened to show what got through and what is badly exposed.",
     steps: [
+      {
+        title: "Start with what needs you",
+        text: "The top of the **Overview** says how many things need you: incidents that got through and are still open, and anything badly exposed. It always looks at the last 30 days, whatever time range is picked, and is kept up to date in the background so it opens straight away. Click it to see each one; click an incident for the details, or an exposed item to go to **Posture**. When nothing needs you it says so, with how many attacks failed, were blocked or were only background scanning.",
+      },
+      {
+        title: "Read an incident",
+        text: "**Incidents** groups findings by the address, account or host behind them and says whether it **Got through** (Visionary saw it work: a probe answered 2xx, a sign-in after the failed ones, an SSH login after a brute force), was **Blocked**, or was only **Tried**. Open one for why it counts, what to do, and the findings behind it.",
+        shot: "security-incident",
+        caption: "An SSH brute force that ended in a login, with what to do and the findings behind it.",
+      },
+      {
+        title: "Block an address",
+        text: "**Block an address** under **Blocked addresses**, or **Block** on an incident, finding or address, opens a window to pick where: the **Host firewall** on every host or some of them (through the host agent), **Your apps** (every server SDK answers it 403), or both, and for how long. A reason is required; it is kept with the block and in the audit log. **Blocked addresses** lists every block, until when (or **Manually unblocked** for ones that stay until someone lifts them), and whether each host has applied the list.",
+        shot: "security-block",
+        caption: "Blocking an address in the firewall of one host and in every app, with the reason.",
+      },
       {
         title: "Record sign-in attempts",
         text: "In your login handler, call the SDK's **LoginAttempt** (Go), **loginAttempt** (Node, Java), **login_attempt** (Python, Ruby) or **LoginAttempt** (.NET) with the email or username typed. Without it Security counts failed sign-ins per address only; with it, it can tell one address trying many accounts, many addresses trying one account, and someone signed in as one user trying another's password.",
@@ -673,9 +690,9 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Open and triage a finding",
-        text: "Click a finding for the requests behind it. Mark it **Acknowledged**, **Resolved** or **False positive** and add a note, so the team knows who looked at it. **Requests from this IP** shows everything the address sent; **Investigate** asks the analyst.",
+        text: "Click a finding for its details and everything around it: requests, security and host events, sudo after an SSH login, logs and audit entries. Mark it **Acknowledged**, **Resolved** or **False positive** and add a note, so the team knows who looked at it. **Everything from this IP** shows all the address did; **Investigate** asks the analyst.",
         shot: "security-finding",
-        caption: "A scanner probing for secrets, with the requests it sent.",
+        caption: "An SSH brute force, with the login and sudo commands that followed it.",
       },
       {
         title: "Look up an account or an address",
@@ -683,7 +700,7 @@ export const GUIDE: GuideSection[] = [
       },
       {
         title: "Act on a finding",
-        text: "**Block IP** and **End sessions** POST a signed JSON call to the **Action webhook** in **Settings → Server → Response**, for your firewall, gateway or app to act on: `{\"action\": \"block_ip\", \"ip\": \"…\", \"finding\": {…}}` or `{\"action\": \"end_sessions\", \"account\": \"…\"}`, signed with HMAC-SHA256 in **X-Visionary-Signature**. **Ignore this IP** makes every detector skip the address, for your own monitors.",
+        text: "**Block IP** opens the block window (see **Block an address**). It and **End sessions** also POST a signed JSON call to the **Action webhook** in **Settings → Server → Response**, when one is set, for your own firewall, gateway or app to act on: `{\"action\": \"block_ip\", \"ip\": \"…\", \"finding\": {…}}` or `{\"action\": \"end_sessions\", \"account\": \"…\"}`, signed with HMAC-SHA256 in **X-Visionary-Signature**. **Ignore this IP** makes every detector skip the address, for your own monitors.",
       },
       {
         title: "Stop a false alarm",

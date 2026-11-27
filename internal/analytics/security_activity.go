@@ -43,6 +43,7 @@ func (s *Server) securityActivityRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/security/host-events", s.authed(s.handleHostEvents))
 	mux.Handle("GET /api/security/incidents", s.authed(s.handleSecurityIncidents))
 	mux.Handle("GET /api/security/posture", s.authed(s.handleSecurityPosture))
+	mux.Handle("GET /api/security/needs", s.authed(s.handleSecurityNeeds))
 }
 
 func sortActivity(items []activityItem) []activityItem {

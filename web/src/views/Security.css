@@ -56,11 +56,6 @@
   margin-bottom: 18px;
 }
 
-.sec-counts {
-  font-size: 12px;
-  margin-right: 6px;
-}
-
 /* Triage, actions and the account and IP views in the finding drawer. */
 
 .sec-triage {
@@ -907,25 +902,47 @@ table.data.sec-print-table td.num {
 .sec-outcome.warning { background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--warning-text); }
 .sec-outcome.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good-text); }
 
-/* Needs you */
+/* Needs you: one row that opens to the details */
 .sec-needs {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 18px;
+  padding: 0;
   border-color: var(--tone-border);
   background: var(--tone-wash);
 }
-.sec-needs.ok { flex-direction: row; align-items: flex-start; }
-.sec-needs-head { display: flex; align-items: flex-start; gap: 12px; }
-.sec-needs-title { color: var(--tone-text); font-size: 15px; font-weight: 650; line-height: 22px; }
-.sec-needs-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.sec-needs-item {
+.sec-needs > .panel-state { padding: 14px 18px; }
+.sec-needs-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 14px 18px;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+}
+button.sec-needs-head { cursor: pointer; }
+button.sec-needs-head:hover .sec-needs-chev { color: var(--text-1); }
+.sec-needs-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.sec-needs-title { color: var(--tone-text); font-size: 15px; font-weight: 650; line-height: 22px; }
+.sec-needs-chev { flex: none; margin-top: 3px; color: var(--text-3); transition: transform 0.15s; }
+.sec-needs.open .sec-needs-chev { transform: rotate(180deg); }
+.sec-needs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0 18px 16px 50px;
+  list-style: none;
+}
+.sec-needs-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-1);
@@ -936,8 +953,7 @@ table.data.sec-print-table td.num {
   cursor: pointer;
 }
 .sec-needs-item:hover { border-color: var(--border-strong); background: var(--hover-wash); }
-.sec-needs-who { display: inline-flex; flex: none; align-items: center; gap: 6px; }
-.sec-needs-what { flex: 1; min-width: 0; }
+.sec-needs-when { flex: none; font-size: 12px; line-height: 22px; }
 
 /* Incidents */
 .sec-incidents,
@@ -961,6 +977,9 @@ table.data.sec-print-table td.num {
 .sec-incident-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .sec-incident-who { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
 .sec-incident-who > svg { flex: none; color: var(--text-3); }
+.sec-incident > .sec-outcome:first-child,
+.sec-needs-item > .sec-outcome:first-child { justify-content: center; width: 92px; }
+.sec-incident > .sec-sev:first-child { flex: none; justify-content: center; width: 68px; margin-top: 1px; }
 .sec-incident-when { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
 .sec-noise { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
 .sec-noise > .btn { margin-left: auto; }
@@ -991,8 +1010,7 @@ table.data.sec-print-table td.num {
 .sec-head-btn { margin-left: auto; }
 .sec-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
 .sec-check > input { margin-top: 3px; }
-.sec-block-form,
-.sec-block-add {
+.sec-block-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1002,11 +1020,9 @@ table.data.sec-print-table td.num {
   border-radius: var(--radius);
   background: var(--surface-2);
 }
-.sec-block-add { margin-top: 4px; }
-.sec-block-add .sec-block-form { padding: 0; border: 0; margin: 0; }
-.sec-block-hosts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-left: 24px; }
-.sec-block-row { display: flex; gap: 8px; }
-.sec-block-row > .input { flex: 1; }
+.modal .sec-block-form { gap: 14px; padding: 0; border: 0; margin: 0; background: none; }
+.modal .sec-block-form > :last-child { align-self: flex-start; }
+.sec-block-hosts { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .sec-block-status {
   display: flex;
   flex-direction: column;
@@ -1060,7 +1076,6 @@ table.data.sec-print-table td.num {
 }
 .sec-drawer .sec-verdict,
 .sec-drawer .sec-blocked,
-.sec-drawer .sec-block-form,
 .sec-drawer .sec-actions,
 .sec-drawer .sec-summary {
   margin-bottom: 16px;

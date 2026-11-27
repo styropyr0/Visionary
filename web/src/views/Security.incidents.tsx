@@ -1,16 +1,16 @@
 import { useState } from "react";
-import { Ban, CheckCircle2, Globe, LogOut, Server, ShieldAlert, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Globe, LogOut, Server, ShieldAlert, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
 import { formatCount } from "../lib/format";
 import { useApp } from "../lib/state";
 import { useQuery } from "../lib/useQuery";
 import { useSession } from "../lib/team";
 import { formatFull, formatLogTime } from "../lib/time";
-import { kindLabel, securityApi, type Finding, type Incident, type IncidentList, type Outcome, type Posture, type PostureItem } from "../lib/security";
+import { kindLabel, securityApi, type Finding, type Incident, type Outcome, type PostureItem } from "../lib/security";
 import { Drawer } from "../components/Modal";
 import { InfoTip } from "../components/InfoTip";
 import { useToast } from "../components/Toast";
 import { linkify } from "../components/ErrorNotice";
-import { BlockForm, BlockState, SevBadge } from "./Security.blocks";
+import { BlockModal, BlockState, SevBadge } from "./Security.blocks";
 
 const OUTCOME: Record<Outcome, { label: string; tone: string }> = {
   succeeded: { label: "Got through", tone: "critical" },
@@ -43,65 +43,86 @@ export function usePosture() {
   return useQuery(`sec-posture#${tick}`, (signal) => securityApi.posture(signal));
 }
 
+export function useNeeds() {
+  const { tick } = useApp();
+  return useQuery(`sec-needs#${tick}`, (signal) => securityApi.needs(signal));
+}
+
 /**
- * The first thing on the page: what got through and what is badly exposed,
- * or a plain all clear with what was stopped.
+ * The first thing on the page: what got through and what is badly exposed in
+ * the last 30 days, as one row that opens to the details.
  */
-export function NeedsYou({ incidents, posture, onIncident }: { incidents: IncidentList | undefined; posture: Posture | undefined; onIncident: (i: Incident) => void }) {
-  if (!incidents || !posture) return <section className="panel span-12 sec-needs"><div className="panel-state">Loading…</div></section>;
-  const through = incidents.incidents.filter((i) => i.outcome === "succeeded" && i.open);
-  const exposed = posture.items.filter((p) => p.severity === "critical");
-  const tried = incidents.incidents.filter((i) => i.outcome === "attempted").length;
-  const blocked = incidents.incidents.filter((i) => i.outcome === "blocked").length;
-  const stopped = `${formatCount(tried, false)} attack(s) tried and failed, ${formatCount(blocked, false)} blocked, and ${formatCount(incidents.noise.addresses, false)} address(es) scanning in the background.`;
-  if (through.length === 0 && exposed.length === 0) {
+export function NeedsYou({ q, onIncident }: { q: ReturnType<typeof useNeeds>; onIncident: (i: Incident) => void }) {
+  const [open, setOpen] = useState(false);
+  const d = q.data;
+  if (!d) {
+    return (
+      <section className="panel span-12 sec-needs">
+        <div className="panel-state">{q.error ? linkify(q.error.message) : "Loading…"}</div>
+      </section>
+    );
+  }
+  const n = d.through.length + d.exposed.length;
+  const stopped = `Last 30 days: ${formatCount(d.tried, false)} attack(s) tried and failed, ${formatCount(d.blocked, false)} blocked, ${formatCount(d.noise_addresses, false)} address(es) scanning in the background.`;
+  if (n === 0) {
     return (
       <section className="panel span-12 sec-needs ok">
-        <CheckCircle2 size={20} />
-        <div>
-          <div className="sec-needs-title">Nothing needs you right now</div>
-          <div className="dim">
-            Nothing got through in this range and nothing is badly exposed. {stopped}
+        <div className="sec-needs-head">
+          <CheckCircle2 size={20} />
+          <div className="sec-needs-text">
+            <div className="sec-needs-title">Nothing needs you right now</div>
+            <div className="dim">{stopped}</div>
           </div>
         </div>
       </section>
     );
   }
   return (
-    <section className="panel span-12 sec-needs bad">
-      <div className="sec-needs-head">
+    <section className={`panel span-12 sec-needs bad${open ? " open" : ""}`}>
+      <button type="button" className="sec-needs-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <TriangleAlert size={20} />
-        <div>
-          <div className="sec-needs-title">
-            {through.length + exposed.length} thing{through.length + exposed.length === 1 ? "" : "s"} need{through.length + exposed.length === 1 ? "s" : ""} you
-          </div>
-          <div className="dim">{stopped}</div>
-        </div>
-      </div>
-      <ul className="sec-needs-list">
-        {through.map((inc) => (
-          <li key={inc.key}>
-            <button type="button" className="sec-needs-item" onClick={() => onIncident(inc)}>
-              <OutcomePill outcome={inc.outcome} />
-              <span className="sec-needs-who">
-                {whoIcon(inc.by)}
-                <span className="mono">{inc.value}</span>
-              </span>
-              <span className="sec-needs-what">{inc.why.join("; ")}</span>
-              <span className="mono dim">{formatLogTime(inc.last)}</span>
-            </button>
-          </li>
-        ))}
-        {exposed.map((p) => (
-          <li key={p.key}>
-            <a className="sec-needs-item" href="#/security?tab=posture">
-              <SevBadge severity={p.severity} />
-              <span className="sec-needs-what">{p.title}</span>
-              <span className="dim">{p.fix}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
+        <span className="sec-needs-text">
+          <span className="sec-needs-title">
+            {n} thing{n === 1 ? "" : "s"} need{n === 1 ? "s" : ""} you
+          </span>
+          <span className="dim">
+            {[d.through.length && `${d.through.length} got through`, d.exposed.length && `${d.exposed.length} badly exposed`].filter(Boolean).join(", ")}. {stopped}
+          </span>
+        </span>
+        <ChevronDown size={16} className="sec-needs-chev" />
+      </button>
+      {open && (
+        <ul className="sec-needs-list">
+          {d.through.map((inc) => (
+            <li key={inc.key}>
+              <button type="button" className="sec-needs-item" onClick={() => onIncident(inc)}>
+                <OutcomePill outcome={inc.outcome} />
+                <span className="sec-incident-main">
+                  <span className="sec-incident-who">
+                    {whoIcon(inc.by)}
+                    <span className="mono">{inc.value}</span>
+                    <SevBadge severity={inc.severity} />
+                  </span>
+                  <span>{inc.why.length ? inc.why.join("; ") : incidentTitle(inc)}</span>
+                </span>
+                <span className="mono dim sec-needs-when">{formatLogTime(inc.last)}</span>
+              </button>
+            </li>
+          ))}
+          {d.exposed.map((p) => (
+            <li key={p.key}>
+              <a className="sec-needs-item" href="#/security?tab=posture">
+                <span className="sec-outcome critical">Exposed</span>
+                <span className="sec-incident-main">
+                  <span className="sec-incident-who">{p.title}</span>
+                  <span className="dim">{p.fix}</span>
+                </span>
+                {p.last && <span className="mono dim sec-needs-when">{formatLogTime(p.last)}</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -223,7 +244,7 @@ export function IncidentDrawer({ incident, onClose, onFinding, onIP }: { inciden
               <li key={st.text}>
                 <span>{st.text}</span>
                 {st.action === "block_ip" && can("admin") && !blocked && (
-                  <button type="button" className="btn sm" onClick={() => setBlocking(!blocking)} aria-expanded={blocking}>
+                  <button type="button" className="btn sm" onClick={() => setBlocking(true)}>
                     <Ban size={14} />
                     Block
                   </button>
@@ -238,10 +259,11 @@ export function IncidentDrawer({ incident, onClose, onFinding, onIP }: { inciden
             ))}
           </ol>
           {blocking && !blocked && incident.by === "ip" && (
-            <BlockForm
+            <BlockModal
               address={incident.value}
               findingId={lastFinding}
               reason={incident.why[0] ?? incidentTitle(incident)}
+              onClose={() => setBlocking(false)}
               onDone={(b) => {
                 setBlocking(false);
                 setBlocked(b);

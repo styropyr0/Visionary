@@ -28,6 +28,7 @@ const (
 // audit records who did what. action is a short verb phrase such as
 // "alert.create"; target names the object; detail is any JSON value.
 func (s *Server) audit(r *http.Request, action, target string, detail any) {
+	s.dropNeedsOn(action)
 	s.auditAs(r, sessionFrom(r), action, target, detail)
 }
 

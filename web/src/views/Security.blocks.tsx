@@ -7,7 +7,7 @@ import { useSession } from "../lib/team";
 import { formatFull, formatLogTime } from "../lib/time";
 import { auditLabel, kindLabel, securityApi, type ActivityItem, type Block, type BlockHost, type Verdict } from "../lib/security";
 import { DataTable, type Column } from "../components/DataTable";
-import { Drawer } from "../components/Modal";
+import { Drawer, Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useToast } from "../components/Toast";
 import { linkify } from "../components/ErrorNotice";
@@ -51,13 +51,15 @@ function hostState(h: BlockHost): { tone: "ok" | "warn" | "bad"; text: string } 
 }
 
 /**
- * Blocks an address in the host firewall through the agent, in every SDK, or
- * both. With a finding it goes through the finding's action so the webhook
- * fires too.
+ * Asks where and for how long to block an address, and why. Blocks it in the
+ * host firewall through the agent, in every SDK, or both. With a finding it
+ * goes through the finding's action so the webhook fires too. Without an
+ * address it asks for one.
  */
-export function BlockForm({ address, findingId, reason, onDone }: { address: string; findingId?: number; reason?: string; onDone: (b: Block) => void }) {
+export function BlockModal({ address: fixed, findingId, reason, onClose, onDone }: { address?: string; findingId?: number; reason?: string; onClose: () => void; onDone: (b: Block) => void }) {
   const toast = useToast();
   const list = useQuery("sec-blocks", (signal) => securityApi.blocks(signal));
+  const [address, setAddress] = useState(fixed ?? "");
   const [firewall, setFirewall] = useState(true);
   const [app, setApp] = useState(true);
   const [allHosts, setAllHosts] = useState(true);
@@ -66,17 +68,18 @@ export function BlockForm({ address, findingId, reason, onDone }: { address: str
   const [why, setWhy] = useState(reason ?? "");
   const [busy, setBusy] = useState(false);
   const hosts = list.data?.hosts ?? [];
+  const ready = address !== "" && why.trim() !== "" && (firewall || app) && !(firewall && !allHosts && picked.length === 0);
   const submit = async () => {
     setBusy(true);
     const req = { firewall, app, hosts: firewall && !allHosts ? picked : [], hours: Number(hours) };
     try {
       let b: Block;
       if (findingId) {
-        const out = await securityApi.action(findingId, "block_ip", { ...req, note: why });
+        const out = await securityApi.action(findingId, "block_ip", { ...req, note: why.trim() });
         b = out.block as Block;
         if (out.webhook_error) toast("err", `Blocked, but the action webhook failed: ${String(out.webhook_error)}`);
       } else {
-        b = await securityApi.block({ address, reason: why, ...req });
+        b = await securityApi.block({ address, reason: why.trim(), ...req });
       }
       toast("ok", `${b.address} is blocked in the ${blockWhere(b)}.`);
       onDone(b);
@@ -87,65 +90,82 @@ export function BlockForm({ address, findingId, reason, onDone }: { address: str
     }
   };
   return (
-    <div className="sec-block-form">
-      <label className="sec-check">
-        <input type="checkbox" checked={firewall} onChange={(e) => setFirewall(e.target.checked)} />
-        <span>
-          Host firewall
-          <span className="dim"> · dropped before it reaches anything on the machine, through the host agent</span>
-        </span>
-      </label>
-      {firewall && (
-        <div className="sec-block-hosts">
-          {hosts.length === 0 ? (
-            <span className="dim">No host agent reports here yet. The block is kept and applies to agents as they connect.</span>
-          ) : (
-            <>
-              <div className="segmented" role="radiogroup" aria-label="Hosts">
-                <button type="button" role="radio" aria-checked={allHosts} className={allHosts ? "on" : ""} onClick={() => setAllHosts(true)}>
-                  Every host
-                </button>
-                <button type="button" role="radio" aria-checked={!allHosts} className={!allHosts ? "on" : ""} onClick={() => setAllHosts(false)}>
-                  Some hosts
-                </button>
-              </div>
-              {!allHosts && (
-                <div className="sec-chips">
-                  {hosts.map((h) => (
-                    <button
-                      type="button"
-                      key={h.host}
-                      className={`sec-chip ${picked.includes(h.host) ? "on" : ""}`}
-                      aria-pressed={picked.includes(h.host)}
-                      onClick={() => setPicked(picked.includes(h.host) ? picked.filter((x) => x !== h.host) : [...picked, h.host])}
-                    >
-                      {h.host}
-                    </button>
-                  ))}
+    <Modal
+      title={fixed ? `Block ${fixed}` : "Block an address"}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn primary" disabled={busy || !ready} onClick={submit}>
+            <Ban size={14} />
+            {busy ? "Blocking…" : "Block"}
+          </button>
+        </>
+      }
+    >
+      <div className="sec-block-form">
+        {!fixed && (
+          <label className="field">
+            <span>Address</span>
+            <input className="input mono" autoFocus placeholder="203.0.113.7 or 203.0.113.0/24" value={address} onChange={(e) => setAddress(e.target.value.trim())} />
+          </label>
+        )}
+        <label className="field">
+          <span>Reason</span>
+          <textarea className="input" rows={2} autoFocus={!!fixed} value={why} maxLength={500} placeholder="Why it is blocked, kept with the block and in the audit log" onChange={(e) => setWhy(e.target.value)} />
+        </label>
+        <label className="sec-check">
+          <input type="checkbox" checked={firewall} onChange={(e) => setFirewall(e.target.checked)} />
+          <span>
+            Host firewall
+            <span className="dim"> · dropped before it reaches anything on the machine, through the host agent</span>
+          </span>
+        </label>
+        {firewall && (
+          <div className="sec-block-hosts">
+            {hosts.length === 0 ? (
+              <span className="dim">No host agent reports here yet. The block is kept and applies to agents as they connect.</span>
+            ) : (
+              <>
+                <div className="segmented" role="radiogroup" aria-label="Hosts">
+                  <button type="button" role="radio" aria-checked={allHosts} className={allHosts ? "on" : ""} onClick={() => setAllHosts(true)}>
+                    Every host
+                  </button>
+                  <button type="button" role="radio" aria-checked={!allHosts} className={!allHosts ? "on" : ""} onClick={() => setAllHosts(false)}>
+                    Some hosts
+                  </button>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      <label className="sec-check">
-        <input type="checkbox" checked={app} onChange={(e) => setApp(e.target.checked)} />
-        <span>
-          Your apps
-          <span className="dim"> · every server SDK answers it 403, within about 15 seconds, no agent needed</span>
-        </span>
-      </label>
-      <div className="sec-block-row">
+                {!allHosts && (
+                  <div className="sec-chips">
+                    {hosts.map((h) => (
+                      <button
+                        type="button"
+                        key={h.host}
+                        className={`sec-chip ${picked.includes(h.host) ? "on" : ""}`}
+                        aria-pressed={picked.includes(h.host)}
+                        onClick={() => setPicked(picked.includes(h.host) ? picked.filter((x) => x !== h.host) : [...picked, h.host])}
+                      >
+                        {h.host}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        <label className="sec-check">
+          <input type="checkbox" checked={app} onChange={(e) => setApp(e.target.checked)} />
+          <span>
+            Your apps
+            <span className="dim"> · every server SDK answers it 403, within about 15 seconds, no agent needed</span>
+          </span>
+        </label>
         <Select label="How long" align="left" value={hours} options={DURATIONS} onChange={setHours} />
-        <input className="input" value={why} maxLength={500} placeholder="Why (optional)" onChange={(e) => setWhy(e.target.value)} aria-label="Why" />
       </div>
-      <div>
-        <button type="button" className="btn primary" disabled={busy || (!firewall && !app) || (firewall && !allHosts && picked.length === 0)} onClick={submit}>
-          <Ban size={14} />
-          {busy ? "Blocking…" : `Block ${address}`}
-        </button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -194,7 +214,6 @@ export function BlockedPanel({ onIP }: { onIP: (ip: string) => void }) {
   const [n, setN] = useState(0);
   const q = useQuery(`sec-blocks#${tick}-${n}`, (signal) => securityApi.blocks(signal));
   const [adding, setAdding] = useState(false);
-  const [address, setAddress] = useState("");
   const { can } = useSession();
   const toast = useToast();
   const blocks = q.data?.blocks ?? [];
@@ -217,7 +236,7 @@ export function BlockedPanel({ onIP }: { onIP: (ip: string) => void }) {
     { key: "where", label: "Blocked in" },
     { key: "reason", render: (v) => (v ? String(v) : <span className="dim">—</span>) },
     { key: "created_at", label: "Since", render: (v) => <span className="mono dim">{formatLogTime(String(v))}</span>, width: 150 },
-    { key: "expires_at", label: "Until", render: (v) => (v ? <span className="mono dim">{formatLogTime(String(v))}</span> : <span className="dim">Unblocked by hand</span>), width: 150 },
+    { key: "expires_at", label: "Until", render: (v) => (v ? <span className="mono dim">{formatLogTime(String(v))}</span> : <span className="dim">Manually unblocked</span>), width: 150 },
     ...(q.data?.can_edit
       ? [
           {
@@ -246,7 +265,7 @@ export function BlockedPanel({ onIP }: { onIP: (ip: string) => void }) {
         <h3 className="panel-title">Blocked addresses</h3>
         <InfoTip text="Dropped by the host firewall through the agent, refused by every server SDK, or both. Click an address for everything it did." />
         {can("admin") && (
-          <button type="button" className="btn sm sec-head-btn" onClick={() => setAdding(!adding)} aria-expanded={adding}>
+          <button type="button" className="btn sm sec-head-btn" onClick={() => setAdding(true)}>
             <Ban size={14} />
             Block an address
           </button>
@@ -254,19 +273,13 @@ export function BlockedPanel({ onIP }: { onIP: (ip: string) => void }) {
       </header>
       <div className="panel-body">
       {adding && (
-        <div className="sec-block-add">
-          <input className="input mono" placeholder="203.0.113.7 or 203.0.113.0/24" value={address} onChange={(e) => setAddress(e.target.value.trim())} aria-label="Address" />
-          {address && (
-            <BlockForm
-              address={address}
-              onDone={() => {
-                setAdding(false);
-                setAddress("");
-                setN(n + 1);
-              }}
-            />
-          )}
-        </div>
+        <BlockModal
+          onClose={() => setAdding(false)}
+          onDone={() => {
+            setAdding(false);
+            setN(n + 1);
+          }}
+        />
       )}
       {q.error && <div className="panel-state error">{linkify(q.error.message)}</div>}
       {q.data && (
@@ -463,7 +476,7 @@ export function IPDrawer({ ip, onClose, findingId, reason }: { ip: string; onClo
             can("admin") &&
             d.public && (
               <div className="sec-actions">
-                <button type="button" className={blocking ? "btn" : "btn primary"} onClick={() => setBlocking(!blocking)} aria-expanded={blocking}>
+                <button type="button" className="btn primary" onClick={() => setBlocking(true)}>
                   <Ban size={14} />
                   Block this address
                 </button>
@@ -482,10 +495,11 @@ export function IPDrawer({ ip, onClose, findingId, reason }: { ip: string; onClo
             )
           )}
           {blocking && !d.block && (
-            <BlockForm
+            <BlockModal
               address={ip}
               findingId={findingId}
               reason={reason}
+              onClose={() => setBlocking(false)}
               onDone={() => {
                 setBlocking(false);
                 setN(n + 1);

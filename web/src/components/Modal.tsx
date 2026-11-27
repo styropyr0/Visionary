@@ -21,8 +21,21 @@ interface ModalProps {
   narrow?: boolean;
 }
 
+// A modal can open over a drawer: Escape closes only the modal
+function useModalEscape(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+}
+
 export function Modal({ title, onClose, children, footer, narrow }: ModalProps) {
-  useEscape(onClose);
+  useModalEscape(onClose);
   return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
